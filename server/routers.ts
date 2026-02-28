@@ -230,7 +230,7 @@ export const appRouter = router({
 
   // ─── AI Services ──────────────────────────────────────
   ai: router({
-    classifyEvidence: protectedProcedure
+    classifyEvidence: publicProcedure
       .input(z.object({
         description: z.string().optional(),
         fileName: z.string().optional(),

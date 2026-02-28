@@ -20,8 +20,26 @@ import {
   LinkIcon, Loader2, ChevronDown, ChevronUp, Layers, BarChart3,
   CheckCircle, AlertTriangle, XCircle, TrendingUp, Wand2, X,
   GraduationCap, Building2, Users, Heart, Search as SearchIcon,
-  BookOpen, Baby, Accessibility, Briefcase, ClipboardList
+  BookOpen, Baby, Accessibility, Briefcase, ClipboardList,
+  ClipboardCheck, Handshake, UserCheck, Target,
+  NotebookPen, Monitor, School, Award, PieChart, ListChecks
 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
+
+// خريطة أيقونات Lucide لاستبدال emoji
+const STANDARD_ICONS: Record<string, LucideIcon> = {
+  "std-1": ClipboardCheck,   // أداء الواجبات الوظيفية
+  "std-2": Handshake,        // التفاعل مع المجتمع المهني
+  "std-3": UserCheck,        // التفاعل مع أولياء الأمور
+  "std-4": Target,           // التنويع في استراتيجيات التدريس
+  "std-5": TrendingUp,       // تحسين نتائج المتعلمين
+  "std-6": NotebookPen,      // إعداد وتنفيذ خطة التعلم
+  "std-7": Monitor,          // توظيف تقنيات ووسائل التعلم
+  "std-8": School,           // تهيئة البيئة التعليمية
+  "std-9": Award,            // الإدارة الصفية
+  "std-10": PieChart,        // تحليل نتائج المتعلمين
+  "std-11": ListChecks,      // تنوع أساليب التقويم
+};
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -399,28 +417,19 @@ export default function PerformanceEvidence() {
     setIsSmartUploading(true);
     const reader = new FileReader();
     reader.onload = async () => {
-      const isImage = file.type.startsWith("image/");
-      const isVideo = file.type.startsWith("video/");
-      let fileUrl: string | undefined;
-
-      // رفع الملف لـ S3 أولاً للحصول على URL للتحليل
-      if (isAuthenticated) {
-        try {
-          const uploadResult = await portfolio.uploadFile(file);
-          fileUrl = uploadResult.url;
-        } catch {
-          // إذا فشل الرفع، نستمر بدون URL
-        }
-      }
-
       try {
-        // إرسال URL الصورة للتحليل البصري بالـ AI
+        const isImage = file.type.startsWith("image/");
+        const isVideo = file.type.startsWith("video/");
+        const base64Data = reader.result as string;
+
+        // إرسال base64 مباشرة للـ AI للتحليل (publicProcedure - لا يحتاج تسجيل دخول)
         const result = await classifyMutation.mutateAsync({
           fileName: file.name,
           fileType: file.type,
           description: file.name.replace(/\.[^/.]+$/, "").replace(/[-_]/g, " "),
-          fileUrl: fileUrl || (isImage ? (reader.result as string) : undefined),
+          fileUrl: isImage ? base64Data : undefined,
         });
+
         if (result.success && result.classification) {
           const cls = result.classification;
           const targetCriterion = allCriteria.find(c =>
@@ -428,11 +437,10 @@ export default function PerformanceEvidence() {
           );
           if (targetCriterion && criteriaData[targetCriterion.id]) {
             const subs = [...targetCriterion.subEvidences, ...(criteriaData[targetCriterion.id]?.customSubEvidences || [])];
-            // اختيار الشاهد الفرعي الأنسب بناءً على المؤشر
             const targetSub = (cls.indicatorIndex > 0 && subs[cls.indicatorIndex - 1]) ? subs[cls.indicatorIndex - 1] : subs[0];
             const newEv = createEmptyEvidence(targetSub?.id || "");
             newEv.type = isImage ? "image" : isVideo ? "video" : "file";
-            newEv.fileData = fileUrl || (reader.result as string);
+            newEv.fileData = base64Data;
             newEv.fileName = file.name;
             newEv.text = cls.contentDescription || file.name;
             newEv.displayAs = isImage ? "image" : "qr";
@@ -450,7 +458,7 @@ export default function PerformanceEvidence() {
             if (firstCriterion) {
               const newEv = createEmptyEvidence(firstCriterion.subEvidences[0]?.id || "");
               newEv.type = isImage ? "image" : isVideo ? "video" : "file";
-              newEv.fileData = fileUrl || (reader.result as string);
+              newEv.fileData = base64Data;
               newEv.fileName = file.name;
               newEv.displayAs = isImage ? "image" : "qr";
               setCriteriaData((prev) => ({
@@ -458,15 +466,23 @@ export default function PerformanceEvidence() {
               }));
             }
           }
+        } else {
+          toast.error("لم يتمكن النظام من تصنيف الشاهد، يرجى رفعه يدوياً");
         }
-      } catch {
+      } catch (err) {
+        console.error("Smart upload error:", err);
         toast.error("فشل التصنيف التلقائي، يرجى رفع الشاهد يدوياً");
+      } finally {
+        setIsSmartUploading(false);
       }
+    };
+    reader.onerror = () => {
+      toast.error("فشل قراءة الملف");
       setIsSmartUploading(false);
     };
     reader.readAsDataURL(file);
     e.target.value = "";
-  }, [allCriteria, criteriaData, classifyMutation, isAuthenticated, portfolio]);
+  }, [allCriteria, criteriaData, classifyMutation]);
 
   // ===== AI Functions =====
   const callAI = async (criterionId: string, subId: string, userPrompt: string) => {
@@ -656,48 +672,88 @@ export default function PerformanceEvidence() {
   // ======================================================================
   if (step === "select") {
     return (
-      <div className="min-h-screen bg-background p-4 md:p-8" dir="rtl">
+      <div className="min-h-screen bg-gradient-to-b from-background to-muted/30 p-4 md:p-8" dir="rtl">
         <div className="max-w-5xl mx-auto">
-          <button onClick={() => navigate("/")} className="flex items-center gap-2 text-muted-foreground hover:text-foreground mb-8 transition-colors">
-            <ArrowLeft className="w-4 h-4" /><span className="text-sm">العودة للرئيسية</span>
+          <button onClick={() => navigate("/")} className="flex items-center gap-2 text-muted-foreground hover:text-foreground mb-8 transition-colors group">
+            <ArrowLeft className="w-4 h-4 transition-transform group-hover:-translate-x-1" /><span className="text-sm">العودة للرئيسية</span>
           </button>
 
-          <div className="text-center mb-12">
-            <div className="w-20 h-20 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-5">
-              <BarChart3 className="w-10 h-10 text-primary" />
+          {/* Hero Section */}
+          <div className="text-center mb-10">
+            <div className="relative w-16 h-16 rounded-2xl bg-gradient-to-br from-emerald-500 to-emerald-700 flex items-center justify-center mx-auto mb-5 shadow-lg shadow-emerald-500/20">
+              <BarChart3 className="w-8 h-8 text-white" />
             </div>
             <h1 className="text-3xl md:text-4xl font-black text-foreground mb-3" style={{ fontFamily: "var(--font-heading)" }}>
               شواهد الأداء الوظيفي
             </h1>
-            <p className="text-muted-foreground max-w-lg mx-auto leading-relaxed">
+            <p className="text-muted-foreground max-w-lg mx-auto leading-relaxed text-sm">
               اختر وظيفتك لبدء إعداد ملف الإنجاز. يتضمن النظام ذكاء اصطناعي تفاعلي لتصنيف الشواهد وتعبئة النماذج تلقائياً.
             </p>
             <div className="flex items-center justify-center gap-2 mt-4">
-              <Badge variant="secondary" className="gap-1.5 py-1 px-3">
+              <Badge variant="secondary" className="gap-1.5 py-1.5 px-4 text-xs">
                 <Sparkles className="w-3.5 h-3.5 text-violet-500" />
                 ذكاء اصطناعي مفعّل تلقائياً
               </Badge>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {JOB_TYPES.map((job, i) => {
+          {/* Featured: معلم/معلمة */}
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="mb-6">
+            <Card className="cursor-pointer hover:shadow-xl transition-all duration-300 border-emerald-200 bg-gradient-to-l from-emerald-50/80 to-background hover:border-emerald-300 overflow-hidden relative group"
+              onClick={() => handleSelectJob(JOB_TYPES[0])}>
+              <CardContent className="p-6 md:p-8">
+                <div className="flex items-center gap-5">
+                  <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-emerald-500 to-emerald-700 flex items-center justify-center shrink-0 shadow-md shadow-emerald-500/20 group-hover:scale-105 transition-transform">
+                    <GraduationCap className="w-8 h-8 text-white" />
+                  </div>
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-1">
+                      <h3 className="text-xl font-black text-foreground" style={{ fontFamily: "var(--font-heading)" }}>معلم / معلمة</h3>
+                      <Badge className="bg-emerald-600 text-white text-[10px] hover:bg-emerald-700">الأكثر استخداماً</Badge>
+                    </div>
+                    <p className="text-sm text-muted-foreground mb-2">نظام شامل يغطي 11 معيار و 45 مؤشر أداء وفق وزارة التعليم 1447هـ</p>
+                    <div className="flex items-center gap-3">
+                      <Badge variant="outline" className="text-[10px] gap-1 border-emerald-300 text-emerald-700">
+                        <Sparkles className="w-3 h-3" />11 معيار
+                      </Badge>
+                      <Badge variant="outline" className="text-[10px] gap-1 border-emerald-300 text-emerald-700">
+                        45 مؤشر
+                      </Badge>
+                      <Badge variant="outline" className="text-[10px] gap-1 border-emerald-300 text-emerald-700">
+                        11 بند تقييم
+                      </Badge>
+                    </div>
+                  </div>
+                  <ArrowLeft className="w-5 h-5 text-muted-foreground group-hover:text-emerald-600 transition-colors shrink-0" />
+                </div>
+              </CardContent>
+            </Card>
+          </motion.div>
+
+          {/* باقي الوظائف */}
+          <div className="mb-4">
+            <h2 className="text-sm font-bold text-muted-foreground mb-3" style={{ fontFamily: "var(--font-heading)" }}>وظائف أخرى</h2>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {JOB_TYPES.slice(1).map((job, i) => {
               const Icon = job.icon;
               return (
-                <motion.div key={job.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.04 }}>
-                  <Card className="cursor-pointer hover:shadow-lg hover:-translate-y-1 transition-all duration-200 border-border/50 hover:border-primary/30 h-full"
+                <motion.div key={job.id} initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: (i + 1) * 0.04 }}>
+                  <Card className="cursor-pointer hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 border-border/60 hover:border-opacity-100 h-full group"
+                    style={{ ['--hover-border' as string]: job.color }}
                     onClick={() => handleSelectJob(job)}>
-                    <CardContent className="p-5">
-                      <div className="w-12 h-12 rounded-xl flex items-center justify-center mb-4" style={{ backgroundColor: job.color + "15" }}>
-                        <Icon className="w-6 h-6" style={{ color: job.color }} />
+                    <CardContent className="p-4">
+                      <div className="flex items-center gap-3">
+                        <div className="w-11 h-11 rounded-xl flex items-center justify-center shrink-0 transition-transform group-hover:scale-105"
+                          style={{ backgroundColor: job.color + "12", border: `1.5px solid ${job.color}25` }}>
+                          <Icon className="w-5 h-5" style={{ color: job.color }} />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <h3 className="font-bold text-foreground text-sm truncate" style={{ fontFamily: "var(--font-heading)" }}>{job.title}</h3>
+                          <p className="text-[11px] text-muted-foreground">{job.criteria.length} بند تقييم</p>
+                        </div>
+                        <ArrowLeft className="w-4 h-4 text-muted-foreground/50 group-hover:text-foreground transition-colors shrink-0" />
                       </div>
-                      <h3 className="font-bold text-foreground mb-1 text-sm" style={{ fontFamily: "var(--font-heading)" }}>{job.title}</h3>
-                      <p className="text-xs text-muted-foreground">{job.criteria.length} بند تقييم</p>
-                      {job.isTeacher && (
-                        <Badge variant="outline" className="mt-2 text-[10px] gap-1 border-primary/30 text-primary">
-                          <Sparkles className="w-3 h-3" />11 معيار · 45 مؤشر
-                        </Badge>
-                      )}
                     </CardContent>
                   </Card>
                 </motion.div>
@@ -720,22 +776,23 @@ export default function PerformanceEvidence() {
         <div className="max-w-6xl mx-auto">
 
           {/* ===== Header Bar ===== */}
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center gap-3">
-              <Button variant="outline" size="sm" onClick={() => setStep("select")}>
-                <ArrowRight className="w-4 h-4 ml-1" />تغيير الوظيفة
+          <div className="flex flex-wrap items-center justify-between gap-3 mb-6 bg-card/80 backdrop-blur-sm rounded-xl p-3 border border-border/40 shadow-sm">
+            <div className="flex items-center gap-2">
+              <Button variant="ghost" size="sm" onClick={() => setStep("select")} className="gap-1.5 text-muted-foreground hover:text-foreground">
+                <ArrowRight className="w-4 h-4" />تغيير الوظيفة
               </Button>
-              <Button variant="outline" size="sm" onClick={saveReport} disabled={isSaving}>
-                {isSaving ? <Loader2 className="w-4 h-4 ml-1 animate-spin" /> : <Save className="w-4 h-4 ml-1" />}
+              <div className="w-px h-5 bg-border/60" />
+              <Button variant="ghost" size="sm" onClick={saveReport} disabled={isSaving} className="gap-1.5">
+                {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                 {isSaving ? "جاري الحفظ..." : "حفظ"}
               </Button>
             </div>
             <div className="flex items-center gap-3">
-              <div className="text-left">
-                <span className="text-2xl font-black" style={{ color: grade.color }}>{percentage}%</span>
-                <p className="text-xs text-muted-foreground">{grade.label}</p>
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg" style={{ backgroundColor: grade.color + '12' }}>
+                <span className="text-xl font-black" style={{ color: grade.color }}>{percentage}%</span>
+                <span className="text-xs font-medium" style={{ color: grade.color }}>{grade.label}</span>
               </div>
-              <Button onClick={() => setStep("final-review")} className="gap-1.5">
+              <Button onClick={() => setStep("final-review")} size="sm" className="gap-1.5">
                 <Eye className="w-4 h-4" />التقييم النهائي
               </Button>
             </div>
@@ -744,26 +801,34 @@ export default function PerformanceEvidence() {
           {/* ===== Title ===== */}
           <div className="mb-6">
             <div className="flex items-center gap-3 mb-1">
-              {selectedJob && <selectedJob.icon className="w-7 h-7" style={{ color: selectedJob.color }} />}
-              <h1 className="text-2xl font-black text-foreground" style={{ fontFamily: "var(--font-heading)" }}>
-                {selectedJob?.title}
-              </h1>
+              {selectedJob && (
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ backgroundColor: selectedJob.color + '15' }}>
+                  <selectedJob.icon className="w-5 h-5" style={{ color: selectedJob.color }} />
+                </div>
+              )}
+              <div>
+                <h1 className="text-xl md:text-2xl font-black text-foreground" style={{ fontFamily: "var(--font-heading)" }}>
+                  {selectedJob?.title}
+                </h1>
+                {selectedJob?.isTeacher && (
+                  <p className="text-xs text-muted-foreground mt-0.5">نظام المعايير الـ 11 وفق وزارة التعليم 1447هـ · {indicatorsCoverage?.covered || 0}/{indicatorsCoverage?.total || 45} مؤشر مغطى</p>
+                )}
+              </div>
             </div>
-            {selectedJob?.isTeacher && (
-              <p className="text-sm text-muted-foreground mr-10">نظام المعايير الـ 11 وفق وزارة التعليم 1447هـ · {indicatorsCoverage?.covered || 0}/{indicatorsCoverage?.total || 45} مؤشر مغطى</p>
-            )}
           </div>
 
           {/* ===== لوحة تحليل الفجوات ===== */}
-          <Card className="mb-6 border-border/50">
+          <Card className="mb-6 border-border/40 shadow-sm">
             <CardContent className="p-5">
-              <div className="flex items-center justify-between mb-4">
+              <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
                 <div className="flex items-center gap-2">
-                  <TrendingUp className="w-5 h-5 text-primary" />
-                  <h2 className="font-bold text-foreground" style={{ fontFamily: "var(--font-heading)" }}>تحليل الجاهزية</h2>
+                  <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
+                    <TrendingUp className="w-4 h-4 text-primary" />
+                  </div>
+                  <h2 className="font-bold text-foreground text-sm" style={{ fontFamily: "var(--font-heading)" }}>تحليل الجاهزية</h2>
                 </div>
                 <Button onClick={() => smartUploadRef.current?.click()} disabled={isSmartUploading}
-                  variant="default" size="sm" className="gap-1.5 bg-violet-600 hover:bg-violet-700">
+                  variant="default" size="sm" className="gap-1.5 bg-violet-600 hover:bg-violet-700 shadow-sm">
                   {isSmartUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
                   {isSmartUploading ? "جاري التصنيف..." : "رفع شاهد مع تصنيف ذكي"}
                 </Button>
@@ -773,24 +838,39 @@ export default function PerformanceEvidence() {
               <div className="mb-4">
                 <div className="flex items-center justify-between text-sm mb-2">
                   <span className="font-bold" style={{ color: grade.color }}>{gapAnalysis.percentage}% جاهزية</span>
-                  <span className="text-muted-foreground">{gapAnalysis.totalEvidences} شاهد مرفوع</span>
+                  <span className="text-xs text-muted-foreground">{gapAnalysis.totalEvidences} شاهد مرفوع</span>
                 </div>
-                <Progress value={gapAnalysis.percentage} className="h-3" />
+                <Progress value={gapAnalysis.percentage} className="h-2.5" />
               </div>
 
               {/* إحصائيات سريعة */}
               <div className="grid grid-cols-3 gap-3">
-                <div className="flex items-center gap-2 bg-emerald-50 rounded-lg p-3">
-                  <CheckCircle className="w-5 h-5 text-emerald-600 shrink-0" />
-                  <div><p className="text-lg font-black text-emerald-700">{gapAnalysis.coveredCriteria}</p><p className="text-[10px] text-emerald-600">مكتمل</p></div>
+                <div className="flex items-center gap-3 bg-emerald-50 dark:bg-emerald-950/30 rounded-xl p-3 border border-emerald-200/50">
+                  <div className="w-9 h-9 rounded-lg bg-emerald-100 dark:bg-emerald-900/50 flex items-center justify-center shrink-0">
+                    <CheckCircle className="w-4.5 h-4.5 text-emerald-600" />
+                  </div>
+                  <div>
+                    <p className="text-lg font-black text-emerald-700 dark:text-emerald-400 leading-none">{gapAnalysis.coveredCriteria}</p>
+                    <p className="text-[10px] text-emerald-600 dark:text-emerald-500 mt-0.5">مكتمل</p>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2 bg-amber-50 rounded-lg p-3">
-                  <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0" />
-                  <div><p className="text-lg font-black text-amber-700">{gapAnalysis.partialCriteria}</p><p className="text-[10px] text-amber-600">جزئي</p></div>
+                <div className="flex items-center gap-3 bg-amber-50 dark:bg-amber-950/30 rounded-xl p-3 border border-amber-200/50">
+                  <div className="w-9 h-9 rounded-lg bg-amber-100 dark:bg-amber-900/50 flex items-center justify-center shrink-0">
+                    <AlertTriangle className="w-4.5 h-4.5 text-amber-600" />
+                  </div>
+                  <div>
+                    <p className="text-lg font-black text-amber-700 dark:text-amber-400 leading-none">{gapAnalysis.partialCriteria}</p>
+                    <p className="text-[10px] text-amber-600 dark:text-amber-500 mt-0.5">جزئي</p>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2 bg-red-50 rounded-lg p-3">
-                  <XCircle className="w-5 h-5 text-red-500 shrink-0" />
-                  <div><p className="text-lg font-black text-red-600">{gapAnalysis.missedCriteria}</p><p className="text-[10px] text-red-500">مفقود</p></div>
+                <div className="flex items-center gap-3 bg-red-50 dark:bg-red-950/30 rounded-xl p-3 border border-red-200/50">
+                  <div className="w-9 h-9 rounded-lg bg-red-100 dark:bg-red-900/50 flex items-center justify-center shrink-0">
+                    <XCircle className="w-4.5 h-4.5 text-red-500" />
+                  </div>
+                  <div>
+                    <p className="text-lg font-black text-red-600 dark:text-red-400 leading-none">{gapAnalysis.missedCriteria}</p>
+                    <p className="text-[10px] text-red-500 dark:text-red-400 mt-0.5">مفقود</p>
+                  </div>
                 </div>
               </div>
             </CardContent>
@@ -805,62 +885,8 @@ export default function PerformanceEvidence() {
 
             {/* ===== تبويب البنود ===== */}
             <TabsContent value="criteria">
-              {/* شبكة البنود مع حالة كل بند */}
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 mb-6">
-                {allCriteria.map((c, i) => {
-                  const d = criteriaData[c.id];
-                  const evCount = d?.evidences.length || 0;
-                  const status = d?.score >= 4 && evCount > 0 ? "complete" : evCount > 0 || (d?.score || 0) > 0 ? "partial" : "missing";
-                  const isTeacherStandard = selectedJob?.isTeacher && c.id.startsWith("std-");
-                  const standard = isTeacherStandard ? STANDARDS.find(s => s.id === c.id) : null;
-
-                  return (
-                    <Card key={c.id}
-                      className={`cursor-pointer hover:shadow-md transition-all duration-200 ${
-                        status === "complete" ? "border-emerald-300 bg-emerald-50/30"
-                        : status === "partial" ? "border-amber-300 bg-amber-50/30"
-                        : "border-border/50 hover:border-primary/30"
-                      }`}
-                      onClick={() => { setCurrentCriterionIndex(i); setStep("criterion-detail"); }}>
-                      <CardContent className="p-3">
-                        <div className="flex items-start justify-between mb-2">
-                          <div className="flex items-center gap-1.5">
-                            {standard && <span className="text-base">{standard.icon}</span>}
-                            <span className="text-xs font-bold text-muted-foreground">#{i + 1}</span>
-                          </div>
-                          {status === "complete" && <CheckCircle className="w-4 h-4 text-emerald-500" />}
-                          {status === "partial" && <AlertTriangle className="w-4 h-4 text-amber-500" />}
-                          {status === "missing" && <XCircle className="w-4 h-4 text-red-400" />}
-                        </div>
-                        <h3 className="text-xs font-bold text-foreground leading-snug mb-1 line-clamp-2" style={{ fontFamily: "var(--font-heading)" }}>
-                          {c.title}
-                        </h3>
-                        <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
-                          <span>{evCount} شاهد</span>
-                          <span>·</span>
-                          <span>{d?.score || 0}/{c.maxScore}</span>
-                        </div>
-                        {isTeacherStandard && standard && (
-                          <div className="mt-1.5">
-                            <div className="w-full h-1 bg-muted rounded-full overflow-hidden">
-                              <div className="h-full rounded-full transition-all" style={{
-                                width: `${(() => {
-                                  const covered = standard.indicators.filter(ind => d?.evidences.some(e => e.subEvidenceId === ind.id)).length;
-                                  return standard.indicators.length > 0 ? (covered / standard.indicators.length) * 100 : 0;
-                                })()}%`,
-                                backgroundColor: standard.color,
-                              }} />
-                            </div>
-                          </div>
-                        )}
-                      </CardContent>
-                    </Card>
-                  );
-                })}
-              </div>
-
-              {/* قائمة البنود التفصيلية */}
-              <div className="space-y-2">
+              {/* قائمة البنود */}
+              <div className="space-y-3">
                 {allCriteria.map((criterion, index) => {
                   const data = criteriaData[criterion.id];
                   if (!data) return null;
@@ -869,36 +895,70 @@ export default function PerformanceEvidence() {
                   const status = data.score >= 4 && evidenceCount > 0 ? "complete" : evidenceCount > 0 || data.score > 0 ? "partial" : "missing";
                   const isTeacherStandard = selectedJob?.isTeacher && criterion.id.startsWith("std-");
                   const standard = isTeacherStandard ? STANDARDS.find(s => s.id === criterion.id) : null;
+                  const indicatorProgress = isTeacherStandard && standard ? (() => {
+                    const covered = standard.indicators.filter(ind => data.evidences.some(e => e.subEvidenceId === ind.id)).length;
+                    return { covered, total: standard.indicators.length, pct: standard.indicators.length > 0 ? Math.round((covered / standard.indicators.length) * 100) : 0 };
+                  })() : null;
 
                   return (
                     <Card key={criterion.id}
-                      className={`cursor-pointer hover:shadow-sm transition-all ${
-                        status === "complete" ? "border-emerald-200" : status === "partial" ? "border-amber-200" : "border-border/50"
+                      className={`cursor-pointer hover:shadow-md transition-all duration-200 group ${
+                        status === "complete" ? "border-emerald-300 bg-emerald-50/20 hover:border-emerald-400"
+                        : status === "partial" ? "border-amber-300 bg-amber-50/20 hover:border-amber-400"
+                        : "border-border/50 hover:border-primary/30"
                       }`}
                       onClick={() => { setCurrentCriterionIndex(index); setStep("criterion-detail"); }}>
-                      <CardContent className="p-4 flex items-center gap-4">
-                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold text-sm shrink-0 ${
-                          status === "complete" ? "bg-emerald-100 text-emerald-700"
-                          : status === "partial" ? "bg-amber-100 text-amber-700"
-                          : isCustom ? "bg-violet-50 text-violet-700" : "bg-muted text-muted-foreground"
-                        }`}>
-                          {standard ? standard.icon : isCustom ? "+" : index + 1}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <h3 className="font-bold text-foreground text-sm truncate" style={{ fontFamily: "var(--font-heading)" }}>
-                            {criterion.title}
-                            {isCustom && <Badge variant="outline" className="mr-2 text-[10px]">مخصص</Badge>}
-                          </h3>
-                          <p className="text-xs text-muted-foreground truncate">{criterion.description}</p>
-                        </div>
-                        <div className="flex items-center gap-3 shrink-0">
-                          <div className="text-center">
-                            <p className="text-sm font-bold" style={{ color: status === "complete" ? "#16A34A" : status === "partial" ? "#CA8A04" : "#9CA3AF" }}>
-                              {data.score}/{criterion.maxScore}
-                            </p>
-                            <p className="text-[10px] text-muted-foreground">{evidenceCount} شاهد</p>
+                      <CardContent className="p-4">
+                        <div className="flex items-center gap-4">
+                          {/* رقم البند / أيقونة */}
+                          <div className={`w-12 h-12 rounded-xl flex items-center justify-center font-bold text-lg shrink-0 transition-transform group-hover:scale-105 ${
+                            isCustom ? "bg-violet-100 text-violet-700" : ""
+                          }`}
+                            style={standard ? { backgroundColor: standard.color + "15" } : !isCustom ? (
+                              status === "complete" ? { backgroundColor: "#dcfce7" } : status === "partial" ? { backgroundColor: "#fef3c7" } : { backgroundColor: "#f1f5f9" }
+                            ) : undefined}>
+                            {standard ? (() => { const StdIcon = STANDARD_ICONS[standard.id]; return StdIcon ? <StdIcon className="w-6 h-6" style={{ color: standard.color }} /> : <span className="text-lg font-bold" style={{ color: standard.color }}>{standard.number}</span>; })() : isCustom ? <Plus className="w-5 h-5" /> : <span className="text-lg font-bold" style={{ color: status === "complete" ? "#16a34a" : status === "partial" ? "#ca8a04" : "#64748b" }}>{index + 1}</span>}
                           </div>
-                          <ArrowLeft className="w-4 h-4 text-muted-foreground" />
+
+                          {/* المحتوى */}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-0.5">
+                              <h3 className="font-bold text-foreground text-sm truncate" style={{ fontFamily: "var(--font-heading)" }}>
+                                {criterion.title}
+                              </h3>
+                              {isCustom && <Badge variant="outline" className="text-[10px] shrink-0">مخصص</Badge>}
+                            </div>
+                            {isTeacherStandard && standard && indicatorProgress ? (
+                              <div className="flex items-center gap-2 mt-1">
+                                <span className="text-[11px] text-muted-foreground shrink-0">{indicatorProgress.covered}/{indicatorProgress.total} مؤشر</span>
+                                <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden max-w-[120px]">
+                                  <div className="h-full rounded-full transition-all duration-300" style={{ width: `${indicatorProgress.pct}%`, backgroundColor: standard.color }} />
+                                </div>
+                                <span className="text-[10px] font-medium" style={{ color: standard.color }}>الوزن {standard.weight}%</span>
+                              </div>
+                            ) : (
+                              <p className="text-xs text-muted-foreground truncate">{criterion.description}</p>
+                            )}
+                          </div>
+
+                          {/* الإحصائيات */}
+                          <div className="flex items-center gap-4 shrink-0">
+                            <div className="flex items-center gap-1.5">
+                              {status === "complete" && <CheckCircle className="w-4 h-4 text-emerald-500" />}
+                              {status === "partial" && <AlertTriangle className="w-4 h-4 text-amber-500" />}
+                              {status === "missing" && <XCircle className="w-4 h-4 text-red-400" />}
+                              <div className="text-center">
+                                <p className="text-sm font-bold" style={{ color: status === "complete" ? "#16A34A" : status === "partial" ? "#CA8A04" : "#9CA3AF" }}>
+                                  {data.score}/{criterion.maxScore}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="text-center border-r border-border/50 pr-3">
+                              <p className="text-xs font-bold text-foreground">{evidenceCount}</p>
+                              <p className="text-[10px] text-muted-foreground">شاهد</p>
+                            </div>
+                            <ArrowLeft className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors" />
+                          </div>
                         </div>
                       </CardContent>
                     </Card>
@@ -1001,7 +1061,7 @@ export default function PerformanceEvidence() {
                 <div className="flex items-start gap-3">
                   <div className="w-12 h-12 rounded-xl flex items-center justify-center text-lg shrink-0"
                     style={{ backgroundColor: (standard?.color || selectedJob?.color || "#059669") + "15" }}>
-                    {standard ? standard.icon : currentCriterionIndex + 1}
+                    {standard ? (() => { const StdIcon = STANDARD_ICONS[standard.id]; return StdIcon ? <StdIcon className="w-6 h-6" style={{ color: standard.color }} /> : <span className="text-lg font-bold">{standard.number}</span>; })() : <span className="text-lg font-bold">{currentCriterionIndex + 1}</span>}
                   </div>
                   <div>
                     <h1 className="text-xl font-black text-foreground mb-1" style={{ fontFamily: "var(--font-heading)" }}>
