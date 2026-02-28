@@ -17,6 +17,73 @@ export const appRouter = router({
   }),
 
   ai: router({
+    // تصنيف شاهد تلقائياً - الميزة الرئيسية على نمط معياري
+    classifyEvidence: publicProcedure
+      .input(z.object({
+        description: z.string().optional(),
+        fileName: z.string().optional(),
+        fileType: z.string().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const prompt = `أنت نظام تصنيف ذكي لشواهد الأداء الوظيفي للمعلمين وفق معايير وزارة التعليم السعودية 1447هـ.
+
+المعايير الـ 11 هي:
+1. أداء الواجبات الوظيفية (std-1)
+2. التفاعل مع المجتمع المهني (std-2)
+3. التفاعل مع أولياء الأمور (std-3)
+4. التنويع في استراتيجيات التدريس (std-4)
+5. تحسين نتائج المتعلمين (std-5)
+6. إعداد وتنفيذ خطة التعلم (std-6)
+7. توظيف تقنيات ووسائل التعلم المناسبة (std-7)
+8. تهيئة البيئة التعليمية (std-8)
+9. الإدارة الصفية (std-9)
+10. تحليل نتائج المتعلمين وتشخيص مستوياتهم (std-10)
+11. تنوع أساليب التقويم (std-11)
+
+بناءً على المعلومات التالية عن الشاهد، حدد المعيار والمؤشر الأنسب:
+${input.description ? `وصف الشاهد: ${input.description}` : ""}
+${input.fileName ? `اسم الملف: ${input.fileName}` : ""}
+${input.fileType ? `نوع الملف: ${input.fileType}` : ""}
+
+أعطني الإجابة بصيغة JSON.`;
+
+        const response = await invokeLLM({
+          messages: [
+            { role: "system", content: "أنت نظام تصنيف ذكي للشواهد التعليمية. أجب بصيغة JSON فقط." },
+            { role: "user", content: prompt }
+          ],
+          response_format: {
+            type: "json_schema",
+            json_schema: {
+              name: "evidence_classification",
+              strict: true,
+              schema: {
+                type: "object",
+                properties: {
+                  standardId: { type: "string", description: "معرف المعيار مثل std-1" },
+                  standardNumber: { type: "integer", description: "رقم المعيار من 1 إلى 11" },
+                  standardName: { type: "string", description: "اسم المعيار" },
+                  indicatorIndex: { type: "integer", description: "رقم المؤشر داخل المعيار (يبدأ من 1)" },
+                  indicatorText: { type: "string", description: "نص المؤشر" },
+                  confidence: { type: "number", description: "نسبة الثقة من 0 إلى 1" },
+                  reasoning: { type: "string", description: "سبب التصنيف" },
+                },
+                required: ["standardId", "standardNumber", "standardName", "indicatorIndex", "indicatorText", "confidence", "reasoning"],
+                additionalProperties: false,
+              },
+            },
+          },
+        });
+        const raw = response.choices?.[0]?.message?.content;
+        const content = typeof raw === 'string' ? raw : '{}';
+        try {
+          const classification = JSON.parse(content);
+          return { classification, success: true };
+        } catch {
+          return { classification: null, success: false };
+        }
+      }),
+
     suggestEvidence: publicProcedure
       .input(z.object({
         jobTitle: z.string(),
@@ -101,6 +168,23 @@ export const appRouter = router({
         });
         const c = response.choices?.[0]?.message?.content;
         return { content: (typeof c === 'string' ? c : "").trim() };
+      }),
+
+    // تحليل فجوات الشواهد
+    analyzeGaps: publicProcedure
+      .input(z.object({
+        coveredIndicators: z.array(z.string()),
+        totalIndicators: z.number(),
+      }))
+      .mutation(async ({ input }) => {
+        const response = await invokeLLM({
+          messages: [
+            { role: "system", content: "أنت مستشار تعليمي متخصص في الأداء الوظيفي. قدم توصيات عملية لسد الفجوات في ملف الإنجاز. أجب باللغة العربية." },
+            { role: "user", content: `المعلم غطى ${input.coveredIndicators.length} مؤشر من أصل ${input.totalIndicators}.\n\nالمؤشرات المغطاة:\n${input.coveredIndicators.join("\n")}\n\nقدم 3-5 توصيات عملية لتحسين ملف الإنجاز وسد الفجوات.` }
+          ],
+        });
+        const c = response.choices?.[0]?.message?.content;
+        return { recommendations: (typeof c === 'string' ? c : "").trim() };
       }),
   }),
 });

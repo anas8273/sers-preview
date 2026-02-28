@@ -214,7 +214,6 @@ describe("ai.suggestEvidence", () => {
     });
 
     expect(result.suggestions.length).toBeGreaterThanOrEqual(1);
-    // Verify the existing content was passed to the LLM
     expect(mockedInvokeLLM).toHaveBeenCalledWith(
       expect.objectContaining({
         messages: expect.arrayContaining([
@@ -343,5 +342,223 @@ describe("ai.fillFormFields", () => {
         }),
       })
     );
+  });
+});
+
+describe("ai.classifyEvidence", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("classifies evidence to the correct standard and indicator", async () => {
+    const classification = {
+      standardId: "std-1",
+      standardNumber: 1,
+      standardName: "أداء الواجبات الوظيفية",
+      indicatorIndex: 1,
+      indicatorText: "يطبق الأنظمة وقواعد السلوك الوظيفية",
+      confidence: 0.92,
+      reasoning: "الشاهد يتعلق بالالتزام بالدوام والأنظمة",
+    };
+
+    mockedInvokeLLM.mockResolvedValueOnce({
+      id: "test-classify-1",
+      created: Date.now(),
+      model: "test",
+      choices: [
+        {
+          index: 0,
+          message: {
+            role: "assistant",
+            content: JSON.stringify(classification),
+          },
+          finish_reason: "stop",
+        },
+      ],
+    });
+
+    const ctx = createPublicContext();
+    const caller = appRouter.createCaller(ctx);
+
+    const result = await caller.ai.classifyEvidence({
+      description: "صورة من سجل الحضور والانصراف",
+      fileName: "attendance_record.jpg",
+      fileType: "image",
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.classification).toBeDefined();
+    expect(result.classification.standardId).toBe("std-1");
+    expect(result.classification.confidence).toBeGreaterThan(0.5);
+    expect(mockedInvokeLLM).toHaveBeenCalledWith(
+      expect.objectContaining({
+        response_format: expect.objectContaining({
+          type: "json_schema",
+          json_schema: expect.objectContaining({
+            name: "evidence_classification",
+            strict: true,
+          }),
+        }),
+      })
+    );
+  });
+
+  it("handles invalid JSON response gracefully", async () => {
+    mockedInvokeLLM.mockResolvedValueOnce({
+      id: "test-classify-2",
+      created: Date.now(),
+      model: "test",
+      choices: [
+        {
+          index: 0,
+          message: {
+            role: "assistant",
+            content: "لا أستطيع تصنيف هذا الشاهد",
+          },
+          finish_reason: "stop",
+        },
+      ],
+    });
+
+    const ctx = createPublicContext();
+    const caller = appRouter.createCaller(ctx);
+
+    const result = await caller.ai.classifyEvidence({
+      description: "ملف غير واضح",
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.classification).toBeNull();
+  });
+
+  it("works with minimal input (only fileName)", async () => {
+    const classification = {
+      standardId: "std-7",
+      standardNumber: 7,
+      standardName: "توظيف تقنيات ووسائل التعلم المناسبة",
+      indicatorIndex: 2,
+      indicatorText: "يوظف التقنية في التعليم",
+      confidence: 0.78,
+      reasoning: "اسم الملف يشير لاستخدام التقنية",
+    };
+
+    mockedInvokeLLM.mockResolvedValueOnce({
+      id: "test-classify-3",
+      created: Date.now(),
+      model: "test",
+      choices: [
+        {
+          index: 0,
+          message: {
+            role: "assistant",
+            content: JSON.stringify(classification),
+          },
+          finish_reason: "stop",
+        },
+      ],
+    });
+
+    const ctx = createPublicContext();
+    const caller = appRouter.createCaller(ctx);
+
+    const result = await caller.ai.classifyEvidence({
+      fileName: "screenshot_madrasati_platform.png",
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.classification.standardId).toBe("std-7");
+  });
+});
+
+describe("ai.analyzeGaps", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("returns recommendations for gap analysis", async () => {
+    mockedInvokeLLM.mockResolvedValueOnce({
+      id: "test-gaps-1",
+      created: Date.now(),
+      model: "test",
+      choices: [
+        {
+          index: 0,
+          message: {
+            role: "assistant",
+            content: "1. ركّز على معيار التنويع في استراتيجيات التدريس\n2. أضف شواهد لمعيار تهيئة البيئة التعليمية\n3. وثّق أنشطة التقويم المتنوعة",
+          },
+          finish_reason: "stop",
+        },
+      ],
+    });
+
+    const ctx = createPublicContext();
+    const caller = appRouter.createCaller(ctx);
+
+    const result = await caller.ai.analyzeGaps({
+      coveredIndicators: [
+        "أداء الواجبات الوظيفية: يطبق الأنظمة",
+        "التفاعل مع المجتمع المهني: يشارك في المجتمعات المهنية",
+      ],
+      totalIndicators: 45,
+    });
+
+    expect(result.recommendations).toBeDefined();
+    expect(result.recommendations.length).toBeGreaterThan(0);
+    expect(result.recommendations).toContain("استراتيجيات");
+    expect(mockedInvokeLLM).toHaveBeenCalledTimes(1);
+  });
+
+  it("handles empty covered indicators", async () => {
+    mockedInvokeLLM.mockResolvedValueOnce({
+      id: "test-gaps-2",
+      created: Date.now(),
+      model: "test",
+      choices: [
+        {
+          index: 0,
+          message: {
+            role: "assistant",
+            content: "ملفك فارغ تماماً. ابدأ بتوثيق الشواهد الأساسية.",
+          },
+          finish_reason: "stop",
+        },
+      ],
+    });
+
+    const ctx = createPublicContext();
+    const caller = appRouter.createCaller(ctx);
+
+    const result = await caller.ai.analyzeGaps({
+      coveredIndicators: [],
+      totalIndicators: 45,
+    });
+
+    expect(result.recommendations).toContain("فارغ");
+  });
+
+  it("handles non-string LLM response", async () => {
+    mockedInvokeLLM.mockResolvedValueOnce({
+      id: "test-gaps-3",
+      created: Date.now(),
+      model: "test",
+      choices: [
+        {
+          index: 0,
+          message: { role: "assistant", content: null as any },
+          finish_reason: "stop",
+        },
+      ],
+    });
+
+    const ctx = createPublicContext();
+    const caller = appRouter.createCaller(ctx);
+
+    const result = await caller.ai.analyzeGaps({
+      coveredIndicators: ["test"],
+      totalIndicators: 45,
+    });
+
+    expect(result.recommendations).toBe("");
   });
 });
