@@ -4,32 +4,50 @@ import NotFound from "@/pages/NotFound";
 import { Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
-import Home from "./pages/Home";
+import { lazy, Suspense } from "react";
 
+// Lazy load pages
+const Home = lazy(() => import("./pages/Home"));
+const PerformanceEvidence = lazy(() => import("./pages/PerformanceEvidence"));
+const CertificateBuilder = lazy(() => import("./pages/CertificateBuilder"));
+const GradeAnalysis = lazy(() => import("./pages/GradeAnalysis"));
+const CoverBuilder = lazy(() => import("./pages/CoverBuilder"));
+const TreatmentPlan = lazy(() => import("./pages/TreatmentPlan"));
+const SectionPage = lazy(() => import("./pages/SectionPage"));
 
-function Router() {
+function LoadingFallback() {
   return (
-    <Switch>
-      <Route path={"/"} component={Home} />
-      <Route path={"/404"} component={NotFound} />
-      {/* Final fallback route */}
-      <Route component={NotFound} />
-    </Switch>
+    <div className="min-h-screen flex items-center justify-center bg-[#F8FAFC]" dir="rtl">
+      <div className="text-center">
+        <div className="w-10 h-10 border-4 border-emerald-200 border-t-emerald-600 rounded-full animate-spin mx-auto mb-3" />
+        <p className="text-sm text-gray-500" style={{ fontFamily: "'Tajawal', sans-serif" }}>جاري التحميل...</p>
+      </div>
+    </div>
   );
 }
 
-// NOTE: About Theme
-// - First choose a default theme according to your design style (dark or light bg), than change color palette in index.css
-//   to keep consistent foreground/background color across components
-// - If you want to make theme switchable, pass `switchable` ThemeProvider and use `useTheme` hook
+function Router() {
+  return (
+    <Suspense fallback={<LoadingFallback />}>
+      <Switch>
+        <Route path={"/"} component={Home} />
+        <Route path={"/performance-evidence"} component={PerformanceEvidence} />
+        <Route path={"/certificates"} component={CertificateBuilder} />
+        <Route path={"/grade-analysis"} component={GradeAnalysis} />
+        <Route path={"/covers"} component={CoverBuilder} />
+        <Route path={"/treatment-plans"} component={TreatmentPlan} />
+        <Route path={"/section/:sectionId"} component={SectionPage} />
+        <Route path={"/404"} component={NotFound} />
+        <Route component={NotFound} />
+      </Switch>
+    </Suspense>
+  );
+}
 
 function App() {
   return (
     <ErrorBoundary>
-      <ThemeProvider
-        defaultTheme="light"
-        // switchable
-      >
+      <ThemeProvider defaultTheme="light">
         <TooltipProvider>
           <Toaster />
           <Router />

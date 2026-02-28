@@ -6,6 +6,7 @@
  */
 import { useState, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { useLocation } from "wouter";
 import {
   Award, FolderOpen, FileText, BarChart3, TrendingUp, HeartPulse,
   CalendarDays, ClipboardCheck, Medal, GraduationCap, BookOpen,
@@ -25,6 +26,15 @@ const HERO_BG = "https://d2xsxph8kpxj0f.cloudfront.net/310519663047121386/h34s4a
 const CERTS_IMG = "https://d2xsxph8kpxj0f.cloudfront.net/310519663047121386/h34s4aPNVyHXdtjgZ7eNNf/certificates-showcase-SVbvZz5NXwQKtTvTnrEhrL.webp";
 const FORMS_IMG = "https://d2xsxph8kpxj0f.cloudfront.net/310519663047121386/h34s4aPNVyHXdtjgZ7eNNf/interactive-forms-GheGH45wZDR9EC9ti29f7Z.webp";
 
+// خريطة الأقسام التي لها صفحات تفاعلية مبنية
+const INTERACTIVE_ROUTES: Record<string, string> = {
+  "1": "/performance-evidence",
+  "3": "/covers",
+  "4": "/grade-analysis",
+  "6": "/treatment-plans",
+  "8": "/certificates",
+};
+
 function StatCard({ value, label, icon: Icon, color }: { value: number | string; label: string; icon: React.ComponentType<any>; color: string }) {
   return (
     <motion.div
@@ -43,14 +53,24 @@ function StatCard({ value, label, icon: Icon, color }: { value: number | string;
   );
 }
 
-function ServiceCard({ service, sectionColor }: { service: Service; sectionColor: string }) {
+function ServiceCard({ service, sectionColor, sectionId, onNavigate }: { service: Service; sectionColor: string; sectionId: string; onNavigate: (path: string) => void }) {
+  const route = INTERACTIVE_ROUTES[sectionId];
   return (
     <motion.div
       initial={{ opacity: 0, scale: 0.95 }}
       animate={{ opacity: 1, scale: 1 }}
       whileHover={{ y: -2, boxShadow: "0 8px 25px rgba(0,0,0,0.08)" }}
       transition={{ duration: 0.2 }}
-      className="bg-white rounded-lg border border-gray-100 p-4 hover:border-gray-200 transition-all group"
+      className="bg-white rounded-lg border border-gray-100 p-4 hover:border-gray-200 transition-all group cursor-pointer"
+      onClick={() => {
+        if (route) {
+          onNavigate(route);
+        } else {
+          import("sonner").then(({ toast }) => {
+            toast.info("هذه الخدمة قيد التطوير", { description: "سيتم إضافتها قريباً إن شاء الله" });
+          });
+        }
+      }}
     >
       <div className="flex items-start justify-between gap-3 mb-3">
         <h4 className="font-semibold text-gray-800 text-sm leading-relaxed group-hover:text-gray-900" style={{ fontFamily: "'Tajawal', sans-serif" }}>
@@ -84,25 +104,32 @@ function ServiceCard({ service, sectionColor }: { service: Service; sectionColor
               مجاني
             </span>
           )}
-          {service.category && (
-            <span className="px-2 py-0.5 rounded-full text-[10px] bg-gray-100 text-gray-600">{service.category}</span>
-          )}
         </div>
         <button
           className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium text-white transition-colors"
-          style={{ backgroundColor: sectionColor }}
+          style={{ backgroundColor: route ? sectionColor : "#9CA3AF" }}
         >
-          <Eye className="w-3 h-3" />
-          معاينة
+          {route ? (
+            <>
+              <Zap className="w-3 h-3" />
+              ابدأ الآن
+            </>
+          ) : (
+            <>
+              <Eye className="w-3 h-3" />
+              قريباً
+            </>
+          )}
         </button>
       </div>
     </motion.div>
   );
 }
 
-function SectionView({ section, onBack }: { section: Section; onBack: () => void }) {
+function SectionView({ section, onBack, onNavigate }: { section: Section; onBack: () => void; onNavigate: (path: string) => void }) {
   const Icon = iconMap[section.icon] || FileText;
   const [filter, setFilter] = useState<"all" | "interactive" | "downloadable" | "both">("all");
+  const route = INTERACTIVE_ROUTES[section.id];
 
   const filtered = useMemo(() => {
     if (filter === "all") return section.services;
@@ -116,14 +143,26 @@ function SectionView({ section, onBack }: { section: Section; onBack: () => void
         <span className="text-sm">العودة للأقسام</span>
       </button>
 
-      <div className="flex items-center gap-4 mb-6">
-        <div className="w-14 h-14 rounded-xl flex items-center justify-center" style={{ backgroundColor: section.color + "15" }}>
-          <Icon className="w-7 h-7" style={{ color: section.color }} />
+      <div className="flex items-center justify-between gap-4 mb-6 flex-wrap">
+        <div className="flex items-center gap-4">
+          <div className="w-14 h-14 rounded-xl flex items-center justify-center" style={{ backgroundColor: section.color + "15" }}>
+            <Icon className="w-7 h-7" style={{ color: section.color }} />
+          </div>
+          <div>
+            <h2 className="text-2xl font-bold text-gray-900" style={{ fontFamily: "'Tajawal', sans-serif" }}>{section.title}</h2>
+            <p className="text-sm text-gray-500 mt-1">{section.description}</p>
+          </div>
         </div>
-        <div>
-          <h2 className="text-2xl font-bold text-gray-900" style={{ fontFamily: "'Tajawal', sans-serif" }}>{section.title}</h2>
-          <p className="text-sm text-gray-500 mt-1">{section.description}</p>
-        </div>
+        {route && (
+          <button
+            onClick={() => onNavigate(route)}
+            className="flex items-center gap-2 text-white px-5 py-2.5 rounded-xl text-sm font-bold shadow-lg hover:shadow-xl transition-all"
+            style={{ backgroundColor: section.color }}
+          >
+            <Zap className="w-4 h-4" />
+            فتح الخدمة التفاعلية
+          </button>
+        )}
       </div>
 
       <div className="flex items-center gap-3 mb-6 flex-wrap">
@@ -151,7 +190,7 @@ function SectionView({ section, onBack }: { section: Section; onBack: () => void
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
         <AnimatePresence mode="popLayout">
           {filtered.map((service) => (
-            <ServiceCard key={service.id} service={service} sectionColor={section.color} />
+            <ServiceCard key={service.id} service={service} sectionColor={section.color} sectionId={section.id} onNavigate={onNavigate} />
           ))}
         </AnimatePresence>
       </div>
@@ -164,6 +203,7 @@ export default function Home() {
   const [searchQuery, setSearchQuery] = useState("");
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [expandedSidebar, setExpandedSidebar] = useState<string | null>(null);
+  const [, navigate] = useLocation();
 
   const searchResults = useMemo(() => {
     if (!searchQuery.trim()) return [];
@@ -194,7 +234,6 @@ export default function Home() {
       <aside className={`fixed top-0 right-0 h-full w-72 bg-white border-l border-gray-200 z-50 transition-transform duration-300 overflow-y-auto ${
         sidebarOpen ? "translate-x-0" : "translate-x-full lg:translate-x-0"
       }`}>
-        {/* Logo */}
         <div className="p-5 border-b border-gray-100">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-emerald-600 flex items-center justify-center">
@@ -207,7 +246,6 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Sidebar nav */}
         <nav className="p-3">
           <button
             onClick={() => { setSelectedSection(null); setSearchQuery(""); setSidebarOpen(false); }}
@@ -226,7 +264,7 @@ export default function Home() {
           {sections.map((section) => {
             const Icon = iconMap[section.icon] || FileText;
             const isActive = selectedSection?.id === section.id;
-            const isExpanded = expandedSidebar === section.id;
+            const hasRoute = !!INTERACTIVE_ROUTES[section.id];
             return (
               <div key={section.id} className="mb-0.5">
                 <button
@@ -234,7 +272,6 @@ export default function Home() {
                     setSelectedSection(section);
                     setSearchQuery("");
                     setSidebarOpen(false);
-                    setExpandedSidebar(isExpanded ? null : section.id);
                   }}
                   className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-all ${
                     isActive
@@ -244,7 +281,10 @@ export default function Home() {
                 >
                   <Icon className="w-4 h-4 shrink-0" style={{ color: section.color }} />
                   <span className="truncate flex-1 text-right">{section.title}</span>
-                  <span className="text-[10px] text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded-full">{section.services.length}</span>
+                  <div className="flex items-center gap-1">
+                    {hasRoute && <Zap className="w-3 h-3 text-emerald-500" />}
+                    <span className="text-[10px] text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded-full">{section.services.length}</span>
+                  </div>
                 </button>
               </div>
             );
@@ -254,14 +294,12 @@ export default function Home() {
 
       {/* Main content */}
       <main className="lg:mr-72 min-h-screen">
-        {/* Top bar */}
         <header className="sticky top-0 z-30 bg-white/80 backdrop-blur-md border-b border-gray-100">
           <div className="flex items-center gap-4 px-6 py-3">
             <button onClick={() => setSidebarOpen(true)} className="lg:hidden text-gray-600">
               <Menu className="w-5 h-5" />
             </button>
 
-            {/* Search */}
             <div className="relative flex-1 max-w-xl">
               <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
               <input
@@ -306,7 +344,7 @@ export default function Home() {
                           {section.title}
                         </span>
                       </div>
-                      <ServiceCard service={service} sectionColor={section.color} />
+                      <ServiceCard service={service} sectionColor={section.color} sectionId={section.id} onNavigate={navigate} />
                     </div>
                   ))}
                 </div>
@@ -316,7 +354,7 @@ export default function Home() {
 
           {/* Section detail view */}
           {!searchQuery && selectedSection && (
-            <SectionView section={selectedSection} onBack={() => setSelectedSection(null)} />
+            <SectionView section={selectedSection} onBack={() => setSelectedSection(null)} onNavigate={navigate} />
           )}
 
           {/* Home view */}
@@ -349,6 +387,41 @@ export default function Home() {
                 </div>
               </motion.div>
 
+              {/* Quick access to interactive services */}
+              <div className="mb-8">
+                <h2 className="text-lg font-bold text-gray-900 mb-3" style={{ fontFamily: "'Tajawal', sans-serif" }}>
+                  <Zap className="w-5 h-5 inline ml-1 text-emerald-600" />
+                  الخدمات التفاعلية الجاهزة
+                </h2>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+                  {[
+                    { route: "/performance-evidence", title: "شواهد الأداء الوظيفي", icon: "📋", color: "#059669", desc: "فورم كامل → معاينة → PDF" },
+                    { route: "/certificates", title: "شهادات الشكر والتقدير", icon: "🏆", color: "#D97706", desc: "6 أنواع × 5 ثيمات → PDF" },
+                    { route: "/grade-analysis", title: "تحليل النتائج", icon: "📊", color: "#2563EB", desc: "إدخال درجات → رسوم بيانية" },
+                    { route: "/covers", title: "أغلفة وفواصل", icon: "📁", color: "#7C3AED", desc: "6 أنواع × 5 ألوان → PDF" },
+                    { route: "/treatment-plans", title: "الخطط العلاجية", icon: "📝", color: "#DC2626", desc: "6 أنواع خطط → PDF" },
+                  ].map((item, i) => (
+                    <motion.button
+                      key={item.route}
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: i * 0.05 }}
+                      whileHover={{ y: -3, boxShadow: "0 10px 25px rgba(0,0,0,0.1)" }}
+                      onClick={() => navigate(item.route)}
+                      className="bg-white rounded-xl p-4 border border-gray-100 text-right transition-all group hover:border-gray-200"
+                    >
+                      <div className="text-2xl mb-2">{item.icon}</div>
+                      <h3 className="font-bold text-gray-800 text-sm mb-1" style={{ fontFamily: "'Tajawal', sans-serif" }}>{item.title}</h3>
+                      <p className="text-[10px] text-gray-500">{item.desc}</p>
+                      <div className="mt-2 flex items-center gap-1 text-[10px] font-bold" style={{ color: item.color }}>
+                        <Zap className="w-3 h-3" />
+                        جاهز للاستخدام
+                      </div>
+                    </motion.button>
+                  ))}
+                </div>
+              </div>
+
               {/* Stats */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
                 <StatCard value={totalServices} label="إجمالي الخدمات" icon={Sparkles} color="#059669" />
@@ -363,24 +436,34 @@ export default function Home() {
                   initial={{ opacity: 0, x: 20 }}
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ delay: 0.2 }}
-                  className="bg-white rounded-2xl overflow-hidden shadow-sm border border-gray-100"
+                  className="bg-white rounded-2xl overflow-hidden shadow-sm border border-gray-100 cursor-pointer"
+                  onClick={() => navigate("/performance-evidence")}
                 >
                   <img src={FORMS_IMG} alt="نماذج تفاعلية" className="w-full h-48 object-cover" />
                   <div className="p-5">
                     <h3 className="text-lg font-bold text-gray-900 mb-2" style={{ fontFamily: "'Tajawal', sans-serif" }}>نماذج تفاعلية حية</h3>
                     <p className="text-sm text-gray-500 leading-relaxed">أدخل بياناتك مباشرة → معاينة فورية → تصدير PDF بثيمات متعددة مع باركودات QR تلقائية</p>
+                    <div className="mt-3 flex items-center gap-1 text-sm font-bold text-emerald-600">
+                      <Zap className="w-4 h-4" />
+                      جرّب الآن
+                    </div>
                   </div>
                 </motion.div>
                 <motion.div
                   initial={{ opacity: 0, x: -20 }}
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ delay: 0.3 }}
-                  className="bg-white rounded-2xl overflow-hidden shadow-sm border border-gray-100"
+                  className="bg-white rounded-2xl overflow-hidden shadow-sm border border-gray-100 cursor-pointer"
+                  onClick={() => navigate("/certificates")}
                 >
                   <img src={CERTS_IMG} alt="شهادات وقوالب" className="w-full h-48 object-cover" />
                   <div className="p-5">
-                    <h3 className="text-lg font-bold text-gray-900 mb-2" style={{ fontFamily: "'Tajawal', sans-serif" }}>قوالب قابلة للشراء والتحميل</h3>
-                    <p className="text-sm text-gray-500 leading-relaxed">شهادات وملفات إنجاز وحقائب تدريبية جاهزة بتصاميم احترافية متعددة الثيمات</p>
+                    <h3 className="text-lg font-bold text-gray-900 mb-2" style={{ fontFamily: "'Tajawal', sans-serif" }}>شهادات شكر وتقدير</h3>
+                    <p className="text-sm text-gray-500 leading-relaxed">6 أنواع شهادات × 5 ثيمات ألوان → معاينة فورية → تصدير PDF مع QR</p>
+                    <div className="mt-3 flex items-center gap-1 text-sm font-bold text-amber-600">
+                      <Zap className="w-4 h-4" />
+                      صمّم شهادتك
+                    </div>
                   </div>
                 </motion.div>
               </div>
@@ -394,6 +477,7 @@ export default function Home() {
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                 {sections.map((section, i) => {
                   const Icon = iconMap[section.icon] || FileText;
+                  const hasRoute = !!INTERACTIVE_ROUTES[section.id];
                   return (
                     <motion.button
                       key={section.id}
@@ -401,7 +485,13 @@ export default function Home() {
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ delay: i * 0.03 }}
                       whileHover={{ y: -4, boxShadow: "0 12px 30px rgba(0,0,0,0.1)" }}
-                      onClick={() => setSelectedSection(section)}
+                      onClick={() => {
+                        if (hasRoute) {
+                          navigate(INTERACTIVE_ROUTES[section.id]);
+                        } else {
+                          setSelectedSection(section);
+                        }
+                      }}
                       className="bg-white rounded-xl p-5 border border-gray-100 text-right transition-all group hover:border-gray-200"
                     >
                       <div className="flex items-start gap-3 mb-3">
@@ -422,8 +512,14 @@ export default function Home() {
                       </div>
                       <p className="text-xs text-gray-500 leading-relaxed line-clamp-2">{section.description}</p>
                       <div className="mt-3 flex items-center gap-2 text-[10px] text-gray-400">
-                        <span className="bg-emerald-50 text-emerald-600 px-1.5 py-0.5 rounded">
-                          {section.services.filter((s) => s.type === "interactive" || s.type === "both").length} تفاعلي
+                        {hasRoute && (
+                          <span className="bg-emerald-50 text-emerald-600 px-1.5 py-0.5 rounded flex items-center gap-1">
+                            <Zap className="w-2.5 h-2.5" />
+                            تفاعلي
+                          </span>
+                        )}
+                        <span className="bg-gray-50 text-gray-500 px-1.5 py-0.5 rounded">
+                          {section.services.filter((s) => s.type === "interactive" || s.type === "both").length} خدمة تفاعلية
                         </span>
                         {section.services.some((s) => s.price > 0) && (
                           <span className="bg-orange-50 text-orange-600 px-1.5 py-0.5 rounded">

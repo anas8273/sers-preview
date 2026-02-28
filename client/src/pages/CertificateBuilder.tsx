@@ -1,0 +1,326 @@
+/*
+ * شهادات الشكر والتقدير - صفحة تفاعلية كاملة
+ * المستخدم يختار الثيم → يدخل البيانات → معاينة حية فورية → تصدير PDF / طباعة
+ */
+import { useState, useMemo } from "react";
+import { motion } from "framer-motion";
+import { ArrowLeft, Download, Printer, Palette, Type, Image as ImageIcon } from "lucide-react";
+import { useLocation } from "wouter";
+import { exportToPDF, printElement } from "@/lib/pdf-export";
+import { generateQRDataURL } from "@/lib/qr-utils";
+
+const CERT_THEMES = [
+  {
+    id: "green-official",
+    name: "الهوية الرسمية",
+    bg: "linear-gradient(135deg, #f0fdf4 0%, #dcfce7 50%, #f0fdf4 100%)",
+    borderColor: "#166534",
+    headerColor: "#166534",
+    textColor: "#1a1a1a",
+    accentColor: "#16a34a",
+    ornament: "🏛️",
+  },
+  {
+    id: "gold-elegant",
+    name: "الذهبي الأنيق",
+    bg: "linear-gradient(135deg, #fffbeb 0%, #fef3c7 50%, #fffbeb 100%)",
+    borderColor: "#92400e",
+    headerColor: "#78350f",
+    textColor: "#1a1a1a",
+    accentColor: "#d97706",
+    ornament: "⭐",
+  },
+  {
+    id: "blue-modern",
+    name: "الأزرق العصري",
+    bg: "linear-gradient(135deg, #eff6ff 0%, #dbeafe 50%, #eff6ff 100%)",
+    borderColor: "#1e40af",
+    headerColor: "#1e3a8a",
+    textColor: "#1a1a1a",
+    accentColor: "#2563eb",
+    ornament: "🎓",
+  },
+  {
+    id: "purple-royal",
+    name: "البنفسجي الملكي",
+    bg: "linear-gradient(135deg, #faf5ff 0%, #f3e8ff 50%, #faf5ff 100%)",
+    borderColor: "#6b21a8",
+    headerColor: "#581c87",
+    textColor: "#1a1a1a",
+    accentColor: "#9333ea",
+    ornament: "👑",
+  },
+  {
+    id: "teal-fresh",
+    name: "التيل المنعش",
+    bg: "linear-gradient(135deg, #f0fdfa 0%, #ccfbf1 50%, #f0fdfa 100%)",
+    borderColor: "#115e59",
+    headerColor: "#134e4a",
+    textColor: "#1a1a1a",
+    accentColor: "#0d9488",
+    ornament: "🌿",
+  },
+];
+
+const CERT_TYPES = [
+  { id: "thanks", title: "شهادة شكر وتقدير", defaultText: "تقديراً لجهودكم المتميزة وعطائكم المستمر" },
+  { id: "excellence", title: "شهادة تميز", defaultText: "تقديراً لتميزكم وإبداعكم في العمل التعليمي" },
+  { id: "participation", title: "شهادة مشاركة", defaultText: "نشهد بمشاركتكم الفاعلة في" },
+  { id: "training", title: "شهادة حضور دورة", defaultText: "نشهد بحضوركم وإتمامكم للدورة التدريبية" },
+  { id: "student_excellence", title: "شهادة تفوق طالب", defaultText: "تقديراً لتفوقكم الدراسي وتميزكم" },
+  { id: "national", title: "شهادة مناسبة وطنية", defaultText: "بمناسبة اليوم الوطني السعودي" },
+];
+
+export default function CertificateBuilder() {
+  const [, navigate] = useLocation();
+  const [selectedTheme, setSelectedTheme] = useState(CERT_THEMES[0]);
+  const [selectedType, setSelectedType] = useState(CERT_TYPES[0]);
+  const [isExporting, setIsExporting] = useState(false);
+
+  const [formData, setFormData] = useState({
+    recipientName: "",
+    recipientTitle: "",
+    reason: "",
+    issuerName: "",
+    issuerTitle: "",
+    organization: "",
+    date: "",
+    certNumber: "",
+  });
+
+  const qrData = useMemo(
+    () => generateQRDataURL(`SERS-CERT|${formData.recipientName}|${selectedType.title}|${formData.date}|${formData.certNumber}`),
+    [formData.recipientName, selectedType.title, formData.date, formData.certNumber]
+  );
+
+  const handleExportPDF = async () => {
+    setIsExporting(true);
+    await exportToPDF("cert-preview", `${selectedType.title}_${formData.recipientName || "شهادة"}.pdf`);
+    setIsExporting(false);
+  };
+
+  return (
+    <div className="min-h-screen bg-[#F8FAFC]" dir="rtl">
+      <div className="flex flex-col lg:flex-row min-h-screen">
+        {/* الشريط الجانبي - الإعدادات */}
+        <aside className="lg:w-96 bg-white border-l border-gray-200 p-5 overflow-y-auto">
+          <button onClick={() => navigate("/")} className="flex items-center gap-2 text-gray-500 hover:text-gray-700 mb-5">
+            <ArrowLeft className="w-4 h-4" />
+            <span className="text-sm">العودة</span>
+          </button>
+
+          <h1 className="text-xl font-black text-gray-900 mb-1" style={{ fontFamily: "'Tajawal', sans-serif" }}>
+            شهادات الشكر والتقدير
+          </h1>
+          <p className="text-xs text-gray-500 mb-5">صمم شهادتك → معاينة فورية → تصدير PDF</p>
+
+          {/* نوع الشهادة */}
+          <div className="mb-5">
+            <label className="block text-sm font-bold text-gray-700 mb-2">
+              <Type className="w-4 h-4 inline ml-1" />
+              نوع الشهادة
+            </label>
+            <div className="grid grid-cols-2 gap-2">
+              {CERT_TYPES.map((type) => (
+                <button
+                  key={type.id}
+                  onClick={() => {
+                    setSelectedType(type);
+                    setFormData((prev) => ({ ...prev, reason: type.defaultText }));
+                  }}
+                  className={`px-3 py-2 rounded-lg text-xs font-medium transition-all border ${
+                    selectedType.id === type.id
+                      ? "border-emerald-500 bg-emerald-50 text-emerald-700"
+                      : "border-gray-200 text-gray-600 hover:bg-gray-50"
+                  }`}
+                >
+                  {type.title}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* الثيم */}
+          <div className="mb-5">
+            <label className="block text-sm font-bold text-gray-700 mb-2">
+              <Palette className="w-4 h-4 inline ml-1" />
+              ثيم الشهادة
+            </label>
+            <div className="flex gap-2 flex-wrap">
+              {CERT_THEMES.map((theme) => (
+                <button
+                  key={theme.id}
+                  onClick={() => setSelectedTheme(theme)}
+                  className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-xs font-medium transition-all ${
+                    selectedTheme.id === theme.id ? "border-gray-900 shadow-sm" : "border-gray-200 hover:border-gray-300"
+                  }`}
+                >
+                  <div className="w-4 h-4 rounded-full border" style={{ backgroundColor: theme.borderColor }} />
+                  {theme.name}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* البيانات */}
+          <div className="space-y-3">
+            <h3 className="text-sm font-bold text-gray-700">بيانات الشهادة</h3>
+            {[
+              { key: "recipientName", label: "اسم المستلم", placeholder: "الاسم الكامل" },
+              { key: "recipientTitle", label: "صفة المستلم", placeholder: "معلم / طالب / مدير..." },
+              { key: "reason", label: "نص الشهادة", placeholder: "سبب التكريم...", multiline: true },
+              { key: "issuerName", label: "اسم المانح", placeholder: "اسم مدير المدرسة" },
+              { key: "issuerTitle", label: "صفة المانح", placeholder: "مدير المدرسة / المشرف" },
+              { key: "organization", label: "الجهة", placeholder: "اسم المدرسة / الإدارة" },
+              { key: "date", label: "التاريخ", placeholder: "1446/06/15" },
+              { key: "certNumber", label: "رقم الشهادة (اختياري)", placeholder: "CERT-001" },
+            ].map((field) => (
+              <div key={field.key}>
+                <label className="block text-xs font-medium text-gray-600 mb-1">{field.label}</label>
+                {(field as any).multiline ? (
+                  <textarea
+                    value={(formData as any)[field.key]}
+                    onChange={(e) => setFormData((prev) => ({ ...prev, [field.key]: e.target.value }))}
+                    placeholder={field.placeholder}
+                    rows={3}
+                    className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-400 resize-none"
+                  />
+                ) : (
+                  <input
+                    type="text"
+                    value={(formData as any)[field.key]}
+                    onChange={(e) => setFormData((prev) => ({ ...prev, [field.key]: e.target.value }))}
+                    placeholder={field.placeholder}
+                    className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-400"
+                  />
+                )}
+              </div>
+            ))}
+          </div>
+
+          {/* أزرار التصدير */}
+          <div className="mt-5 flex gap-3">
+            <button
+              onClick={handleExportPDF}
+              disabled={isExporting}
+              className="flex-1 flex items-center justify-center gap-2 bg-emerald-600 text-white px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-emerald-700 transition-colors disabled:opacity-50"
+            >
+              <Download className="w-4 h-4" />
+              {isExporting ? "جاري..." : "تحميل PDF"}
+            </button>
+            <button
+              onClick={() => printElement("cert-preview")}
+              className="flex items-center justify-center gap-2 bg-gray-100 text-gray-700 px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-gray-200 transition-colors"
+            >
+              <Printer className="w-4 h-4" />
+              طباعة
+            </button>
+          </div>
+        </aside>
+
+        {/* المعاينة الحية */}
+        <main className="flex-1 p-6 flex items-center justify-center bg-gray-100 overflow-auto">
+          <div
+            id="cert-preview"
+            className="w-full max-w-[800px] aspect-[1.414/1] rounded-lg shadow-2xl overflow-hidden relative"
+            style={{
+              background: selectedTheme.bg,
+              fontFamily: "'Cairo', 'Tajawal', sans-serif",
+            }}
+          >
+            {/* إطار مزخرف */}
+            <div
+              className="absolute inset-4 rounded-lg"
+              style={{ border: `3px double ${selectedTheme.borderColor}` }}
+            />
+            <div
+              className="absolute inset-6 rounded"
+              style={{ border: `1px solid ${selectedTheme.borderColor}40` }}
+            />
+
+            {/* المحتوى */}
+            <div className="relative z-10 h-full flex flex-col items-center justify-between p-12 text-center">
+              {/* الشعار والعنوان */}
+              <div>
+                <div className="text-4xl mb-2">{selectedTheme.ornament}</div>
+                <h1
+                  className="text-3xl font-black mb-1"
+                  style={{ color: selectedTheme.headerColor, fontFamily: "'Tajawal', sans-serif" }}
+                >
+                  {selectedType.title}
+                </h1>
+                {formData.organization && (
+                  <p className="text-sm" style={{ color: selectedTheme.accentColor }}>{formData.organization}</p>
+                )}
+              </div>
+
+              {/* النص الرئيسي */}
+              <div className="flex-1 flex flex-col items-center justify-center max-w-lg">
+                <p className="text-sm mb-3" style={{ color: selectedTheme.textColor + "99" }}>
+                  {selectedType.id === "thanks" ? "يسر إدارة المدرسة أن تتقدم بخالص الشكر والتقدير إلى" : "تشهد إدارة المدرسة بأن"}
+                </p>
+
+                <div className="mb-4">
+                  <h2
+                    className="text-2xl font-black mb-1"
+                    style={{ color: selectedTheme.headerColor, fontFamily: "'Tajawal', sans-serif" }}
+                  >
+                    {formData.recipientName || "اسم المستلم"}
+                  </h2>
+                  {formData.recipientTitle && (
+                    <p className="text-sm font-medium" style={{ color: selectedTheme.accentColor }}>{formData.recipientTitle}</p>
+                  )}
+                </div>
+
+                <div
+                  className="w-24 h-0.5 rounded-full mb-4"
+                  style={{ backgroundColor: selectedTheme.accentColor }}
+                />
+
+                <p className="text-base leading-relaxed" style={{ color: selectedTheme.textColor }}>
+                  {formData.reason || selectedType.defaultText}
+                </p>
+              </div>
+
+              {/* التوقيع والتاريخ */}
+              <div className="w-full">
+                <div className="flex items-end justify-between">
+                  {/* QR */}
+                  <div>
+                    <img src={qrData} alt="QR" className="w-14 h-14 rounded" />
+                    {formData.certNumber && (
+                      <p className="text-[9px] mt-1" style={{ color: selectedTheme.textColor + "60" }}>
+                        {formData.certNumber}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* التوقيع */}
+                  <div className="text-center">
+                    <div className="mb-6" />
+                    <div className="w-40 border-t pt-2" style={{ borderColor: selectedTheme.borderColor + "40" }}>
+                      <p className="text-sm font-bold" style={{ color: selectedTheme.headerColor }}>
+                        {formData.issuerName || "_______________"}
+                      </p>
+                      <p className="text-xs" style={{ color: selectedTheme.textColor + "80" }}>
+                        {formData.issuerTitle || "المنصب"}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* التاريخ */}
+                  <div className="text-left">
+                    <p className="text-xs" style={{ color: selectedTheme.textColor + "60" }}>التاريخ</p>
+                    <p className="text-sm font-medium" style={{ color: selectedTheme.headerColor }}>
+                      {formData.date || "____/____/____"}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </main>
+      </div>
+    </div>
+  );
+}
