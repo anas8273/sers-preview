@@ -3,11 +3,14 @@
  * المعلم/المعلمة → نظام المعايير الـ 11 (نمط معياري) مع 45 مؤشر
  * باقي الوظائف → النظام العادي (البنود) مع ميزات معياري
  */
-import { useState, useMemo, useRef, useCallback } from "react";
+import { useState, useMemo, useRef, useCallback, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useLocation } from "wouter";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
+import { useAuth } from "@/_core/hooks/useAuth";
+import { usePortfolio } from "@/hooks/usePortfolio";
+import { getLoginUrl } from "@/const";
 import { generateQRDataURL } from "@/lib/qr-utils";
 import { exportToPDF, printElement } from "@/lib/pdf-export";
 import { STANDARDS, type Standard, type Indicator } from "@/lib/standards-data";
@@ -190,9 +193,12 @@ function createEmptyEvidence(subEvidenceId: string = ""): EvidenceItem {
 // ===== المكون الرئيسي =====
 export default function PerformanceEvidence() {
   const [, navigate] = useLocation();
+  const { user, isAuthenticated, loading: authLoading } = useAuth();
+  const portfolio = usePortfolio();
   const [step, setStep] = useState<"select" | "dashboard" | "criterion-detail" | "final-review" | "preview">("select");
   const [selectedJob, setSelectedJob] = useState<typeof JOB_TYPES[0] | null>(null);
   const [selectedTheme, setSelectedTheme] = useState(THEMES[0]);
+  const [portfolioId, setPortfolioId] = useState<number | null>(null);
   const [currentCriterionIndex, setCurrentCriterionIndex] = useState(0);
   const [expandedSubEvidence, setExpandedSubEvidence] = useState<string | null>(null);
   const [isExporting, setIsExporting] = useState(false);
@@ -395,10 +401,25 @@ export default function PerformanceEvidence() {
     reader.onload = async () => {
       const isImage = file.type.startsWith("image/");
       const isVideo = file.type.startsWith("video/");
+      let fileUrl: string | undefined;
+
+      // رفع الملف لـ S3 أولاً للحصول على URL للتحليل
+      if (isAuthenticated) {
+        try {
+          const uploadResult = await portfolio.uploadFile(file);
+          fileUrl = uploadResult.url;
+        } catch {
+          // إذا فشل الرفع، نستمر بدون URL
+        }
+      }
+
       try {
+        // إرسال URL الصورة للتحليل البصري بالـ AI
         const result = await classifyMutation.mutateAsync({
-          fileName: file.name, fileType: file.type,
+          fileName: file.name,
+          fileType: file.type,
           description: file.name.replace(/\.[^/.]+$/, "").replace(/[-_]/g, " "),
+          fileUrl: fileUrl || (isImage ? (reader.result as string) : undefined),
         });
         if (result.success && result.classification) {
           const cls = result.classification;
@@ -407,25 +428,29 @@ export default function PerformanceEvidence() {
           );
           if (targetCriterion && criteriaData[targetCriterion.id]) {
             const subs = [...targetCriterion.subEvidences, ...(criteriaData[targetCriterion.id]?.customSubEvidences || [])];
-            const targetSub = subs[0];
+            // اختيار الشاهد الفرعي الأنسب بناءً على المؤشر
+            const targetSub = (cls.indicatorIndex > 0 && subs[cls.indicatorIndex - 1]) ? subs[cls.indicatorIndex - 1] : subs[0];
             const newEv = createEmptyEvidence(targetSub?.id || "");
             newEv.type = isImage ? "image" : isVideo ? "video" : "file";
-            newEv.fileData = reader.result as string;
+            newEv.fileData = fileUrl || (reader.result as string);
             newEv.fileName = file.name;
-            newEv.text = file.name;
+            newEv.text = cls.contentDescription || file.name;
             newEv.displayAs = isImage ? "image" : "qr";
             setCriteriaData((prev) => ({
               ...prev,
               [targetCriterion.id]: { ...prev[targetCriterion.id], evidences: [...prev[targetCriterion.id].evidences, newEv] },
             }));
-            toast.success(`تم تصنيف الشاهد تلقائياً`, { description: `البند: ${targetCriterion.title} (ثقة: ${Math.round(cls.confidence * 100)}%)` });
+            toast.success(`تم تصنيف الشاهد تلقائياً`, {
+              description: `البند: ${targetCriterion.title}\nالمؤشر: ${cls.indicatorText}\nالثقة: ${Math.round(cls.confidence * 100)}%`,
+              duration: 6000,
+            });
           } else {
             toast.info("لم يتم العثور على بند مطابق، تم إضافته للبند الأول");
             const firstCriterion = allCriteria[0];
             if (firstCriterion) {
               const newEv = createEmptyEvidence(firstCriterion.subEvidences[0]?.id || "");
               newEv.type = isImage ? "image" : isVideo ? "video" : "file";
-              newEv.fileData = reader.result as string;
+              newEv.fileData = fileUrl || (reader.result as string);
               newEv.fileName = file.name;
               newEv.displayAs = isImage ? "image" : "qr";
               setCriteriaData((prev) => ({
@@ -441,7 +466,7 @@ export default function PerformanceEvidence() {
     };
     reader.readAsDataURL(file);
     e.target.value = "";
-  }, [allCriteria, criteriaData, classifyMutation]);
+  }, [allCriteria, criteriaData, classifyMutation, isAuthenticated, portfolio]);
 
   // ===== AI Functions =====
   const callAI = async (criterionId: string, subId: string, userPrompt: string) => {
@@ -502,10 +527,35 @@ export default function PerformanceEvidence() {
   };
 
   // ===== Save & Calculations =====
-  const saveReport = () => {
-    const data = { personalInfo, criteriaData, jobId: selectedJob?.id, themeId: selectedTheme.id, customCriteria };
-    localStorage.setItem(`sers_perf_${personalInfo.name || "draft"}`, JSON.stringify(data));
-    toast.success("تم حفظ البيانات بنجاح!");
+  const [isSaving, setIsSaving] = useState(false);
+
+  const saveReport = async () => {
+    if (!selectedJob) return;
+    if (!isAuthenticated) {
+      // حفظ محلي كاحتياطي للمستخدمين غير المسجلين
+      const data = { personalInfo, criteriaData, jobId: selectedJob?.id, themeId: selectedTheme.id, customCriteria };
+      localStorage.setItem(`sers_perf_${personalInfo.name || "draft"}`, JSON.stringify(data));
+      toast.success("تم حفظ البيانات محلياً! سجل دخولك لحفظها في السحابة.");
+      return;
+    }
+    setIsSaving(true);
+    try {
+      const success = await portfolio.savePortfolio({
+        jobId: selectedJob.id,
+        jobTitle: selectedJob.title,
+        personalInfo,
+        criteriaData,
+        customCriteria,
+        themeId: selectedTheme.id,
+        completionPercentage: percentage,
+      });
+      if (success) {
+        toast.success("تم حفظ البيانات في السحابة بنجاح!");
+      }
+    } catch {
+      toast.error("فشل الحفظ، يرجى المحاولة مرة أخرى");
+    }
+    setIsSaving(false);
   };
 
   const totalScore = Object.values(criteriaData).reduce((sum, c) => sum + c.score, 0);
@@ -675,8 +725,9 @@ export default function PerformanceEvidence() {
               <Button variant="outline" size="sm" onClick={() => setStep("select")}>
                 <ArrowRight className="w-4 h-4 ml-1" />تغيير الوظيفة
               </Button>
-              <Button variant="outline" size="sm" onClick={saveReport}>
-                <Save className="w-4 h-4 ml-1" />حفظ
+              <Button variant="outline" size="sm" onClick={saveReport} disabled={isSaving}>
+                {isSaving ? <Loader2 className="w-4 h-4 ml-1 animate-spin" /> : <Save className="w-4 h-4 ml-1" />}
+                {isSaving ? "جاري الحفظ..." : "حفظ"}
               </Button>
             </div>
             <div className="flex items-center gap-3">
@@ -1189,9 +1240,15 @@ export default function PerformanceEvidence() {
               <ArrowRight className="w-4 h-4 ml-1" />العودة للبنود
             </Button>
             <div className="flex gap-2">
-              <Button variant="outline" size="sm" onClick={saveReport} className="gap-1.5">
-                <Save className="w-4 h-4" />حفظ
+              <Button variant="outline" size="sm" onClick={saveReport} disabled={isSaving} className="gap-1.5">
+                {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                {isSaving ? "جاري الحفظ..." : "حفظ"}
               </Button>
+              {isAuthenticated && portfolio.id && (
+                <Button variant="outline" size="sm" onClick={portfolio.submitForReview} className="gap-1.5 text-emerald-600 border-emerald-200 hover:bg-emerald-50">
+                  <CheckCircle className="w-4 h-4" />تقديم للمراجعة
+                </Button>
+              )}
               <Button size="sm" onClick={() => setStep('preview')} className="gap-1.5">
                 <Eye className="w-4 h-4" />معاينة وتصدير
               </Button>

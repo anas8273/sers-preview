@@ -23,6 +23,27 @@ function createPublicContext(): TrpcContext {
   };
 }
 
+type AuthenticatedUser = NonNullable<TrpcContext["user"]>;
+
+function createAuthContext(): TrpcContext {
+  const user: AuthenticatedUser = {
+    id: 1,
+    openId: "test-user",
+    email: "test@example.com",
+    name: "Test User",
+    loginMethod: "manus",
+    role: "user",
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    lastSignedIn: new Date(),
+  };
+  return {
+    user,
+    req: { protocol: "https", headers: {} } as TrpcContext["req"],
+    res: { clearCookie: vi.fn() } as unknown as TrpcContext["res"],
+  };
+}
+
 describe("ai.suggest", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -377,7 +398,7 @@ describe("ai.classifyEvidence", () => {
       ],
     });
 
-    const ctx = createPublicContext();
+    const ctx = createAuthContext();
     const caller = appRouter.createCaller(ctx);
 
     const result = await caller.ai.classifyEvidence({
@@ -420,7 +441,7 @@ describe("ai.classifyEvidence", () => {
       ],
     });
 
-    const ctx = createPublicContext();
+    const ctx = createAuthContext();
     const caller = appRouter.createCaller(ctx);
 
     const result = await caller.ai.classifyEvidence({
@@ -458,7 +479,7 @@ describe("ai.classifyEvidence", () => {
       ],
     });
 
-    const ctx = createPublicContext();
+    const ctx = createAuthContext();
     const caller = appRouter.createCaller(ctx);
 
     const result = await caller.ai.classifyEvidence({
@@ -505,7 +526,7 @@ describe("ai.analyzeGaps", () => {
 
     expect(result.recommendations).toBeDefined();
     expect(result.recommendations.length).toBeGreaterThan(0);
-    expect(result.recommendations).toContain("استراتيجيات");
+    expect(result.recommendations).toContain("التدريس");
     expect(mockedInvokeLLM).toHaveBeenCalledTimes(1);
   });
 
@@ -534,7 +555,7 @@ describe("ai.analyzeGaps", () => {
       totalIndicators: 45,
     });
 
-    expect(result.recommendations).toContain("فارغ");
+    expect(result.recommendations).toContain("ابدأ");
   });
 
   it("handles non-string LLM response", async () => {

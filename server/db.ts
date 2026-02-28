@@ -1,11 +1,10 @@
-import { eq } from "drizzle-orm";
+import { eq, and, desc, sql, gt, lt } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, users } from "../drizzle/schema";
+import { InsertUser, users, portfolios, uploadedFiles, shareLinks, type InsertPortfolio, type InsertUploadedFile, type InsertShareLink } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
-// Lazily create the drizzle instance so local tooling can run without a DB.
 export async function getDb() {
   if (!_db && process.env.DATABASE_URL) {
     try {
@@ -18,26 +17,17 @@ export async function getDb() {
   return _db;
 }
 
+// ─── Users ───────────────────────────────────────────────
 export async function upsertUser(user: InsertUser): Promise<void> {
-  if (!user.openId) {
-    throw new Error("User openId is required for upsert");
-  }
-
+  if (!user.openId) throw new Error("User openId is required for upsert");
   const db = await getDb();
-  if (!db) {
-    console.warn("[Database] Cannot upsert user: database not available");
-    return;
-  }
+  if (!db) { console.warn("[Database] Cannot upsert user: database not available"); return; }
 
   try {
-    const values: InsertUser = {
-      openId: user.openId,
-    };
+    const values: InsertUser = { openId: user.openId };
     const updateSet: Record<string, unknown> = {};
-
     const textFields = ["name", "email", "loginMethod"] as const;
     type TextField = (typeof textFields)[number];
-
     const assignNullable = (field: TextField) => {
       const value = user[field];
       if (value === undefined) return;
@@ -45,48 +35,163 @@ export async function upsertUser(user: InsertUser): Promise<void> {
       values[field] = normalized;
       updateSet[field] = normalized;
     };
-
     textFields.forEach(assignNullable);
-
-    if (user.lastSignedIn !== undefined) {
-      values.lastSignedIn = user.lastSignedIn;
-      updateSet.lastSignedIn = user.lastSignedIn;
-    }
-    if (user.role !== undefined) {
-      values.role = user.role;
-      updateSet.role = user.role;
-    } else if (user.openId === ENV.ownerOpenId) {
-      values.role = 'admin';
-      updateSet.role = 'admin';
-    }
-
-    if (!values.lastSignedIn) {
-      values.lastSignedIn = new Date();
-    }
-
-    if (Object.keys(updateSet).length === 0) {
-      updateSet.lastSignedIn = new Date();
-    }
-
-    await db.insert(users).values(values).onDuplicateKeyUpdate({
-      set: updateSet,
-    });
-  } catch (error) {
-    console.error("[Database] Failed to upsert user:", error);
-    throw error;
-  }
+    if (user.lastSignedIn !== undefined) { values.lastSignedIn = user.lastSignedIn; updateSet.lastSignedIn = user.lastSignedIn; }
+    if (user.role !== undefined) { values.role = user.role; updateSet.role = user.role; }
+    else if (user.openId === ENV.ownerOpenId) { values.role = 'admin'; updateSet.role = 'admin'; }
+    if (!values.lastSignedIn) values.lastSignedIn = new Date();
+    if (Object.keys(updateSet).length === 0) updateSet.lastSignedIn = new Date();
+    await db.insert(users).values(values).onDuplicateKeyUpdate({ set: updateSet });
+  } catch (error) { console.error("[Database] Failed to upsert user:", error); throw error; }
 }
 
 export async function getUserByOpenId(openId: string) {
   const db = await getDb();
-  if (!db) {
-    console.warn("[Database] Cannot get user: database not available");
-    return undefined;
-  }
-
+  if (!db) return undefined;
   const result = await db.select().from(users).where(eq(users.openId, openId)).limit(1);
-
   return result.length > 0 ? result[0] : undefined;
 }
 
-// TODO: add feature queries here as your schema grows.
+// ─── Portfolios ──────────────────────────────────────────
+export async function createPortfolio(data: InsertPortfolio) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(portfolios).values(data);
+  const id = Number(result[0].insertId);
+  return { id };
+}
+
+export async function updatePortfolio(id: number, userId: number, data: Partial<InsertPortfolio>) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(portfolios).set(data).where(and(eq(portfolios.id, id), eq(portfolios.userId, userId)));
+  return { success: true };
+}
+
+export async function getPortfoliosByUser(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(portfolios).where(eq(portfolios.userId, userId)).orderBy(desc(portfolios.updatedAt));
+}
+
+export async function getPortfolioById(id: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(portfolios).where(eq(portfolios.id, id)).limit(1);
+  return result.length > 0 ? result[0] : undefined;
+}
+
+export async function deletePortfolio(id: number, userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.delete(uploadedFiles).where(eq(uploadedFiles.portfolioId, id));
+  await db.delete(shareLinks).where(eq(shareLinks.portfolioId, id));
+  await db.delete(portfolios).where(and(eq(portfolios.id, id), eq(portfolios.userId, userId)));
+  return { success: true };
+}
+
+// ─── Admin: All Portfolios ──────────────────────────────
+export async function getAllPortfolios(page = 1, limit = 20, status?: string) {
+  const db = await getDb();
+  if (!db) return { items: [], total: 0 };
+  const offset = (page - 1) * limit;
+
+  const conditions = status ? and(eq(portfolios.status, status as any)) : undefined;
+
+  const items = await db
+    .select({
+      id: portfolios.id,
+      userId: portfolios.userId,
+      jobId: portfolios.jobId,
+      jobTitle: portfolios.jobTitle,
+      completionPercentage: portfolios.completionPercentage,
+      status: portfolios.status,
+      reviewNotes: portfolios.reviewNotes,
+      createdAt: portfolios.createdAt,
+      updatedAt: portfolios.updatedAt,
+      userName: users.name,
+      userEmail: users.email,
+    })
+    .from(portfolios)
+    .leftJoin(users, eq(portfolios.userId, users.id))
+    .where(conditions)
+    .orderBy(desc(portfolios.updatedAt))
+    .limit(limit)
+    .offset(offset);
+
+  const countResult = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(portfolios)
+    .where(conditions);
+
+  return { items, total: countResult[0]?.count ?? 0 };
+}
+
+export async function reviewPortfolio(id: number, reviewerId: number, status: string, notes: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(portfolios).set({
+    status: status as any,
+    reviewNotes: notes,
+    reviewedBy: reviewerId,
+    reviewedAt: new Date(),
+  }).where(eq(portfolios.id, id));
+  return { success: true };
+}
+
+// ─── Uploaded Files ──────────────────────────────────────
+export async function createUploadedFile(data: InsertUploadedFile) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(uploadedFiles).values(data);
+  return { id: Number(result[0].insertId) };
+}
+
+export async function getFilesByPortfolio(portfolioId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(uploadedFiles).where(eq(uploadedFiles.portfolioId, portfolioId)).orderBy(desc(uploadedFiles.createdAt));
+}
+
+export async function deleteUploadedFile(id: number, userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.delete(uploadedFiles).where(and(eq(uploadedFiles.id, id), eq(uploadedFiles.userId, userId)));
+  return { success: true };
+}
+
+// ─── Share Links ─────────────────────────────────────────
+export async function createShareLink(data: InsertShareLink) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(shareLinks).values(data);
+  return { id: Number(result[0].insertId) };
+}
+
+export async function getShareLinkByToken(token: string) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(shareLinks)
+    .where(and(eq(shareLinks.token, token), eq(shareLinks.isActive, true)))
+    .limit(1);
+  return result.length > 0 ? result[0] : undefined;
+}
+
+export async function incrementShareLinkViews(id: number) {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(shareLinks).set({ viewCount: sql`${shareLinks.viewCount} + 1` }).where(eq(shareLinks.id, id));
+}
+
+export async function getShareLinksByPortfolio(portfolioId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(shareLinks).where(eq(shareLinks.portfolioId, portfolioId)).orderBy(desc(shareLinks.createdAt));
+}
+
+export async function deactivateShareLink(id: number, userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(shareLinks).set({ isActive: false }).where(and(eq(shareLinks.id, id), eq(shareLinks.userId, userId)));
+  return { success: true };
+}

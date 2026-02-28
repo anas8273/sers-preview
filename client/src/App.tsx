@@ -14,6 +14,8 @@ const GradeAnalysis = lazy(() => import("./pages/GradeAnalysis"));
 const CoverBuilder = lazy(() => import("./pages/CoverBuilder"));
 const TreatmentPlan = lazy(() => import("./pages/TreatmentPlan"));
 const SectionPage = lazy(() => import("./pages/SectionPage"));
+const SharedPortfolio = lazy(() => import("./pages/SharedPortfolio"));
+const AdminDashboard = lazy(() => import("./pages/AdminDashboard"));
 
 function LoadingFallback() {
   return (
@@ -25,8 +27,8 @@ function LoadingFallback() {
     </div>
   );
 }
+
 function Router() {
-  // make sure to consider if you need authentication for certain routes
   return (
     <Suspense fallback={<LoadingFallback />}>
       <Switch>
@@ -37,6 +39,8 @@ function Router() {
         <Route path={"/covers"} component={CoverBuilder} />
         <Route path={"/treatment-plans"} component={TreatmentPlan} />
         <Route path={"/section/:sectionId"} component={SectionPage} />
+        <Route path={"/share/:token"} component={SharedPortfolio} />
+        <Route path={"/admin"} component={AdminDashboard} />
         <Route path={"/404"} component={NotFound} />
         <Route component={NotFound} />
       </Switch>

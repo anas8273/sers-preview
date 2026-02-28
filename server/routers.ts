@@ -1,9 +1,17 @@
 import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
-import { publicProcedure, router } from "./_core/trpc";
+import { publicProcedure, protectedProcedure, adminProcedure, router } from "./_core/trpc";
 import { invokeLLM } from "./_core/llm";
+import { storagePut } from "./storage";
 import { z } from "zod";
+import { nanoid } from "nanoid";
+import {
+  createPortfolio, updatePortfolio, getPortfoliosByUser, getPortfolioById, deletePortfolio,
+  getAllPortfolios, reviewPortfolio,
+  createUploadedFile, getFilesByPortfolio, deleteUploadedFile,
+  createShareLink, getShareLinkByToken, incrementShareLinkViews, getShareLinksByPortfolio, deactivateShareLink,
+} from "./db";
 
 export const appRouter = router({
   system: systemRouter,
@@ -16,19 +24,261 @@ export const appRouter = router({
     }),
   }),
 
+  // ─── Portfolio CRUD ────────────────────────────────────
+  portfolio: router({
+    list: protectedProcedure.query(async ({ ctx }) => {
+      return getPortfoliosByUser(ctx.user.id);
+    }),
+
+    get: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .query(async ({ ctx, input }) => {
+        const p = await getPortfolioById(input.id);
+        if (!p || p.userId !== ctx.user.id) return null;
+        return p;
+      }),
+
+    create: protectedProcedure
+      .input(z.object({
+        jobId: z.string(),
+        jobTitle: z.string(),
+        personalInfo: z.record(z.string(), z.string()),
+        criteriaData: z.record(z.string(), z.any()),
+        customCriteria: z.array(z.any()).optional(),
+        themeId: z.string().optional(),
+        completionPercentage: z.number().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        return createPortfolio({
+          userId: ctx.user.id,
+          jobId: input.jobId,
+          jobTitle: input.jobTitle,
+          personalInfo: input.personalInfo as Record<string, string>,
+          criteriaData: input.criteriaData,
+          customCriteria: input.customCriteria ?? [],
+          themeId: input.themeId ?? "classic",
+          completionPercentage: input.completionPercentage ?? 0,
+          status: "draft",
+        });
+      }),
+
+    update: protectedProcedure
+      .input(z.object({
+        id: z.number(),
+        criteriaData: z.record(z.string(), z.any()).optional(),
+        customCriteria: z.array(z.any()).optional(),
+        personalInfo: z.record(z.string(), z.string()).optional(),
+        themeId: z.string().optional(),
+        completionPercentage: z.number().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const { id, ...data } = input;
+        return updatePortfolio(id, ctx.user.id, data as any);
+      }),
+
+    delete: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        return deletePortfolio(input.id, ctx.user.id);
+      }),
+
+    submit: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        return updatePortfolio(input.id, ctx.user.id, { status: "submitted" });
+      }),
+  }),
+
+  // ─── File Upload ───────────────────────────────────────
+  file: router({
+    upload: protectedProcedure
+      .input(z.object({
+        portfolioId: z.number().optional(),
+        fileName: z.string(),
+        mimeType: z.string(),
+        base64Data: z.string(),
+        criterionId: z.string().optional(),
+        subEvidenceId: z.string().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const suffix = nanoid(8);
+        const ext = input.fileName.split('.').pop() || 'bin';
+        const fileKey = `evidence/${ctx.user.id}/${suffix}.${ext}`;
+        const buffer = Buffer.from(input.base64Data, 'base64');
+        const { url } = await storagePut(fileKey, buffer, input.mimeType);
+
+        const { id } = await createUploadedFile({
+          userId: ctx.user.id,
+          portfolioId: input.portfolioId ?? null,
+          fileKey,
+          url,
+          originalName: input.fileName,
+          mimeType: input.mimeType,
+          fileSize: buffer.length,
+          criterionId: input.criterionId ?? null,
+          subEvidenceId: input.subEvidenceId ?? null,
+        });
+
+        return { id, url, fileKey };
+      }),
+
+    listByPortfolio: protectedProcedure
+      .input(z.object({ portfolioId: z.number() }))
+      .query(async ({ input }) => {
+        return getFilesByPortfolio(input.portfolioId);
+      }),
+
+    delete: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        return deleteUploadedFile(input.id, ctx.user.id);
+      }),
+  }),
+
+  // ─── Share Links ───────────────────────────────────────
+  share: router({
+    create: protectedProcedure
+      .input(z.object({
+        portfolioId: z.number(),
+        expiresInDays: z.number().min(1).max(30).default(7),
+        maxViews: z.number().min(0).max(1000).default(0),
+        password: z.string().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const token = nanoid(32);
+        const expiresAt = new Date(Date.now() + input.expiresInDays * 24 * 60 * 60 * 1000);
+
+        await createShareLink({
+          portfolioId: input.portfolioId,
+          userId: ctx.user.id,
+          token,
+          expiresAt,
+          hasPassword: !!input.password,
+          passwordHash: input.password || null,
+          viewCount: 0,
+          maxViews: input.maxViews,
+          isActive: true,
+        });
+
+        return { token, expiresAt };
+      }),
+
+    view: publicProcedure
+      .input(z.object({
+        token: z.string(),
+        password: z.string().optional(),
+      }))
+      .query(async ({ input }) => {
+        const link = await getShareLinkByToken(input.token);
+        if (!link) return { error: "رابط غير صالح", portfolio: null };
+        if (new Date() > link.expiresAt) return { error: "انتهت صلاحية الرابط", portfolio: null };
+        if ((link.maxViews ?? 0) > 0 && (link.viewCount ?? 0) >= (link.maxViews ?? 0)) return { error: "تم تجاوز الحد الأقصى للمشاهدات", portfolio: null };
+        if (link.hasPassword && input.password !== link.passwordHash) return { error: "كلمة المرور غير صحيحة", portfolio: null, requiresPassword: true };
+
+        await incrementShareLinkViews(link.id);
+        const portfolio = await getPortfolioById(link.portfolioId);
+        if (!portfolio) return { error: "الملف غير موجود", portfolio: null };
+
+        const files = await getFilesByPortfolio(portfolio.id);
+        return { error: null, portfolio, files };
+      }),
+
+    listByPortfolio: protectedProcedure
+      .input(z.object({ portfolioId: z.number() }))
+      .query(async ({ input }) => {
+        return getShareLinksByPortfolio(input.portfolioId);
+      }),
+
+    deactivate: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        return deactivateShareLink(input.id, ctx.user.id);
+      }),
+  }),
+
+  // ─── Admin Dashboard ──────────────────────────────────
+  admin: router({
+    portfolios: adminProcedure
+      .input(z.object({
+        page: z.number().default(1),
+        limit: z.number().default(20),
+        status: z.string().optional(),
+      }))
+      .query(async ({ input }) => {
+        return getAllPortfolios(input.page, input.limit, input.status);
+      }),
+
+    review: adminProcedure
+      .input(z.object({
+        portfolioId: z.number(),
+        status: z.enum(["approved", "rejected", "reviewed"]),
+        notes: z.string().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        return reviewPortfolio(input.portfolioId, ctx.user.id, input.status, input.notes ?? "");
+      }),
+
+    portfolioDetail: adminProcedure
+      .input(z.object({ id: z.number() }))
+      .query(async ({ input }) => {
+        const portfolio = await getPortfolioById(input.id);
+        if (!portfolio) return null;
+        const files = await getFilesByPortfolio(portfolio.id);
+        return { ...portfolio, files };
+      }),
+  }),
+
+  // ─── AI Services ──────────────────────────────────────
   ai: router({
-    // تصنيف شاهد تلقائياً - الميزة الرئيسية على نمط معياري
-    classifyEvidence: publicProcedure
+    classifyEvidence: protectedProcedure
       .input(z.object({
         description: z.string().optional(),
         fileName: z.string().optional(),
         fileType: z.string().optional(),
+        fileUrl: z.string().optional(),
+        linkUrl: z.string().optional(),
       }))
       .mutation(async ({ input }) => {
-        const prompt = `أنت نظام تصنيف ذكي لشواهد الأداء الوظيفي للمعلمين وفق معايير وزارة التعليم السعودية 1447هـ.
+        const SYSTEM_PROMPT = `أنت نظام تصنيف ذكي متقدم لشواهد الأداء الوظيفي للمعلمين وفق معايير وزارة التعليم السعودية 1447هـ.
 
-المعايير الـ 11 هي:
-1. أداء الواجبات الوظيفية (std-1)
+مهمتك:
+1. حلل المحتوى بعمق (صورة، ملف، رابط، نص) واستخرج المعلومات الرئيسية
+2. حدد المعيار الأنسب من المعايير الـ 11
+3. حدد المؤشر الأنسب داخل المعيار
+4. اشرح سبب التصنيف بالتفصيل
+5. صف محتوى الملف/الصورة بدقة
+
+المعايير الـ 11 ومؤشراتها:
+
+1. أداء الواجبات الوظيفية (std-1): الالتزام بالحضور، تنفيذ التوجيهات، المشاركة في الأنشطة المدرسية، الإشراف اليومي
+2. التفاعل مع المجتمع المهني (std-2): المشاركة في التطوير المهني، التعاون مع الزملاء، المشاركة في مجتمعات التعلم
+3. التفاعل مع أولياء الأمور (std-3): التواصل مع الأسر، الاجتماعات، التقارير الدورية
+4. التنويع في استراتيجيات التدريس (std-4): التعلم النشط، التعلم التعاوني، التعلم باللعب، الصف المقلوب
+5. تحسين نتائج المتعلمين (std-5): خطط التحسين، البرامج الإثرائية، متابعة التقدم
+6. إعداد وتنفيذ خطة التعلم (std-6): تحضير الدروس، الأهداف التعليمية، التوزيع الزمني
+7. توظيف تقنيات ووسائل التعلم (std-7): التقنية في التعليم، الوسائل التعليمية، المنصات الرقمية
+8. تهيئة البيئة التعليمية (std-8): الفصل الدراسي، المعامل، البيئة الآمنة، الموارد
+9. الإدارة الصفية (std-9): ضبط الصف، إدارة الوقت، التعامل مع السلوك
+10. تحليل نتائج المتعلمين (std-10): الاختبارات، التحليل الإحصائي، تشخيص المستويات
+11. تنوع أساليب التقويم (std-11): التقويم التكويني، الختامي، الذاتي، الأقران، ملفات الإنجاز
+
+عند تحليل الصور:
+- اقرأ أي نص عربي أو إنجليزي ظاهر في الصورة
+- حدد نوع الوثيقة (شهادة، تقرير، خطاب، صورة نشاط، لقطة شاشة)
+- حلل السياق التعليمي للصورة
+- استخرج المعلومات الرئيسية (التاريخ، الجهة، الموضوع)
+
+عند تحليل الروابط:
+- حلل اسم النطاق والمسار لتحديد نوع المحتوى
+- إذا كان رابط منصة تعليمية (مدرستي، عين، نور) صنفه حسب السياق
+
+أجب بصيغة JSON فقط.`;
+
+        const messages: any[] = [
+          { role: "system", content: SYSTEM_PROMPT },
+        ];
+
+        const STANDARDS_LIST = `1. أداء الواجبات الوظيفية (std-1)
 2. التفاعل مع المجتمع المهني (std-2)
 3. التفاعل مع أولياء الأمور (std-3)
 4. التنويع في استراتيجيات التدريس (std-4)
@@ -38,20 +288,35 @@ export const appRouter = router({
 8. تهيئة البيئة التعليمية (std-8)
 9. الإدارة الصفية (std-9)
 10. تحليل نتائج المتعلمين وتشخيص مستوياتهم (std-10)
-11. تنوع أساليب التقويم (std-11)
+11. تنوع أساليب التقويم (std-11)`;
 
-بناءً على المعلومات التالية عن الشاهد، حدد المعيار والمؤشر الأنسب:
-${input.description ? `وصف الشاهد: ${input.description}` : ""}
-${input.fileName ? `اسم الملف: ${input.fileName}` : ""}
-${input.fileType ? `نوع الملف: ${input.fileType}` : ""}
-
-أعطني الإجابة بصيغة JSON.`;
+        // تحليل بصري للصور
+        if (input.fileUrl && (input.fileType?.startsWith('image/') || input.fileUrl.startsWith('data:image'))) {
+          messages.push({
+            role: "user",
+            content: [
+              { type: "image_url", image_url: { url: input.fileUrl, detail: "high" } },
+              { type: "text", text: `حلل هذه الصورة بعمق وصنفها ضمن أحد المعايير:\n${STANDARDS_LIST}\n\nتعليمات التحليل:\n- اقرأ كل النصوص الظاهرة في الصورة (عربي/إنجليزي)\n- حدد نوع الوثيقة (شهادة، تقرير، خطاب، صورة نشاط، لقطة شاشة)\n- حلل السياق التعليمي\n- استخرج التاريخ والجهة والموضوع إن وجد\n${input.description ? `وصف إضافي: ${input.description}` : ""}\n${input.fileName ? `اسم الملف: ${input.fileName}` : ""}` },
+            ],
+          });
+        }
+        // تحليل الروابط
+        else if (input.linkUrl) {
+          messages.push({
+            role: "user",
+            content: `حلل هذا الرابط وصنفه ضمن أحد المعايير:\n${STANDARDS_LIST}\n\nالرابط: ${input.linkUrl}\n${input.description ? `وصف: ${input.description}` : ""}\n\nتعليمات:\n- حلل اسم النطاق والمسار لتحديد نوع المحتوى\n- إذا كان رابط منصة تعليمية (مدرستي، عين، نور، كلاسيرا) صنفه حسب السياق\n- إذا كان رابط دورة تدريبية صنفه ضمن التطوير المهني`,
+          });
+        }
+        // تحليل الملفات بناءً على الاسم والنوع
+        else {
+          messages.push({
+            role: "user",
+            content: `صنف هذا الشاهد ضمن أحد المعايير:\n${STANDARDS_LIST}\n\n${input.description ? `وصف: ${input.description}` : ""}\n${input.fileName ? `اسم الملف: ${input.fileName}` : ""}\n${input.fileType ? `نوع الملف: ${input.fileType}` : ""}\n${input.fileUrl ? `رابط الملف: ${input.fileUrl}` : ""}`,
+          });
+        }
 
         const response = await invokeLLM({
-          messages: [
-            { role: "system", content: "أنت نظام تصنيف ذكي للشواهد التعليمية. أجب بصيغة JSON فقط." },
-            { role: "user", content: prompt }
-          ],
+          messages,
           response_format: {
             type: "json_schema",
             json_schema: {
@@ -63,12 +328,13 @@ ${input.fileType ? `نوع الملف: ${input.fileType}` : ""}
                   standardId: { type: "string", description: "معرف المعيار مثل std-1" },
                   standardNumber: { type: "integer", description: "رقم المعيار من 1 إلى 11" },
                   standardName: { type: "string", description: "اسم المعيار" },
-                  indicatorIndex: { type: "integer", description: "رقم المؤشر داخل المعيار (يبدأ من 1)" },
+                  indicatorIndex: { type: "integer", description: "رقم المؤشر داخل المعيار" },
                   indicatorText: { type: "string", description: "نص المؤشر" },
                   confidence: { type: "number", description: "نسبة الثقة من 0 إلى 1" },
                   reasoning: { type: "string", description: "سبب التصنيف" },
+                  contentDescription: { type: "string", description: "وصف محتوى الملف أو الصورة" },
                 },
-                required: ["standardId", "standardNumber", "standardName", "indicatorIndex", "indicatorText", "confidence", "reasoning"],
+                required: ["standardId", "standardNumber", "standardName", "indicatorIndex", "indicatorText", "confidence", "reasoning", "contentDescription"],
                 additionalProperties: false,
               },
             },
@@ -77,8 +343,7 @@ ${input.fileType ? `نوع الملف: ${input.fileType}` : ""}
         const raw = response.choices?.[0]?.message?.content;
         const content = typeof raw === 'string' ? raw : '{}';
         try {
-          const classification = JSON.parse(content);
-          return { classification, success: true };
+          return { classification: JSON.parse(content), success: true };
         } catch {
           return { classification: null, success: false };
         }
@@ -94,14 +359,8 @@ ${input.fileType ? `نوع الملف: ${input.fileType}` : ""}
       .mutation(async ({ input }) => {
         const response = await invokeLLM({
           messages: [
-            {
-              role: "system",
-              content: "أنت مساعد ذكاء اصطناعي متخصص في التعليم السعودي وتقييم الأداء الوظيفي. مهمتك مساعدة المعلمين والإداريين في كتابة شواهد أداء وظيفي احترافية. أجب دائماً باللغة العربية. قدم 3-5 اقتراحات عملية ومحددة. كل اقتراح في سطر يبدأ بـ •"
-            },
-            {
-              role: "user",
-              content: `الوظيفة: ${input.jobTitle}\nالبند: ${input.criterionName}\nالشاهد الفرعي: ${input.subEvidenceName}${input.existingContent ? `\nالمحتوى الحالي: ${input.existingContent}` : ""}\n\nاقترح شواهد أداء وظيفي مناسبة.`
-            }
+            { role: "system", content: "أنت مساعد ذكاء اصطناعي متخصص في التعليم السعودي وتقييم الأداء الوظيفي. مهمتك مساعدة المعلمين والإداريين في كتابة شواهد أداء وظيفي احترافية. أجب دائماً باللغة العربية. قدم 3-5 اقتراحات عملية ومحددة. كل اقتراح في سطر يبدأ بـ •" },
+            { role: "user", content: `الوظيفة: ${input.jobTitle}\nالبند: ${input.criterionName}\nالشاهد الفرعي: ${input.subEvidenceName}${input.existingContent ? `\nالمحتوى الحالي: ${input.existingContent}` : ""}\n\nاقترح شواهد أداء وظيفي مناسبة.` }
           ],
         });
         const raw = response.choices?.[0]?.message?.content;
@@ -170,7 +429,6 @@ ${input.fileType ? `نوع الملف: ${input.fileType}` : ""}
         return { content: (typeof c === 'string' ? c : "").trim() };
       }),
 
-    // تحليل فجوات الشواهد
     analyzeGaps: publicProcedure
       .input(z.object({
         coveredIndicators: z.array(z.string()),
