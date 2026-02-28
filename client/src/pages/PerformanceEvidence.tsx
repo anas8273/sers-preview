@@ -1,353 +1,90 @@
 /**
- * شواهد الأداء الوظيفي - النسخة المدمجة
- * ✅ 10 وظائف مختلفة مع بنود تفصيلية لكل وظيفة
- * ✅ ذكاء اصطناعي حقيقي عبر tRPC + invokeLLM
- * ✅ تصنيف AI تلقائي للشواهد (نمط معياري)
- * ✅ تحليل فجوات ذكي + شريط تقدم عام
- * ✅ إضافة أقسام رئيسية وفرعية مخصصة
- * ✅ معاينة + PDF بثيمات متعددة
+ * شواهد الأداء الوظيفي - SERS
+ * المعلم/المعلمة → نظام المعايير الـ 11 (نمط معياري) مع 45 مؤشر
+ * باقي الوظائف → النظام العادي (البنود) مع ميزات معياري
  */
-import { useState, useRef, useCallback, useMemo } from "react";
+import { useState, useMemo, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import {
-  ArrowLeft, ArrowRight, Download, Printer, Eye, ChevronDown, ChevronUp,
-  Plus, Trash2, Upload, Link as LinkIcon, QrCode, Image,
-  FileText, Video, Type, Sparkles, Save, X,
-  Bot, ChevronLeft, BarChart3, Layers,
-  Loader2, Send, PlusCircle, CheckCircle, AlertTriangle, XCircle,
-  TrendingUp, Home as HomeIcon
-} from "lucide-react";
 import { useLocation } from "wouter";
-import { exportToPDF, printElement } from "@/lib/pdf-export";
-import { generateQRDataURL } from "@/lib/qr-utils";
-import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
+import { trpc } from "@/lib/trpc";
+import { generateQRDataURL } from "@/lib/qr-utils";
+import { exportToPDF, printElement } from "@/lib/pdf-export";
+import { STANDARDS, type Standard, type Indicator } from "@/lib/standards-data";
+import {
+  ArrowLeft, ArrowRight, Sparkles, Upload, Plus, Trash2, Save,
+  Eye, Download, Printer, FileText, Image, Video, QrCode, Type,
+  LinkIcon, Loader2, ChevronDown, ChevronUp, Layers, BarChart3,
+  CheckCircle, AlertTriangle, XCircle, TrendingUp, Wand2, X,
+  GraduationCap, Building2, Users, Heart, Search as SearchIcon,
+  BookOpen, Baby, Accessibility, Briefcase, ClipboardList
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 // ===== أنواع البيانات =====
 type EvidenceType = "text" | "image" | "link" | "file" | "video";
-
-interface SubEvidence {
-  id: string;
-  title: string;
-  description: string;
-  type: "report" | "upload" | "both";
-  formFields?: FormField[];
-  isCustom?: boolean;
-}
-
-interface FormField {
-  id: string;
-  label: string;
-  type: "text" | "textarea" | "select" | "date" | "number";
-  placeholder?: string;
-  options?: string[];
-  required?: boolean;
-}
-
+interface FormField { id: string; label: string; type: "text" | "textarea" | "date" | "number" | "select"; placeholder?: string; required?: boolean; options?: string[]; }
+interface SubEvidence { id: string; title: string; description: string; type: "report" | "upload" | "both"; isCustom?: boolean; formFields?: FormField[]; }
+interface Criterion { id: string; title: string; maxScore: number; description: string; subEvidences: SubEvidence[]; }
 interface EvidenceItem {
-  id: string;
-  subEvidenceId: string;
-  type: EvidenceType;
-  text: string;
-  link: string;
-  fileData: string | null;
-  fileName: string;
-  displayAs: "image" | "qr";
-  formData?: Record<string, string>;
+  id: string; subEvidenceId: string; type: EvidenceType; text: string; link: string;
+  fileData: string | null; fileName: string; displayAs: "image" | "qr"; formData?: Record<string, string>;
 }
+interface CriterionData { score: number; notes: string; evidences: EvidenceItem[]; customSubEvidences: SubEvidence[]; }
 
-interface CriterionData {
-  score: number;
-  notes: string;
-  evidences: EvidenceItem[];
-  customSubEvidences: SubEvidence[];
-}
-
-interface Criterion {
-  id: string;
-  title: string;
-  maxScore: number;
-  description: string;
-  subEvidences: SubEvidence[];
-}
-
-// ===== بنود المعلم (12 بند تفصيلي) =====
-const TEACHER_CRITERIA: Criterion[] = [
-  {
-    id: "t1", title: "أداء الواجبات الوظيفية", maxScore: 5,
-    description: "الالتزام بالحضور والانصراف وتنفيذ المهام الموكلة والمشاركة في الأعمال المدرسية",
-    subEvidences: [
-      { id: "t1-1", title: "تقرير تنفيذ إذاعة مدرسية", description: "توثيق تنفيذ الإذاعة المدرسية", type: "report",
-        formFields: [
-          { id: "topic", label: "موضوع الإذاعة", type: "text", placeholder: "مثال: اليوم الوطني", required: true },
-          { id: "date", label: "تاريخ التنفيذ", type: "date", required: true },
-          { id: "students_count", label: "عدد الطلاب المشاركين", type: "number", placeholder: "مثال: 8" },
-          { id: "segments", label: "فقرات الإذاعة", type: "textarea", placeholder: "القرآن الكريم - الحديث الشريف - كلمة الصباح..." },
-          { id: "notes", label: "ملاحظات إضافية", type: "textarea", placeholder: "أي ملاحظات حول التنفيذ" },
-        ],
-      },
-      { id: "t1-2", title: "تقرير تنفيذ نشاط لا صفي", description: "توثيق الأنشطة اللاصفية", type: "report",
-        formFields: [
-          { id: "activity_name", label: "اسم النشاط", type: "text", placeholder: "مثال: مسابقة القراءة", required: true },
-          { id: "date", label: "تاريخ التنفيذ", type: "date", required: true },
-          { id: "target_group", label: "الفئة المستهدفة", type: "text", placeholder: "مثال: طلاب الصف الرابع" },
-          { id: "objectives", label: "أهداف النشاط", type: "textarea", placeholder: "الأهداف المراد تحقيقها..." },
-          { id: "description", label: "وصف النشاط", type: "textarea", placeholder: "وصف تفصيلي..." },
-          { id: "results", label: "النتائج والتوصيات", type: "textarea", placeholder: "ما تم تحقيقه..." },
-        ],
-      },
-      { id: "t1-3", title: "تقرير حصة انتظار", description: "توثيق حصص الانتظار", type: "report",
-        formFields: [
-          { id: "class", label: "الصف والفصل", type: "text", placeholder: "مثال: 3/أ", required: true },
-          { id: "date", label: "تاريخ الحصة", type: "date", required: true },
-          { id: "period", label: "رقم الحصة", type: "select", options: ["الأولى", "الثانية", "الثالثة", "الرابعة", "الخامسة", "السادسة", "السابعة"] },
-          { id: "activities", label: "الأنشطة المنفذة", type: "textarea", placeholder: "ما تم تنفيذه..." },
-        ],
-      },
-      { id: "t1-4", title: "المشاركة في لجان المدرسة", description: "توثيق المشاركة في اللجان", type: "report",
-        formFields: [
-          { id: "committee_name", label: "اسم اللجنة", type: "text", placeholder: "مثال: لجنة الاختبارات", required: true },
-          { id: "role", label: "الدور في اللجنة", type: "text", placeholder: "عضو / مقرر / رئيس" },
-          { id: "tasks", label: "المهام المنفذة", type: "textarea", placeholder: "المهام التي تم تنفيذها..." },
-        ],
-      },
-      { id: "t1-5", title: "الإشراف اليومي", description: "توثيق الإشراف اليومي", type: "both",
-        formFields: [
-          { id: "location", label: "مكان الإشراف", type: "select", options: ["البوابة الرئيسية", "الفناء", "الممرات", "المقصف", "المصلى", "أخرى"] },
-          { id: "date", label: "التاريخ", type: "date", required: true },
-          { id: "observations", label: "الملاحظات", type: "textarea", placeholder: "ملاحظات الإشراف..." },
-        ],
-      },
-    ],
-  },
-  { id: "t2", title: "التفاعل مع المجتمع المهني", maxScore: 5,
-    description: "المشاركة في مجتمعات التعلم المهنية والزيارات التبادلية",
-    subEvidences: [
-      { id: "t2-1", title: "تقرير تبادل الزيارات", description: "توثيق الزيارات التبادلية الصفية", type: "report",
-        formFields: [
-          { id: "visited_teacher", label: "اسم المعلم/ة", type: "text", required: true },
-          { id: "subject", label: "المادة", type: "text", required: true },
-          { id: "date", label: "تاريخ الزيارة", type: "date", required: true },
-          { id: "lesson", label: "عنوان الدرس", type: "text" },
-          { id: "strengths", label: "نقاط القوة", type: "textarea" },
-          { id: "improvements", label: "نقاط التحسين", type: "textarea" },
-        ] },
-      { id: "t2-2", title: "محضر مجتمع التعلم المهني", description: "توثيق اجتماعات مجتمع التعلم", type: "report",
-        formFields: [
-          { id: "topic", label: "الموضوع", type: "text", required: true },
-          { id: "date", label: "التاريخ", type: "date", required: true },
-          { id: "attendees", label: "الحضور", type: "textarea" },
-          { id: "outcomes", label: "المخرجات", type: "textarea" },
-        ] },
-      { id: "t2-3", title: "بحث الدرس", description: "توثيق بحث الدرس التعاوني", type: "report",
-        formFields: [
-          { id: "lesson", label: "عنوان الدرس", type: "text", required: true },
-          { id: "team", label: "فريق العمل", type: "textarea" },
-          { id: "findings", label: "النتائج", type: "textarea" },
-        ] },
-      { id: "t2-4", title: "شهادات الدورات التدريبية", description: "توثيق الدورات والورش", type: "upload" },
-    ],
-  },
-  { id: "t3", title: "التفاعل مع أولياء الأمور والمجتمع", maxScore: 5,
-    description: "التواصل الفعال مع أولياء الأمور وتعزيز الشراكة المجتمعية",
-    subEvidences: [
-      { id: "t3-1", title: "سجل التواصل مع أولياء الأمور", description: "توثيق التواصل", type: "report",
-        formFields: [
-          { id: "parent_name", label: "اسم ولي الأمر", type: "text" },
-          { id: "student_name", label: "اسم الطالب", type: "text" },
-          { id: "date", label: "التاريخ", type: "date" },
-          { id: "method", label: "وسيلة التواصل", type: "select", options: ["حضوري", "هاتفي", "رسالة نصية", "تطبيق مدرستي", "أخرى"] },
-          { id: "topic", label: "الموضوع", type: "textarea" },
-        ] },
-      { id: "t3-2", title: "تقرير مشاركة مجتمعية", description: "توثيق الشراكات المجتمعية", type: "both",
-        formFields: [
-          { id: "activity", label: "النشاط", type: "text" },
-          { id: "partner", label: "الجهة الشريكة", type: "text" },
-          { id: "description", label: "الوصف", type: "textarea" },
-        ] },
-    ],
-  },
-  { id: "t4", title: "التنوع في استراتيجيات التدريس", maxScore: 5,
-    description: "استخدام استراتيجيات تدريس متنوعة وفعالة تراعي الفروق الفردية",
-    subEvidences: [
-      { id: "t4-1", title: "تقرير تطبيق استراتيجية", description: "توثيق تطبيق استراتيجية تدريسية", type: "report",
-        formFields: [
-          { id: "strategy_name", label: "اسم الاستراتيجية", type: "text", required: true },
-          { id: "subject", label: "المادة", type: "text" },
-          { id: "lesson", label: "الدرس", type: "text" },
-          { id: "steps", label: "خطوات التنفيذ", type: "textarea" },
-          { id: "results", label: "النتائج", type: "textarea" },
-        ] },
-      { id: "t4-2", title: "صور/فيديو تطبيق الاستراتيجيات", description: "توثيق بصري", type: "upload" },
-    ],
-  },
-  { id: "t5", title: "تحسين نتائج المتعلمين", maxScore: 5,
-    description: "العمل على رفع مستوى تحصيل الطلاب وتحسين نتائجهم",
-    subEvidences: [
-      { id: "t5-1", title: "خطة تحسين النتائج", description: "خطة لتحسين مستوى الطلاب", type: "report",
-        formFields: [
-          { id: "subject", label: "المادة", type: "text", required: true },
-          { id: "current_level", label: "المستوى الحالي", type: "textarea" },
-          { id: "target", label: "المستوى المستهدف", type: "textarea" },
-          { id: "strategies", label: "الاستراتيجيات المتبعة", type: "textarea" },
-        ] },
-      { id: "t5-2", title: "مقارنة النتائج قبل وبعد", description: "مقارنة النتائج", type: "both",
-        formFields: [
-          { id: "before", label: "النتائج قبل", type: "textarea" },
-          { id: "after", label: "النتائج بعد", type: "textarea" },
-          { id: "analysis", label: "التحليل", type: "textarea" },
-        ] },
-      { id: "t5-3", title: "برامج التقوية والمعالجة", description: "توثيق برامج التقوية", type: "report",
-        formFields: [
-          { id: "program", label: "اسم البرنامج", type: "text" },
-          { id: "target_students", label: "الطلاب المستهدفون", type: "textarea" },
-          { id: "activities", label: "الأنشطة", type: "textarea" },
-        ] },
-    ],
-  },
-  { id: "t6", title: "إعداد وتنفيذ خطة التعلم", maxScore: 5,
-    description: "إعداد خطط الدروس وتنفيذها بفاعلية مع تحقيق الأهداف التعليمية",
-    subEvidences: [
-      { id: "t6-1", title: "التحضير اليومي", description: "نماذج تحضير الدروس", type: "both",
-        formFields: [
-          { id: "subject", label: "المادة", type: "text" },
-          { id: "lesson", label: "عنوان الدرس", type: "text" },
-          { id: "objectives", label: "الأهداف", type: "textarea" },
-          { id: "activities", label: "الأنشطة", type: "textarea" },
-          { id: "assessment", label: "التقويم", type: "textarea" },
-        ] },
-      { id: "t6-2", title: "توزيع المنهج", description: "خطة توزيع المنهج", type: "both",
-        formFields: [
-          { id: "subject", label: "المادة", type: "text" },
-          { id: "semester", label: "الفصل الدراسي", type: "text" },
-          { id: "distribution", label: "التوزيع", type: "textarea" },
-        ] },
-    ],
-  },
-  { id: "t7", title: "توظيف تقنيات ووسائل التعلم", maxScore: 5,
-    description: "استخدام التقنية والوسائل التعليمية بفاعلية في العملية التعليمية",
-    subEvidences: [
-      { id: "t7-1", title: "تقرير توظيف التقنية", description: "توثيق استخدام التقنية", type: "report",
-        formFields: [
-          { id: "tool", label: "الأداة/التطبيق", type: "text", required: true },
-          { id: "subject", label: "المادة", type: "text" },
-          { id: "usage", label: "كيفية الاستخدام", type: "textarea" },
-          { id: "impact", label: "الأثر على التعلم", type: "textarea" },
-        ] },
-      { id: "t7-2", title: "وسائل تعليمية", description: "توثيق الوسائل التعليمية", type: "both",
-        formFields: [
-          { id: "tool_name", label: "اسم الوسيلة", type: "text" },
-          { id: "description", label: "الوصف", type: "textarea" },
-        ] },
-    ],
-  },
-  { id: "t8", title: "تهيئة البيئة التعليمية", maxScore: 5,
-    description: "توفير بيئة تعليمية محفزة وآمنة تدعم التعلم الفعال",
-    subEvidences: [
-      { id: "t8-1", title: "صور البيئة الصفية", description: "توثيق بصري للبيئة الصفية", type: "upload" },
-      { id: "t8-2", title: "ركن التعلم", description: "توثيق أركان التعلم", type: "both",
-        formFields: [
-          { id: "corner_name", label: "اسم الركن", type: "text" },
-          { id: "description", label: "الوصف", type: "textarea" },
-        ] },
-    ],
-  },
-  { id: "t9", title: "الإدارة الصفية", maxScore: 5,
-    description: "إدارة الصف بفاعلية وتوفير بيئة آمنة ومنظمة",
-    subEvidences: [
-      { id: "t9-1", title: "قوانين الصف", description: "قوانين الصف المتفق عليها", type: "both",
-        formFields: [
-          { id: "rules", label: "قوانين الصف", type: "textarea", placeholder: "1. الاستئذان\n2. احترام الآخرين..." },
-          { id: "rewards", label: "نظام المكافآت", type: "textarea" },
-        ] },
-      { id: "t9-2", title: "خطة السلوك الإيجابي", description: "تعزيز السلوك الإيجابي", type: "report",
-        formFields: [
-          { id: "behaviors", label: "السلوكيات المستهدفة", type: "textarea" },
-          { id: "reinforcement", label: "أساليب التعزيز", type: "textarea" },
-        ] },
-    ],
-  },
-  { id: "t10", title: "تحليل نتائج المتعلمين", maxScore: 5,
-    description: "تحليل نتائج الطلاب وتشخيص نقاط القوة والضعف",
-    subEvidences: [
-      { id: "t10-1", title: "تحليل نتائج مادة", description: "تحليل نتائج مادة لصف", type: "both",
-        formFields: [
-          { id: "subject", label: "المادة", type: "text", required: true },
-          { id: "class", label: "الصف والفصل", type: "text", required: true },
-          { id: "period", label: "الفترة", type: "select", options: ["الأولى", "الثانية", "الثالثة", "النهائي"] },
-          { id: "total_students", label: "عدد الطلاب", type: "number" },
-          { id: "pass_count", label: "عدد الناجحين", type: "number" },
-          { id: "fail_count", label: "عدد الراسبين", type: "number" },
-          { id: "average", label: "المتوسط", type: "number" },
-          { id: "analysis", label: "التحليل والتوصيات", type: "textarea" },
-        ] },
-      { id: "t10-2", title: "كشف تصنيف الطلاب", description: "تصنيف حسب المستوى", type: "report",
-        formFields: [
-          { id: "subject", label: "المادة", type: "text" },
-          { id: "excellent", label: "متفوقون (90-100)", type: "textarea" },
-          { id: "good", label: "جيد جداً (80-89)", type: "textarea" },
-          { id: "avg", label: "جيد (70-79)", type: "textarea" },
-          { id: "weak", label: "ضعيف (أقل من 60)", type: "textarea" },
-        ] },
-    ],
-  },
-  { id: "t11", title: "تنوع أساليب التقويم", maxScore: 5,
-    description: "استخدام أساليب تقويم متنوعة لقياس مستوى التحصيل",
-    subEvidences: [
-      { id: "t11-1", title: "اختبار تشخيصي / قبلي", description: "نموذج اختبار تشخيصي", type: "both",
-        formFields: [
-          { id: "subject", label: "المادة", type: "text", required: true },
-          { id: "skills", label: "المهارات المستهدفة", type: "textarea" },
-          { id: "results_summary", label: "ملخص النتائج", type: "textarea" },
-        ] },
-      { id: "t11-2", title: "تقويم بديل (مشروع/ملف إنجاز)", description: "أساليب تقويم بديلة", type: "both",
-        formFields: [
-          { id: "eval_type", label: "نوع التقويم", type: "select", options: ["مشروع", "ملف إنجاز", "عرض تقديمي", "بحث", "أخرى"] },
-          { id: "description", label: "الوصف", type: "textarea" },
-          { id: "criteria", label: "معايير التقييم", type: "textarea" },
-        ] },
-    ],
-  },
-  { id: "t12", title: "البرامج والأنشطة الطلابية", maxScore: 5,
-    description: "المشاركة في تنفيذ البرامج والأنشطة الطلابية المتنوعة",
-    subEvidences: [
-      { id: "t12-1", title: "تقرير برنامج طلابي", description: "توثيق تنفيذ برنامج", type: "report",
-        formFields: [
-          { id: "program_name", label: "اسم البرنامج", type: "text", required: true },
-          { id: "date", label: "التاريخ", type: "date" },
-          { id: "target", label: "الفئة المستهدفة", type: "text" },
-          { id: "description", label: "الوصف", type: "textarea" },
-          { id: "results", label: "النتائج", type: "textarea" },
-        ] },
-      { id: "t12-2", title: "صور الأنشطة والبرامج", description: "توثيق بصري", type: "upload" },
-      { id: "t12-3", title: "خطة النشاط الطلابي", description: "خطة الأنشطة", type: "report",
-        formFields: [
-          { id: "semester", label: "الفصل", type: "text" },
-          { id: "activities", label: "الأنشطة المخططة", type: "textarea" },
-          { id: "timeline", label: "الجدول الزمني", type: "textarea" },
-        ] },
-    ],
-  },
-];
-
-// ===== بنود بقية الوظائف =====
-function makeSimpleCriteria(prefix: string, items: { id: string; title: string; desc: string; subTitle: string }[]): Criterion[] {
+// ===== بناء البنود للوظائف غير المعلم =====
+function makeSimpleCriteria(prefix: string, items: { id: string; title: string; desc: string; subTitle: string; formFields?: FormField[] }[]): Criterion[] {
   return items.map(item => ({
-    id: `${prefix}${item.id}`, title: item.title, maxScore: 5, description: item.desc,
-    subEvidences: [{ id: `${prefix}${item.id}-1`, title: item.subTitle, type: "both" as const, description: item.desc, formFields: [{ id: "content", label: "المحتوى", type: "textarea" as const, placeholder: "أدخل التفاصيل..." }] }],
+    id: `${prefix}_${item.id}`, title: item.title, maxScore: 5, description: item.desc,
+    subEvidences: [{
+      id: `${prefix}_${item.id}_sub`, title: item.subTitle, description: item.desc, type: "both" as const,
+      formFields: item.formFields || [
+        { id: "title", label: "العنوان", type: "text" as const, placeholder: "أدخل العنوان..." },
+        { id: "date", label: "التاريخ", type: "date" as const },
+        { id: "details", label: "التفاصيل", type: "textarea" as const, placeholder: "أدخل التفاصيل..." },
+        { id: "notes", label: "ملاحظات", type: "textarea" as const, placeholder: "ملاحظات إضافية..." },
+      ],
+    }],
   }));
 }
 
+// ===== بنود المعلم/المعلمة (نظام المعايير الـ 11) =====
+function buildTeacherCriteria(): Criterion[] {
+  return STANDARDS.map(std => ({
+    id: std.id,
+    title: std.title,
+    maxScore: 5,
+    description: `${std.indicators.length} مؤشر · الوزن ${std.weight}%`,
+    subEvidences: std.indicators.map(ind => ({
+      id: ind.id,
+      title: ind.text,
+      description: ind.suggestedEvidence.join(" · "),
+      type: "both" as const,
+      formFields: [
+        { id: "evidence_desc", label: "وصف الشاهد", type: "textarea" as const, placeholder: "اكتب وصفاً للشاهد المقدم..." },
+        { id: "date", label: "التاريخ", type: "date" as const },
+        { id: "notes", label: "ملاحظات", type: "textarea" as const, placeholder: "ملاحظات إضافية..." },
+      ],
+    })),
+  }));
+}
+
+const TEACHER_CRITERIA = buildTeacherCriteria();
+
+// ===== بنود الوظائف الأخرى =====
 const PRINCIPAL_CRITERIA = makeSimpleCriteria("p", [
-  { id: "1", title: "القيادة المدرسية", desc: "قيادة المدرسة بفاعلية", subTitle: "الخطة التشغيلية" },
-  { id: "2", title: "التخطيط الاستراتيجي", desc: "وضع خطط استراتيجية", subTitle: "الخطة الاستراتيجية" },
+  { id: "1", title: "التخطيط المدرسي", desc: "إعداد الخطط التشغيلية والاستراتيجية", subTitle: "الخطة التشغيلية السنوية" },
+  { id: "2", title: "القيادة التعليمية", desc: "قيادة العملية التعليمية وتطويرها", subTitle: "تقارير الزيارات الصفية" },
   { id: "3", title: "إدارة الموارد البشرية", desc: "إدارة وتطوير الكوادر", subTitle: "خطة التطوير المهني" },
-  { id: "4", title: "إدارة البيئة المدرسية", desc: "توفير بيئة آمنة", subTitle: "تقرير السلامة" },
-  { id: "5", title: "العلاقات المجتمعية", desc: "تعزيز الشراكة", subTitle: "سجل الشراكة المجتمعية" },
-  { id: "6", title: "التطوير المهني", desc: "دعم التطوير", subTitle: "خطة التدريب" },
-  { id: "7", title: "الإشراف على العملية التعليمية", desc: "متابعة العملية التعليمية", subTitle: "سجل الزيارات الصفية" },
-  { id: "8", title: "تحسين نتائج الطلاب", desc: "رفع مستوى التحصيل", subTitle: "تقرير تحليل النتائج" },
-  { id: "9", title: "إدارة الأزمات", desc: "الاستعداد للأزمات", subTitle: "خطة إدارة الأزمات" },
+  { id: "4", title: "البيئة المدرسية", desc: "تهيئة بيئة تعليمية آمنة وجاذبة", subTitle: "تقرير البيئة المدرسية" },
+  { id: "5", title: "العلاقات المجتمعية", desc: "تعزيز الشراكة المجتمعية", subTitle: "سجل الشراكات المجتمعية" },
+  { id: "6", title: "التقويم والمتابعة", desc: "متابعة وتقويم الأداء المدرسي", subTitle: "تقارير المتابعة الدورية" },
+  { id: "7", title: "الإدارة المالية", desc: "إدارة الميزانية والموارد المالية", subTitle: "التقرير المالي" },
 ]);
 
 const VICE_PRINCIPAL_CRITERIA = makeSimpleCriteria("v", [
@@ -421,25 +158,25 @@ const ADMIN_ASSISTANT_CRITERIA = makeSimpleCriteria("a", [
 
 // ===== أنواع الوظائف =====
 const JOB_TYPES = [
-  { id: "teacher", title: "معلم / معلمة", icon: "👨‍🏫", criteria: TEACHER_CRITERIA },
-  { id: "principal", title: "مدير / مديرة مدرسة", icon: "👔", criteria: PRINCIPAL_CRITERIA },
-  { id: "vice_principal", title: "وكيل / وكيلة مدرسة", icon: "📋", criteria: VICE_PRINCIPAL_CRITERIA },
-  { id: "counselor", title: "موجه/ة طلابي/ة", icon: "🤝", criteria: COUNSELOR_CRITERIA },
-  { id: "health_counselor", title: "موجه/ة صحي/ة", icon: "🏥", criteria: HEALTH_COUNSELOR_CRITERIA },
-  { id: "supervisor", title: "مشرف/ة تربوي/ة", icon: "🔍", criteria: SUPERVISOR_CRITERIA },
-  { id: "librarian", title: "أمين/ة مصادر تعلم", icon: "📚", criteria: LIBRARIAN_CRITERIA },
-  { id: "kindergarten", title: "معلمة رياض أطفال", icon: "🧒", criteria: KINDERGARTEN_CRITERIA },
-  { id: "special_ed", title: "معلم/ة تربية خاصة", icon: "♿", criteria: SPECIAL_ED_CRITERIA },
-  { id: "admin_assistant", title: "مساعد/ة إداري/ة", icon: "🗂️", criteria: ADMIN_ASSISTANT_CRITERIA },
+  { id: "teacher", title: "معلم / معلمة", icon: GraduationCap, emoji: "👨‍🏫", criteria: TEACHER_CRITERIA, isTeacher: true, color: "#059669" },
+  { id: "principal", title: "مدير / مديرة مدرسة", icon: Building2, emoji: "👔", criteria: PRINCIPAL_CRITERIA, isTeacher: false, color: "#2563EB" },
+  { id: "vice_principal", title: "وكيل / وكيلة مدرسة", icon: ClipboardList, emoji: "📋", criteria: VICE_PRINCIPAL_CRITERIA, isTeacher: false, color: "#7C3AED" },
+  { id: "counselor", title: "موجه/ة طلابي/ة", icon: Users, emoji: "🤝", criteria: COUNSELOR_CRITERIA, isTeacher: false, color: "#0891B2" },
+  { id: "health_counselor", title: "موجه/ة صحي/ة", icon: Heart, emoji: "🏥", criteria: HEALTH_COUNSELOR_CRITERIA, isTeacher: false, color: "#DC2626" },
+  { id: "supervisor", title: "مشرف/ة تربوي/ة", icon: SearchIcon, emoji: "🔍", criteria: SUPERVISOR_CRITERIA, isTeacher: false, color: "#CA8A04" },
+  { id: "librarian", title: "أمين/ة مصادر تعلم", icon: BookOpen, emoji: "📚", criteria: LIBRARIAN_CRITERIA, isTeacher: false, color: "#9333EA" },
+  { id: "kindergarten", title: "معلمة رياض أطفال", icon: Baby, emoji: "🧒", criteria: KINDERGARTEN_CRITERIA, isTeacher: false, color: "#EC4899" },
+  { id: "special_ed", title: "معلم/ة تربية خاصة", icon: Accessibility, emoji: "♿", criteria: SPECIAL_ED_CRITERIA, isTeacher: false, color: "#F97316" },
+  { id: "admin_assistant", title: "مساعد/ة إداري/ة", icon: Briefcase, emoji: "🗂️", criteria: ADMIN_ASSISTANT_CRITERIA, isTeacher: false, color: "#6B7280" },
 ];
 
 // ===== الثيمات =====
 const THEMES = [
-  { id: "simple", name: "بسيط", headerBg: "#f8f9fa", headerText: "#1a1a1a", accent: "#059669", borderColor: "#e5e7eb" },
   { id: "official", name: "الهوية الرسمية", headerBg: "#1B5E20", headerText: "#fff", accent: "#2E7D32", borderColor: "#1B5E20" },
   { id: "official-gradient", name: "تدرج رسمي", headerBg: "linear-gradient(135deg, #1B5E20, #2E7D32, #43A047)", headerText: "#fff", accent: "#2E7D32", borderColor: "#1B5E20" },
   { id: "blue", name: "أزرق كلاسيكي", headerBg: "#0D47A1", headerText: "#fff", accent: "#1565C0", borderColor: "#0D47A1" },
   { id: "purple", name: "بنفسجي أنيق", headerBg: "#4A148C", headerText: "#fff", accent: "#6A1B9A", borderColor: "#4A148C" },
+  { id: "simple", name: "بسيط", headerBg: "#f8f9fa", headerText: "#1a1a1a", accent: "#059669", borderColor: "#e5e7eb" },
 ];
 
 function createEmptyEvidence(subEvidenceId: string = ""): EvidenceItem {
@@ -453,12 +190,13 @@ function createEmptyEvidence(subEvidenceId: string = ""): EvidenceItem {
 // ===== المكون الرئيسي =====
 export default function PerformanceEvidence() {
   const [, navigate] = useLocation();
-  const [step, setStep] = useState<"select" | "criteria-list" | "criterion-detail" | "final-review" | "preview">("select");
+  const [step, setStep] = useState<"select" | "dashboard" | "criterion-detail" | "final-review" | "preview">("select");
   const [selectedJob, setSelectedJob] = useState<typeof JOB_TYPES[0] | null>(null);
-  const [selectedTheme, setSelectedTheme] = useState(THEMES[1]);
+  const [selectedTheme, setSelectedTheme] = useState(THEMES[0]);
   const [currentCriterionIndex, setCurrentCriterionIndex] = useState(0);
   const [expandedSubEvidence, setExpandedSubEvidence] = useState<string | null>(null);
   const [isExporting, setIsExporting] = useState(false);
+  const [activeTab, setActiveTab] = useState("criteria");
 
   // AI State
   const [aiLoading, setAiLoading] = useState<string | null>(null);
@@ -481,7 +219,6 @@ export default function PerformanceEvidence() {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const activeUploadRef = useRef<{ criterionId: string; subEvidenceId: string } | null>(null);
-  // Smart upload ref (for AI classification)
   const smartUploadRef = useRef<HTMLInputElement>(null);
 
   const [personalInfo, setPersonalInfo] = useState({
@@ -507,10 +244,10 @@ export default function PerformanceEvidence() {
     setSelectedJob(job);
     setCustomCriteria([]);
     initCriteriaData(job.criteria);
-    setStep("criteria-list");
+    setStep("dashboard");
   };
 
-  // ===== حسابات تحليل الفجوات (نمط معياري) =====
+  // ===== حسابات تحليل الفجوات =====
   const gapAnalysis = useMemo(() => {
     let totalEvidences = 0;
     let coveredCriteria = 0;
@@ -533,6 +270,23 @@ export default function PerformanceEvidence() {
 
     return { totalEvidences, coveredCriteria, partialCriteria, missedCriteria, percentage };
   }, [allCriteria, criteriaData]);
+
+  // ===== عدد المؤشرات المغطاة (للمعلم) =====
+  const indicatorsCoverage = useMemo(() => {
+    if (!selectedJob?.isTeacher) return null;
+    let totalIndicators = 0;
+    let coveredIndicators = 0;
+    STANDARDS.forEach(std => {
+      std.indicators.forEach(ind => {
+        totalIndicators++;
+        const data = criteriaData[std.id];
+        if (data && data.evidences.some(e => e.subEvidenceId === ind.id)) {
+          coveredIndicators++;
+        }
+      });
+    });
+    return { total: totalIndicators, covered: coveredIndicators, percentage: totalIndicators > 0 ? Math.round((coveredIndicators / totalIndicators) * 100) : 0 };
+  }, [selectedJob, criteriaData]);
 
   const updateScore = (criterionId: string, score: number) => {
     setCriteriaData((prev) => ({ ...prev, [criterionId]: { ...prev[criterionId], score } }));
@@ -591,9 +345,7 @@ export default function PerformanceEvidence() {
   const addCustomMainSection = () => {
     if (!newMainSectionTitle.trim()) return;
     const newCriterion: Criterion = {
-      id: `custom_main_${Date.now()}`,
-      title: newMainSectionTitle.trim(),
-      maxScore: 5,
+      id: `custom_main_${Date.now()}`, title: newMainSectionTitle.trim(), maxScore: 5,
       description: newMainSectionDesc.trim() || "قسم رئيسي مخصص",
       subEvidences: [{ id: `custom_main_${Date.now()}_sub1`, title: "شاهد عام", description: "شاهد عام", type: "both", formFields: [{ id: "content", label: "المحتوى", type: "textarea", placeholder: "أدخل التفاصيل..." }] }],
     };
@@ -632,58 +384,41 @@ export default function PerformanceEvidence() {
     fileInputRef.current?.click();
   };
 
-  // ===== رفع ذكي مع تصنيف AI تلقائي (نمط معياري) =====
+  // ===== رفع ذكي مع تصنيف AI تلقائي =====
   const [isSmartUploading, setIsSmartUploading] = useState(false);
 
   const handleSmartUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     setIsSmartUploading(true);
-
     const reader = new FileReader();
     reader.onload = async () => {
       const isImage = file.type.startsWith("image/");
       const isVideo = file.type.startsWith("video/");
-
       try {
-        // تصنيف AI تلقائي
         const result = await classifyMutation.mutateAsync({
-          fileName: file.name,
-          fileType: file.type,
+          fileName: file.name, fileType: file.type,
           description: file.name.replace(/\.[^/.]+$/, "").replace(/[-_]/g, " "),
         });
-
         if (result.success && result.classification) {
           const cls = result.classification;
-          // البحث عن البند المناسب
           const targetCriterion = allCriteria.find(c =>
-            c.id === cls.standardId ||
-            c.title.includes(cls.standardName) ||
-            cls.standardName.includes(c.title)
+            c.id === cls.standardId || c.title.includes(cls.standardName) || cls.standardName.includes(c.title)
           );
-
           if (targetCriterion && criteriaData[targetCriterion.id]) {
             const subs = [...targetCriterion.subEvidences, ...(criteriaData[targetCriterion.id]?.customSubEvidences || [])];
-            const targetSub = subs[0]; // أول شاهد فرعي
-
+            const targetSub = subs[0];
             const newEv = createEmptyEvidence(targetSub?.id || "");
             newEv.type = isImage ? "image" : isVideo ? "video" : "file";
             newEv.fileData = reader.result as string;
             newEv.fileName = file.name;
             newEv.text = file.name;
             newEv.displayAs = isImage ? "image" : "qr";
-
             setCriteriaData((prev) => ({
               ...prev,
-              [targetCriterion.id]: {
-                ...prev[targetCriterion.id],
-                evidences: [...prev[targetCriterion.id].evidences, newEv],
-              },
+              [targetCriterion.id]: { ...prev[targetCriterion.id], evidences: [...prev[targetCriterion.id].evidences, newEv] },
             }));
-
-            toast.success(`تم تصنيف الشاهد تلقائياً`, {
-              description: `البند: ${targetCriterion.title} (ثقة: ${Math.round(cls.confidence * 100)}%)`,
-            });
+            toast.success(`تم تصنيف الشاهد تلقائياً`, { description: `البند: ${targetCriterion.title} (ثقة: ${Math.round(cls.confidence * 100)}%)` });
           } else {
             toast.info("لم يتم العثور على بند مطابق، تم إضافته للبند الأول");
             const firstCriterion = allCriteria[0];
@@ -694,8 +429,7 @@ export default function PerformanceEvidence() {
               newEv.fileName = file.name;
               newEv.displayAs = isImage ? "image" : "qr";
               setCriteriaData((prev) => ({
-                ...prev,
-                [firstCriterion.id]: { ...prev[firstCriterion.id], evidences: [...prev[firstCriterion.id].evidences, newEv] },
+                ...prev, [firstCriterion.id]: { ...prev[firstCriterion.id], evidences: [...prev[firstCriterion.id].evidences, newEv] },
               }));
             }
           }
@@ -731,15 +465,6 @@ export default function PerformanceEvidence() {
     setAiPrompt("");
   };
 
-  const applyAIText = (criterionId: string, subId: string, text: string) => {
-    const ev = createEmptyEvidence(subId);
-    ev.text = text;
-    setCriteriaData((prev) => ({
-      ...prev,
-      [criterionId]: { ...prev[criterionId], evidences: [...prev[criterionId].evidences, ev] },
-    }));
-  };
-
   const fillFormWithAI = async (criterionId: string, subId: string, evId: string, fields: FormField[]) => {
     const key = `fill_${evId}`;
     setAiLoading(key);
@@ -748,8 +473,7 @@ export default function PerformanceEvidence() {
       const allSubs = [...(currentCrit?.subEvidences || []), ...(criteriaData[criterionId]?.customSubEvidences || [])];
       const currentSub = allSubs.find(s => s.id === subId);
       const result = await fillFormMutation.mutateAsync({
-        jobTitle: selectedJob?.title || "",
-        criterionName: currentCrit?.title || "",
+        jobTitle: selectedJob?.title || "", criterionName: currentCrit?.title || "",
         subEvidenceName: currentSub?.title || "",
         formFields: fields.map(f => ({ id: f.id, label: f.label, type: f.type })),
       });
@@ -768,10 +492,7 @@ export default function PerformanceEvidence() {
     const key = `improve_${evId}_${fieldId}`;
     setAiLoading(key);
     try {
-      const result = await improveMutation.mutateAsync({
-        text: currentText,
-        context: `شاهد أداء وظيفي - ${selectedJob?.title}`,
-      });
+      const result = await improveMutation.mutateAsync({ text: currentText, context: `شاهد أداء وظيفي - ${selectedJob?.title}` });
       if (result.improved) {
         updateFormField(criterionId, evId, fieldId, result.improved);
         toast.success("تم تحسين النص");
@@ -809,26 +530,30 @@ export default function PerformanceEvidence() {
   // ===== Render Evidence Item =====
   const renderEvidenceItem = (ev: EvidenceItem, criterionId: string) => (
     <motion.div key={ev.id} initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }}
-      className="bg-gray-50 rounded-xl p-4 border border-gray-200 group">
+      className="bg-muted/50 rounded-xl p-4 border border-border group">
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-2">
-          {ev.type === 'text' && <Type className="w-4 h-4 text-gray-500" />}
+          {ev.type === 'text' && <Type className="w-4 h-4 text-muted-foreground" />}
           {ev.type === 'image' && <Image className="w-4 h-4 text-blue-500" />}
           {ev.type === 'link' && <LinkIcon className="w-4 h-4 text-purple-500" />}
           {ev.type === 'file' && <FileText className="w-4 h-4 text-orange-500" />}
           {ev.type === 'video' && <Video className="w-4 h-4 text-red-500" />}
-          <span className="text-xs font-medium text-gray-500">
+          <span className="text-xs font-medium text-muted-foreground">
             {ev.type === 'text' ? 'نص' : ev.type === 'image' ? 'صورة' : ev.type === 'link' ? 'رابط' : ev.type === 'file' ? 'ملف' : 'فيديو'}
           </span>
-          {ev.fileName && <span className="text-xs text-gray-400">({ev.fileName})</span>}
+          {ev.fileName && <span className="text-xs text-muted-foreground/70">({ev.fileName})</span>}
         </div>
         <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
           {ev.type === 'image' && (
-            <button onClick={() => updateEvidence(criterionId, ev.id, { displayAs: ev.displayAs === 'image' ? 'qr' : 'image' })}
-              className={`p-1.5 rounded-lg text-xs ${ev.displayAs === 'qr' ? 'bg-violet-100 text-violet-600' : 'bg-blue-100 text-blue-600'}`}
-              title={ev.displayAs === 'image' ? 'تحويل لباركود' : 'عرض كصورة'}>
-              {ev.displayAs === 'image' ? <QrCode className="w-3.5 h-3.5" /> : <Image className="w-3.5 h-3.5" />}
-            </button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button onClick={() => updateEvidence(criterionId, ev.id, { displayAs: ev.displayAs === 'image' ? 'qr' : 'image' })}
+                  className={`p-1.5 rounded-lg text-xs ${ev.displayAs === 'qr' ? 'bg-violet-100 text-violet-600' : 'bg-blue-100 text-blue-600'}`}>
+                  {ev.displayAs === 'image' ? <QrCode className="w-3.5 h-3.5" /> : <Image className="w-3.5 h-3.5" />}
+                </button>
+              </TooltipTrigger>
+              <TooltipContent>{ev.displayAs === 'image' ? 'تحويل لباركود QR' : 'عرض كصورة'}</TooltipContent>
+            </Tooltip>
           )}
           <button onClick={() => removeEvidence(criterionId, ev.id)} className="p-1.5 rounded-lg text-red-400 hover:text-red-600 hover:bg-red-50">
             <Trash2 className="w-3.5 h-3.5" />
@@ -839,19 +564,19 @@ export default function PerformanceEvidence() {
       {ev.type === 'text' && !ev.formData && (
         <textarea value={ev.text} onChange={(e) => updateEvidence(criterionId, ev.id, { text: e.target.value })}
           placeholder="اكتب نص الشاهد هنا..." rows={2}
-          className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-emerald-500/20" />
+          className="w-full px-3 py-2 rounded-lg border border-border text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/20 bg-background" />
       )}
 
       {ev.type === 'link' && (
         <input type="url" value={ev.link} onChange={(e) => updateEvidence(criterionId, ev.id, { link: e.target.value })}
           placeholder="https://example.com" dir="ltr"
-          className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20" />
+          className="w-full px-3 py-2 rounded-lg border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 bg-background" />
       )}
 
       {(ev.type === 'image' || ev.type === 'video' || ev.type === 'file') && ev.fileData && (
         <div className="mt-2">
           {ev.type === 'image' && ev.displayAs === 'image' && (
-            <img src={ev.fileData} alt="" className="max-h-48 rounded-lg border border-gray-200" />
+            <img src={ev.fileData} alt="" className="max-h-48 rounded-lg border border-border" />
           )}
           {ev.type === 'image' && ev.displayAs === 'qr' && (
             <div className="flex items-center gap-3 bg-violet-50 p-3 rounded-lg">
@@ -862,19 +587,13 @@ export default function PerformanceEvidence() {
           {ev.type === 'video' && (
             <div className="flex items-center gap-3 bg-red-50 p-3 rounded-lg">
               <Video className="w-8 h-8 text-red-500" />
-              <div>
-                <p className="text-sm font-medium text-gray-700">{ev.fileName}</p>
-                <p className="text-xs text-red-500">سيتحول لباركود QR عند الطباعة</p>
-              </div>
+              <div><p className="text-sm font-medium">{ev.fileName}</p><p className="text-xs text-red-500">سيتحول لباركود QR عند الطباعة</p></div>
             </div>
           )}
           {ev.type === 'file' && (
             <div className="flex items-center gap-3 bg-orange-50 p-3 rounded-lg">
               <FileText className="w-8 h-8 text-orange-500" />
-              <div>
-                <p className="text-sm font-medium text-gray-700">{ev.fileName}</p>
-                <p className="text-xs text-orange-500">سيتحول لباركود QR عند الطباعة</p>
-              </div>
+              <div><p className="text-sm font-medium">{ev.fileName}</p><p className="text-xs text-orange-500">سيتحول لباركود QR عند الطباعة</p></div>
             </div>
           )}
         </div>
@@ -882,276 +601,385 @@ export default function PerformanceEvidence() {
     </motion.div>
   );
 
-  // ===== Step 1: اختيار الوظيفة =====
+  // ======================================================================
+  // ===== الخطوة 1: اختيار الوظيفة =====
+  // ======================================================================
   if (step === "select") {
     return (
-      <div className="min-h-screen bg-[#F8FAFC] p-6" dir="rtl">
+      <div className="min-h-screen bg-background p-4 md:p-8" dir="rtl">
         <div className="max-w-5xl mx-auto">
-          <div className="flex items-center justify-between mb-6">
-            <button onClick={() => navigate("/")} className="flex items-center gap-2 text-gray-500 hover:text-gray-700">
-              <ArrowLeft className="w-4 h-4" /><span className="text-sm">العودة للرئيسية</span>
-            </button>
-          </div>
-          <div className="text-center mb-10">
-            <div className="w-16 h-16 rounded-2xl bg-emerald-100 flex items-center justify-center mx-auto mb-4"><span className="text-3xl">📊</span></div>
-            <h1 className="text-3xl font-black text-gray-900 mb-2" style={{ fontFamily: "'Tajawal', sans-serif" }}>شواهد الأداء الوظيفي</h1>
-            <p className="text-gray-500 max-w-lg mx-auto text-sm">اختر الوظيفة لبدء إعداد الشواهد. كل بند يحتوي على شواهد فرعية مع فورمات تفاعلية وذكاء اصطناعي حقيقي.</p>
-            <div className="flex items-center justify-center gap-2 mt-3">
-              <Sparkles className="w-4 h-4 text-violet-500" />
-              <span className="text-sm text-violet-600 font-medium">الذكاء الاصطناعي مفعّل تلقائياً - تصنيف ذكي للشواهد</span>
+          <button onClick={() => navigate("/")} className="flex items-center gap-2 text-muted-foreground hover:text-foreground mb-8 transition-colors">
+            <ArrowLeft className="w-4 h-4" /><span className="text-sm">العودة للرئيسية</span>
+          </button>
+
+          <div className="text-center mb-12">
+            <div className="w-20 h-20 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-5">
+              <BarChart3 className="w-10 h-10 text-primary" />
+            </div>
+            <h1 className="text-3xl md:text-4xl font-black text-foreground mb-3" style={{ fontFamily: "var(--font-heading)" }}>
+              شواهد الأداء الوظيفي
+            </h1>
+            <p className="text-muted-foreground max-w-lg mx-auto leading-relaxed">
+              اختر وظيفتك لبدء إعداد ملف الإنجاز. يتضمن النظام ذكاء اصطناعي تفاعلي لتصنيف الشواهد وتعبئة النماذج تلقائياً.
+            </p>
+            <div className="flex items-center justify-center gap-2 mt-4">
+              <Badge variant="secondary" className="gap-1.5 py-1 px-3">
+                <Sparkles className="w-3.5 h-3.5 text-violet-500" />
+                ذكاء اصطناعي مفعّل تلقائياً
+              </Badge>
             </div>
           </div>
+
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {JOB_TYPES.map((job, i) => (
-              <motion.button key={job.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.04 }}
-                whileHover={{ y: -4, boxShadow: "0 12px 30px rgba(0,0,0,0.08)" }}
-                onClick={() => handleSelectJob(job)}
-                className="bg-white rounded-xl p-5 border border-gray-200 text-right hover:border-emerald-300 transition-all">
-                <div className="text-3xl mb-3">{job.icon}</div>
-                <h3 className="font-bold text-gray-800 mb-1 text-sm" style={{ fontFamily: "'Tajawal', sans-serif" }}>{job.title}</h3>
-                <p className="text-xs text-gray-500">{job.criteria.length} بند تقييم</p>
-              </motion.button>
-            ))}
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // ===== Step 2: قائمة البنود + تحليل الفجوات =====
-  if (step === "criteria-list") {
-    return (
-      <div className="min-h-screen bg-[#F8FAFC] p-4 md:p-6" dir="rtl">
-        <input type="file" ref={smartUploadRef} className="hidden" accept="image/*,video/*,.pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx" onChange={handleSmartUpload} />
-        <div className="max-w-5xl mx-auto">
-          {/* Header */}
-          <div className="flex items-center justify-between mb-5 bg-white rounded-xl p-4 shadow-sm border border-gray-100">
-            <div className="flex items-center gap-3">
-              <button onClick={() => setStep("select")} className="flex items-center gap-1.5 text-gray-500 hover:text-gray-700 text-sm">
-                <ArrowLeft className="w-4 h-4" />تغيير الوظيفة
-              </button>
-              <button onClick={saveReport} className="flex items-center gap-1.5 text-blue-600 text-sm"><Save className="w-4 h-4" />حفظ</button>
-            </div>
-            <div className="flex items-center gap-4">
-              <div className="text-left">
-                <div className="text-2xl font-black" style={{ color: getGrade(percentage).color }}>{percentage}%</div>
-                <div className="text-xs text-gray-500">{getGrade(percentage).label} · {totalScore}/{maxScore}</div>
-              </div>
-              <button onClick={() => setStep("final-review")} className="flex items-center gap-2 bg-emerald-600 text-white px-5 py-2.5 rounded-lg text-sm font-medium hover:bg-emerald-700">
-                <Eye className="w-4 h-4" />التقييم النهائي
-              </button>
-            </div>
-          </div>
-
-          <h1 className="text-2xl font-black text-gray-900 mb-1" style={{ fontFamily: "'Tajawal', sans-serif" }}>
-            {selectedJob?.icon} {selectedJob?.title}
-          </h1>
-          <p className="text-sm text-gray-500 mb-5">اضغط على أي بند لفتح الشواهد الفرعية</p>
-
-          {/* ===== لوحة تحليل الفجوات (نمط معياري) ===== */}
-          <div className="bg-white rounded-2xl border border-gray-200 p-5 mb-5">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-base font-bold text-gray-900 flex items-center gap-2" style={{ fontFamily: "'Tajawal', sans-serif" }}>
-                <TrendingUp className="w-5 h-5 text-emerald-600" />
-                تحليل الفجوات
-              </h2>
-              <button onClick={() => smartUploadRef.current?.click()} disabled={isSmartUploading}
-                className="flex items-center gap-2 bg-violet-600 text-white px-4 py-2.5 rounded-xl text-sm font-medium hover:bg-violet-700 disabled:opacity-50 shadow-lg shadow-violet-200">
-                {isSmartUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-                {isSmartUploading ? "جاري التصنيف..." : "رفع شاهد مع تصنيف ذكي"}
-              </button>
-            </div>
-
-            {/* شريط التقدم */}
-            <div className="w-full h-3 bg-gray-100 rounded-full overflow-hidden mb-3">
-              <div className="h-full rounded-full transition-all duration-500"
-                style={{
-                  width: `${gapAnalysis.percentage}%`,
-                  background: gapAnalysis.percentage >= 80 ? "linear-gradient(90deg, #059669, #10B981)"
-                    : gapAnalysis.percentage >= 50 ? "linear-gradient(90deg, #D97706, #F59E0B)"
-                    : "linear-gradient(90deg, #DC2626, #EF4444)",
-                }} />
-            </div>
-
-            <div className="flex items-center justify-between text-xs text-gray-500 mb-4">
-              <span>{gapAnalysis.totalEvidences} شاهد مرفوع</span>
-              <div className="flex gap-3">
-                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-500" />{gapAnalysis.coveredCriteria} مكتمل</span>
-                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-500" />{gapAnalysis.partialCriteria} جزئي</span>
-                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-500" />{gapAnalysis.missedCriteria} مفقود</span>
-              </div>
-            </div>
-
-            {/* شبكة البنود مع حالة كل بند */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
-              {allCriteria.map((c, i) => {
-                const d = criteriaData[c.id];
-                const evCount = d?.evidences.length || 0;
-                const status = d?.score >= 4 && evCount > 0 ? "complete" : evCount > 0 || (d?.score || 0) > 0 ? "partial" : "missing";
-                return (
-                  <button key={c.id} onClick={() => { setCurrentCriterionIndex(i); setStep("criterion-detail"); }}
-                    className={`rounded-lg p-2.5 text-right text-xs transition-all border ${
-                      status === "complete" ? "bg-emerald-50 border-emerald-200 hover:border-emerald-400"
-                      : status === "partial" ? "bg-amber-50 border-amber-200 hover:border-amber-400"
-                      : "bg-red-50 border-red-200 hover:border-red-400"
-                    }`}>
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="font-bold text-gray-700 truncate">{i + 1}. {c.title.substring(0, 15)}{c.title.length > 15 ? '...' : ''}</span>
-                      {status === "complete" && <CheckCircle className="w-3.5 h-3.5 text-emerald-500 shrink-0" />}
-                      {status === "partial" && <AlertTriangle className="w-3.5 h-3.5 text-amber-500 shrink-0" />}
-                      {status === "missing" && <XCircle className="w-3.5 h-3.5 text-red-400 shrink-0" />}
-                    </div>
-                    <span className="text-[10px] text-gray-500">{evCount} شاهد · {d?.score || 0}/{c.maxScore}</span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* البيانات الشخصية */}
-          <div className="bg-white rounded-xl border border-gray-200 p-5 mb-5">
-            <h2 className="font-bold text-gray-800 mb-4 text-base flex items-center gap-2"><FileText className="w-5 h-5 text-emerald-600" />البيانات الأساسية</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {[
-                { key: "name", label: "الاسم الكامل", placeholder: "أدخل الاسم الرباعي" },
-                { key: "school", label: "المدرسة", placeholder: "اسم المدرسة" },
-                { key: "year", label: "العام الدراسي", placeholder: "١٤٤٧هـ" },
-                { key: "semester", label: "الفصل الدراسي", placeholder: "الفصل الدراسي الثاني" },
-                { key: "evaluator", label: "اسم المقيّم", placeholder: "اسم المقيّم" },
-                { key: "evaluatorRole", label: "صفة المقيّم", placeholder: "مدير المدرسة" },
-                { key: "date", label: "تاريخ التقييم", placeholder: "١٤٤٧/٠٦/١٥" },
-              ].map((field) => (
-                <div key={field.key}>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">{field.label}</label>
-                  <input type="text" value={(personalInfo as any)[field.key]}
-                    onChange={(e) => setPersonalInfo((prev) => ({ ...prev, [field.key]: e.target.value }))}
-                    placeholder={field.placeholder}
-                    className="w-full px-3 py-2.5 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-400" />
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* قائمة البنود */}
-          <div className="space-y-3">
-            {allCriteria.map((criterion, index) => {
-              const data = criteriaData[criterion.id];
-              if (!data) return null;
-              const evidenceCount = data.evidences.length;
-              const isCustom = criterion.id.startsWith("custom_main_");
-              const status = data.score >= 4 && evidenceCount > 0 ? "complete" : evidenceCount > 0 || data.score > 0 ? "partial" : "missing";
+            {JOB_TYPES.map((job, i) => {
+              const Icon = job.icon;
               return (
-                <motion.button key={criterion.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.02 }}
-                  onClick={() => { setCurrentCriterionIndex(index); setStep("criterion-detail"); }}
-                  className={`w-full bg-white rounded-xl border p-4 hover:shadow-md transition-all text-right group ${
-                    status === "complete" ? "border-emerald-200" : status === "partial" ? "border-amber-200" : "border-gray-200"
-                  }`}>
-                  <div className="flex items-center gap-4">
-                    <div className={`w-10 h-10 rounded-lg flex items-center justify-center font-bold text-sm shrink-0 ${
-                      status === "complete" ? "bg-emerald-100 text-emerald-700"
-                      : status === "partial" ? "bg-amber-100 text-amber-700"
-                      : isCustom ? "bg-violet-50 text-violet-700" : "bg-gray-100 text-gray-500"
-                    }`}>
-                      {status === "complete" ? <CheckCircle className="w-5 h-5" /> : index + 1}
-                    </div>
-                    <div className="flex-1">
-                      <h3 className="font-bold text-gray-800 text-sm" style={{ fontFamily: "'Tajawal', sans-serif" }}>
-                        {criterion.title} {isCustom && <span className="text-xs text-violet-500 mr-1">(مخصص)</span>}
-                      </h3>
-                      <p className="text-xs text-gray-500">{criterion.description}</p>
-                    </div>
-                    <div className="flex items-center gap-3 shrink-0">
-                      <div className="text-center">
-                        <div className="text-lg font-black" style={{ color: data.score >= 4 ? '#16A34A' : data.score >= 3 ? '#CA8A04' : '#9CA3AF' }}>{data.score}</div>
-                        <div className="text-[10px] text-gray-400">من {criterion.maxScore}</div>
+                <motion.div key={job.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.04 }}>
+                  <Card className="cursor-pointer hover:shadow-lg hover:-translate-y-1 transition-all duration-200 border-border/50 hover:border-primary/30 h-full"
+                    onClick={() => handleSelectJob(job)}>
+                    <CardContent className="p-5">
+                      <div className="w-12 h-12 rounded-xl flex items-center justify-center mb-4" style={{ backgroundColor: job.color + "15" }}>
+                        <Icon className="w-6 h-6" style={{ color: job.color }} />
                       </div>
-                      <span className="text-[10px] text-gray-400 bg-gray-100 px-2 py-1 rounded-md">{evidenceCount} شاهد</span>
-                      <ChevronLeft className="w-5 h-5 text-gray-300 group-hover:text-emerald-500" />
-                    </div>
-                  </div>
-                </motion.button>
+                      <h3 className="font-bold text-foreground mb-1 text-sm" style={{ fontFamily: "var(--font-heading)" }}>{job.title}</h3>
+                      <p className="text-xs text-muted-foreground">{job.criteria.length} بند تقييم</p>
+                      {job.isTeacher && (
+                        <Badge variant="outline" className="mt-2 text-[10px] gap-1 border-primary/30 text-primary">
+                          <Sparkles className="w-3 h-3" />11 معيار · 45 مؤشر
+                        </Badge>
+                      )}
+                    </CardContent>
+                  </Card>
+                </motion.div>
               );
             })}
           </div>
-
-          {/* إضافة قسم رئيسي جديد */}
-          <div className="mt-4">
-            {showAddMainSection ? (
-              <div className="bg-white rounded-xl border-2 border-dashed border-violet-300 p-5">
-                <h4 className="text-sm font-bold text-violet-700 mb-3 flex items-center gap-2"><PlusCircle className="w-4 h-4" />إضافة بند رئيسي جديد</h4>
-                <div className="space-y-3">
-                  <input type="text" value={newMainSectionTitle} onChange={(e) => setNewMainSectionTitle(e.target.value)}
-                    placeholder="اسم البند الرئيسي الجديد..."
-                    className="w-full px-3 py-2.5 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/20" />
-                  <input type="text" value={newMainSectionDesc} onChange={(e) => setNewMainSectionDesc(e.target.value)}
-                    placeholder="وصف مختصر (اختياري)..."
-                    className="w-full px-3 py-2.5 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/20" />
-                  <div className="flex gap-2">
-                    <button onClick={addCustomMainSection} className="px-4 py-2.5 rounded-lg bg-violet-600 text-white text-sm font-medium hover:bg-violet-700">إضافة</button>
-                    <button onClick={() => { setShowAddMainSection(false); setNewMainSectionTitle(""); setNewMainSectionDesc(""); }}
-                      className="px-3 py-2.5 rounded-lg bg-gray-100 text-gray-600 text-sm hover:bg-gray-200"><X className="w-4 h-4" /></button>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <button onClick={() => setShowAddMainSection(true)}
-                className="w-full flex items-center justify-center gap-2 p-4 rounded-xl border-2 border-dashed border-gray-300 text-gray-500 hover:border-violet-400 hover:text-violet-600 transition-colors text-sm">
-                <PlusCircle className="w-5 h-5" />إضافة بند رئيسي جديد
-              </button>
-            )}
-          </div>
         </div>
       </div>
     );
   }
 
-  // ===== Step 3: تفاصيل البند =====
+  // ======================================================================
+  // ===== الخطوة 2: لوحة التحكم الرئيسية =====
+  // ======================================================================
+  if (step === "dashboard") {
+    const grade = getGrade(percentage);
+    return (
+      <div className="min-h-screen bg-background p-4 md:p-6" dir="rtl">
+        <input type="file" ref={smartUploadRef} className="hidden" accept="image/*,video/*,.pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx" onChange={handleSmartUpload} />
+        <div className="max-w-6xl mx-auto">
+
+          {/* ===== Header Bar ===== */}
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center gap-3">
+              <Button variant="outline" size="sm" onClick={() => setStep("select")}>
+                <ArrowRight className="w-4 h-4 ml-1" />تغيير الوظيفة
+              </Button>
+              <Button variant="outline" size="sm" onClick={saveReport}>
+                <Save className="w-4 h-4 ml-1" />حفظ
+              </Button>
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="text-left">
+                <span className="text-2xl font-black" style={{ color: grade.color }}>{percentage}%</span>
+                <p className="text-xs text-muted-foreground">{grade.label}</p>
+              </div>
+              <Button onClick={() => setStep("final-review")} className="gap-1.5">
+                <Eye className="w-4 h-4" />التقييم النهائي
+              </Button>
+            </div>
+          </div>
+
+          {/* ===== Title ===== */}
+          <div className="mb-6">
+            <div className="flex items-center gap-3 mb-1">
+              {selectedJob && <selectedJob.icon className="w-7 h-7" style={{ color: selectedJob.color }} />}
+              <h1 className="text-2xl font-black text-foreground" style={{ fontFamily: "var(--font-heading)" }}>
+                {selectedJob?.title}
+              </h1>
+            </div>
+            {selectedJob?.isTeacher && (
+              <p className="text-sm text-muted-foreground mr-10">نظام المعايير الـ 11 وفق وزارة التعليم 1447هـ · {indicatorsCoverage?.covered || 0}/{indicatorsCoverage?.total || 45} مؤشر مغطى</p>
+            )}
+          </div>
+
+          {/* ===== لوحة تحليل الفجوات ===== */}
+          <Card className="mb-6 border-border/50">
+            <CardContent className="p-5">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <TrendingUp className="w-5 h-5 text-primary" />
+                  <h2 className="font-bold text-foreground" style={{ fontFamily: "var(--font-heading)" }}>تحليل الجاهزية</h2>
+                </div>
+                <Button onClick={() => smartUploadRef.current?.click()} disabled={isSmartUploading}
+                  variant="default" size="sm" className="gap-1.5 bg-violet-600 hover:bg-violet-700">
+                  {isSmartUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+                  {isSmartUploading ? "جاري التصنيف..." : "رفع شاهد مع تصنيف ذكي"}
+                </Button>
+              </div>
+
+              {/* شريط التقدم */}
+              <div className="mb-4">
+                <div className="flex items-center justify-between text-sm mb-2">
+                  <span className="font-bold" style={{ color: grade.color }}>{gapAnalysis.percentage}% جاهزية</span>
+                  <span className="text-muted-foreground">{gapAnalysis.totalEvidences} شاهد مرفوع</span>
+                </div>
+                <Progress value={gapAnalysis.percentage} className="h-3" />
+              </div>
+
+              {/* إحصائيات سريعة */}
+              <div className="grid grid-cols-3 gap-3">
+                <div className="flex items-center gap-2 bg-emerald-50 rounded-lg p-3">
+                  <CheckCircle className="w-5 h-5 text-emerald-600 shrink-0" />
+                  <div><p className="text-lg font-black text-emerald-700">{gapAnalysis.coveredCriteria}</p><p className="text-[10px] text-emerald-600">مكتمل</p></div>
+                </div>
+                <div className="flex items-center gap-2 bg-amber-50 rounded-lg p-3">
+                  <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0" />
+                  <div><p className="text-lg font-black text-amber-700">{gapAnalysis.partialCriteria}</p><p className="text-[10px] text-amber-600">جزئي</p></div>
+                </div>
+                <div className="flex items-center gap-2 bg-red-50 rounded-lg p-3">
+                  <XCircle className="w-5 h-5 text-red-500 shrink-0" />
+                  <div><p className="text-lg font-black text-red-600">{gapAnalysis.missedCriteria}</p><p className="text-[10px] text-red-500">مفقود</p></div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* ===== Tabs ===== */}
+          <Tabs value={activeTab} onValueChange={setActiveTab}>
+            <TabsList className="mb-4">
+              <TabsTrigger value="criteria">البنود ({allCriteria.length})</TabsTrigger>
+              <TabsTrigger value="info">البيانات الشخصية</TabsTrigger>
+            </TabsList>
+
+            {/* ===== تبويب البنود ===== */}
+            <TabsContent value="criteria">
+              {/* شبكة البنود مع حالة كل بند */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 mb-6">
+                {allCriteria.map((c, i) => {
+                  const d = criteriaData[c.id];
+                  const evCount = d?.evidences.length || 0;
+                  const status = d?.score >= 4 && evCount > 0 ? "complete" : evCount > 0 || (d?.score || 0) > 0 ? "partial" : "missing";
+                  const isTeacherStandard = selectedJob?.isTeacher && c.id.startsWith("std-");
+                  const standard = isTeacherStandard ? STANDARDS.find(s => s.id === c.id) : null;
+
+                  return (
+                    <Card key={c.id}
+                      className={`cursor-pointer hover:shadow-md transition-all duration-200 ${
+                        status === "complete" ? "border-emerald-300 bg-emerald-50/30"
+                        : status === "partial" ? "border-amber-300 bg-amber-50/30"
+                        : "border-border/50 hover:border-primary/30"
+                      }`}
+                      onClick={() => { setCurrentCriterionIndex(i); setStep("criterion-detail"); }}>
+                      <CardContent className="p-3">
+                        <div className="flex items-start justify-between mb-2">
+                          <div className="flex items-center gap-1.5">
+                            {standard && <span className="text-base">{standard.icon}</span>}
+                            <span className="text-xs font-bold text-muted-foreground">#{i + 1}</span>
+                          </div>
+                          {status === "complete" && <CheckCircle className="w-4 h-4 text-emerald-500" />}
+                          {status === "partial" && <AlertTriangle className="w-4 h-4 text-amber-500" />}
+                          {status === "missing" && <XCircle className="w-4 h-4 text-red-400" />}
+                        </div>
+                        <h3 className="text-xs font-bold text-foreground leading-snug mb-1 line-clamp-2" style={{ fontFamily: "var(--font-heading)" }}>
+                          {c.title}
+                        </h3>
+                        <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
+                          <span>{evCount} شاهد</span>
+                          <span>·</span>
+                          <span>{d?.score || 0}/{c.maxScore}</span>
+                        </div>
+                        {isTeacherStandard && standard && (
+                          <div className="mt-1.5">
+                            <div className="w-full h-1 bg-muted rounded-full overflow-hidden">
+                              <div className="h-full rounded-full transition-all" style={{
+                                width: `${(() => {
+                                  const covered = standard.indicators.filter(ind => d?.evidences.some(e => e.subEvidenceId === ind.id)).length;
+                                  return standard.indicators.length > 0 ? (covered / standard.indicators.length) * 100 : 0;
+                                })()}%`,
+                                backgroundColor: standard.color,
+                              }} />
+                            </div>
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+              </div>
+
+              {/* قائمة البنود التفصيلية */}
+              <div className="space-y-2">
+                {allCriteria.map((criterion, index) => {
+                  const data = criteriaData[criterion.id];
+                  if (!data) return null;
+                  const evidenceCount = data.evidences.length;
+                  const isCustom = criterion.id.startsWith("custom_main_");
+                  const status = data.score >= 4 && evidenceCount > 0 ? "complete" : evidenceCount > 0 || data.score > 0 ? "partial" : "missing";
+                  const isTeacherStandard = selectedJob?.isTeacher && criterion.id.startsWith("std-");
+                  const standard = isTeacherStandard ? STANDARDS.find(s => s.id === criterion.id) : null;
+
+                  return (
+                    <Card key={criterion.id}
+                      className={`cursor-pointer hover:shadow-sm transition-all ${
+                        status === "complete" ? "border-emerald-200" : status === "partial" ? "border-amber-200" : "border-border/50"
+                      }`}
+                      onClick={() => { setCurrentCriterionIndex(index); setStep("criterion-detail"); }}>
+                      <CardContent className="p-4 flex items-center gap-4">
+                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold text-sm shrink-0 ${
+                          status === "complete" ? "bg-emerald-100 text-emerald-700"
+                          : status === "partial" ? "bg-amber-100 text-amber-700"
+                          : isCustom ? "bg-violet-50 text-violet-700" : "bg-muted text-muted-foreground"
+                        }`}>
+                          {standard ? standard.icon : isCustom ? "+" : index + 1}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <h3 className="font-bold text-foreground text-sm truncate" style={{ fontFamily: "var(--font-heading)" }}>
+                            {criterion.title}
+                            {isCustom && <Badge variant="outline" className="mr-2 text-[10px]">مخصص</Badge>}
+                          </h3>
+                          <p className="text-xs text-muted-foreground truncate">{criterion.description}</p>
+                        </div>
+                        <div className="flex items-center gap-3 shrink-0">
+                          <div className="text-center">
+                            <p className="text-sm font-bold" style={{ color: status === "complete" ? "#16A34A" : status === "partial" ? "#CA8A04" : "#9CA3AF" }}>
+                              {data.score}/{criterion.maxScore}
+                            </p>
+                            <p className="text-[10px] text-muted-foreground">{evidenceCount} شاهد</p>
+                          </div>
+                          <ArrowLeft className="w-4 h-4 text-muted-foreground" />
+                        </div>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+              </div>
+
+              {/* إضافة قسم رئيسي مخصص */}
+              {!showAddMainSection ? (
+                <Button variant="outline" className="w-full mt-4 border-dashed gap-2" onClick={() => setShowAddMainSection(true)}>
+                  <Plus className="w-4 h-4" />إضافة قسم رئيسي مخصص
+                </Button>
+              ) : (
+                <Card className="mt-4 border-violet-200 bg-violet-50/30">
+                  <CardContent className="p-4 space-y-3">
+                    <input type="text" value={newMainSectionTitle} onChange={(e) => setNewMainSectionTitle(e.target.value)}
+                      placeholder="اسم القسم الرئيسي" className="w-full px-3 py-2.5 rounded-lg border border-border text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/20" />
+                    <input type="text" value={newMainSectionDesc} onChange={(e) => setNewMainSectionDesc(e.target.value)}
+                      placeholder="وصف مختصر (اختياري)" className="w-full px-3 py-2 rounded-lg border border-border text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/20" />
+                    <div className="flex gap-2">
+                      <Button size="sm" onClick={addCustomMainSection} disabled={!newMainSectionTitle.trim()}>إضافة</Button>
+                      <Button size="sm" variant="ghost" onClick={() => setShowAddMainSection(false)}>إلغاء</Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+            </TabsContent>
+
+            {/* ===== تبويب البيانات الشخصية ===== */}
+            <TabsContent value="info">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <FileText className="w-5 h-5 text-primary" />البيانات الأساسية
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {[
+                      { key: "name", label: "الاسم الكامل", placeholder: "أدخل الاسم الرباعي" },
+                      { key: "school", label: "المدرسة", placeholder: "اسم المدرسة" },
+                      { key: "year", label: "العام الدراسي", placeholder: "١٤٤٧هـ" },
+                      { key: "semester", label: "الفصل الدراسي", placeholder: "الفصل الدراسي الثاني" },
+                      { key: "evaluator", label: "اسم المقيّم", placeholder: "اسم المقيّم" },
+                      { key: "evaluatorRole", label: "صفة المقيّم", placeholder: "مدير المدرسة" },
+                      { key: "date", label: "تاريخ التقييم", placeholder: "١٤٤٧/٠٦/١٥" },
+                    ].map((field) => (
+                      <div key={field.key}>
+                        <label className="block text-sm font-medium text-foreground mb-1.5">{field.label}</label>
+                        <input type="text" value={(personalInfo as any)[field.key]}
+                          onChange={(e) => setPersonalInfo((prev) => ({ ...prev, [field.key]: e.target.value }))}
+                          placeholder={field.placeholder}
+                          className="w-full px-3 py-2.5 rounded-lg border border-border text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40" />
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+          </Tabs>
+        </div>
+      </div>
+    );
+  }
+
+  // ======================================================================
+  // ===== الخطوة 3: تفاصيل البند =====
+  // ======================================================================
   if (step === "criterion-detail" && currentCriterion) {
     const data = criteriaData[currentCriterion.id] || { score: 0, notes: "", evidences: [], customSubEvidences: [] };
     const allSubEvidences = [...(currentCriterion.subEvidences || []), ...(data.customSubEvidences || [])];
+    const isTeacherStandard = selectedJob?.isTeacher && currentCriterion.id.startsWith("std-");
+    const standard = isTeacherStandard ? STANDARDS.find(s => s.id === currentCriterion.id) : null;
 
     return (
-      <div className="min-h-screen bg-[#F8FAFC] p-4 md:p-6" dir="rtl">
+      <div className="min-h-screen bg-background p-4 md:p-6" dir="rtl">
         <input type="file" ref={fileInputRef} className="hidden" accept="image/*,video/*,.pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx" onChange={handleFileUpload} />
         <div className="max-w-4xl mx-auto">
+
           {/* Header */}
           <div className="flex items-center justify-between mb-5">
-            <div className="flex items-center gap-3">
-              <button onClick={() => setStep("criteria-list")} className="flex items-center gap-1.5 text-gray-500 hover:text-gray-700 text-sm bg-white px-3 py-2 rounded-lg border border-gray-200">
-                <ArrowRight className="w-4 h-4" />العودة للبنود
-              </button>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" onClick={() => setStep("dashboard")}>
+                <ArrowRight className="w-4 h-4 ml-1" />العودة للبنود
+              </Button>
               <div className="flex gap-1">
-                <button disabled={currentCriterionIndex === 0} onClick={() => setCurrentCriterionIndex(i => i - 1)} className="p-2 rounded-lg bg-white border border-gray-200 disabled:opacity-30"><ArrowRight className="w-4 h-4" /></button>
-                <button disabled={currentCriterionIndex === allCriteria.length - 1} onClick={() => setCurrentCriterionIndex(i => i + 1)} className="p-2 rounded-lg bg-white border border-gray-200 disabled:opacity-30"><ArrowLeft className="w-4 h-4" /></button>
+                <Button variant="outline" size="icon" className="h-9 w-9" disabled={currentCriterionIndex === 0}
+                  onClick={() => setCurrentCriterionIndex(i => i - 1)}><ArrowRight className="w-4 h-4" /></Button>
+                <Button variant="outline" size="icon" className="h-9 w-9" disabled={currentCriterionIndex === allCriteria.length - 1}
+                  onClick={() => setCurrentCriterionIndex(i => i + 1)}><ArrowLeft className="w-4 h-4" /></Button>
               </div>
             </div>
-            <span className="text-sm text-gray-500">البند {currentCriterionIndex + 1} من {allCriteria.length}</span>
+            <Badge variant="secondary">{currentCriterionIndex + 1} / {allCriteria.length}</Badge>
           </div>
 
-          {/* Criterion Header */}
-          <div className="bg-white rounded-xl border border-gray-200 p-5 mb-5">
-            <div className="flex items-start justify-between mb-4">
-              <div>
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="w-8 h-8 rounded-lg bg-emerald-100 flex items-center justify-center text-emerald-700 font-bold text-sm">{currentCriterionIndex + 1}</span>
-                  <h1 className="text-xl font-black text-gray-900" style={{ fontFamily: "'Tajawal', sans-serif" }}>{currentCriterion.title}</h1>
+          {/* Criterion Header Card */}
+          <Card className="mb-5">
+            <CardContent className="p-5">
+              <div className="flex items-start justify-between">
+                <div className="flex items-start gap-3">
+                  <div className="w-12 h-12 rounded-xl flex items-center justify-center text-lg shrink-0"
+                    style={{ backgroundColor: (standard?.color || selectedJob?.color || "#059669") + "15" }}>
+                    {standard ? standard.icon : currentCriterionIndex + 1}
+                  </div>
+                  <div>
+                    <h1 className="text-xl font-black text-foreground mb-1" style={{ fontFamily: "var(--font-heading)" }}>
+                      {currentCriterion.title}
+                    </h1>
+                    <p className="text-sm text-muted-foreground">{currentCriterion.description}</p>
+                    {isTeacherStandard && standard && (
+                      <div className="flex items-center gap-2 mt-2">
+                        <Badge variant="outline" className="text-[10px]">الوزن: {standard.weight}%</Badge>
+                        <Badge variant="outline" className="text-[10px]">{standard.indicators.length} مؤشر</Badge>
+                      </div>
+                    )}
+                  </div>
                 </div>
-                <p className="text-sm text-gray-500 mr-10">{currentCriterion.description}</p>
-              </div>
-              <div className="text-center">
-                <label className="text-xs text-gray-500 block mb-1">الدرجة</label>
-                <div className="flex gap-1">
-                  {[1, 2, 3, 4, 5].map((s) => (
-                    <button key={s} onClick={() => updateScore(currentCriterion.id, s)}
-                      className={`w-9 h-9 rounded-lg text-sm font-bold transition-all ${data.score >= s ? 'bg-emerald-600 text-white shadow-md' : 'bg-gray-100 text-gray-400 hover:bg-gray-200'}`}>{s}</button>
-                  ))}
+                <div className="text-center shrink-0">
+                  <label className="text-xs text-muted-foreground block mb-1.5">الدرجة</label>
+                  <div className="flex gap-1">
+                    {[1, 2, 3, 4, 5].map((s) => (
+                      <button key={s} onClick={() => updateScore(currentCriterion.id, s)}
+                        className={`w-9 h-9 rounded-lg text-sm font-bold transition-all ${data.score >= s ? 'bg-primary text-primary-foreground shadow-md' : 'bg-muted text-muted-foreground hover:bg-muted/80'}`}>{s}</button>
+                    ))}
+                  </div>
                 </div>
               </div>
-            </div>
-          </div>
+            </CardContent>
+          </Card>
 
           {/* Sub-Evidences */}
-          <div className="space-y-4">
+          <div className="space-y-3">
             {allSubEvidences.map((sub) => {
               const subEvidences = data.evidences.filter(e => e.subEvidenceId === sub.id);
               const isExpanded = expandedSubEvidence === sub.id;
@@ -1160,7 +988,7 @@ export default function PerformanceEvidence() {
               const hasFormEvidence = subEvidences.some(e => e.formData && Object.keys(e.formData).length > 0);
 
               return (
-                <div key={sub.id} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                <Card key={sub.id} className={`overflow-hidden transition-all ${isExpanded ? 'border-primary/30 shadow-sm' : 'border-border/50'}`}>
                   <div role="button" tabIndex={0} onClick={() => {
                     setExpandedSubEvidence(isExpanded ? null : sub.id);
                     if (!isExpanded && (sub.type === 'report' || sub.type === 'both') && sub.formFields && !hasFormEvidence) {
@@ -1168,53 +996,58 @@ export default function PerformanceEvidence() {
                     }
                   }}
                     onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setExpandedSubEvidence(isExpanded ? null : sub.id); }}
-                    className="w-full flex items-center justify-between p-4 hover:bg-gray-50 transition-colors text-right cursor-pointer">
-                    <div className="flex items-center gap-3">
-                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm ${sub.type === 'report' ? 'bg-blue-50 text-blue-600' : sub.type === 'upload' ? 'bg-orange-50 text-orange-600' : 'bg-purple-50 text-purple-600'}`}>
-                        {sub.type === 'report' ? <FileText className="w-4 h-4" /> : sub.type === 'upload' ? <Upload className="w-4 h-4" /> : <Layers className="w-4 h-4" />}
+                    className="w-full flex items-center justify-between p-4 hover:bg-muted/30 transition-colors text-right cursor-pointer">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm shrink-0 ${
+                        subEvidences.length > 0 ? 'bg-emerald-100 text-emerald-600' : 'bg-muted text-muted-foreground'
+                      }`}>
+                        {subEvidences.length > 0 ? <CheckCircle className="w-4 h-4" /> : <Layers className="w-4 h-4" />}
                       </div>
-                      <div>
-                        <h3 className="font-bold text-gray-800 text-sm">{sub.title} {sub.isCustom && <span className="text-xs text-violet-500 mr-1">(مخصص)</span>}</h3>
-                        <p className="text-xs text-gray-500">{sub.description} · {subEvidences.length} شاهد</p>
+                      <div className="min-w-0">
+                        <h3 className="font-bold text-foreground text-sm truncate">
+                          {sub.title}
+                          {sub.isCustom && <Badge variant="outline" className="mr-1 text-[9px]">مخصص</Badge>}
+                        </h3>
+                        <p className="text-xs text-muted-foreground truncate">{subEvidences.length} شاهد مرفق</p>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      {isExpanded ? <ChevronUp className="w-5 h-5 text-gray-400" /> : <ChevronDown className="w-5 h-5 text-gray-400" />}
-                    </div>
+                    {isExpanded ? <ChevronUp className="w-5 h-5 text-muted-foreground shrink-0" /> : <ChevronDown className="w-5 h-5 text-muted-foreground shrink-0" />}
                   </div>
 
                   <AnimatePresence>
                     {isExpanded && (
                       <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }}
-                        className="border-t border-gray-100 overflow-hidden">
+                        className="border-t border-border overflow-hidden">
                         <div className="p-4 space-y-4">
                           {/* Form Fields */}
                           {(sub.type === 'report' || sub.type === 'both') && sub.formFields && (() => {
                             const formEv = subEvidences.find(e => e.formData !== undefined);
                             if (!formEv) return null;
                             return (
-                              <div className="bg-blue-50/50 rounded-xl p-4 border border-blue-100">
+                              <div className="bg-primary/5 rounded-xl p-4 border border-primary/10">
                                 <div className="flex items-center justify-between mb-3">
-                                  <h4 className="text-sm font-bold text-gray-700 flex items-center gap-2"><FileText className="w-4 h-4 text-blue-500" />نموذج التقرير</h4>
-                                  <button onClick={() => fillFormWithAI(currentCriterion.id, sub.id, formEv.id, sub.formFields!)}
-                                    disabled={aiLoading === `fill_${formEv.id}`}
-                                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-violet-100 text-violet-700 text-xs font-medium hover:bg-violet-200 disabled:opacity-50">
-                                    {aiLoading === `fill_${formEv.id}` ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+                                  <h4 className="text-sm font-bold text-foreground flex items-center gap-2">
+                                    <FileText className="w-4 h-4 text-primary" />نموذج التقرير
+                                  </h4>
+                                  <Button variant="secondary" size="sm" className="gap-1.5 text-xs"
+                                    onClick={() => fillFormWithAI(currentCriterion.id, sub.id, formEv.id, sub.formFields!)}
+                                    disabled={aiLoading === `fill_${formEv.id}`}>
+                                    {aiLoading === `fill_${formEv.id}` ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5 text-violet-500" />}
                                     تعبئة بالذكاء الاصطناعي
-                                  </button>
+                                  </Button>
                                 </div>
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                   {sub.formFields.map((field: FormField) => (
                                     <div key={field.id} className={field.type === 'textarea' ? 'md:col-span-2' : ''}>
                                       <div className="flex items-center justify-between mb-1">
-                                        <label className="block text-xs font-medium text-gray-600">
-                                          {field.label} {field.required && <span className="text-red-500">*</span>}
+                                        <label className="block text-xs font-medium text-foreground">
+                                          {field.label} {field.required && <span className="text-destructive">*</span>}
                                         </label>
                                         {field.type === 'textarea' && formEv.formData?.[field.id] && (
                                           <button onClick={() => improveFieldText(currentCriterion.id, formEv.id, field.id, formEv.formData?.[field.id] || '')}
                                             disabled={aiLoading === `improve_${formEv.id}_${field.id}`}
                                             className="text-[10px] text-violet-600 hover:text-violet-700 flex items-center gap-1">
-                                            {aiLoading === `improve_${formEv.id}_${field.id}` ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
+                                            {aiLoading === `improve_${formEv.id}_${field.id}` ? <Loader2 className="w-3 h-3 animate-spin" /> : <Wand2 className="w-3 h-3" />}
                                             تحسين
                                           </button>
                                         )}
@@ -1222,10 +1055,10 @@ export default function PerformanceEvidence() {
                                       {field.type === 'textarea' ? (
                                         <textarea value={formEv.formData?.[field.id] || ''} onChange={(e) => updateFormField(currentCriterion.id, formEv.id, field.id, e.target.value)}
                                           placeholder={field.placeholder} rows={3}
-                                          className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-500/20 bg-white" />
+                                          className="w-full px-3 py-2 rounded-lg border border-border text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/20 bg-background" />
                                       ) : field.type === 'select' ? (
                                         <select value={formEv.formData?.[field.id] || ''} onChange={(e) => updateFormField(currentCriterion.id, formEv.id, field.id, e.target.value)}
-                                          className="w-full px-3 py-2.5 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 bg-white">
+                                          className="w-full px-3 py-2.5 rounded-lg border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 bg-background">
                                           <option value="">اختر...</option>
                                           {field.options?.map(opt => <option key={opt} value={opt}>{opt}</option>)}
                                         </select>
@@ -1233,7 +1066,7 @@ export default function PerformanceEvidence() {
                                         <input type={field.type === 'date' ? 'date' : field.type === 'number' ? 'number' : 'text'}
                                           value={formEv.formData?.[field.id] || ''} onChange={(e) => updateFormField(currentCriterion.id, formEv.id, field.id, e.target.value)}
                                           placeholder={field.placeholder}
-                                          className="w-full px-3 py-2.5 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 bg-white" />
+                                          className="w-full px-3 py-2.5 rounded-lg border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 bg-background" />
                                       )}
                                     </div>
                                   ))}
@@ -1247,47 +1080,37 @@ export default function PerformanceEvidence() {
                             if (e.formData && Object.keys(e.formData).some(k => e.formData![k])) return false;
                             if (e.type === 'text' && !e.text && e.formData) return false;
                             return true;
-                          }).length > 0 && (
-                            <div className="space-y-2">
-                              {subEvidences.filter(e => {
-                                if (e.formData && Object.keys(e.formData).some(k => e.formData![k])) return false;
-                                if (e.type === 'text' && !e.text && e.formData) return false;
-                                return true;
-                              }).map((ev) => renderEvidenceItem(ev, currentCriterion.id))}
-                            </div>
-                          )}
+                          }).map((ev) => renderEvidenceItem(ev, currentCriterion.id))}
 
                           {/* Add Evidence Buttons */}
                           <div className="flex flex-wrap gap-2">
-                            <button onClick={() => addEvidence(currentCriterion.id, sub.id, "text")}
-                              className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl border-2 border-dashed border-emerald-300 text-emerald-600 hover:bg-emerald-50 text-xs font-medium transition-colors">
-                              <Plus className="w-4 h-4" />إضافة شاهد نصي
-                            </button>
-                            <button onClick={() => triggerFileUpload(currentCriterion.id, sub.id)}
-                              className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl border-2 border-dashed border-blue-300 text-blue-600 hover:bg-blue-50 text-xs font-medium transition-colors">
-                              <Upload className="w-4 h-4" />رفع صورة / ملف / فيديو
-                            </button>
-                            <button onClick={() => addEvidence(currentCriterion.id, sub.id, "link")}
-                              className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl border-2 border-dashed border-purple-300 text-purple-600 hover:bg-purple-50 text-xs font-medium transition-colors">
-                              <LinkIcon className="w-4 h-4" />إضافة رابط
-                            </button>
+                            <Button variant="outline" size="sm" className="gap-1.5 border-dashed border-primary/40 text-primary"
+                              onClick={() => addEvidence(currentCriterion.id, sub.id, "text")}>
+                              <Plus className="w-3.5 h-3.5" />شاهد نصي
+                            </Button>
+                            <Button variant="outline" size="sm" className="gap-1.5 border-dashed border-blue-400 text-blue-600"
+                              onClick={() => triggerFileUpload(currentCriterion.id, sub.id)}>
+                              <Upload className="w-3.5 h-3.5" />صورة / ملف / فيديو
+                            </Button>
+                            <Button variant="outline" size="sm" className="gap-1.5 border-dashed border-purple-400 text-purple-600"
+                              onClick={() => addEvidence(currentCriterion.id, sub.id, "link")}>
+                              <LinkIcon className="w-3.5 h-3.5" />رابط
+                            </Button>
                           </div>
 
-                          {/* AI Chat */}
-                          <div className="bg-violet-50/50 rounded-xl p-4 border border-violet-100">
-                            <div className="flex items-center gap-2 mb-3">
-                              <Bot className="w-4 h-4 text-violet-600" />
-                              <span className="text-sm font-bold text-violet-700">مساعد الذكاء الاصطناعي</span>
-                              <span className="text-[10px] bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full">مفعّل</span>
-                            </div>
+                          {/* AI Assistant */}
+                          <div className="bg-violet-50/50 rounded-xl p-4 border border-violet-200/50">
+                            <h4 className="text-xs font-bold text-violet-700 flex items-center gap-1.5 mb-3">
+                              <Sparkles className="w-3.5 h-3.5" />مساعد الذكاء الاصطناعي
+                            </h4>
                             {aiMessages.length > 0 && (
-                              <div className="space-y-2 mb-3 max-h-48 overflow-y-auto">
-                                {aiMessages.map((msg, idx) => (
-                                  <div key={idx} className="bg-white rounded-lg p-3 border border-violet-200">
-                                    <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">{msg}</p>
-                                    <button onClick={() => applyAIText(currentCriterion.id, sub.id, msg)}
-                                      className="mt-2 text-xs bg-violet-600 text-white px-3 py-1.5 rounded-md hover:bg-violet-700">
-                                      استخدام كشاهد
+                              <div className="space-y-2 mb-3 max-h-40 overflow-y-auto">
+                                {aiMessages.map((msg, i) => (
+                                  <div key={i} className="bg-white rounded-lg p-3 text-xs text-foreground leading-relaxed border border-violet-100">
+                                    {msg}
+                                    <button onClick={() => { const ev = createEmptyEvidence(sub.id); ev.text = msg; setCriteriaData(prev => ({ ...prev, [currentCriterion.id]: { ...prev[currentCriterion.id], evidences: [...prev[currentCriterion.id].evidences, ev] } })); toast.success("تم إضافة النص كشاهد"); }}
+                                      className="mt-2 text-[10px] text-violet-600 hover:text-violet-700 flex items-center gap-1">
+                                      <Plus className="w-3 h-3" />استخدام كشاهد
                                     </button>
                                   </div>
                                 ))}
@@ -1295,64 +1118,57 @@ export default function PerformanceEvidence() {
                             )}
                             <div className="flex gap-2">
                               <input type="text" value={aiPrompt} onChange={(e) => setAiPrompt(e.target.value)}
-                                placeholder={`اطلب اقتراح لـ "${sub.title}"...`}
                                 onKeyDown={(e) => { if (e.key === 'Enter') callAI(currentCriterion.id, sub.id, aiPrompt); }}
-                                className="flex-1 px-3 py-2.5 rounded-lg border border-violet-200 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/20 bg-white" />
-                              <button onClick={() => callAI(currentCriterion.id, sub.id, aiPrompt)}
-                                disabled={aiLoading === aiKey}
-                                className="px-4 py-2.5 rounded-lg bg-violet-600 text-white text-sm font-medium hover:bg-violet-700 disabled:opacity-50 flex items-center gap-1.5">
-                                {aiLoading === aiKey ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-                              </button>
+                                placeholder="اسأل الذكاء الاصطناعي..."
+                                className="flex-1 px-3 py-2 rounded-lg border border-violet-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-violet-500/20" />
+                              <Button size="sm" className="bg-violet-600 hover:bg-violet-700 gap-1.5"
+                                onClick={() => callAI(currentCriterion.id, sub.id, aiPrompt)}
+                                disabled={aiLoading === `${currentCriterion.id}_${sub.id}`}>
+                                {aiLoading === `${currentCriterion.id}_${sub.id}` ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+                              </Button>
                             </div>
                           </div>
                         </div>
                       </motion.div>
                     )}
                   </AnimatePresence>
-                </div>
+                </Card>
               );
             })}
           </div>
 
-          {/* Add Custom Sub-Evidence */}
-          <div className="mt-4">
-            {showAddSub === currentCriterion.id ? (
-              <div className="bg-white rounded-xl border-2 border-dashed border-violet-300 p-4">
-                <h4 className="text-sm font-bold text-violet-700 mb-3 flex items-center gap-2"><PlusCircle className="w-4 h-4" />إضافة قسم فرعي جديد</h4>
-                <div className="flex gap-2">
-                  <input type="text" value={newSubTitle} onChange={(e) => setNewSubTitle(e.target.value)}
-                    placeholder="اسم القسم الفرعي الجديد..."
-                    className="flex-1 px-3 py-2.5 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/20" />
-                  <button onClick={() => addCustomSubEvidence(currentCriterion.id)}
-                    className="px-4 py-2.5 rounded-lg bg-violet-600 text-white text-sm font-medium hover:bg-violet-700">إضافة</button>
-                  <button onClick={() => { setShowAddSub(null); setNewSubTitle(""); }}
-                    className="px-3 py-2.5 rounded-lg bg-gray-100 text-gray-600 text-sm hover:bg-gray-200"><X className="w-4 h-4" /></button>
-                </div>
-              </div>
-            ) : (
-              <button onClick={() => setShowAddSub(currentCriterion.id)}
-                className="w-full flex items-center justify-center gap-2 p-4 rounded-xl border-2 border-dashed border-gray-300 text-gray-500 hover:border-violet-400 hover:text-violet-600 transition-colors text-sm">
-                <PlusCircle className="w-5 h-5" />إضافة قسم فرعي جديد
-              </button>
-            )}
-          </div>
+          {/* إضافة قسم فرعي مخصص */}
+          {showAddSub === currentCriterion.id ? (
+            <Card className="mt-3 border-violet-200">
+              <CardContent className="p-4 flex gap-2">
+                <input type="text" value={newSubTitle} onChange={(e) => setNewSubTitle(e.target.value)}
+                  placeholder="اسم القسم الفرعي الجديد"
+                  className="flex-1 px-3 py-2 rounded-lg border border-border text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/20" />
+                <Button size="sm" onClick={() => addCustomSubEvidence(currentCriterion.id)} disabled={!newSubTitle.trim()}>إضافة</Button>
+                <Button size="sm" variant="ghost" onClick={() => setShowAddSub(null)}>إلغاء</Button>
+              </CardContent>
+            </Card>
+          ) : (
+            <Button variant="outline" size="sm" className="mt-3 gap-1.5 border-dashed" onClick={() => setShowAddSub(currentCriterion.id)}>
+              <Plus className="w-3.5 h-3.5" />إضافة قسم فرعي مخصص
+            </Button>
+          )}
 
           {/* Navigation */}
-          <div className="flex items-center justify-between mt-6 bg-white rounded-xl p-4 border border-gray-200">
-            <button disabled={currentCriterionIndex === 0} onClick={() => setCurrentCriterionIndex(i => i - 1)}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-gray-100 text-gray-700 text-sm disabled:opacity-30">
-              <ArrowRight className="w-4 h-4" />البند السابق
-            </button>
+          <div className="flex items-center justify-between mt-6">
+            {currentCriterionIndex > 0 ? (
+              <Button variant="outline" onClick={() => setCurrentCriterionIndex(i => i - 1)}>
+                <ArrowRight className="w-4 h-4 ml-1" />البند السابق
+              </Button>
+            ) : <div />}
             {currentCriterionIndex < allCriteria.length - 1 ? (
-              <button onClick={() => setCurrentCriterionIndex(i => i + 1)}
-                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm hover:bg-emerald-700">
-                البند التالي<ArrowLeft className="w-4 h-4" />
-              </button>
+              <Button variant="outline" onClick={() => setCurrentCriterionIndex(i => i + 1)}>
+                البند التالي<ArrowLeft className="w-4 h-4 mr-1" />
+              </Button>
             ) : (
-              <button onClick={() => setStep('final-review')}
-                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm hover:bg-emerald-700">
+              <Button onClick={() => setStep('final-review')} className="gap-1.5">
                 <BarChart3 className="w-4 h-4" />التقييم النهائي
-              </button>
+              </Button>
             )}
           </div>
         </div>
@@ -1360,46 +1176,59 @@ export default function PerformanceEvidence() {
     );
   }
 
-  // ===== Step 4: التقييم النهائي =====
+  // ======================================================================
+  // ===== الخطوة 4: التقييم النهائي =====
+  // ======================================================================
   if (step === 'final-review') {
     const grade = getGrade(percentage);
     return (
-      <div className="min-h-screen bg-[#F8FAFC] p-4 md:p-6" dir="rtl">
+      <div className="min-h-screen bg-background p-4 md:p-6" dir="rtl">
         <div className="max-w-4xl mx-auto">
           <div className="flex items-center justify-between mb-5">
-            <button onClick={() => setStep('criteria-list')} className="flex items-center gap-1.5 text-gray-500 hover:text-gray-700 text-sm bg-white px-3 py-2 rounded-lg border border-gray-200">
-              <ArrowRight className="w-4 h-4" />العودة للبنود
-            </button>
+            <Button variant="outline" size="sm" onClick={() => setStep('dashboard')}>
+              <ArrowRight className="w-4 h-4 ml-1" />العودة للبنود
+            </Button>
             <div className="flex gap-2">
-              <button onClick={saveReport} className="flex items-center gap-1.5 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700"><Save className="w-4 h-4" />حفظ</button>
-              <button onClick={() => setStep('preview')} className="flex items-center gap-1.5 bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-emerald-700"><Eye className="w-4 h-4" />معاينة وتصدير</button>
+              <Button variant="outline" size="sm" onClick={saveReport} className="gap-1.5">
+                <Save className="w-4 h-4" />حفظ
+              </Button>
+              <Button size="sm" onClick={() => setStep('preview')} className="gap-1.5">
+                <Eye className="w-4 h-4" />معاينة وتصدير
+              </Button>
             </div>
           </div>
 
-          <div className="bg-white rounded-xl border border-gray-200 p-6 mb-5 text-center">
-            <h1 className="text-2xl font-black text-gray-900 mb-4" style={{ fontFamily: "'Tajawal', sans-serif" }}>ملخص التقييم النهائي</h1>
-            <div className="flex items-center justify-center gap-8">
-              <div>
-                <div className="text-5xl font-black" style={{ color: grade.color }}>{percentage}%</div>
-                <div className="text-lg font-bold mt-1" style={{ color: grade.color }}>{grade.label}</div>
+          {/* ملخص التقييم */}
+          <Card className="mb-5">
+            <CardContent className="p-6 text-center">
+              <h1 className="text-2xl font-black text-foreground mb-4" style={{ fontFamily: "var(--font-heading)" }}>ملخص التقييم النهائي</h1>
+              <div className="flex items-center justify-center gap-8">
+                <div>
+                  <div className="text-5xl font-black" style={{ color: grade.color }}>{percentage}%</div>
+                  <div className="text-lg font-bold mt-1" style={{ color: grade.color }}>{grade.label}</div>
+                </div>
+                <div className="text-right space-y-1">
+                  <p className="text-sm text-muted-foreground">المجموع: <strong className="text-foreground">{totalScore}</strong> من <strong className="text-foreground">{maxScore}</strong></p>
+                  <p className="text-sm text-muted-foreground">الوظيفة: <strong className="text-foreground">{selectedJob?.title}</strong></p>
+                  <p className="text-sm text-muted-foreground">الاسم: <strong className="text-foreground">{personalInfo.name || '—'}</strong></p>
+                  {indicatorsCoverage && (
+                    <p className="text-sm text-muted-foreground">المؤشرات: <strong className="text-foreground">{indicatorsCoverage.covered}/{indicatorsCoverage.total}</strong></p>
+                  )}
+                </div>
               </div>
-              <div className="text-right">
-                <p className="text-sm text-gray-500">المجموع: <strong className="text-gray-800">{totalScore}</strong> من <strong className="text-gray-800">{maxScore}</strong></p>
-                <p className="text-sm text-gray-500">الوظيفة: <strong className="text-gray-800">{selectedJob?.title}</strong></p>
-                <p className="text-sm text-gray-500">الاسم: <strong className="text-gray-800">{personalInfo.name || '—'}</strong></p>
-              </div>
-            </div>
-          </div>
+            </CardContent>
+          </Card>
 
-          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+          {/* جدول البنود */}
+          <Card className="mb-5 overflow-hidden">
             <table className="w-full">
-              <thead className="bg-gray-50">
+              <thead className="bg-muted">
                 <tr>
-                  <th className="text-right text-xs font-bold text-gray-600 p-3">م</th>
-                  <th className="text-right text-xs font-bold text-gray-600 p-3">البند</th>
-                  <th className="text-center text-xs font-bold text-gray-600 p-3">الدرجة</th>
-                  <th className="text-center text-xs font-bold text-gray-600 p-3">الشواهد</th>
-                  <th className="text-center text-xs font-bold text-gray-600 p-3">الحالة</th>
+                  <th className="text-right text-xs font-bold text-muted-foreground p-3">م</th>
+                  <th className="text-right text-xs font-bold text-muted-foreground p-3">البند</th>
+                  <th className="text-center text-xs font-bold text-muted-foreground p-3">الدرجة</th>
+                  <th className="text-center text-xs font-bold text-muted-foreground p-3">الشواهد</th>
+                  <th className="text-center text-xs font-bold text-muted-foreground p-3">الحالة</th>
                 </tr>
               </thead>
               <tbody>
@@ -1408,15 +1237,16 @@ export default function PerformanceEvidence() {
                   const evCount = d?.evidences.length || 0;
                   const status = (d?.score || 0) >= 4 && evCount > 0 ? "complete" : evCount > 0 || (d?.score || 0) > 0 ? "partial" : "missing";
                   return (
-                    <tr key={c.id} className="border-t border-gray-100 hover:bg-gray-50 cursor-pointer" onClick={() => { setCurrentCriterionIndex(i); setStep('criterion-detail'); }}>
-                      <td className="p-3 text-sm text-gray-500">{i + 1}</td>
-                      <td className="p-3 text-sm font-medium text-gray-800">{c.title}</td>
+                    <tr key={c.id} className="border-t border-border hover:bg-muted/30 cursor-pointer transition-colors"
+                      onClick={() => { setCurrentCriterionIndex(i); setStep('criterion-detail'); }}>
+                      <td className="p-3 text-sm text-muted-foreground">{i + 1}</td>
+                      <td className="p-3 text-sm font-medium text-foreground">{c.title}</td>
                       <td className="p-3 text-center">
-                        <span className={`inline-block px-2 py-1 rounded-md text-sm font-bold ${(d?.score || 0) >= 4 ? 'bg-green-100 text-green-700' : (d?.score || 0) >= 3 ? 'bg-yellow-100 text-yellow-700' : 'bg-gray-100 text-gray-500'}`}>
+                        <Badge variant={((d?.score || 0) >= 4) ? "default" : ((d?.score || 0) >= 3) ? "secondary" : "outline"}>
                           {d?.score || 0}/{c.maxScore}
-                        </span>
+                        </Badge>
                       </td>
-                      <td className="p-3 text-center text-sm text-gray-500">{evCount}</td>
+                      <td className="p-3 text-center text-sm text-muted-foreground">{evCount}</td>
                       <td className="p-3 text-center">
                         {status === "complete" && <CheckCircle className="w-4 h-4 text-emerald-500 mx-auto" />}
                         {status === "partial" && <AlertTriangle className="w-4 h-4 text-amber-500 mx-auto" />}
@@ -1427,45 +1257,48 @@ export default function PerformanceEvidence() {
                 })}
               </tbody>
             </table>
-          </div>
+          </Card>
 
-          <div className="bg-white rounded-xl border border-gray-200 p-5 mt-5">
-            <h3 className="font-bold text-gray-800 mb-3 text-sm">اختر ثيم التصدير</h3>
-            <div className="flex flex-wrap gap-2">
-              {THEMES.map((t) => (
-                <button key={t.id} onClick={() => setSelectedTheme(t)}
-                  className={`px-4 py-2 rounded-lg text-sm border transition-all ${selectedTheme.id === t.id ? 'border-emerald-500 bg-emerald-50 text-emerald-700 font-bold' : 'border-gray-200 text-gray-600 hover:border-gray-300'}`}>
-                  {t.name}
-                </button>
-              ))}
-            </div>
-          </div>
+          {/* اختيار الثيم */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-sm">اختر ثيم التصدير</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex flex-wrap gap-2">
+                {THEMES.map((t) => (
+                  <Button key={t.id} variant={selectedTheme.id === t.id ? "default" : "outline"} size="sm"
+                    onClick={() => setSelectedTheme(t)}>{t.name}</Button>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
         </div>
       </div>
     );
   }
 
-  // ===== Step 5: المعاينة والتصدير =====
+  // ======================================================================
+  // ===== الخطوة 5: المعاينة والتصدير =====
+  // ======================================================================
   if (step === 'preview') {
     const grade = getGrade(percentage);
     const theme = selectedTheme;
     return (
-      <div className="min-h-screen bg-gray-100 p-4" dir="rtl">
+      <div className="min-h-screen bg-muted p-4" dir="rtl">
         <div className="max-w-4xl mx-auto">
-          <div className="flex items-center justify-between mb-4 bg-white rounded-xl p-4 shadow-sm border border-gray-200 sticky top-2 z-10">
-            <button onClick={() => setStep('final-review')} className="flex items-center gap-1.5 text-gray-500 hover:text-gray-700 text-sm">
-              <ArrowRight className="w-4 h-4" />العودة
-            </button>
+          <div className="flex items-center justify-between mb-4 bg-background rounded-xl p-4 shadow-sm border border-border sticky top-2 z-10">
+            <Button variant="outline" size="sm" onClick={() => setStep('final-review')}>
+              <ArrowRight className="w-4 h-4 ml-1" />العودة
+            </Button>
             <div className="flex gap-2">
-              <button onClick={handleExportPDF} disabled={isExporting}
-                className="flex items-center gap-1.5 bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-emerald-700 disabled:opacity-50">
+              <Button size="sm" onClick={handleExportPDF} disabled={isExporting} className="gap-1.5">
                 {isExporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
                 {isExporting ? 'جاري التصدير...' : 'تحميل PDF'}
-              </button>
-              <button onClick={() => printElement('preview-content')}
-                className="flex items-center gap-1.5 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700">
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => printElement('preview-content')} className="gap-1.5">
                 <Printer className="w-4 h-4" />طباعة
-              </button>
+              </Button>
             </div>
           </div>
 
@@ -1523,7 +1356,7 @@ export default function PerformanceEvidence() {
                 const d = criteriaData[c.id];
                 if (!d || d.evidences.length === 0) return null;
                 return (
-                  <div key={c.id} className="mt-6 page-break-inside-avoid">
+                  <div key={c.id} className="mt-6" style={{ pageBreakInside: 'avoid' }}>
                     <h3 className="font-bold text-sm mb-2" style={{ color: theme.accent }}>{i + 1}. {c.title}</h3>
                     <div className="space-y-2">
                       {d.evidences.map((ev) => (
