@@ -11,6 +11,7 @@ import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { usePortfolio } from "@/hooks/usePortfolio";
 import { useOfflineSync } from "@/hooks/useOfflineSync";
+import { saveFileToIDB, getFileFromIDB, deleteFileFromIDB, cleanOldFiles } from "@/hooks/useIndexedDB";
 import { getLoginUrl } from "@/const";
 import { generateQRDataURL } from "@/lib/qr-utils";
 import { exportToPDF, printElement } from "@/lib/pdf-export";
@@ -57,6 +58,7 @@ interface Criterion { id: string; title: string; maxScore: number; description: 
 interface EvidenceItem {
   id: string; subEvidenceId: string; type: EvidenceType; text: string; link: string;
   fileData: string | null; fileName: string; displayAs: "image" | "qr"; formData?: Record<string, string>;
+  comment?: string;
 }
 interface CriterionData { score: number; notes: string; evidences: EvidenceItem[]; customSubEvidences: SubEvidence[]; }
 
@@ -225,16 +227,20 @@ function saveStateToStorage(data: {
 }) {
   try {
     // حفظ الصور الصغيرة فقط لتجنب تجاوز حد localStorage
+    // مراجع idb:// تُحفظ كما هي (حجمها صغير جداً)
     const cleanCriteria: Record<string, any> = {};
     for (const [key, val] of Object.entries(data.criteriaData)) {
       cleanCriteria[key] = {
         ...val,
-        evidences: val.evidences.map(ev => ({
-          ...ev,
-          fileData: ev.fileData && ev.fileData.length < 100000 ? ev.fileData : null,
-          // حفظ معلومات الملف حتى لو لم نحفظ البيانات الكبيرة
-          _hadFile: !!ev.fileData,
-        })),
+        evidences: val.evidences.map(ev => {
+          // إذا كان الملف محفوظ في IndexedDB، نحفظ المرجع فقط
+          const isIdbRef = ev.fileData?.startsWith('idb://');
+          return {
+            ...ev,
+            fileData: isIdbRef ? ev.fileData : (ev.fileData && ev.fileData.length < 100000 ? ev.fileData : null),
+            _hadFile: !!ev.fileData,
+          };
+        }),
       };
     }
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...data, criteriaData: cleanCriteria, timestamp: Date.now() }));
@@ -331,6 +337,11 @@ export default function PerformanceEvidence() {
     initCriteriaData(job.criteria);
     setStep("dashboard");
   };
+
+  // ===== تنظيف ملفات IndexedDB القديمة =====
+  useEffect(() => {
+    cleanOldFiles().catch(() => {});
+  }, []);
 
   // ===== استعادة الـ state من localStorage عند تحميل الصفحة (حل مشكلة الجوال + إغلاق المتصفح) =====
   useEffect(() => {
@@ -540,6 +551,8 @@ export default function PerformanceEvidence() {
   const [draggedEvidence, setDraggedEvidence] = useState<{ evidence: EvidenceItem; fromCriterionId: string; fromSubId: string } | null>(null);
   const [dragOverTarget, setDragOverTarget] = useState<{ criterionId: string; subId: string } | null>(null);
   const [showMoveDialog, setShowMoveDialog] = useState<{ evidence: EvidenceItem; fromCriterionId: string } | null>(null);
+  const [showCoverageReport, setShowCoverageReport] = useState(false);
+  const [isGeneratingReport, setIsGeneratingReport] = useState(false);
 
   const handleDragStart = useCallback((ev: EvidenceItem, criterionId: string, subId: string) => {
     setDraggedEvidence({ evidence: ev, fromCriterionId: criterionId, fromSubId: subId });
@@ -674,144 +687,201 @@ export default function PerformanceEvidence() {
     });
   }, []);
 
+  // ===== معالجة ملف واحد للتصنيف الذكي =====
+  const processSmartFile = useCallback(async (file: File, fileIndex: number, totalFiles: number): Promise<{ success: boolean; criterion?: string; indicator?: string }> => {
+    const isImage = file.type.startsWith("image/");
+    const isVideo = file.type.startsWith("video/");
+    const batchPrefix = totalFiles > 1 ? `[ملف ${fileIndex + 1}/${totalFiles}] ` : "";
+
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = async () => {
+        try {
+          const rawBase64 = reader.result as string;
+          let storageBase64 = rawBase64;
+          let aiImageUrl: string | undefined;
+          
+          if (isImage) {
+            storageBase64 = await compressImageForStorage(rawBase64, 1200, 0.7);
+            aiImageUrl = await compressImage(rawBase64, 800, 0.5);
+          }
+
+          let targetCriterionId: string | null = null;
+          let targetSubId: string = "";
+          let contentDesc: string = file.name;
+          let classificationSuccess = false;
+          let criterionTitle = "";
+          let indicatorText = "";
+          
+          try {
+            const result = await classifyMutation.mutateAsync({
+              fileName: file.name,
+              fileType: file.type,
+              description: file.name.replace(/\.[^/.]+$/, "").replace(/[-_]/g, " "),
+              fileUrl: aiImageUrl,
+            });
+
+            if (result.success && result.classification) {
+              const cls = result.classification;
+              const targetCriterion = allCriteria.find(c =>
+                c.id === cls.standardId || c.title.includes(cls.standardName) || cls.standardName.includes(c.title)
+              );
+              if (targetCriterion && criteriaData[targetCriterion.id]) {
+                const subs = [...targetCriterion.subEvidences, ...(criteriaData[targetCriterion.id]?.customSubEvidences || [])];
+                const targetSub = (cls.indicatorIndex > 0 && subs[cls.indicatorIndex - 1]) ? subs[cls.indicatorIndex - 1] : subs[0];
+                targetCriterionId = targetCriterion.id;
+                targetSubId = targetSub?.id || "";
+                contentDesc = cls.contentDescription || file.name;
+                classificationSuccess = true;
+                criterionTitle = targetCriterion.title;
+                indicatorText = cls.indicatorText;
+              }
+            }
+          } catch (aiErr) {
+            console.error("AI classification error:", aiErr);
+          }
+          
+          if (!classificationSuccess) {
+            const firstCriterion = allCriteria[0];
+            if (firstCriterion) {
+              targetCriterionId = firstCriterion.id;
+              targetSubId = firstCriterion.subEvidences[0]?.id || "";
+              criterionTitle = firstCriterion.title;
+            }
+          }
+          
+          if (targetCriterionId) {
+            const evId = `ev_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+            const newEv = createEmptyEvidence(targetSubId);
+            newEv.id = evId;
+            newEv.type = isImage ? "image" : isVideo ? "video" : "file";
+            newEv.fileName = file.name;
+            newEv.text = contentDesc;
+            newEv.displayAs = isImage ? "image" : "qr";
+            
+            try {
+              await saveFileToIDB({
+                id: evId,
+                data: storageBase64,
+                fileName: file.name,
+                fileType: file.type,
+                timestamp: Date.now(),
+              });
+              if (isImage && storageBase64.length < 200000) {
+                newEv.fileData = storageBase64;
+              } else {
+                newEv.fileData = `idb://${evId}`;
+              }
+            } catch {
+              newEv.fileData = storageBase64;
+            }
+            
+            addEvidenceToCriterion(targetCriterionId, newEv);
+            resolve({ success: classificationSuccess, criterion: criterionTitle, indicator: indicatorText });
+          } else {
+            resolve({ success: false });
+          }
+        } catch (err) {
+          console.error("Smart upload error:", err);
+          resolve({ success: false });
+        }
+      };
+      reader.onerror = () => resolve({ success: false });
+      reader.readAsDataURL(file);
+    });
+  }, [allCriteria, criteriaData, classifyMutation, compressImage, compressImageForStorage, addEvidenceToCriterion]);
+
   const handleSmartUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     e.preventDefault();
     e.stopPropagation();
-    const file = e.target.files?.[0];
-    if (!file) {
+    const files = e.target.files;
+    if (!files || files.length === 0) {
       return;
     }
     
-    // مسح قيمة input فوراً لتجنب مشاكل إعادة الاستخدام
+    // مسح قيمة input فوراً
+    const fileList = Array.from(files);
     e.target.value = "";
     
-    // التحقق من حجم الملف (16MB حد أقصى)
-    if (file.size > 16 * 1024 * 1024) {
-      toast.error("حجم الملف كبير جداً", { description: "الحد الأقصى 16 ميجابايت. يرجى اختيار ملف أصغر." });
-      return;
+    // التحقق من حجم الملفات
+    const oversized = fileList.filter(f => f.size > 16 * 1024 * 1024);
+    if (oversized.length > 0) {
+      toast.error(`${oversized.length} ملف تجاوز الحد الأقصى (16MB)`, { description: oversized.map(f => f.name).join(', ') });
     }
+    const validFiles = fileList.filter(f => f.size <= 16 * 1024 * 1024);
+    if (validFiles.length === 0) return;
     
     // تفعيل flag منع الحفظ أثناء الرفع
     isUploadingRef.current = true;
     setIsSmartUploading(true);
-    setUploadProgress({ stage: "جاري قراءة الملف...", percent: 10 });
     
     // إزالة pending upload flag
     try { localStorage.removeItem(STORAGE_PENDING_UPLOAD); } catch {}
     
-    const isImage = file.type.startsWith("image/");
-    const isVideo = file.type.startsWith("video/");
+    const totalFiles = validFiles.length;
+    const results: { success: boolean; criterion?: string; indicator?: string; fileName: string }[] = [];
     
-    const reader = new FileReader();
-    reader.onload = async () => {
-      try {
-        const rawBase64 = reader.result as string;
-        
-        setUploadProgress({ stage: "جاري معالجة الملف...", percent: 30 });
-        
-        // ضغط الصورة للحفظ في state (تقليل استهلاك الذاكرة على الجوال)
-        let storageBase64 = rawBase64;
-        let aiImageUrl: string | undefined;
-        
-        if (isImage) {
-          setUploadProgress({ stage: "جاري ضغط الصورة...", percent: 40 });
-          // ضغط للحفظ في state (جودة متوسطة)
-          storageBase64 = await compressImageForStorage(rawBase64, 1200, 0.7);
-          // ضغط أكبر للإرسال للـ AI
-          aiImageUrl = await compressImage(rawBase64, 800, 0.5);
-        }
-
-        setUploadProgress({ stage: "جاري التصنيف بالذكاء الاصطناعي...", percent: 60 });
-        
-        // تحرير الذاكرة من الصورة الأصلية الكبيرة
-        // rawBase64 لم يعد مطلوباً بعد الضغط
-        
-        let targetCriterionId: string | null = null;
-        let targetSubId: string = "";
-        let contentDesc: string = file.name;
-        let classificationSuccess = false;
-        
-        try {
-          // إرسال للـ AI للتحليل (publicProcedure - لا يحتاج تسجيل دخول)
-          const result = await classifyMutation.mutateAsync({
-            fileName: file.name,
-            fileType: file.type,
-            description: file.name.replace(/\.[^/.]+$/, "").replace(/[-_]/g, " "),
-            fileUrl: aiImageUrl,
-          });
-
-          if (result.success && result.classification) {
-            const cls = result.classification;
-            const targetCriterion = allCriteria.find(c =>
-              c.id === cls.standardId || c.title.includes(cls.standardName) || cls.standardName.includes(c.title)
-            );
-            if (targetCriterion && criteriaData[targetCriterion.id]) {
-              const subs = [...targetCriterion.subEvidences, ...(criteriaData[targetCriterion.id]?.customSubEvidences || [])];
-              const targetSub = (cls.indicatorIndex > 0 && subs[cls.indicatorIndex - 1]) ? subs[cls.indicatorIndex - 1] : subs[0];
-              targetCriterionId = targetCriterion.id;
-              targetSubId = targetSub?.id || "";
-              contentDesc = cls.contentDescription || file.name;
-              classificationSuccess = true;
-              toast.success(`تم تصنيف الشاهد تلقائياً`, {
-                description: `البند: ${targetCriterion.title}\nالمؤشر: ${cls.indicatorText}\nالثقة: ${Math.round(cls.confidence * 100)}%`,
-                duration: 6000,
-              });
-            }
-          }
-        } catch (aiErr) {
-          console.error("AI classification error:", aiErr);
-        }
-        
-        // إذا فشل التصنيف، نضيف للبند الأول
-        if (!classificationSuccess) {
-          const firstCriterion = allCriteria[0];
-          if (firstCriterion) {
-            targetCriterionId = firstCriterion.id;
-            targetSubId = firstCriterion.subEvidences[0]?.id || "";
-            if (!classificationSuccess) {
-              toast.warning("لم يتمكن النظام من تصنيف الشاهد تلقائياً", {
-                description: "تم إضافته للبند الأول. يمكنك نقله يدوياً للبند المناسب.",
-                duration: 5000,
-              });
-            }
-          }
-        }
-        
-        setUploadProgress({ stage: "جاري إضافة الشاهد...", percent: 85 });
-        
-        // إضافة الشاهد
-        if (targetCriterionId) {
-          const newEv = createEmptyEvidence(targetSubId);
-          newEv.type = isImage ? "image" : isVideo ? "video" : "file";
-          newEv.fileData = storageBase64; // الصورة المضغوطة للحفظ
-          newEv.fileName = file.name;
-          newEv.text = contentDesc;
-          newEv.displayAs = isImage ? "image" : "qr";
-          addEvidenceToCriterion(targetCriterionId, newEv);
-        }
-      } catch (err: any) {
-        console.error("Smart upload error:", err);
-        toast.error("حدث خطأ أثناء رفع الشاهد", {
-          description: "يرجى المحاولة مرة أخرى",
+    for (let i = 0; i < totalFiles; i++) {
+      const currentFile = validFiles[i];
+      setUploadProgress({
+        stage: totalFiles > 1 
+          ? `جاري معالجة الملف ${i + 1} من ${totalFiles}: ${currentFile.name}`
+          : `جاري معالجة: ${currentFile.name}`,
+        percent: Math.round(10 + (80 * i / totalFiles)),
+      });
+      
+      const result = await processSmartFile(currentFile, i, totalFiles);
+      results.push({ ...result, fileName: currentFile.name });
+    }
+    
+    // عرض ملخص النتائج
+    const successCount = results.filter(r => r.success).length;
+    const failCount = results.filter(r => !r.success).length;
+    
+    if (totalFiles === 1) {
+      const r = results[0];
+      if (r.success) {
+        toast.success(`تم تصنيف الشاهد تلقائياً`, {
+          description: `البند: ${r.criterion}${r.indicator ? `\nالمؤشر: ${r.indicator}` : ''}`,
+          duration: 6000,
+        });
+      } else {
+        toast.warning("لم يتمكن النظام من تصنيف الشاهد تلقائياً", {
+          description: "تم إضافته للبند الأول. يمكنك نقله يدوياً.",
           duration: 5000,
         });
-      } finally {
-        setUploadProgress({ stage: "اكتمل!", percent: 100 });
-        setTimeout(() => {
-          setUploadProgress(null);
-          setIsSmartUploading(false);
-          isUploadingRef.current = false;
-        }, 1000);
       }
-    };
-    reader.onerror = () => {
-      toast.error("فشل قراءة الملف", { description: "يرجى المحاولة مرة أخرى" });
+    } else {
+      // ملخص الدفعة
+      const summaryLines = results.map(r => 
+        `${r.success ? '✅' : '⚠️'} ${r.fileName} → ${r.criterion || 'البند الأول'}`
+      ).join('\n');
+      
+      if (successCount === totalFiles) {
+        toast.success(`تم تصنيف ${totalFiles} شواهد بنجاح!`, {
+          description: summaryLines,
+          duration: 8000,
+        });
+      } else if (successCount > 0) {
+        toast.info(`تم تصنيف ${successCount} من ${totalFiles} شواهد`, {
+          description: summaryLines,
+          duration: 8000,
+        });
+      } else {
+        toast.warning(`تم إضافة ${totalFiles} شواهد للبند الأول`, {
+          description: "لم يتمكن النظام من تصنيفها تلقائياً. يمكنك نقلها يدوياً.",
+          duration: 6000,
+        });
+      }
+    }
+    
+    setUploadProgress({ stage: "اكتمل!", percent: 100 });
+    setTimeout(() => {
       setUploadProgress(null);
       setIsSmartUploading(false);
       isUploadingRef.current = false;
-    };
-    reader.readAsDataURL(file);
-  }, [allCriteria, criteriaData, classifyMutation, compressImage, compressImageForStorage, addEvidenceToCriterion]);
+    }, 1000);
+  }, [processSmartFile]);
 
   // ===== رفع ملف عادي (بدون تصنيف ذكي) =====
   const handleFileUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -840,16 +910,35 @@ export default function PerformanceEvidence() {
     reader.onload = async () => {
       try {
         let fileData = reader.result as string;
-        // ضغط الصور لتقليل استهلاك الذاكرة
         if (isImage) {
           fileData = await compressImageForStorage(fileData, 1200, 0.7);
         }
+        const evId = `ev_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
         const newEv = createEmptyEvidence(subEvidenceId);
+        newEv.id = evId;
         newEv.type = isImage ? "image" : isVideo ? "video" : "file";
-        newEv.fileData = fileData;
         newEv.fileName = file.name;
         newEv.text = file.name;
         newEv.displayAs = isImage ? "image" : "qr";
+        
+        // حفظ في IndexedDB للملفات الكبيرة
+        try {
+          await saveFileToIDB({
+            id: evId,
+            data: fileData,
+            fileName: file.name,
+            fileType: file.type,
+            timestamp: Date.now(),
+          });
+          if (isImage && fileData.length < 200000) {
+            newEv.fileData = fileData;
+          } else {
+            newEv.fileData = `idb://${evId}`;
+          }
+        } catch {
+          newEv.fileData = fileData;
+        }
+        
         addEvidenceToCriterion(criterionId, newEv);
         toast.success("تم إضافة الشاهد بنجاح", { description: file.name, duration: 3000 });
       } catch {
@@ -982,6 +1071,65 @@ export default function PerformanceEvidence() {
   const currentCriterion = allCriteria[currentCriterionIndex];
 
   // ===== Render Evidence Item =====
+  // ===== مكون عرض ملف الشاهد (يدعم IndexedDB references) =====
+  const EvidenceFilePreview = ({ ev, criterionId }: { ev: EvidenceItem; criterionId: string }) => {
+    const [resolvedData, setResolvedData] = useState<string | null>(null);
+    const [loading, setLoading] = useState(false);
+    
+    useEffect(() => {
+      if (ev.fileData?.startsWith('idb://')) {
+        setLoading(true);
+        const idbId = ev.fileData.replace('idb://', '');
+        getFileFromIDB(idbId).then(file => {
+          if (file) {
+            setResolvedData(file.data);
+          }
+          setLoading(false);
+        }).catch(() => setLoading(false));
+      } else {
+        setResolvedData(ev.fileData);
+      }
+    }, [ev.fileData]);
+    
+    if (loading) {
+      return (
+        <div className="mt-2 flex items-center gap-2 p-3 bg-muted/50 rounded-lg">
+          <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+          <span className="text-xs text-muted-foreground">جاري تحميل الملف...</span>
+        </div>
+      );
+    }
+    
+    const displayData = resolvedData || ev.fileData;
+    if (!displayData) return null;
+    
+    return (
+      <div className="mt-2">
+        {ev.type === 'image' && ev.displayAs === 'image' && (
+          <img src={displayData.startsWith('idb://') ? '' : displayData} alt="" className="max-h-48 rounded-lg border border-border" />
+        )}
+        {ev.type === 'image' && ev.displayAs === 'qr' && (
+          <div className="flex items-center gap-3 bg-violet-50 dark:bg-violet-950/30 p-3 rounded-lg">
+            <img src={generateQRDataURL((displayData.startsWith('idb://') ? ev.fileName : displayData).substring(0, 200))} alt="QR" className="w-16 h-16" />
+            <span className="text-xs text-violet-600">سيظهر كباركود QR عند الطباعة</span>
+          </div>
+        )}
+        {ev.type === 'video' && (
+          <div className="flex items-center gap-3 bg-red-50 dark:bg-red-950/30 p-3 rounded-lg">
+            <Video className="w-8 h-8 text-red-500" />
+            <div><p className="text-sm font-medium">{ev.fileName}</p><p className="text-xs text-red-500">سيتحول لباركود QR عند الطباعة</p></div>
+          </div>
+        )}
+        {ev.type === 'file' && (
+          <div className="flex items-center gap-3 bg-orange-50 dark:bg-orange-950/30 p-3 rounded-lg">
+            <FileText className="w-8 h-8 text-orange-500" />
+            <div><p className="text-sm font-medium">{ev.fileName}</p><p className="text-xs text-orange-500">سيتحول لباركود QR عند الطباعة</p></div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   const renderEvidenceItem = (ev: EvidenceItem, criterionId: string) => (
     <motion.div key={ev.id} initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }}
       draggable
@@ -1043,30 +1191,29 @@ export default function PerformanceEvidence() {
       )}
 
       {(ev.type === 'image' || ev.type === 'video' || ev.type === 'file') && ev.fileData && (
-        <div className="mt-2">
-          {ev.type === 'image' && ev.displayAs === 'image' && (
-            <img src={ev.fileData} alt="" className="max-h-48 rounded-lg border border-border" />
-          )}
-          {ev.type === 'image' && ev.displayAs === 'qr' && (
-            <div className="flex items-center gap-3 bg-violet-50 p-3 rounded-lg">
-              <img src={generateQRDataURL(ev.fileData.substring(0, 200))} alt="QR" className="w-16 h-16" />
-              <span className="text-xs text-violet-600">سيظهر كباركود QR عند الطباعة</span>
-            </div>
-          )}
-          {ev.type === 'video' && (
-            <div className="flex items-center gap-3 bg-red-50 p-3 rounded-lg">
-              <Video className="w-8 h-8 text-red-500" />
-              <div><p className="text-sm font-medium">{ev.fileName}</p><p className="text-xs text-red-500">سيتحول لباركود QR عند الطباعة</p></div>
-            </div>
-          )}
-          {ev.type === 'file' && (
-            <div className="flex items-center gap-3 bg-orange-50 p-3 rounded-lg">
-              <FileText className="w-8 h-8 text-orange-500" />
-              <div><p className="text-sm font-medium">{ev.fileName}</p><p className="text-xs text-orange-500">سيتحول لباركود QR عند الطباعة</p></div>
-            </div>
-          )}
-        </div>
+        <EvidenceFilePreview ev={ev} criterionId={criterionId} />
       )}
+
+      {/* تعليق نصي */}
+      <div className="mt-2">
+        {ev.comment !== undefined && ev.comment !== '' ? (
+          <div className="bg-amber-50/50 dark:bg-amber-950/20 rounded-lg p-2.5 border border-amber-200/30">
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-[10px] font-medium text-amber-700 dark:text-amber-400">تعليق</span>
+              <button type="button" onClick={() => updateEvidence(criterionId, ev.id, { comment: '' })}
+                className="text-[10px] text-muted-foreground hover:text-red-500 transition-colors">حذف</button>
+            </div>
+            <textarea value={ev.comment} onChange={(e) => updateEvidence(criterionId, ev.id, { comment: e.target.value })}
+              placeholder="أضف تعليقك هنا..." rows={2}
+              className="w-full px-2 py-1.5 rounded-md border border-amber-200/50 text-xs resize-none focus:outline-none focus:ring-1 focus:ring-amber-400/30 bg-white/50 dark:bg-background/50" />
+          </div>
+        ) : (
+          <button type="button" onClick={() => updateEvidence(criterionId, ev.id, { comment: ' ' })}
+            className="text-[10px] text-muted-foreground hover:text-amber-600 transition-colors flex items-center gap-1 opacity-0 group-hover:opacity-100">
+            <Plus className="w-3 h-3" />إضافة تعليق
+          </button>
+        )}
+      </div>
     </motion.div>
   );
 
@@ -1175,7 +1322,7 @@ export default function PerformanceEvidence() {
     const grade = getGrade(percentage);
     return (
       <div className="min-h-screen bg-background p-3 sm:p-4 md:p-6" dir="rtl">
-        <input type="file" ref={smartUploadRef} className="hidden" accept="image/*,video/*,.pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx" onChange={handleSmartUpload} />
+        <input type="file" ref={smartUploadRef} className="hidden" accept="image/*,video/*,.pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx" multiple onChange={handleSmartUpload} />
         <div className="max-w-6xl mx-auto">
 
           {/* ===== Header Bar - Mobile Optimized ===== */}
@@ -1257,11 +1404,18 @@ export default function PerformanceEvidence() {
                   </div>
                   <h2 className="font-bold text-foreground text-xs sm:text-sm" style={{ fontFamily: "var(--font-heading)" }}>تحليل الجاهزية</h2>
                 </div>
-                <Button onClick={(e) => { e.preventDefault(); e.stopPropagation(); try { localStorage.setItem(STORAGE_PENDING_UPLOAD, "smart"); } catch {} smartUploadRef.current?.click(); }} disabled={isSmartUploading}
-                  variant="default" size="sm" className="gap-1.5 bg-violet-600 hover:bg-violet-700 shadow-sm text-xs h-8 sm:h-9 w-full sm:w-auto">
-                  {isSmartUploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
-                  {isSmartUploading ? "جاري التصنيف..." : "رفع شاهد مع تصنيف ذكي"}
-                </Button>
+                <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+                  <Button onClick={(e) => { e.preventDefault(); e.stopPropagation(); try { localStorage.setItem(STORAGE_PENDING_UPLOAD, "smart"); } catch {} smartUploadRef.current?.click(); }} disabled={isSmartUploading}
+                    variant="default" size="sm" className="gap-1.5 bg-violet-600 hover:bg-violet-700 shadow-sm text-xs h-8 sm:h-9 w-full sm:w-auto">
+                    {isSmartUploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+                    {isSmartUploading ? "جاري التصنيف..." : "رفع شواهد مع تصنيف ذكي"}
+                  </Button>
+                  <Button onClick={(e) => { e.preventDefault(); e.stopPropagation(); setShowCoverageReport(true); }}
+                    variant="outline" size="sm" className="gap-1.5 text-xs h-8 sm:h-9 w-full sm:w-auto border-emerald-300 text-emerald-700 hover:bg-emerald-50 dark:border-emerald-700 dark:text-emerald-400 dark:hover:bg-emerald-950/30">
+                    <BarChart3 className="w-3.5 h-3.5" />
+                    تقرير التغطية
+                  </Button>
+                </div>
               </div>
 
               {/* شريط تقدم التصنيف الذكي */}
@@ -1826,6 +1980,164 @@ export default function PerformanceEvidence() {
               </motion.div>
             </motion.div>
           )}
+
+          {/* ===== تقرير التغطية Dialog ===== */}
+          {showCoverageReport && (() => {
+            const reportGrade = getGrade(percentage);
+            return (
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={() => setShowCoverageReport(false)}>
+              <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
+                className="bg-card rounded-2xl shadow-2xl border border-border max-w-2xl w-full max-h-[85vh] overflow-y-auto p-6" onClick={e => e.stopPropagation()}>
+                <div className="flex items-center justify-between mb-6">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-emerald-100 dark:bg-emerald-900/40 flex items-center justify-center">
+                      <BarChart3 className="w-5 h-5 text-emerald-600" />
+                    </div>
+                    <div>
+                      <h2 className="text-lg font-bold" style={{ fontFamily: "var(--font-heading)" }}>تقرير تغطية البنود بالشواهد</h2>
+                      <p className="text-xs text-muted-foreground">{personalInfo.name || 'ملف الإنجاز'} - {selectedJob?.title}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={async (e) => {
+                      e.preventDefault();
+                      setIsGeneratingReport(true);
+                      try {
+                        await exportToPDF('coverage-report-content', `تقرير_التغطية_${personalInfo.name || 'مستند'}.pdf`);
+                        toast.success('تم تصدير التقرير بنجاح');
+                      } catch { toast.error('فشل تصدير التقرير'); }
+                      setIsGeneratingReport(false);
+                    }}>
+                      {isGeneratingReport ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+                      تحميل PDF
+                    </Button>
+                    <button onClick={() => setShowCoverageReport(false)} className="p-1.5 rounded-lg hover:bg-muted">
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+
+                <div id="coverage-report-content" className="space-y-6" dir="rtl">
+                  {/* ملخص عام */}
+                  <div className="bg-gradient-to-r from-emerald-50 to-teal-50 dark:from-emerald-950/30 dark:to-teal-950/30 rounded-xl p-5 border border-emerald-200/50">
+                    <h3 className="font-bold text-sm mb-3" style={{ fontFamily: "var(--font-heading)" }}>ملخص عام</h3>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                      <div className="bg-white/80 dark:bg-card/80 rounded-lg p-3 text-center">
+                        <div className="text-2xl font-bold text-emerald-600">{gapAnalysis.coveredCriteria}</div>
+                        <div className="text-[10px] text-muted-foreground">بند مكتمل</div>
+                      </div>
+                      <div className="bg-white/80 dark:bg-card/80 rounded-lg p-3 text-center">
+                        <div className="text-2xl font-bold text-amber-600">{gapAnalysis.partialCriteria}</div>
+                        <div className="text-[10px] text-muted-foreground">بند جزئي</div>
+                      </div>
+                      <div className="bg-white/80 dark:bg-card/80 rounded-lg p-3 text-center">
+                        <div className="text-2xl font-bold text-red-600">{gapAnalysis.missedCriteria}</div>
+                        <div className="text-[10px] text-muted-foreground">بند مفقود</div>
+                      </div>
+                      <div className="bg-white/80 dark:bg-card/80 rounded-lg p-3 text-center">
+                        <div className="text-2xl font-bold text-blue-600">{gapAnalysis.totalEvidences}</div>
+                        <div className="text-[10px] text-muted-foreground">إجمالي الشواهد</div>
+                      </div>
+                    </div>
+                    <div className="mt-3">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-xs font-medium">نسبة التغطية الإجمالية</span>
+                        <span className="text-xs font-bold" style={{ color: reportGrade.color }}>{percentage}%</span>
+                      </div>
+                      <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-3">
+                        <div className="h-3 rounded-full transition-all duration-500" style={{ width: `${percentage}%`, backgroundColor: reportGrade.color }} />
+                      </div>
+                      <div className="text-center mt-2">
+                        <Badge variant="outline" className="text-sm font-bold" style={{ borderColor: reportGrade.color, color: reportGrade.color }}>
+                          التقدير: {reportGrade.label}
+                        </Badge>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* رسم بياني شريطي لكل بند */}
+                  <div>
+                    <h3 className="font-bold text-sm mb-3" style={{ fontFamily: "var(--font-heading)" }}>تفصيل التغطية لكل بند</h3>
+                    <div className="space-y-2">
+                      {allCriteria.map((criterion, idx) => {
+                        const data = criteriaData[criterion.id];
+                        const evidenceCount = data?.evidences?.length || 0;
+                        const subCount = criterion.subEvidences.length + (data?.customSubEvidences?.length || 0);
+                        const coveredSubs = new Set(data?.evidences?.map(e => e.subEvidenceId) || []).size;
+                        const subCoverage = subCount > 0 ? Math.round((coveredSubs / subCount) * 100) : 0;
+                        const barColor = subCoverage >= 80 ? '#16A34A' : subCoverage >= 50 ? '#CA8A04' : subCoverage > 0 ? '#EA580C' : '#DC2626';
+                        const StatusIcon = subCoverage >= 80 ? CheckCircle : subCoverage >= 50 ? AlertTriangle : XCircle;
+                        
+                        return (
+                          <div key={criterion.id} className="bg-muted/30 rounded-lg p-3 border border-border/50">
+                            <div className="flex items-center justify-between mb-1.5">
+                              <div className="flex items-center gap-2 flex-1 min-w-0">
+                                <StatusIcon className="w-4 h-4 shrink-0" style={{ color: barColor }} />
+                                <span className="text-xs font-medium truncate">{idx + 1}. {criterion.title}</span>
+                              </div>
+                              <div className="flex items-center gap-2 shrink-0">
+                                <span className="text-[10px] text-muted-foreground">{evidenceCount} شاهد</span>
+                                <span className="text-xs font-bold" style={{ color: barColor }}>{subCoverage}%</span>
+                              </div>
+                            </div>
+                            <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                              <div className="h-2 rounded-full transition-all duration-500" style={{ width: `${subCoverage}%`, backgroundColor: barColor }} />
+                            </div>
+                            {evidenceCount === 0 && (
+                              <p className="text-[10px] text-red-500 mt-1">⚠ لا توجد شواهد مرفقة - يرجى إضافة شواهد</p>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* توزيع أنواع الشواهد */}
+                  <div>
+                    <h3 className="font-bold text-sm mb-3" style={{ fontFamily: "var(--font-heading)" }}>توزيع أنواع الشواهد</h3>
+                    {(() => {
+                      const allEvs = Object.values(criteriaData).flatMap(c => c.evidences);
+                      const typeCounts = { image: 0, file: 0, text: 0, link: 0, video: 0 };
+                      allEvs.forEach(ev => { if (ev.type in typeCounts) typeCounts[ev.type as keyof typeof typeCounts]++; });
+                      const typeLabels = { image: 'صورة', file: 'ملف', text: 'نص', link: 'رابط', video: 'فيديو' };
+                      const typeColors = { image: '#3B82F6', file: '#F97316', text: '#8B5CF6', link: '#A855F7', video: '#EF4444' };
+                      const total = allEvs.length || 1;
+                      return (
+                        <div className="grid grid-cols-5 gap-2">
+                          {Object.entries(typeCounts).map(([type, count]) => (
+                            <div key={type} className="text-center">
+                              <div className="relative w-full aspect-square rounded-xl flex items-center justify-center mb-1" style={{ backgroundColor: typeColors[type as keyof typeof typeColors] + '15' }}>
+                                <span className="text-lg font-bold" style={{ color: typeColors[type as keyof typeof typeColors] }}>{count}</span>
+                              </div>
+                              <span className="text-[10px] text-muted-foreground">{typeLabels[type as keyof typeof typeLabels]}</span>
+                              <div className="text-[9px] font-medium" style={{ color: typeColors[type as keyof typeof typeColors] }}>{Math.round((count / total) * 100)}%</div>
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    })()}
+                  </div>
+
+                  {/* توصيات */}
+                  {gapAnalysis.missedCriteria > 0 && (
+                    <div className="bg-amber-50 dark:bg-amber-950/30 rounded-xl p-4 border border-amber-200/50">
+                      <h3 className="font-bold text-sm mb-2 text-amber-800 dark:text-amber-300" style={{ fontFamily: "var(--font-heading)" }}>توصيات لتحسين التغطية</h3>
+                      <ul className="space-y-1">
+                        {allCriteria.filter(c => !criteriaData[c.id]?.evidences?.length).map(c => (
+                          <li key={c.id} className="text-xs text-amber-700 dark:text-amber-400 flex items-start gap-1.5">
+                            <AlertTriangle className="w-3 h-3 mt-0.5 shrink-0" />
+                            <span>أضف شواهد لـبند "{c.title}" لرفع نسبة التغطية</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              </motion.div>
+            </motion.div>
+          );
+          })()}
 
           {/* Navigation */}
           <div className="flex items-center justify-between mt-4 sm:mt-6 gap-2">

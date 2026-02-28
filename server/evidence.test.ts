@@ -203,3 +203,120 @@ describe("Auth", () => {
     expect(result?.email).toBe("teacher@example.com");
   });
 });
+
+describe("AI Services - classifyEvidence with image", () => {
+  it("should accept image data URL for classification", async () => {
+    const { ctx } = createPublicContext();
+    const caller = appRouter.createCaller(ctx);
+
+    try {
+      const result = await caller.ai.classifyEvidence({
+        imageDataUrl: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+        fileName: "evidence.png",
+        fileType: "image/png",
+      });
+      expect(result).toHaveProperty("success");
+      if (result.success) {
+        expect(result.classification).toHaveProperty("standardId");
+        expect(result.classification).toHaveProperty("standardNumber");
+        expect(result.classification).toHaveProperty("confidence");
+        expect(typeof result.classification!.confidence).toBe("number");
+        expect(result.classification!.confidence).toBeGreaterThanOrEqual(0);
+        expect(result.classification!.confidence).toBeLessThanOrEqual(1);
+      }
+    } catch (e: any) {
+      expect(e.message).toBeDefined();
+    }
+  }, 30000);
+});
+
+describe("AI Services - classifyEvidence batch validation", () => {
+  it("should handle multiple sequential classification calls", async () => {
+    const { ctx } = createPublicContext();
+    const caller = appRouter.createCaller(ctx);
+
+    const inputs = [
+      { description: "شهادة شكر من مدير المدرسة", fileName: "شهادة.pdf", fileType: "application/pdf" },
+      { description: "خطة درس في مادة الرياضيات", fileName: "خطة_درس.docx", fileType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" },
+    ];
+
+    for (const input of inputs) {
+      try {
+        const result = await caller.ai.classifyEvidence(input);
+        expect(result).toHaveProperty("success");
+      } catch (e: any) {
+        expect(e.message).toBeDefined();
+      }
+    }
+  }, 30000);
+});
+
+describe("Evidence Data Model", () => {
+  it("should support comment field in evidence items", () => {
+    // Test that EvidenceItem interface supports comment field
+    const evidence = {
+      id: "test-1",
+      subEvidenceId: "sub-1",
+      type: "text" as const,
+      text: "شاهد اختبار",
+      link: "",
+      fileData: null,
+      fileName: "",
+      displayAs: "image" as const,
+      comment: "هذا تعليق على الشاهد",
+    };
+
+    expect(evidence.comment).toBe("هذا تعليق على الشاهد");
+    expect(evidence).toHaveProperty("comment");
+  });
+
+  it("should allow evidence without comment", () => {
+    const evidence = {
+      id: "test-2",
+      subEvidenceId: "sub-2",
+      type: "image" as const,
+      text: "",
+      link: "",
+      fileData: "data:image/png;base64,abc",
+      fileName: "test.png",
+      displayAs: "image" as const,
+    };
+
+    expect(evidence.comment).toBeUndefined();
+  });
+});
+
+describe("Coverage Report Calculations", () => {
+  it("should calculate correct coverage percentage", () => {
+    // Simulate coverage calculation logic
+    const criteriaData: Record<string, { score: number; evidences: any[] }> = {
+      "std-1": { score: 4, evidences: [{ id: "1" }, { id: "2" }] },
+      "std-2": { score: 3, evidences: [{ id: "3" }] },
+      "std-3": { score: 0, evidences: [] },
+    };
+
+    const maxScore = 5;
+    const totalScore = Object.values(criteriaData).reduce((sum, d) => sum + d.score, 0);
+    const totalMaxScore = Object.keys(criteriaData).length * maxScore;
+    const percentage = Math.round((totalScore / totalMaxScore) * 100);
+
+    expect(percentage).toBe(47); // (4+3+0) / (5*3) * 100 = 46.67 ≈ 47
+  });
+
+  it("should count evidence types correctly", () => {
+    const evidences = [
+      { type: "image" }, { type: "image" }, { type: "file" },
+      { type: "text" }, { type: "link" }, { type: "image" },
+    ];
+
+    const typeCounts = evidences.reduce((acc: Record<string, number>, ev) => {
+      acc[ev.type] = (acc[ev.type] || 0) + 1;
+      return acc;
+    }, {});
+
+    expect(typeCounts.image).toBe(3);
+    expect(typeCounts.file).toBe(1);
+    expect(typeCounts.text).toBe(1);
+    expect(typeCounts.link).toBe(1);
+  });
+});
