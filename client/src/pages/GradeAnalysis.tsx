@@ -109,7 +109,7 @@ export default function GradeAnalysis() {
   return (
     <div className="min-h-screen bg-[#F8FAFC] p-4 md:p-6" dir="rtl">
       <div className="max-w-6xl mx-auto">
-        <button onClick={() => navigate("/")} className="flex items-center gap-2 text-gray-500 hover:text-gray-700 mb-6">
+        <button type="button" onClick={() => navigate("/")} className="flex items-center gap-2 text-gray-500 hover:text-gray-700 mb-6">
           <ArrowLeft className="w-4 h-4" />
           <span className="text-sm">العودة للرئيسية</span>
         </button>
@@ -223,7 +223,7 @@ export default function GradeAnalysis() {
                 <h2 className="font-bold text-gray-800" style={{ fontFamily: "'Tajawal', sans-serif" }}>
                   درجات الطلاب ({students.length})
                 </h2>
-                <button onClick={addStudent} className="flex items-center gap-1 text-sm text-blue-600 hover:text-blue-700 font-medium">
+                <button type="button" onClick={addStudent} className="flex items-center gap-1 text-sm text-blue-600 hover:text-blue-700 font-medium">
                   <Plus className="w-4 h-4" />
                   إضافة طالب
                 </button>
@@ -291,7 +291,7 @@ export default function GradeAnalysis() {
                           </td>
                           <td className="p-2">
                             {students.length > 1 && (
-                              <button onClick={() => removeStudent(student.id)} className="text-red-400 hover:text-red-600">
+                              <button type="button" onClick={() => removeStudent(student.id)} className="text-red-400 hover:text-red-600">
                                 <Trash2 className="w-4 h-4" />
                               </button>
                             )}
@@ -304,7 +304,7 @@ export default function GradeAnalysis() {
               </div>
 
               <div className="mt-4 flex gap-3">
-                <button onClick={addStudent} className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700 bg-gray-50 px-4 py-2 rounded-lg">
+                <button type="button" onClick={addStudent} className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700 bg-gray-50 px-4 py-2 rounded-lg">
                   <Plus className="w-4 h-4" />
                   إضافة 1 طالب
                 </button>
@@ -329,15 +329,15 @@ export default function GradeAnalysis() {
           /* التقرير الكامل */
           <div>
             <div className="flex gap-3 mb-4">
-              <button onClick={() => setShowReport(false)} className="flex items-center gap-2 bg-gray-100 text-gray-700 px-4 py-2 rounded-lg text-sm">
+              <button type="button" onClick={() => setShowReport(false)} className="flex items-center gap-2 bg-gray-100 text-gray-700 px-4 py-2 rounded-lg text-sm">
                 <ArrowLeft className="w-4 h-4" />
                 العودة للإدخال
               </button>
-              <button onClick={handleExportPDF} disabled={isExporting} className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
+              <button type="button" onClick={handleExportPDF} disabled={isExporting} className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
                 <Download className="w-4 h-4" />
                 {isExporting ? "جاري..." : "تحميل PDF"}
               </button>
-              <button onClick={() => printElement("analysis-report")} className="flex items-center gap-2 bg-gray-100 text-gray-700 px-4 py-2 rounded-lg text-sm">
+              <button type="button" onClick={() => printElement("analysis-report")} className="flex items-center gap-2 bg-gray-100 text-gray-700 px-4 py-2 rounded-lg text-sm">
                 <Printer className="w-4 h-4" />
                 طباعة
               </button>

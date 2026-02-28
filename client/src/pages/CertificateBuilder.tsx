@@ -104,7 +104,7 @@ export default function CertificateBuilder() {
       <div className="flex flex-col lg:flex-row min-h-screen">
         {/* الشريط الجانبي - الإعدادات */}
         <aside className="lg:w-96 bg-white border-l border-gray-200 p-5 overflow-y-auto">
-          <button onClick={() => navigate("/")} className="flex items-center gap-2 text-gray-500 hover:text-gray-700 mb-5">
+          <button type="button" onClick={() => navigate("/")} className="flex items-center gap-2 text-gray-500 hover:text-gray-700 mb-5">
             <ArrowLeft className="w-4 h-4" />
             <span className="text-sm">العودة</span>
           </button>

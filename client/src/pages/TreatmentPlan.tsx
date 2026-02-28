@@ -72,15 +72,15 @@ export default function TreatmentPlan() {
       <div className="min-h-screen bg-gray-100 p-4 md:p-6" dir="rtl">
         <div className="max-w-4xl mx-auto">
           <div className="flex gap-3 mb-4 flex-wrap">
-            <button onClick={() => setShowPreview(false)} className="flex items-center gap-2 bg-white text-gray-700 px-4 py-2 rounded-lg text-sm border">
+            <button type="button" onClick={() => setShowPreview(false)} className="flex items-center gap-2 bg-white text-gray-700 px-4 py-2 rounded-lg text-sm border">
               <ArrowLeft className="w-4 h-4" />
               تعديل
             </button>
-            <button onClick={handleExportPDF} disabled={isExporting} className="flex items-center gap-2 text-white px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50" style={{ backgroundColor: selectedType.color }}>
+            <button type="button" onClick={handleExportPDF} disabled={isExporting} className="flex items-center gap-2 text-white px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50" style={{ backgroundColor: selectedType.color }}>
               <Download className="w-4 h-4" />
               {isExporting ? "جاري..." : "تحميل PDF"}
             </button>
-            <button onClick={() => printElement("plan-preview")} className="flex items-center gap-2 bg-white text-gray-700 px-4 py-2 rounded-lg text-sm border">
+            <button type="button" onClick={() => printElement("plan-preview")} className="flex items-center gap-2 bg-white text-gray-700 px-4 py-2 rounded-lg text-sm border">
               <Printer className="w-4 h-4" />
               طباعة
             </button>
@@ -154,7 +154,7 @@ export default function TreatmentPlan() {
   return (
     <div className="min-h-screen bg-[#F8FAFC] p-4 md:p-6" dir="rtl">
       <div className="max-w-5xl mx-auto">
-        <button onClick={() => navigate("/")} className="flex items-center gap-2 text-gray-500 hover:text-gray-700 mb-6">
+        <button type="button" onClick={() => navigate("/")} className="flex items-center gap-2 text-gray-500 hover:text-gray-700 mb-6">
           <ArrowLeft className="w-4 h-4" />
           <span className="text-sm">العودة</span>
         </button>
@@ -164,7 +164,7 @@ export default function TreatmentPlan() {
             <h1 className="text-2xl font-black text-gray-900" style={{ fontFamily: "'Tajawal', sans-serif" }}>الخطط العلاجية والإثرائية</h1>
             <p className="text-sm text-gray-500">اختر النوع → أدخل البيانات → معاينة وتصدير</p>
           </div>
-          <button onClick={() => setShowPreview(true)} className="flex items-center gap-2 text-white px-5 py-2.5 rounded-lg text-sm font-medium" style={{ backgroundColor: selectedType.color }}>
+          <button type="button" onClick={() => setShowPreview(true)} className="flex items-center gap-2 text-white px-5 py-2.5 rounded-lg text-sm font-medium" style={{ backgroundColor: selectedType.color }}>
             <Eye className="w-4 h-4" />
             معاينة وتصدير
           </button>
@@ -220,7 +220,7 @@ export default function TreatmentPlan() {
         <div className="bg-white rounded-xl border border-gray-200 p-5">
           <div className="flex items-center justify-between mb-4">
             <h2 className="font-bold text-gray-800" style={{ fontFamily: "'Tajawal', sans-serif" }}>بيانات الطلاب ({students.length})</h2>
-            <button onClick={addStudent} className="flex items-center gap-1 text-sm font-medium" style={{ color: selectedType.color }}>
+            <button type="button" onClick={addStudent} className="flex items-center gap-1 text-sm font-medium" style={{ color: selectedType.color }}>
               <Plus className="w-4 h-4" />
               إضافة طالب
             </button>
@@ -232,7 +232,7 @@ export default function TreatmentPlan() {
                 <div className="flex items-center justify-between mb-3">
                   <span className="text-sm font-bold" style={{ color: selectedType.color }}>الطالب {index + 1}</span>
                   {students.length > 1 && (
-                    <button onClick={() => removeStudent(student.id)} className="text-red-400 hover:text-red-600">
+                    <button type="button" onClick={() => removeStudent(student.id)} className="text-red-400 hover:text-red-600">
                       <Trash2 className="w-4 h-4" />
                     </button>
                   )}

@@ -522,6 +522,8 @@ export default function PerformanceEvidence() {
   };
 
   const handleFileUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
     const file = e.target.files?.[0];
     if (!file || !activeUploadRef.current) return;
     
@@ -586,6 +588,8 @@ export default function PerformanceEvidence() {
   }, []);
 
   const handleSmartUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
     const file = e.target.files?.[0];
     if (!file) return;
     
@@ -850,7 +854,7 @@ export default function PerformanceEvidence() {
           {ev.type === 'image' && (
             <Tooltip>
               <TooltipTrigger asChild>
-                <button onClick={() => updateEvidence(criterionId, ev.id, { displayAs: ev.displayAs === 'image' ? 'qr' : 'image' })}
+                <button type="button" onClick={() => updateEvidence(criterionId, ev.id, { displayAs: ev.displayAs === 'image' ? 'qr' : 'image' })}
                   className={`p-1.5 rounded-lg text-xs ${ev.displayAs === 'qr' ? 'bg-violet-100 text-violet-600' : 'bg-blue-100 text-blue-600'}`}>
                   {ev.displayAs === 'image' ? <QrCode className="w-3.5 h-3.5" /> : <Image className="w-3.5 h-3.5" />}
                 </button>
@@ -858,7 +862,7 @@ export default function PerformanceEvidence() {
               <TooltipContent>{ev.displayAs === 'image' ? 'تحويل لباركود QR' : 'عرض كصورة'}</TooltipContent>
             </Tooltip>
           )}
-          <button onClick={() => removeEvidence(criterionId, ev.id)} className="p-1.5 rounded-lg text-red-400 hover:text-red-600 hover:bg-red-50">
+          <button type="button" onClick={() => removeEvidence(criterionId, ev.id)} className="p-1.5 rounded-lg text-red-400 hover:text-red-600 hover:bg-red-50">
             <Trash2 className="w-3.5 h-3.5" />
           </button>
         </div>
@@ -911,7 +915,7 @@ export default function PerformanceEvidence() {
     return (
       <div className="min-h-screen bg-gradient-to-b from-background to-muted/30 p-3 sm:p-4 md:p-8" dir="rtl">
         <div className="max-w-5xl mx-auto">
-          <button onClick={() => navigate("/")} className="flex items-center gap-1.5 sm:gap-2 text-muted-foreground hover:text-foreground mb-5 sm:mb-8 transition-colors group">
+          <button type="button" onClick={() => navigate("/")} className="flex items-center gap-1.5 sm:gap-2 text-muted-foreground hover:text-foreground mb-5 sm:mb-8 transition-colors group">
             <ArrowLeft className="w-3.5 h-3.5 sm:w-4 sm:h-4 transition-transform group-hover:-translate-x-1" /><span className="text-xs sm:text-sm">العودة للرئيسية</span>
           </button>
 
@@ -1064,7 +1068,7 @@ export default function PerformanceEvidence() {
                   </div>
                   <h2 className="font-bold text-foreground text-xs sm:text-sm" style={{ fontFamily: "var(--font-heading)" }}>تحليل الجاهزية</h2>
                 </div>
-                <Button onClick={() => { try { localStorage.setItem(STORAGE_PENDING_UPLOAD, "smart"); } catch {} smartUploadRef.current?.click(); }} disabled={isSmartUploading}
+                <Button onClick={(e) => { e.preventDefault(); e.stopPropagation(); try { localStorage.setItem(STORAGE_PENDING_UPLOAD, "smart"); } catch {} smartUploadRef.current?.click(); }} disabled={isSmartUploading}
                   variant="default" size="sm" className="gap-1.5 bg-violet-600 hover:bg-violet-700 shadow-sm text-xs h-8 sm:h-9 w-full sm:w-auto">
                   {isSmartUploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
                   {isSmartUploading ? "جاري التصنيف..." : "رفع شاهد مع تصنيف ذكي"}
@@ -1347,7 +1351,7 @@ export default function PerformanceEvidence() {
                   <label className="text-xs text-muted-foreground font-medium">الدرجة</label>
                   <div className="flex gap-1 sm:gap-1.5">
                     {[1, 2, 3, 4, 5].map((s) => (
-                      <button key={s} onClick={(e) => { e.stopPropagation(); updateScore(currentCriterion.id, s); }}
+                      <button type="button" key={s} onClick={(e) => { e.stopPropagation(); updateScore(currentCriterion.id, s); }}
                         className={`w-8 h-8 sm:w-9 sm:h-9 rounded-lg text-xs sm:text-sm font-bold transition-all ${data.score >= s ? 'bg-primary text-primary-foreground shadow-md' : 'bg-background text-muted-foreground hover:bg-muted/80 border border-border/50'}`}>{s}</button>
                     ))}
                   </div>
@@ -1422,7 +1426,7 @@ export default function PerformanceEvidence() {
                                           {field.label} {field.required && <span className="text-destructive">*</span>}
                                         </label>
                                         {field.type === 'textarea' && formEv.formData?.[field.id] && (
-                                          <button onClick={() => improveFieldText(currentCriterion.id, formEv.id, field.id, formEv.formData?.[field.id] || '')}
+                                          <button type="button" onClick={() => improveFieldText(currentCriterion.id, formEv.id, field.id, formEv.formData?.[field.id] || '')}
                                             disabled={aiLoading === `improve_${formEv.id}_${field.id}`}
                                             className="text-[10px] text-violet-600 hover:text-violet-700 flex items-center gap-1">
                                             {aiLoading === `improve_${formEv.id}_${field.id}` ? <Loader2 className="w-3 h-3 animate-spin" /> : <Wand2 className="w-3 h-3" />}
@@ -1467,7 +1471,7 @@ export default function PerformanceEvidence() {
                               <Plus className="w-3 h-3 sm:w-3.5 sm:h-3.5" />شاهد نصي
                             </Button>
                             <Button variant="outline" size="sm" className="gap-1 sm:gap-1.5 border-dashed border-blue-400 text-blue-600 text-[10px] sm:text-xs h-7 sm:h-8 px-2 sm:px-3"
-                              onClick={() => triggerFileUpload(currentCriterion.id, sub.id)}>
+                              onClick={(e) => { e.preventDefault(); e.stopPropagation(); triggerFileUpload(currentCriterion.id, sub.id); }}>
                               <Upload className="w-3 h-3 sm:w-3.5 sm:h-3.5" /><span className="hidden sm:inline">صورة / ملف / فيديو</span><span className="sm:hidden">ملف</span>
                             </Button>
                             <Button variant="outline" size="sm" className="gap-1 sm:gap-1.5 border-dashed border-purple-400 text-purple-600 text-[10px] sm:text-xs h-7 sm:h-8 px-2 sm:px-3"
@@ -1486,7 +1490,7 @@ export default function PerformanceEvidence() {
                                 {aiMessages.map((msg, i) => (
                                   <div key={i} className="bg-white rounded-lg p-2.5 sm:p-3 text-[10px] sm:text-xs text-foreground leading-relaxed border border-violet-100">
                                     {msg}
-                                    <button onClick={() => { const ev = createEmptyEvidence(sub.id); ev.text = msg; setCriteriaData(prev => ({ ...prev, [currentCriterion.id]: { ...prev[currentCriterion.id], evidences: [...prev[currentCriterion.id].evidences, ev] } })); toast.success("تم إضافة النص كشاهد"); }}
+                                    <button type="button" onClick={() => { const ev = createEmptyEvidence(sub.id); ev.text = msg; setCriteriaData(prev => ({ ...prev, [currentCriterion.id]: { ...prev[currentCriterion.id], evidences: [...prev[currentCriterion.id].evidences, ev] } })); toast.success("تم إضافة النص كشاهد"); }}
                                       className="mt-1.5 text-[9px] sm:text-[10px] text-violet-600 hover:text-violet-700 flex items-center gap-1">
                                       <Plus className="w-2.5 h-2.5 sm:w-3 sm:h-3" />استخدام كشاهد
                                     </button>
