@@ -209,51 +209,60 @@ function createEmptyEvidence(subEvidenceId: string = ""): EvidenceItem {
 }
 
 // ===== المكون الرئيسي =====
-// ===== مفاتيح sessionStorage =====
-const SESSION_KEY = "sers_perf_state";
-const SESSION_PENDING_UPLOAD = "sers_pending_upload";
+// ===== مفاتيح التخزين المحلي (localStorage يبقى حتى بعد إغلاق المتصفح) =====
+const STORAGE_KEY = "sers_perf_state";
+const STORAGE_PENDING_UPLOAD = "sers_pending_upload";
+const STORAGE_AUTOSAVE_KEY = "sers_perf_autosave";
 
-// ===== حفظ واستعادة الـ state من sessionStorage (لحل مشكلة الجوال) =====
-function saveStateToSession(data: {
+// ===== حفظ واستعادة الـ state من localStorage (يبقى حتى بعد إغلاق المتصفح) =====
+function saveStateToStorage(data: {
   step: string; jobId: string; themeId: string;
   criteriaData: Record<string, CriterionData>; personalInfo: any;
   customCriteria: Criterion[]; currentCriterionIndex: number;
   activeTab: string; expandedSubEvidence: string | null;
 }) {
   try {
-    // لا نحفظ fileData الكبيرة في sessionStorage لتجنب تجاوز الحد
+    // حفظ الصور الصغيرة فقط لتجنب تجاوز حد localStorage
     const cleanCriteria: Record<string, any> = {};
     for (const [key, val] of Object.entries(data.criteriaData)) {
       cleanCriteria[key] = {
         ...val,
         evidences: val.evidences.map(ev => ({
           ...ev,
-          fileData: ev.fileData && ev.fileData.length < 50000 ? ev.fileData : null, // حفظ الصور الصغيرة فقط
+          fileData: ev.fileData && ev.fileData.length < 100000 ? ev.fileData : null,
+          // حفظ معلومات الملف حتى لو لم نحفظ البيانات الكبيرة
+          _hadFile: !!ev.fileData,
         })),
       };
     }
-    sessionStorage.setItem(SESSION_KEY, JSON.stringify({ ...data, criteriaData: cleanCriteria, timestamp: Date.now() }));
-  } catch { /* sessionStorage full - ignore */ }
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...data, criteriaData: cleanCriteria, timestamp: Date.now() }));
+  } catch {
+    // localStorage ممتلئ - حاول حذف البيانات القديمة
+    try {
+      localStorage.removeItem(STORAGE_AUTOSAVE_KEY);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...data, timestamp: Date.now() }));
+    } catch { /* ignore */ }
+  }
 }
 
-function loadStateFromSession(): any | null {
+function loadStateFromStorage(): any | null {
   try {
-    const raw = sessionStorage.getItem(SESSION_KEY);
+    const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return null;
     const data = JSON.parse(raw);
-    // تجاهل البيانات القديمة (أكثر من ساعة)
-    if (Date.now() - (data.timestamp || 0) > 3600000) {
-      sessionStorage.removeItem(SESSION_KEY);
+    // تجاهل البيانات القديمة (أكثر من 24 ساعة)
+    if (Date.now() - (data.timestamp || 0) > 86400000) {
+      localStorage.removeItem(STORAGE_KEY);
       return null;
     }
     return data;
   } catch { return null; }
 }
 
-function clearSessionState() {
+function clearStorageState() {
   try {
-    sessionStorage.removeItem(SESSION_KEY);
-    sessionStorage.removeItem(SESSION_PENDING_UPLOAD);
+    localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(STORAGE_PENDING_UPLOAD);
   } catch { /* ignore */ }
 }
 
@@ -320,10 +329,10 @@ export default function PerformanceEvidence() {
     setStep("dashboard");
   };
 
-  // ===== استعادة الـ state من sessionStorage عند تحميل الصفحة (حل مشكلة الجوال) =====
+  // ===== استعادة الـ state من localStorage عند تحميل الصفحة (حل مشكلة الجوال + إغلاق المتصفح) =====
   useEffect(() => {
     if (stateRestored) return;
-    const saved = loadStateFromSession();
+    const saved = loadStateFromStorage();
     if (saved && saved.jobId) {
       const job = JOB_TYPES.find(j => j.id === saved.jobId);
       if (job) {
@@ -350,15 +359,15 @@ export default function PerformanceEvidence() {
           initCriteriaData(job.criteria);
         }
         // إظهار رسالة استعادة
-        const wasPendingUpload = sessionStorage.getItem(SESSION_PENDING_UPLOAD);
+        const wasPendingUpload = localStorage.getItem(STORAGE_PENDING_UPLOAD);
         if (wasPendingUpload) {
           toast.info("تم استعادة بياناتك بعد العودة", {
             description: "يرجى رفع الشاهد مرة أخرى - المتصفح أعاد تحميل الصفحة",
             duration: 6000,
           });
-          sessionStorage.removeItem(SESSION_PENDING_UPLOAD);
+          localStorage.removeItem(STORAGE_PENDING_UPLOAD);
         } else {
-          toast.success("تم استعادة بياناتك السابقة", { duration: 3000 });
+          toast.success("تم استعادة بياناتك السابقة تلقائياً", { duration: 3000 });
         }
       }
     }
@@ -368,12 +377,40 @@ export default function PerformanceEvidence() {
   // ===== حفظ الـ state تلقائياً عند كل تغيير =====
   useEffect(() => {
     if (!selectedJob || step === "select") return;
-    saveStateToSession({
+    saveStateToStorage({
       step, jobId: selectedJob.id, themeId: selectedTheme.id,
       criteriaData, personalInfo, customCriteria,
       currentCriterionIndex, activeTab, expandedSubEvidence,
     });
   }, [step, selectedJob, selectedTheme, criteriaData, personalInfo, customCriteria, currentCriterionIndex, activeTab, expandedSubEvidence]);
+
+  // ===== حفظ تلقائي عند إغلاق المتصفح أو الانتقال =====
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      if (!selectedJob || step === "select") return;
+      saveStateToStorage({
+        step, jobId: selectedJob.id, themeId: selectedTheme.id,
+        criteriaData, personalInfo, customCriteria,
+        currentCriterionIndex, activeTab, expandedSubEvidence,
+      });
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    // حفظ عند visibilitychange (عندما ينتقل المستخدم لتطبيق آخر على الجوال)
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "hidden" && selectedJob && step !== "select") {
+        saveStateToStorage({
+          step, jobId: selectedJob.id, themeId: selectedTheme.id,
+          criteriaData, personalInfo, customCriteria,
+          currentCriterionIndex, activeTab, expandedSubEvidence,
+        });
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  });
 
   // ===== حسابات تحليل الفجوات =====
   const gapAnalysis = useMemo(() => {
@@ -487,6 +524,14 @@ export default function PerformanceEvidence() {
   const handleFileUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !activeUploadRef.current) return;
+    
+    // التحقق من حجم الملف
+    if (file.size > 16 * 1024 * 1024) {
+      toast.error("حجم الملف كبير جداً", { description: "الحد الأقصى 16 ميجابايت" });
+      e.target.value = "";
+      return;
+    }
+    
     const { criterionId, subEvidenceId } = activeUploadRef.current;
     const reader = new FileReader();
     reader.onload = () => {
@@ -502,20 +547,25 @@ export default function PerformanceEvidence() {
         ...prev,
         [criterionId]: { ...prev[criterionId], evidences: [...prev[criterionId].evidences, newEv] },
       }));
+      toast.success("تم إضافة الشاهد بنجاح", { description: file.name, duration: 3000 });
+    };
+    reader.onerror = () => {
+      toast.error("فشل قراءة الملف", { description: "يرجى المحاولة مرة أخرى" });
     };
     reader.readAsDataURL(file);
     e.target.value = "";
-    try { sessionStorage.removeItem(SESSION_PENDING_UPLOAD); } catch {}
+    try { localStorage.removeItem(STORAGE_PENDING_UPLOAD); } catch {}
   }, []);
 
   const triggerFileUpload = (criterionId: string, subEvidenceId: string) => {
     activeUploadRef.current = { criterionId, subEvidenceId };
-    try { sessionStorage.setItem(SESSION_PENDING_UPLOAD, "file"); } catch {}
+    try { localStorage.setItem(STORAGE_PENDING_UPLOAD, "file"); } catch {}
     fileInputRef.current?.click();
   };
 
   // ===== رفع ذكي مع تصنيف AI تلقائي =====
   const [isSmartUploading, setIsSmartUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<{ stage: string; percent: number } | null>(null);
 
   // ===== ضغط الصورة قبل إرسالها للـ AI =====
   const compressImage = useCallback((base64: string, maxWidth = 800, quality = 0.6): Promise<string> => {
@@ -547,7 +597,7 @@ export default function PerformanceEvidence() {
     }
     
     setIsSmartUploading(true);
-    toast.info("جاري تحليل الملف بالذكاء الاصطناعي...", { duration: 3000 });
+    setUploadProgress({ stage: "جاري قراءة الملف...", percent: 10 });
     
     const reader = new FileReader();
     reader.onload = async () => {
@@ -556,12 +606,17 @@ export default function PerformanceEvidence() {
         const isVideo = file.type.startsWith("video/");
         const originalBase64 = reader.result as string;
         
+        setUploadProgress({ stage: "جاري معالجة الملف...", percent: 30 });
+        
         // ضغط الصورة قبل إرسالها للـ AI لتقليل حجم الـ payload
         let aiImageUrl: string | undefined;
         if (isImage) {
+          setUploadProgress({ stage: "جاري ضغط الصورة...", percent: 40 });
           aiImageUrl = await compressImage(originalBase64, 800, 0.5);
         }
 
+        setUploadProgress({ stage: "جاري التصنيف بالذكاء الاصطناعي...", percent: 60 });
+        
         // إرسال للـ AI للتحليل (publicProcedure - لا يحتاج تسجيل دخول)
         const result = await classifyMutation.mutateAsync({
           fileName: file.name,
@@ -570,6 +625,8 @@ export default function PerformanceEvidence() {
           fileUrl: aiImageUrl,
         });
 
+        setUploadProgress({ stage: "جاري إضافة الشاهد...", percent: 85 });
+        
         if (result.success && result.classification) {
           const cls = result.classification;
           const targetCriterion = allCriteria.find(c =>
@@ -649,17 +706,19 @@ export default function PerformanceEvidence() {
           }));
         }
       } finally {
-        setIsSmartUploading(false);
+        setUploadProgress({ stage: "اكتمل!", percent: 100 });
+        setTimeout(() => { setUploadProgress(null); setIsSmartUploading(false); }, 1000);
       }
     };
     reader.onerror = () => {
       toast.error("فشل قراءة الملف", { description: "يرجى المحاولة مرة أخرى" });
+      setUploadProgress(null);
       setIsSmartUploading(false);
     };
     reader.readAsDataURL(file);
     e.target.value = "";
     // إزالة pending upload flag بعد بدء الرفع بنجاح
-    try { sessionStorage.removeItem(SESSION_PENDING_UPLOAD); } catch {}
+    try { localStorage.removeItem(STORAGE_PENDING_UPLOAD); } catch {}
   }, [allCriteria, criteriaData, classifyMutation, compressImage]);
 
   // ===== AI Functions =====
@@ -956,7 +1015,7 @@ export default function PerformanceEvidence() {
           {/* ===== Header Bar - Mobile Optimized ===== */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-3 mb-4 sm:mb-6 bg-card/80 backdrop-blur-sm rounded-xl p-2.5 sm:p-3 border border-border/40 shadow-sm">
             <div className="flex items-center gap-1.5 sm:gap-2">
-              <Button variant="ghost" size="sm" onClick={() => { clearSessionState(); setStep("select"); }} className="gap-1 sm:gap-1.5 text-muted-foreground hover:text-foreground text-xs sm:text-sm h-8 sm:h-9 px-2 sm:px-3">
+              <Button variant="ghost" size="sm" onClick={() => { clearStorageState(); setStep("select"); }} className="gap-1 sm:gap-1.5 text-muted-foreground hover:text-foreground text-xs sm:text-sm h-8 sm:h-9 px-2 sm:px-3">
                 <ArrowRight className="w-3.5 h-3.5 sm:w-4 sm:h-4" />تغيير الوظيفة
               </Button>
               <div className="w-px h-4 sm:h-5 bg-border/60" />
@@ -1005,14 +1064,30 @@ export default function PerformanceEvidence() {
                   </div>
                   <h2 className="font-bold text-foreground text-xs sm:text-sm" style={{ fontFamily: "var(--font-heading)" }}>تحليل الجاهزية</h2>
                 </div>
-                <Button onClick={() => { try { sessionStorage.setItem(SESSION_PENDING_UPLOAD, "smart"); } catch {} smartUploadRef.current?.click(); }} disabled={isSmartUploading}
+                <Button onClick={() => { try { localStorage.setItem(STORAGE_PENDING_UPLOAD, "smart"); } catch {} smartUploadRef.current?.click(); }} disabled={isSmartUploading}
                   variant="default" size="sm" className="gap-1.5 bg-violet-600 hover:bg-violet-700 shadow-sm text-xs h-8 sm:h-9 w-full sm:w-auto">
                   {isSmartUploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
                   {isSmartUploading ? "جاري التصنيف..." : "رفع شاهد مع تصنيف ذكي"}
                 </Button>
               </div>
 
-              {/* شريط التقدم */}
+              {/* شريط تقدم التصنيف الذكي */}
+              {uploadProgress && (
+                <div className="mb-3 sm:mb-4 bg-violet-50 dark:bg-violet-950/30 rounded-lg p-3 border border-violet-200/50 animate-in fade-in duration-300">
+                  <div className="flex items-center justify-between text-xs mb-2">
+                    <div className="flex items-center gap-2">
+                      <Loader2 className="w-3.5 h-3.5 text-violet-600 animate-spin" />
+                      <span className="font-medium text-violet-700 dark:text-violet-400">{uploadProgress.stage}</span>
+                    </div>
+                    <span className="font-bold text-violet-600">{uploadProgress.percent}%</span>
+                  </div>
+                  <div className="w-full bg-violet-200/50 dark:bg-violet-800/30 rounded-full h-2 overflow-hidden">
+                    <div className="h-full bg-violet-600 rounded-full transition-all duration-500 ease-out" style={{ width: `${uploadProgress.percent}%` }} />
+                  </div>
+                </div>
+              )}
+
+              {/* شريط التقدم العام */}
               <div className="mb-3 sm:mb-4">
                 <div className="flex items-center justify-between text-xs sm:text-sm mb-1.5 sm:mb-2">
                   <span className="font-bold" style={{ color: grade.color }}>{gapAnalysis.percentage}% جاهزية</span>

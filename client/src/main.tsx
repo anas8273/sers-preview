@@ -32,7 +32,10 @@ queryClient.getQueryCache().subscribe(event => {
 queryClient.getMutationCache().subscribe(event => {
   if (event.type === "updated" && event.action.type === "error") {
     const error = event.mutation.state.error;
-    redirectToLoginIfUnauthorized(error);
+    // لا نعيد التوجيه لصفحة تسجيل الدخول عند فشل mutations
+    // لأن بعض الـ mutations مثل classifyEvidence هي publicProcedure
+    // والخطأ قد يكون timeout أو خطأ شبكة وليس عدم مصادقة
+    // نترك الـ redirect فقط للـ queries التي تتطلب مصادقة
     console.error("[API Mutation Error]", error);
   }
 });
