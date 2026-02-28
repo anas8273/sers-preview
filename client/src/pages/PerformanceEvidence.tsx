@@ -10,6 +10,7 @@ import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { usePortfolio } from "@/hooks/usePortfolio";
+import { useOfflineSync } from "@/hooks/useOfflineSync";
 import { getLoginUrl } from "@/const";
 import { generateQRDataURL } from "@/lib/qr-utils";
 import { exportToPDF, printElement } from "@/lib/pdf-export";
@@ -22,7 +23,8 @@ import {
   GraduationCap, Building2, Users, Heart, Search as SearchIcon,
   BookOpen, Baby, Accessibility, Briefcase, ClipboardList,
   ClipboardCheck, Handshake, UserCheck, Target,
-  NotebookPen, Monitor, School, Award, PieChart, ListChecks
+  NotebookPen, Monitor, School, Award, PieChart, ListChecks,
+  GripVertical, Move
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -270,6 +272,7 @@ export default function PerformanceEvidence() {
   const [, navigate] = useLocation();
   const { user, isAuthenticated, loading: authLoading } = useAuth();
   const portfolio = usePortfolio(isAuthenticated);
+  const { isOnline, isSyncing, pendingCount, saveOfflineData, getOfflineData } = useOfflineSync();
   const [step, setStep] = useState<"select" | "dashboard" | "criterion-detail" | "final-review" | "preview">("select");
   const [selectedJob, setSelectedJob] = useState<typeof JOB_TYPES[0] | null>(null);
   const [selectedTheme, setSelectedTheme] = useState(THEMES[0]);
@@ -374,35 +377,47 @@ export default function PerformanceEvidence() {
     setStateRestored(true);
   }, [stateRestored]);
 
-  // ===== حفظ الـ state تلقائياً عند كل تغيير =====
+  // ===== حفظ الـ state تلقائياً عند كل تغيير (مع تأجيل أثناء الرفع) =====
   useEffect(() => {
     if (!selectedJob || step === "select") return;
-    saveStateToStorage({
-      step, jobId: selectedJob.id, themeId: selectedTheme.id,
-      criteriaData, personalInfo, customCriteria,
-      currentCriterionIndex, activeTab, expandedSubEvidence,
-    });
+    // لا نحفظ أثناء عملية الرفع لتجنب crash من حجم base64 الكبير
+    if (isUploadingRef.current) return;
+    // تأخير الحفظ لتجنب الحفظ المتكرر السريع
+    const timer = setTimeout(() => {
+      if (!isUploadingRef.current) {
+        saveStateToStorage({
+          step, jobId: selectedJob.id, themeId: selectedTheme.id,
+          criteriaData, personalInfo, customCriteria,
+          currentCriterionIndex, activeTab, expandedSubEvidence,
+        });
+      }
+    }, 500);
+    return () => clearTimeout(timer);
   }, [step, selectedJob, selectedTheme, criteriaData, personalInfo, customCriteria, currentCriterionIndex, activeTab, expandedSubEvidence]);
 
   // ===== حفظ تلقائي عند إغلاق المتصفح أو الانتقال =====
   useEffect(() => {
     const handleBeforeUnload = () => {
       if (!selectedJob || step === "select") return;
-      saveStateToStorage({
-        step, jobId: selectedJob.id, themeId: selectedTheme.id,
-        criteriaData, personalInfo, customCriteria,
-        currentCriterionIndex, activeTab, expandedSubEvidence,
-      });
-    };
-    window.addEventListener("beforeunload", handleBeforeUnload);
-    // حفظ عند visibilitychange (عندما ينتقل المستخدم لتطبيق آخر على الجوال)
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === "hidden" && selectedJob && step !== "select") {
+      try {
         saveStateToStorage({
           step, jobId: selectedJob.id, themeId: selectedTheme.id,
           criteriaData, personalInfo, customCriteria,
           currentCriterionIndex, activeTab, expandedSubEvidence,
         });
+      } catch { /* ignore - localStorage might be full */ }
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    // حفظ عند visibilitychange (عندما ينتقل المستخدم لتطبيق آخر على الجوال)
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "hidden" && selectedJob && step !== "select") {
+        try {
+          saveStateToStorage({
+            step, jobId: selectedJob.id, themeId: selectedTheme.id,
+            criteriaData, personalInfo, customCriteria,
+            currentCriterionIndex, activeTab, expandedSubEvidence,
+          });
+        } catch { /* ignore */ }
       }
     };
     document.addEventListener("visibilitychange", handleVisibilityChange);
@@ -410,7 +425,7 @@ export default function PerformanceEvidence() {
       window.removeEventListener("beforeunload", handleBeforeUnload);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  });
+  }, [selectedJob, step, selectedTheme, criteriaData, personalInfo, customCriteria, currentCriterionIndex, activeTab, expandedSubEvidence]);
 
   // ===== حسابات تحليل الفجوات =====
   const gapAnalysis = useMemo(() => {
@@ -521,53 +536,90 @@ export default function PerformanceEvidence() {
     setShowAddMainSection(false);
   };
 
-  const handleFileUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    e.preventDefault();
-    e.stopPropagation();
-    const file = e.target.files?.[0];
-    if (!file || !activeUploadRef.current) return;
-    
-    // التحقق من حجم الملف
-    if (file.size > 16 * 1024 * 1024) {
-      toast.error("حجم الملف كبير جداً", { description: "الحد الأقصى 16 ميجابايت" });
-      e.target.value = "";
-      return;
-    }
-    
-    const { criterionId, subEvidenceId } = activeUploadRef.current;
-    const reader = new FileReader();
-    reader.onload = () => {
-      const isImage = file.type.startsWith("image/");
-      const isVideo = file.type.startsWith("video/");
-      const newEv = createEmptyEvidence(subEvidenceId);
-      newEv.type = isImage ? "image" : isVideo ? "video" : "file";
-      newEv.fileData = reader.result as string;
-      newEv.fileName = file.name;
-      newEv.text = file.name;
-      newEv.displayAs = isImage ? "image" : "qr";
-      setCriteriaData((prev) => ({
-        ...prev,
-        [criterionId]: { ...prev[criterionId], evidences: [...prev[criterionId].evidences, newEv] },
-      }));
-      toast.success("تم إضافة الشاهد بنجاح", { description: file.name, duration: 3000 });
-    };
-    reader.onerror = () => {
-      toast.error("فشل قراءة الملف", { description: "يرجى المحاولة مرة أخرى" });
-    };
-    reader.readAsDataURL(file);
-    e.target.value = "";
-    try { localStorage.removeItem(STORAGE_PENDING_UPLOAD); } catch {}
+  // ===== سحب وإفلات الشواهد بين البنود =====
+  const [draggedEvidence, setDraggedEvidence] = useState<{ evidence: EvidenceItem; fromCriterionId: string; fromSubId: string } | null>(null);
+  const [dragOverTarget, setDragOverTarget] = useState<{ criterionId: string; subId: string } | null>(null);
+  const [showMoveDialog, setShowMoveDialog] = useState<{ evidence: EvidenceItem; fromCriterionId: string } | null>(null);
+
+  const handleDragStart = useCallback((ev: EvidenceItem, criterionId: string, subId: string) => {
+    setDraggedEvidence({ evidence: ev, fromCriterionId: criterionId, fromSubId: subId });
   }, []);
 
-  const triggerFileUpload = (criterionId: string, subEvidenceId: string) => {
-    activeUploadRef.current = { criterionId, subEvidenceId };
-    try { localStorage.setItem(STORAGE_PENDING_UPLOAD, "file"); } catch {}
-    fileInputRef.current?.click();
-  };
+  const handleDragOver = useCallback((e: React.DragEvent, criterionId: string, subId: string) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    setDragOverTarget({ criterionId, subId });
+  }, []);
+
+  const handleDragLeave = useCallback(() => {
+    setDragOverTarget(null);
+  }, []);
+
+  const handleDrop = useCallback((e: React.DragEvent, toCriterionId: string, toSubId: string) => {
+    e.preventDefault();
+    setDragOverTarget(null);
+    if (!draggedEvidence) return;
+    const { evidence, fromCriterionId } = draggedEvidence;
+    if (fromCriterionId === toCriterionId && evidence.subEvidenceId === toSubId) {
+      setDraggedEvidence(null);
+      return;
+    }
+    // نقل الشاهد: حذف من المصدر وإضافة للهدف
+    const movedEvidence = { ...evidence, subEvidenceId: toSubId };
+    setCriteriaData(prev => {
+      const updated = { ...prev };
+      // حذف من المصدر
+      updated[fromCriterionId] = {
+        ...updated[fromCriterionId],
+        evidences: updated[fromCriterionId].evidences.filter(e => e.id !== evidence.id),
+      };
+      // إضافة للهدف
+      updated[toCriterionId] = {
+        ...updated[toCriterionId],
+        evidences: [...updated[toCriterionId].evidences, movedEvidence],
+      };
+      return updated;
+    });
+    const toCrit = allCriteria.find(c => c.id === toCriterionId);
+    toast.success("تم نقل الشاهد بنجاح", {
+      description: `تم النقل إلى: ${toCrit?.title || 'بند آخر'}`,
+      duration: 3000,
+    });
+    setDraggedEvidence(null);
+  }, [draggedEvidence, allCriteria]);
+
+  const handleDragEnd = useCallback(() => {
+    setDraggedEvidence(null);
+    setDragOverTarget(null);
+  }, []);
+
+  const moveEvidenceToCriterion = useCallback((evidence: EvidenceItem, fromCriterionId: string, toCriterionId: string, toSubId: string) => {
+    if (fromCriterionId === toCriterionId && evidence.subEvidenceId === toSubId) return;
+    const movedEvidence = { ...evidence, subEvidenceId: toSubId };
+    setCriteriaData(prev => {
+      const updated = { ...prev };
+      updated[fromCriterionId] = {
+        ...updated[fromCriterionId],
+        evidences: updated[fromCriterionId].evidences.filter(e => e.id !== evidence.id),
+      };
+      updated[toCriterionId] = {
+        ...updated[toCriterionId],
+        evidences: [...updated[toCriterionId].evidences, movedEvidence],
+      };
+      return updated;
+    });
+    const toCrit = allCriteria.find(c => c.id === toCriterionId);
+    toast.success("تم نقل الشاهد بنجاح", {
+      description: `تم النقل إلى: ${toCrit?.title || 'بند آخر'}`,
+      duration: 3000,
+    });
+    setShowMoveDialog(null);
+  }, [allCriteria]);
 
   // ===== رفع ذكي مع تصنيف AI تلقائي =====
   const [isSmartUploading, setIsSmartUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<{ stage: string; percent: number } | null>(null);
+  const isUploadingRef = useRef(false); // flag لمنع حفظ localStorage أثناء الرفع
 
   // ===== ضغط الصورة قبل إرسالها للـ AI =====
   const compressImage = useCallback((base64: string, maxWidth = 800, quality = 0.6): Promise<string> => {
@@ -587,143 +639,238 @@ export default function PerformanceEvidence() {
     });
   }, []);
 
+  // ===== ضغط الصورة للحفظ في state (جودة متوسطة لتقليل استهلاك الذاكرة) =====
+  const compressImageForStorage = useCallback((base64: string, maxWidth = 1200, quality = 0.7): Promise<string> => {
+    return new Promise((resolve) => {
+      const img = document.createElement('img');
+      img.onload = () => {
+        try {
+          const canvas = document.createElement('canvas');
+          let w = img.width, h = img.height;
+          if (w > maxWidth) { h = (maxWidth / w) * h; w = maxWidth; }
+          canvas.width = w; canvas.height = h;
+          const ctx = canvas.getContext('2d');
+          ctx?.drawImage(img, 0, 0, w, h);
+          const compressed = canvas.toDataURL('image/jpeg', quality);
+          resolve(compressed);
+        } catch {
+          resolve(base64); // fallback to original
+        }
+      };
+      img.onerror = () => resolve(base64);
+      img.src = base64;
+    });
+  }, []);
+
+  // ===== دالة مساعدة لإضافة شاهد لبند معين =====
+  const addEvidenceToCriterion = useCallback((criterionId: string, newEv: EvidenceItem) => {
+    setCriteriaData((prev) => {
+      const existing = prev[criterionId];
+      if (!existing) return prev;
+      return {
+        ...prev,
+        [criterionId]: { ...existing, evidences: [...existing.evidences, newEv] },
+      };
+    });
+  }, []);
+
   const handleSmartUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     e.preventDefault();
     e.stopPropagation();
     const file = e.target.files?.[0];
-    if (!file) return;
+    if (!file) {
+      return;
+    }
+    
+    // مسح قيمة input فوراً لتجنب مشاكل إعادة الاستخدام
+    e.target.value = "";
     
     // التحقق من حجم الملف (16MB حد أقصى)
     if (file.size > 16 * 1024 * 1024) {
       toast.error("حجم الملف كبير جداً", { description: "الحد الأقصى 16 ميجابايت. يرجى اختيار ملف أصغر." });
-      e.target.value = "";
       return;
     }
     
+    // تفعيل flag منع الحفظ أثناء الرفع
+    isUploadingRef.current = true;
     setIsSmartUploading(true);
     setUploadProgress({ stage: "جاري قراءة الملف...", percent: 10 });
+    
+    // إزالة pending upload flag
+    try { localStorage.removeItem(STORAGE_PENDING_UPLOAD); } catch {}
+    
+    const isImage = file.type.startsWith("image/");
+    const isVideo = file.type.startsWith("video/");
     
     const reader = new FileReader();
     reader.onload = async () => {
       try {
-        const isImage = file.type.startsWith("image/");
-        const isVideo = file.type.startsWith("video/");
-        const originalBase64 = reader.result as string;
+        const rawBase64 = reader.result as string;
         
         setUploadProgress({ stage: "جاري معالجة الملف...", percent: 30 });
         
-        // ضغط الصورة قبل إرسالها للـ AI لتقليل حجم الـ payload
+        // ضغط الصورة للحفظ في state (تقليل استهلاك الذاكرة على الجوال)
+        let storageBase64 = rawBase64;
         let aiImageUrl: string | undefined;
+        
         if (isImage) {
           setUploadProgress({ stage: "جاري ضغط الصورة...", percent: 40 });
-          aiImageUrl = await compressImage(originalBase64, 800, 0.5);
+          // ضغط للحفظ في state (جودة متوسطة)
+          storageBase64 = await compressImageForStorage(rawBase64, 1200, 0.7);
+          // ضغط أكبر للإرسال للـ AI
+          aiImageUrl = await compressImage(rawBase64, 800, 0.5);
         }
 
         setUploadProgress({ stage: "جاري التصنيف بالذكاء الاصطناعي...", percent: 60 });
         
-        // إرسال للـ AI للتحليل (publicProcedure - لا يحتاج تسجيل دخول)
-        const result = await classifyMutation.mutateAsync({
-          fileName: file.name,
-          fileType: file.type,
-          description: file.name.replace(/\.[^/.]+$/, "").replace(/[-_]/g, " "),
-          fileUrl: aiImageUrl,
-        });
-
-        setUploadProgress({ stage: "جاري إضافة الشاهد...", percent: 85 });
+        // تحرير الذاكرة من الصورة الأصلية الكبيرة
+        // rawBase64 لم يعد مطلوباً بعد الضغط
         
-        if (result.success && result.classification) {
-          const cls = result.classification;
-          const targetCriterion = allCriteria.find(c =>
-            c.id === cls.standardId || c.title.includes(cls.standardName) || cls.standardName.includes(c.title)
-          );
-          if (targetCriterion && criteriaData[targetCriterion.id]) {
-            const subs = [...targetCriterion.subEvidences, ...(criteriaData[targetCriterion.id]?.customSubEvidences || [])];
-            const targetSub = (cls.indicatorIndex > 0 && subs[cls.indicatorIndex - 1]) ? subs[cls.indicatorIndex - 1] : subs[0];
-            const newEv = createEmptyEvidence(targetSub?.id || "");
-            newEv.type = isImage ? "image" : isVideo ? "video" : "file";
-            newEv.fileData = originalBase64; // حفظ الصورة الأصلية بدون ضغط
-            newEv.fileName = file.name;
-            newEv.text = cls.contentDescription || file.name;
-            newEv.displayAs = isImage ? "image" : "qr";
-            setCriteriaData((prev) => ({
-              ...prev,
-              [targetCriterion.id]: { ...prev[targetCriterion.id], evidences: [...prev[targetCriterion.id].evidences, newEv] },
-            }));
-            toast.success(`تم تصنيف الشاهد تلقائياً`, {
-              description: `البند: ${targetCriterion.title}\nالمؤشر: ${cls.indicatorText}\nالثقة: ${Math.round(cls.confidence * 100)}%`,
-              duration: 6000,
-            });
-          } else {
-            toast.info("لم يتم العثور على بند مطابق، تم إضافته للبند الأول");
-            const firstCriterion = allCriteria[0];
-            if (firstCriterion) {
-              const newEv = createEmptyEvidence(firstCriterion.subEvidences[0]?.id || "");
-              newEv.type = isImage ? "image" : isVideo ? "video" : "file";
-              newEv.fileData = originalBase64;
-              newEv.fileName = file.name;
-              newEv.displayAs = isImage ? "image" : "qr";
-              setCriteriaData((prev) => ({
-                ...prev, [firstCriterion.id]: { ...prev[firstCriterion.id], evidences: [...prev[firstCriterion.id].evidences, newEv] },
-              }));
+        let targetCriterionId: string | null = null;
+        let targetSubId: string = "";
+        let contentDesc: string = file.name;
+        let classificationSuccess = false;
+        
+        try {
+          // إرسال للـ AI للتحليل (publicProcedure - لا يحتاج تسجيل دخول)
+          const result = await classifyMutation.mutateAsync({
+            fileName: file.name,
+            fileType: file.type,
+            description: file.name.replace(/\.[^/.]+$/, "").replace(/[-_]/g, " "),
+            fileUrl: aiImageUrl,
+          });
+
+          if (result.success && result.classification) {
+            const cls = result.classification;
+            const targetCriterion = allCriteria.find(c =>
+              c.id === cls.standardId || c.title.includes(cls.standardName) || cls.standardName.includes(c.title)
+            );
+            if (targetCriterion && criteriaData[targetCriterion.id]) {
+              const subs = [...targetCriterion.subEvidences, ...(criteriaData[targetCriterion.id]?.customSubEvidences || [])];
+              const targetSub = (cls.indicatorIndex > 0 && subs[cls.indicatorIndex - 1]) ? subs[cls.indicatorIndex - 1] : subs[0];
+              targetCriterionId = targetCriterion.id;
+              targetSubId = targetSub?.id || "";
+              contentDesc = cls.contentDescription || file.name;
+              classificationSuccess = true;
+              toast.success(`تم تصنيف الشاهد تلقائياً`, {
+                description: `البند: ${targetCriterion.title}\nالمؤشر: ${cls.indicatorText}\nالثقة: ${Math.round(cls.confidence * 100)}%`,
+                duration: 6000,
+              });
             }
           }
-        } else {
-          // حتى لو فشل التصنيف، نضيف الشاهد للبند الأول
-          toast.warning("لم يتمكن النظام من تصنيف الشاهد تلقائياً", {
-            description: "تم إضافته للبند الأول. يمكنك نقله يدوياً للبند المناسب.",
-            duration: 5000,
-          });
+        } catch (aiErr) {
+          console.error("AI classification error:", aiErr);
+        }
+        
+        // إذا فشل التصنيف، نضيف للبند الأول
+        if (!classificationSuccess) {
           const firstCriterion = allCriteria[0];
           if (firstCriterion) {
-            const newEv = createEmptyEvidence(firstCriterion.subEvidences[0]?.id || "");
-            newEv.type = isImage ? "image" : isVideo ? "video" : "file";
-            newEv.fileData = originalBase64;
-            newEv.fileName = file.name;
-            newEv.displayAs = isImage ? "image" : "qr";
-            setCriteriaData((prev) => ({
-              ...prev, [firstCriterion.id]: { ...prev[firstCriterion.id], evidences: [...prev[firstCriterion.id].evidences, newEv] },
-            }));
+            targetCriterionId = firstCriterion.id;
+            targetSubId = firstCriterion.subEvidences[0]?.id || "";
+            if (!classificationSuccess) {
+              toast.warning("لم يتمكن النظام من تصنيف الشاهد تلقائياً", {
+                description: "تم إضافته للبند الأول. يمكنك نقله يدوياً للبند المناسب.",
+                duration: 5000,
+              });
+            }
           }
+        }
+        
+        setUploadProgress({ stage: "جاري إضافة الشاهد...", percent: 85 });
+        
+        // إضافة الشاهد
+        if (targetCriterionId) {
+          const newEv = createEmptyEvidence(targetSubId);
+          newEv.type = isImage ? "image" : isVideo ? "video" : "file";
+          newEv.fileData = storageBase64; // الصورة المضغوطة للحفظ
+          newEv.fileName = file.name;
+          newEv.text = contentDesc;
+          newEv.displayAs = isImage ? "image" : "qr";
+          addEvidenceToCriterion(targetCriterionId, newEv);
         }
       } catch (err: any) {
         console.error("Smart upload error:", err);
-        // منع الرجوع لصفحة تسجيل الدخول - إضافة الشاهد يدوياً
-        const isImage = file.type.startsWith("image/");
-        const isVideo = file.type.startsWith("video/");
-        const originalBase64 = reader.result as string;
-        
-        toast.warning("فشل التصنيف التلقائي", {
-          description: "تم إضافة الملف للبند الأول. يمكنك نقله يدوياً.",
+        toast.error("حدث خطأ أثناء رفع الشاهد", {
+          description: "يرجى المحاولة مرة أخرى",
           duration: 5000,
         });
-        
-        // إضافة الشاهد للبند الأول كـ fallback
-        const firstCriterion = allCriteria[0];
-        if (firstCriterion) {
-          const newEv = createEmptyEvidence(firstCriterion.subEvidences[0]?.id || "");
-          newEv.type = isImage ? "image" : isVideo ? "video" : "file";
-          newEv.fileData = originalBase64;
-          newEv.fileName = file.name;
-          newEv.displayAs = isImage ? "image" : "qr";
-          setCriteriaData((prev) => ({
-            ...prev, [firstCriterion.id]: { ...prev[firstCriterion.id], evidences: [...prev[firstCriterion.id].evidences, newEv] },
-          }));
-        }
       } finally {
         setUploadProgress({ stage: "اكتمل!", percent: 100 });
-        setTimeout(() => { setUploadProgress(null); setIsSmartUploading(false); }, 1000);
+        setTimeout(() => {
+          setUploadProgress(null);
+          setIsSmartUploading(false);
+          isUploadingRef.current = false;
+        }, 1000);
       }
     };
     reader.onerror = () => {
       toast.error("فشل قراءة الملف", { description: "يرجى المحاولة مرة أخرى" });
       setUploadProgress(null);
       setIsSmartUploading(false);
+      isUploadingRef.current = false;
     };
     reader.readAsDataURL(file);
+  }, [allCriteria, criteriaData, classifyMutation, compressImage, compressImageForStorage, addEvidenceToCriterion]);
+
+  // ===== رفع ملف عادي (بدون تصنيف ذكي) =====
+  const handleFileUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const file = e.target.files?.[0];
+    if (!file || !activeUploadRef.current) return;
+    
+    // مسح قيمة input فوراً
     e.target.value = "";
-    // إزالة pending upload flag بعد بدء الرفع بنجاح
+    
+    // التحقق من حجم الملف
+    if (file.size > 16 * 1024 * 1024) {
+      toast.error("حجم الملف كبير جداً", { description: "الحد الأقصى 16 ميجابايت" });
+      return;
+    }
+    
+    // تفعيل flag منع الحفظ أثناء الرفع
+    isUploadingRef.current = true;
+    
+    const { criterionId, subEvidenceId } = activeUploadRef.current;
+    const isImage = file.type.startsWith("image/");
+    const isVideo = file.type.startsWith("video/");
+    
+    const reader = new FileReader();
+    reader.onload = async () => {
+      try {
+        let fileData = reader.result as string;
+        // ضغط الصور لتقليل استهلاك الذاكرة
+        if (isImage) {
+          fileData = await compressImageForStorage(fileData, 1200, 0.7);
+        }
+        const newEv = createEmptyEvidence(subEvidenceId);
+        newEv.type = isImage ? "image" : isVideo ? "video" : "file";
+        newEv.fileData = fileData;
+        newEv.fileName = file.name;
+        newEv.text = file.name;
+        newEv.displayAs = isImage ? "image" : "qr";
+        addEvidenceToCriterion(criterionId, newEv);
+        toast.success("تم إضافة الشاهد بنجاح", { description: file.name, duration: 3000 });
+      } catch {
+        toast.error("فشل معالجة الملف", { description: "يرجى المحاولة مرة أخرى" });
+      } finally {
+        isUploadingRef.current = false;
+      }
+    };
+    reader.onerror = () => {
+      toast.error("فشل قراءة الملف", { description: "يرجى المحاولة مرة أخرى" });
+      isUploadingRef.current = false;
+    };
+    reader.readAsDataURL(file);
     try { localStorage.removeItem(STORAGE_PENDING_UPLOAD); } catch {}
-  }, [allCriteria, criteriaData, classifyMutation, compressImage]);
+  }, [compressImageForStorage, addEvidenceToCriterion]);
+
+  const triggerFileUpload = (criterionId: string, subEvidenceId: string) => {
+    activeUploadRef.current = { criterionId, subEvidenceId };
+    try { localStorage.setItem(STORAGE_PENDING_UPLOAD, "file"); } catch {}
+    fileInputRef.current?.click();
+  };
 
   // ===== AI Functions =====
   const callAI = async (criterionId: string, subId: string, userPrompt: string) => {
@@ -837,9 +984,15 @@ export default function PerformanceEvidence() {
   // ===== Render Evidence Item =====
   const renderEvidenceItem = (ev: EvidenceItem, criterionId: string) => (
     <motion.div key={ev.id} initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }}
-      className="bg-muted/50 rounded-xl p-4 border border-border group">
+      draggable
+      onDragStart={() => handleDragStart(ev, criterionId, ev.subEvidenceId)}
+      onDragEnd={handleDragEnd}
+      className={`bg-muted/50 rounded-xl p-4 border border-border group cursor-grab active:cursor-grabbing transition-all ${draggedEvidence?.evidence.id === ev.id ? 'opacity-40 scale-95 border-dashed border-primary' : ''}`}>
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-2">
+          <div className="cursor-grab active:cursor-grabbing text-muted-foreground/50 hover:text-muted-foreground transition-colors" title="اسحب لنقل الشاهد">
+            <GripVertical className="w-4 h-4" />
+          </div>
           {ev.type === 'text' && <Type className="w-4 h-4 text-muted-foreground" />}
           {ev.type === 'image' && <Image className="w-4 h-4 text-blue-500" />}
           {ev.type === 'link' && <LinkIcon className="w-4 h-4 text-purple-500" />}
@@ -862,6 +1015,15 @@ export default function PerformanceEvidence() {
               <TooltipContent>{ev.displayAs === 'image' ? 'تحويل لباركود QR' : 'عرض كصورة'}</TooltipContent>
             </Tooltip>
           )}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button type="button" onClick={() => setShowMoveDialog({ evidence: ev, fromCriterionId: criterionId })}
+                className="p-1.5 rounded-lg text-blue-400 hover:text-blue-600 hover:bg-blue-50">
+                <Move className="w-3.5 h-3.5" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>نقل إلى بند آخر</TooltipContent>
+          </Tooltip>
           <button type="button" onClick={() => removeEvidence(criterionId, ev.id)} className="p-1.5 rounded-lg text-red-400 hover:text-red-600 hover:bg-red-50">
             <Trash2 className="w-3.5 h-3.5" />
           </button>
@@ -1027,6 +1189,33 @@ export default function PerformanceEvidence() {
                 {isSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5 sm:w-4 sm:h-4" />}
                 <span className="hidden xs:inline">{isSaving ? "جاري الحفظ..." : "حفظ"}</span>
               </Button>
+              {/* مؤشر حالة الاتصال */}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className={`flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-medium transition-all ${
+                    !isOnline ? 'bg-red-100 text-red-700 border border-red-200' :
+                    isSyncing ? 'bg-yellow-100 text-yellow-700 border border-yellow-200' :
+                    pendingCount > 0 ? 'bg-orange-100 text-orange-700 border border-orange-200' :
+                    'bg-emerald-100 text-emerald-700 border border-emerald-200'
+                  }`}>
+                    <div className={`w-1.5 h-1.5 rounded-full ${
+                      !isOnline ? 'bg-red-500' :
+                      isSyncing ? 'bg-yellow-500 animate-pulse' :
+                      pendingCount > 0 ? 'bg-orange-500' :
+                      'bg-emerald-500'
+                    }`} />
+                    <span className="hidden sm:inline">
+                      {!isOnline ? 'غير متصل' : isSyncing ? 'جاري المزامنة' : pendingCount > 0 ? `${pendingCount} معلق` : 'متصل'}
+                    </span>
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent>
+                  {!isOnline ? 'لا يوجد اتصال - البيانات محفوظة محلياً' :
+                   isSyncing ? 'جاري مزامنة البيانات...' :
+                   pendingCount > 0 ? `${pendingCount} إجراء بانتظار المزامنة` :
+                   'متصل بالإنترنت'}
+                </TooltipContent>
+              </Tooltip>
             </div>
             <div className="flex items-center gap-2 sm:gap-3">
               <div className="flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg" style={{ backgroundColor: grade.color + '12' }}>
@@ -1077,18 +1266,65 @@ export default function PerformanceEvidence() {
 
               {/* شريط تقدم التصنيف الذكي */}
               {uploadProgress && (
-                <div className="mb-3 sm:mb-4 bg-violet-50 dark:bg-violet-950/30 rounded-lg p-3 border border-violet-200/50 animate-in fade-in duration-300">
-                  <div className="flex items-center justify-between text-xs mb-2">
-                    <div className="flex items-center gap-2">
-                      <Loader2 className="w-3.5 h-3.5 text-violet-600 animate-spin" />
-                      <span className="font-medium text-violet-700 dark:text-violet-400">{uploadProgress.stage}</span>
-                    </div>
+                <motion.div
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  className="mb-3 sm:mb-4 bg-gradient-to-r from-violet-50 to-indigo-50 dark:from-violet-950/30 dark:to-indigo-950/30 rounded-xl p-4 border border-violet-200/50 shadow-sm">
+                  {/* مراحل التقدم */}
+                  <div className="flex items-center justify-between mb-3">
+                    {[
+                      { label: "قراءة", threshold: 10, icon: Upload },
+                      { label: "ضغط", threshold: 40, icon: Image },
+                      { label: "تصنيف", threshold: 60, icon: Sparkles },
+                      { label: "إضافة", threshold: 85, icon: CheckCircle },
+                    ].map((phase, i) => {
+                      const isActive = uploadProgress.percent >= phase.threshold;
+                      const isCurrent = uploadProgress.percent >= phase.threshold && (i === 3 || uploadProgress.percent < [10, 40, 60, 85, 100][i + 1]);
+                      const PhaseIcon = phase.icon;
+                      return (
+                        <div key={phase.label} className="flex flex-col items-center gap-1 flex-1">
+                          <div className={`w-8 h-8 rounded-full flex items-center justify-center transition-all duration-500 ${
+                            isCurrent ? 'bg-violet-600 text-white shadow-lg shadow-violet-600/30 scale-110' :
+                            isActive ? 'bg-violet-500 text-white' :
+                            'bg-violet-100 text-violet-400 dark:bg-violet-900/50'
+                          }`}>
+                            {isCurrent ? <Loader2 className="w-4 h-4 animate-spin" /> : <PhaseIcon className="w-4 h-4" />}
+                          </div>
+                          <span className={`text-[9px] font-medium transition-colors ${
+                            isActive ? 'text-violet-700 dark:text-violet-300' : 'text-violet-400 dark:text-violet-600'
+                          }`}>{phase.label}</span>
+                          {i < 3 && (
+                            <div className="absolute" style={{ display: 'none' }} />
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                  {/* شريط التقدم الرئيسي */}
+                  <div className="flex items-center justify-between text-xs mb-1.5">
+                    <span className="font-medium text-violet-700 dark:text-violet-400">{uploadProgress.stage}</span>
                     <span className="font-bold text-violet-600">{uploadProgress.percent}%</span>
                   </div>
-                  <div className="w-full bg-violet-200/50 dark:bg-violet-800/30 rounded-full h-2 overflow-hidden">
-                    <div className="h-full bg-violet-600 rounded-full transition-all duration-500 ease-out" style={{ width: `${uploadProgress.percent}%` }} />
+                  <div className="w-full bg-violet-200/30 dark:bg-violet-800/30 rounded-full h-2.5 overflow-hidden">
+                    <motion.div
+                      initial={{ width: 0 }}
+                      animate={{ width: `${uploadProgress.percent}%` }}
+                      transition={{ duration: 0.5, ease: 'easeOut' }}
+                      className={`h-full rounded-full ${
+                        uploadProgress.percent === 100
+                          ? 'bg-gradient-to-r from-emerald-500 to-emerald-400'
+                          : 'bg-gradient-to-r from-violet-600 to-indigo-500'
+                      }`}
+                    />
                   </div>
-                </div>
+                  {uploadProgress.percent === 100 && (
+                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex items-center gap-1.5 mt-2 text-emerald-600">
+                      <CheckCircle className="w-3.5 h-3.5" />
+                      <span className="text-xs font-medium">تم بنجاح!</span>
+                    </motion.div>
+                  )}
+                </motion.div>
               )}
 
               {/* شريط التقدم العام */}
@@ -1369,8 +1605,13 @@ export default function PerformanceEvidence() {
               const aiMessages = aiChat[aiKey] || [];
               const hasFormEvidence = subEvidences.some(e => e.formData && Object.keys(e.formData).length > 0);
 
+              const isDropTarget = dragOverTarget?.criterionId === currentCriterion.id && dragOverTarget?.subId === sub.id;
               return (
-                <Card key={sub.id} className={`overflow-hidden transition-all ${isExpanded ? 'border-primary/30 shadow-sm' : 'border-border/50'}`}>
+                <Card key={sub.id}
+                  onDragOver={(e) => handleDragOver(e, currentCriterion.id, sub.id)}
+                  onDragLeave={handleDragLeave}
+                  onDrop={(e) => handleDrop(e, currentCriterion.id, sub.id)}
+                  className={`overflow-hidden transition-all ${isExpanded ? 'border-primary/30 shadow-sm' : 'border-border/50'} ${isDropTarget ? 'border-2 border-dashed border-primary bg-primary/5 shadow-lg scale-[1.01]' : ''} ${draggedEvidence ? 'hover:border-primary/50' : ''}`}>
                   <div role="button" tabIndex={0} onClick={() => {
                     setExpandedSubEvidence(isExpanded ? null : sub.id);
                     if (!isExpanded && (sub.type === 'report' || sub.type === 'both') && sub.formFields && !hasFormEvidence) {
@@ -1457,6 +1698,15 @@ export default function PerformanceEvidence() {
                             );
                           })()}
 
+                          {/* Drop Indicator */}
+                          {isDropTarget && draggedEvidence && (
+                            <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }}
+                              className="bg-primary/10 border-2 border-dashed border-primary rounded-xl p-4 text-center">
+                              <Move className="w-5 h-5 text-primary mx-auto mb-1" />
+                              <p className="text-xs font-medium text-primary">أفلت هنا لنقل الشاهد</p>
+                            </motion.div>
+                          )}
+
                           {/* Evidences List */}
                           {subEvidences.filter(e => {
                             if (e.formData && Object.keys(e.formData).some(k => e.formData![k])) return false;
@@ -1534,6 +1784,47 @@ export default function PerformanceEvidence() {
             <Button variant="outline" size="sm" className="mt-3 gap-1.5 border-dashed" onClick={() => setShowAddSub(currentCriterion.id)}>
               <Plus className="w-3.5 h-3.5" />إضافة قسم فرعي مخصص
             </Button>
+          )}
+
+          {/* Move Evidence Dialog */}
+          {showMoveDialog && (
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setShowMoveDialog(null)}>
+              <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
+                className="bg-background rounded-2xl shadow-2xl max-w-md w-full max-h-[80vh] overflow-hidden" onClick={(e) => e.stopPropagation()}>
+                <div className="p-4 border-b border-border flex items-center justify-between">
+                  <h3 className="font-bold text-foreground flex items-center gap-2">
+                    <Move className="w-4 h-4 text-primary" />نقل الشاهد إلى بند آخر
+                  </h3>
+                  <button type="button" onClick={() => setShowMoveDialog(null)} className="p-1 rounded-lg hover:bg-muted">
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+                <div className="p-2 overflow-y-auto max-h-[60vh]">
+                  {allCriteria.map((crit) => {
+                    const critData = criteriaData[crit.id];
+                    const allSubs = [...crit.subEvidences, ...(critData?.customSubEvidences || [])];
+                    const isCurrent = crit.id === showMoveDialog.fromCriterionId;
+                    return (
+                      <div key={crit.id} className={`mb-1 ${isCurrent ? 'opacity-50' : ''}`}>
+                        <div className="px-3 py-2 text-xs font-bold text-muted-foreground">{crit.title}</div>
+                        {allSubs.map((sub) => (
+                          <button type="button" key={sub.id}
+                            disabled={isCurrent && showMoveDialog.evidence.subEvidenceId === sub.id}
+                            onClick={() => moveEvidenceToCriterion(showMoveDialog.evidence, showMoveDialog.fromCriterionId, crit.id, sub.id)}
+                            className="w-full text-right px-4 py-2.5 hover:bg-muted/80 rounded-lg flex items-center gap-2 transition-colors disabled:opacity-30 disabled:cursor-not-allowed">
+                            <Layers className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                            <span className="text-sm truncate">{sub.title}</span>
+                            {isCurrent && showMoveDialog.evidence.subEvidenceId === sub.id && (
+                              <Badge variant="secondary" className="text-[9px] mr-auto">الموقع الحالي</Badge>
+                            )}
+                          </button>
+                        ))}
+                      </div>
+                    );
+                  })}
+                </div>
+              </motion.div>
+            </motion.div>
           )}
 
           {/* Navigation */}
