@@ -1,8 +1,8 @@
 /**
  * شواهد الأداء الوظيفي - النسخة النهائية المتقدمة
- * ✅ ذكاء اصطناعي API حقيقي (OpenAI compatible)
+ * ✅ ذكاء اصطناعي حقيقي عبر tRPC + invokeLLM (بدون حاجة لمفتاح API)
  * ✅ إضافة شاهد واحد بزر واحد (بدل 5 خانات)
- * ✅ إضافة أقسام فرعية جديدة من المستخدم
+ * ✅ إضافة أقسام رئيسية وفرعية جديدة من المستخدم
  * ✅ معاينة ذكية: صور كصور، ملفات/فيديو/روابط → باركود QR حقيقي
  * ✅ PDF بثيمات متعددة
  * ✅ حفظ واستعادة محلي
@@ -13,12 +13,13 @@ import {
   ArrowLeft, ArrowRight, Download, Printer, Eye, ChevronDown, ChevronUp,
   Plus, Trash2, Upload, Link as LinkIcon, QrCode, Image,
   FileText, Video, Type, Sparkles, Save, X,
-  Bot, Lightbulb, ChevronLeft, Star, BarChart3, Layers,
-  Settings, Loader2, Send, PlusCircle, GripVertical
+  Bot, ChevronLeft, BarChart3, Layers,
+  Loader2, Send, PlusCircle
 } from "lucide-react";
 import { useLocation } from "wouter";
 import { exportToPDF, printElement } from "@/lib/pdf-export";
 import { generateQRDataURL } from "@/lib/qr-utils";
+import { trpc } from "@/lib/trpc";
 
 // ===== أنواع البيانات =====
 type EvidenceType = "text" | "image" | "link" | "file" | "video";
@@ -61,8 +62,16 @@ interface CriterionData {
   customSubEvidences: SubEvidence[];
 }
 
+interface Criterion {
+  id: string;
+  title: string;
+  maxScore: number;
+  description: string;
+  subEvidences: SubEvidence[];
+}
+
 // ===== البنود الحقيقية لتقييم أداء المعلم (12 بند) =====
-const TEACHER_CRITERIA = [
+const TEACHER_CRITERIA: Criterion[] = [
   {
     id: "t1", title: "أداء الواجبات الوظيفية", maxScore: 5,
     description: "الالتزام بالحضور والانصراف وتنفيذ المهام الموكلة والمشاركة في الأعمال المدرسية",
@@ -77,7 +86,6 @@ const TEACHER_CRITERIA = [
           { id: "segments", label: "فقرات الإذاعة", type: "textarea" as const, placeholder: "القرآن الكريم - الحديث الشريف - كلمة الصباح..." },
           { id: "notes", label: "ملاحظات إضافية", type: "textarea" as const, placeholder: "أي ملاحظات حول التنفيذ" },
         ],
-        aiSuggestions: ["تقرير إذاعة مدرسية", "توثيق فقرات الإذاعة"],
       },
       {
         id: "t1-2", title: "تقرير تنفيذ نشاط لا صفي", description: "توثيق الأنشطة اللاصفية",
@@ -90,7 +98,6 @@ const TEACHER_CRITERIA = [
           { id: "description", label: "وصف النشاط", type: "textarea" as const, placeholder: "وصف تفصيلي..." },
           { id: "results", label: "النتائج والتوصيات", type: "textarea" as const, placeholder: "ما تم تحقيقه..." },
         ],
-        aiSuggestions: ["تقرير نشاط لاصفي", "توثيق الأنشطة"],
       },
       {
         id: "t1-3", title: "تقرير حصة انتظار", description: "توثيق حصص الانتظار",
@@ -101,7 +108,6 @@ const TEACHER_CRITERIA = [
           { id: "period", label: "رقم الحصة", type: "select" as const, options: ["الأولى", "الثانية", "الثالثة", "الرابعة", "الخامسة", "السادسة", "السابعة"] },
           { id: "activities", label: "الأنشطة المنفذة", type: "textarea" as const, placeholder: "ما تم تنفيذه..." },
         ],
-        aiSuggestions: ["تقرير حصة انتظار"],
       },
       {
         id: "t1-4", title: "المشاركة في لجان المدرسة", description: "توثيق المشاركة في اللجان",
@@ -111,7 +117,6 @@ const TEACHER_CRITERIA = [
           { id: "role", label: "الدور في اللجنة", type: "text" as const, placeholder: "عضو / مقرر / رئيس" },
           { id: "tasks", label: "المهام المنفذة", type: "textarea" as const, placeholder: "المهام التي تم تنفيذها..." },
         ],
-        aiSuggestions: ["تقرير مشاركة في لجنة"],
       },
       {
         id: "t1-5", title: "الإشراف اليومي", description: "توثيق الإشراف اليومي",
@@ -121,7 +126,6 @@ const TEACHER_CRITERIA = [
           { id: "date", label: "التاريخ", type: "date" as const, required: true },
           { id: "observations", label: "الملاحظات", type: "textarea" as const, placeholder: "ملاحظات الإشراف..." },
         ],
-        aiSuggestions: ["تقرير إشراف يومي"],
       },
     ],
   },
@@ -137,21 +141,21 @@ const TEACHER_CRITERIA = [
           { id: "lesson", label: "عنوان الدرس", type: "text" as const },
           { id: "strengths", label: "نقاط القوة", type: "textarea" as const },
           { id: "improvements", label: "نقاط التحسين", type: "textarea" as const },
-        ], aiSuggestions: ["تقرير زيارة تبادلية"] },
+        ] },
       { id: "t2-2", title: "محضر مجتمع التعلم المهني", description: "توثيق اجتماعات مجتمع التعلم", type: "report" as const,
         formFields: [
           { id: "topic", label: "الموضوع", type: "text" as const, required: true },
           { id: "date", label: "التاريخ", type: "date" as const, required: true },
           { id: "attendees", label: "الحضور", type: "textarea" as const },
           { id: "outcomes", label: "المخرجات", type: "textarea" as const },
-        ], aiSuggestions: ["محضر مجتمع تعلم مهني"] },
+        ] },
       { id: "t2-3", title: "بحث الدرس", description: "توثيق بحث الدرس التعاوني", type: "report" as const,
         formFields: [
           { id: "lesson", label: "عنوان الدرس", type: "text" as const, required: true },
           { id: "team", label: "فريق العمل", type: "textarea" as const },
           { id: "findings", label: "النتائج", type: "textarea" as const },
-        ], aiSuggestions: ["تقرير بحث درس"] },
-      { id: "t2-4", title: "شهادات الدورات التدريبية", description: "توثيق الدورات والورش", type: "upload" as const, aiSuggestions: ["شهادة دورة تدريبية"] },
+        ] },
+      { id: "t2-4", title: "شهادات الدورات التدريبية", description: "توثيق الدورات والورش", type: "upload" as const },
     ],
   },
   {
@@ -165,13 +169,13 @@ const TEACHER_CRITERIA = [
           { id: "date", label: "التاريخ", type: "date" as const },
           { id: "method", label: "وسيلة التواصل", type: "select" as const, options: ["حضوري", "هاتفي", "رسالة نصية", "تطبيق مدرستي", "أخرى"] },
           { id: "topic", label: "الموضوع", type: "textarea" as const },
-        ], aiSuggestions: ["تقرير تواصل مع ولي أمر"] },
+        ] },
       { id: "t3-2", title: "تقرير مشاركة مجتمعية", description: "توثيق الشراكات المجتمعية", type: "both" as const,
         formFields: [
           { id: "activity", label: "النشاط", type: "text" as const },
           { id: "partner", label: "الجهة الشريكة", type: "text" as const },
           { id: "description", label: "الوصف", type: "textarea" as const },
-        ], aiSuggestions: ["تقرير مشاركة مجتمعية"] },
+        ] },
     ],
   },
   {
@@ -185,8 +189,8 @@ const TEACHER_CRITERIA = [
           { id: "lesson", label: "الدرس", type: "text" as const },
           { id: "steps", label: "خطوات التنفيذ", type: "textarea" as const },
           { id: "results", label: "النتائج", type: "textarea" as const },
-        ], aiSuggestions: ["تقرير تطبيق استراتيجية تدريسية"] },
-      { id: "t4-2", title: "صور/فيديو تطبيق الاستراتيجيات", description: "توثيق بصري", type: "upload" as const, aiSuggestions: ["صور تطبيق استراتيجيات"] },
+        ] },
+      { id: "t4-2", title: "صور/فيديو تطبيق الاستراتيجيات", description: "توثيق بصري", type: "upload" as const },
     ],
   },
   {
@@ -199,19 +203,19 @@ const TEACHER_CRITERIA = [
           { id: "current_level", label: "المستوى الحالي", type: "textarea" as const },
           { id: "target", label: "المستوى المستهدف", type: "textarea" as const },
           { id: "strategies", label: "الاستراتيجيات المتبعة", type: "textarea" as const },
-        ], aiSuggestions: ["خطة تحسين نتائج"] },
+        ] },
       { id: "t5-2", title: "مقارنة النتائج قبل وبعد", description: "مقارنة النتائج", type: "both" as const,
         formFields: [
           { id: "before", label: "النتائج قبل", type: "textarea" as const },
           { id: "after", label: "النتائج بعد", type: "textarea" as const },
           { id: "analysis", label: "التحليل", type: "textarea" as const },
-        ], aiSuggestions: ["مقارنة نتائج قبل وبعد"] },
+        ] },
       { id: "t5-3", title: "برامج التقوية والمعالجة", description: "توثيق برامج التقوية", type: "report" as const,
         formFields: [
           { id: "program", label: "اسم البرنامج", type: "text" as const },
           { id: "target_students", label: "الطلاب المستهدفون", type: "textarea" as const },
           { id: "activities", label: "الأنشطة", type: "textarea" as const },
-        ], aiSuggestions: ["تقرير برنامج تقوية"] },
+        ] },
     ],
   },
   {
@@ -225,18 +229,13 @@ const TEACHER_CRITERIA = [
           { id: "objectives", label: "الأهداف", type: "textarea" as const },
           { id: "activities", label: "الأنشطة", type: "textarea" as const },
           { id: "assessment", label: "التقويم", type: "textarea" as const },
-        ], aiSuggestions: ["نموذج تحضير درس"] },
+        ] },
       { id: "t6-2", title: "توزيع المنهج", description: "خطة توزيع المنهج", type: "both" as const,
         formFields: [
           { id: "subject", label: "المادة", type: "text" as const },
           { id: "semester", label: "الفصل الدراسي", type: "text" as const },
           { id: "distribution", label: "التوزيع", type: "textarea" as const },
-        ], aiSuggestions: ["توزيع منهج دراسي"] },
-      { id: "t6-3", title: "خريطة نواتج التعلم", description: "خريطة المنهج", type: "both" as const,
-        formFields: [
-          { id: "subject", label: "المادة", type: "text" as const },
-          { id: "outcomes", label: "نواتج التعلم", type: "textarea" as const },
-        ], aiSuggestions: ["خريطة نواتج تعلم"] },
+        ] },
     ],
   },
   {
@@ -249,24 +248,24 @@ const TEACHER_CRITERIA = [
           { id: "subject", label: "المادة", type: "text" as const },
           { id: "usage", label: "كيفية الاستخدام", type: "textarea" as const },
           { id: "impact", label: "الأثر على التعلم", type: "textarea" as const },
-        ], aiSuggestions: ["تقرير توظيف تقنية تعليمية"] },
+        ] },
       { id: "t7-2", title: "وسائل تعليمية", description: "توثيق الوسائل التعليمية", type: "both" as const,
         formFields: [
           { id: "tool_name", label: "اسم الوسيلة", type: "text" as const },
           { id: "description", label: "الوصف", type: "textarea" as const },
-        ], aiSuggestions: ["وسيلة تعليمية مبتكرة"] },
+        ] },
     ],
   },
   {
     id: "t8", title: "تهيئة البيئة التعليمية", maxScore: 5,
     description: "توفير بيئة تعليمية محفزة وآمنة تدعم التعلم الفعال",
     subEvidences: [
-      { id: "t8-1", title: "صور البيئة الصفية", description: "توثيق بصري للبيئة الصفية", type: "upload" as const, aiSuggestions: ["صور البيئة الصفية المحفزة"] },
+      { id: "t8-1", title: "صور البيئة الصفية", description: "توثيق بصري للبيئة الصفية", type: "upload" as const },
       { id: "t8-2", title: "ركن التعلم", description: "توثيق أركان التعلم", type: "both" as const,
         formFields: [
           { id: "corner_name", label: "اسم الركن", type: "text" as const },
           { id: "description", label: "الوصف", type: "textarea" as const },
-        ], aiSuggestions: ["ركن تعلم مبتكر"] },
+        ] },
     ],
   },
   {
@@ -277,12 +276,12 @@ const TEACHER_CRITERIA = [
         formFields: [
           { id: "rules", label: "قوانين الصف", type: "textarea" as const, placeholder: "1. الاستئذان\n2. احترام الآخرين..." },
           { id: "rewards", label: "نظام المكافآت", type: "textarea" as const },
-        ], aiSuggestions: ["قوانين صفية"] },
+        ] },
       { id: "t9-2", title: "خطة السلوك الإيجابي", description: "تعزيز السلوك الإيجابي", type: "report" as const,
         formFields: [
           { id: "behaviors", label: "السلوكيات المستهدفة", type: "textarea" as const },
           { id: "reinforcement", label: "أساليب التعزيز", type: "textarea" as const },
-        ], aiSuggestions: ["خطة سلوك إيجابي"] },
+        ] },
     ],
   },
   {
@@ -299,15 +298,15 @@ const TEACHER_CRITERIA = [
           { id: "fail_count", label: "عدد الراسبين", type: "number" as const },
           { id: "average", label: "المتوسط", type: "number" as const },
           { id: "analysis", label: "التحليل والتوصيات", type: "textarea" as const },
-        ], aiSuggestions: ["تحليل نتائج مادة دراسية"] },
+        ] },
       { id: "t10-2", title: "كشف تصنيف الطلاب", description: "تصنيف حسب المستوى", type: "report" as const,
         formFields: [
           { id: "subject", label: "المادة", type: "text" as const },
           { id: "excellent", label: "متفوقون (90-100)", type: "textarea" as const },
           { id: "good", label: "جيد جداً (80-89)", type: "textarea" as const },
-          { id: "average", label: "جيد (70-79)", type: "textarea" as const },
+          { id: "avg", label: "جيد (70-79)", type: "textarea" as const },
           { id: "weak", label: "ضعيف (أقل من 60)", type: "textarea" as const },
-        ], aiSuggestions: ["كشف تصنيف طلاب"] },
+        ] },
     ],
   },
   {
@@ -319,18 +318,13 @@ const TEACHER_CRITERIA = [
           { id: "subject", label: "المادة", type: "text" as const, required: true },
           { id: "skills", label: "المهارات المستهدفة", type: "textarea" as const },
           { id: "results_summary", label: "ملخص النتائج", type: "textarea" as const },
-        ], aiSuggestions: ["اختبار تشخيصي"] },
+        ] },
       { id: "t11-2", title: "تقويم بديل (مشروع/ملف إنجاز)", description: "أساليب تقويم بديلة", type: "both" as const,
         formFields: [
-          { id: "type", label: "نوع التقويم", type: "select" as const, options: ["مشروع", "ملف إنجاز", "عرض تقديمي", "بحث", "أخرى"] },
+          { id: "eval_type", label: "نوع التقويم", type: "select" as const, options: ["مشروع", "ملف إنجاز", "عرض تقديمي", "بحث", "أخرى"] },
           { id: "description", label: "الوصف", type: "textarea" as const },
           { id: "criteria", label: "معايير التقييم", type: "textarea" as const },
-        ], aiSuggestions: ["تقويم بديل"] },
-      { id: "t11-3", title: "سلالم التقدير (روبريك)", description: "معايير تقييم واضحة", type: "both" as const,
-        formFields: [
-          { id: "skill", label: "المهارة", type: "text" as const },
-          { id: "levels", label: "مستويات الأداء", type: "textarea" as const },
-        ], aiSuggestions: ["سلم تقدير"] },
+        ] },
     ],
   },
   {
@@ -344,102 +338,106 @@ const TEACHER_CRITERIA = [
           { id: "target", label: "الفئة المستهدفة", type: "text" as const },
           { id: "description", label: "الوصف", type: "textarea" as const },
           { id: "results", label: "النتائج", type: "textarea" as const },
-        ], aiSuggestions: ["تقرير برنامج طلابي"] },
-      { id: "t12-2", title: "صور الأنشطة والبرامج", description: "توثيق بصري", type: "upload" as const, aiSuggestions: ["صور أنشطة طلابية"] },
+        ] },
+      { id: "t12-2", title: "صور الأنشطة والبرامج", description: "توثيق بصري", type: "upload" as const },
       { id: "t12-3", title: "خطة النشاط الطلابي", description: "خطة الأنشطة", type: "report" as const,
         formFields: [
           { id: "semester", label: "الفصل", type: "text" as const },
           { id: "activities", label: "الأنشطة المخططة", type: "textarea" as const },
           { id: "timeline", label: "الجدول الزمني", type: "textarea" as const },
-        ], aiSuggestions: ["خطة نشاط طلابي"] },
+        ] },
     ],
   },
 ];
 
-// ===== بنود بقية الوظائف =====
-const PRINCIPAL_CRITERIA = [
-  { id: "p1", title: "القيادة المدرسية", maxScore: 5, description: "قيادة المدرسة بفاعلية", subEvidences: [
-    { id: "p1-1", title: "الخطة التشغيلية", type: "both" as const, description: "إعداد الخطة التشغيلية", formFields: [{ id: "plan", label: "ملخص الخطة", type: "textarea" as const }], aiSuggestions: ["خطة تشغيلية"] },
-    { id: "p1-2", title: "محاضر اجتماعات مجلس المدرسة", type: "both" as const, description: "توثيق الاجتماعات", formFields: [{ id: "meeting", label: "ملخص الاجتماع", type: "textarea" as const }], aiSuggestions: ["محضر اجتماع"] },
-  ]},
-  { id: "p2", title: "التخطيط الاستراتيجي", maxScore: 5, description: "وضع خطط استراتيجية", subEvidences: [{ id: "p2-1", title: "الخطة الاستراتيجية", type: "both" as const, description: "الخطة الاستراتيجية", formFields: [{ id: "strategy", label: "ملخص الخطة", type: "textarea" as const }], aiSuggestions: ["خطة استراتيجية"] }] },
-  { id: "p3", title: "إدارة الموارد البشرية", maxScore: 5, description: "إدارة وتطوير الكوادر", subEvidences: [{ id: "p3-1", title: "خطة التطوير المهني", type: "both" as const, description: "تطوير المعلمين", formFields: [{ id: "plan", label: "ملخص الخطة", type: "textarea" as const }], aiSuggestions: ["خطة تطوير مهني"] }] },
-  { id: "p4", title: "إدارة البيئة المدرسية", maxScore: 5, description: "توفير بيئة آمنة", subEvidences: [{ id: "p4-1", title: "تقرير السلامة", type: "report" as const, description: "تقرير السلامة", formFields: [{ id: "report", label: "التقرير", type: "textarea" as const }], aiSuggestions: ["تقرير سلامة"] }] },
-  { id: "p5", title: "العلاقات المجتمعية", maxScore: 5, description: "تعزيز الشراكة", subEvidences: [{ id: "p5-1", title: "سجل الشراكة المجتمعية", type: "both" as const, description: "توثيق الشراكات", formFields: [{ id: "partnership", label: "التفاصيل", type: "textarea" as const }], aiSuggestions: ["شراكة مجتمعية"] }] },
-  { id: "p6", title: "التطوير المهني", maxScore: 5, description: "دعم التطوير", subEvidences: [{ id: "p6-1", title: "خطة التدريب", type: "both" as const, description: "خطة التدريب", formFields: [{ id: "plan", label: "الملخص", type: "textarea" as const }], aiSuggestions: ["خطة تدريب"] }] },
-  { id: "p7", title: "الإشراف على العملية التعليمية", maxScore: 5, description: "متابعة العملية التعليمية", subEvidences: [{ id: "p7-1", title: "سجل الزيارات الصفية", type: "both" as const, description: "توثيق الزيارات", formFields: [{ id: "visits", label: "الملخص", type: "textarea" as const }], aiSuggestions: ["سجل زيارات صفية"] }] },
-  { id: "p8", title: "تحسين نتائج الطلاب", maxScore: 5, description: "رفع مستوى التحصيل", subEvidences: [{ id: "p8-1", title: "تقرير تحليل النتائج", type: "both" as const, description: "تحليل النتائج", formFields: [{ id: "analysis", label: "التحليل", type: "textarea" as const }], aiSuggestions: ["تحليل نتائج"] }] },
-  { id: "p9", title: "إدارة الأزمات", maxScore: 5, description: "الاستعداد للأزمات", subEvidences: [{ id: "p9-1", title: "خطة إدارة الأزمات", type: "both" as const, description: "خطة الطوارئ", formFields: [{ id: "plan", label: "الملخص", type: "textarea" as const }], aiSuggestions: ["خطة أزمات"] }] },
-];
+// ===== بنود بقية الوظائف (مختصرة) =====
+function makeSimpleCriteria(prefix: string, items: { id: string; title: string; desc: string; subTitle: string }[]): Criterion[] {
+  return items.map(item => ({
+    id: `${prefix}${item.id}`, title: item.title, maxScore: 5, description: item.desc,
+    subEvidences: [{ id: `${prefix}${item.id}-1`, title: item.subTitle, type: "both" as const, description: item.desc, formFields: [{ id: "content", label: "المحتوى", type: "textarea" as const, placeholder: "أدخل التفاصيل..." }] }],
+  }));
+}
 
-const VICE_PRINCIPAL_CRITERIA = [
-  { id: "v1", title: "المشاركة في التخطيط", maxScore: 5, description: "المشاركة في إعداد الخطط", subEvidences: [{ id: "v1-1", title: "الخطة التشغيلية", type: "both" as const, description: "المشاركة في الخطة", formFields: [{ id: "plan", label: "الملخص", type: "textarea" as const }], aiSuggestions: ["خطة تشغيلية"] }] },
-  { id: "v2", title: "متابعة الحضور والغياب", maxScore: 5, description: "متابعة الحضور", subEvidences: [{ id: "v2-1", title: "سجل الحضور", type: "both" as const, description: "توثيق الحضور", formFields: [{ id: "record", label: "الملخص", type: "textarea" as const }], aiSuggestions: ["سجل حضور"] }] },
-  { id: "v3", title: "الإشراف على الاختبارات", maxScore: 5, description: "تنظيم الاختبارات", subEvidences: [{ id: "v3-1", title: "جدول الاختبارات", type: "both" as const, description: "إعداد الجداول", formFields: [{ id: "schedule", label: "الجدول", type: "textarea" as const }], aiSuggestions: ["جدول اختبارات"] }] },
-  { id: "v4", title: "متابعة النظام والانضباط", maxScore: 5, description: "الحفاظ على النظام", subEvidences: [{ id: "v4-1", title: "سجل الملاحظات السلوكية", type: "both" as const, description: "توثيق السلوك", formFields: [{ id: "notes", label: "الملاحظات", type: "textarea" as const }], aiSuggestions: ["سجل سلوكي"] }] },
-  { id: "v5", title: "إدارة شؤون الطلاب", maxScore: 5, description: "إدارة الشؤون", subEvidences: [{ id: "v5-1", title: "سجل شؤون الطلاب", type: "both" as const, description: "توثيق الشؤون", formFields: [{ id: "record", label: "الملخص", type: "textarea" as const }], aiSuggestions: ["سجل شؤون طلاب"] }] },
-  { id: "v6", title: "التواصل مع أولياء الأمور", maxScore: 5, description: "التواصل المستمر", subEvidences: [{ id: "v6-1", title: "سجل التواصل", type: "both" as const, description: "توثيق التواصل", formFields: [{ id: "comm", label: "الملخص", type: "textarea" as const }], aiSuggestions: ["سجل تواصل"] }] },
-  { id: "v7", title: "الإشراف على الأنشطة", maxScore: 5, description: "الإشراف على الأنشطة", subEvidences: [{ id: "v7-1", title: "خطة الأنشطة", type: "both" as const, description: "توثيق الأنشطة", formFields: [{ id: "activities", label: "الملخص", type: "textarea" as const }], aiSuggestions: ["خطة أنشطة"] }] },
-];
+const PRINCIPAL_CRITERIA = makeSimpleCriteria("p", [
+  { id: "1", title: "القيادة المدرسية", desc: "قيادة المدرسة بفاعلية", subTitle: "الخطة التشغيلية" },
+  { id: "2", title: "التخطيط الاستراتيجي", desc: "وضع خطط استراتيجية", subTitle: "الخطة الاستراتيجية" },
+  { id: "3", title: "إدارة الموارد البشرية", desc: "إدارة وتطوير الكوادر", subTitle: "خطة التطوير المهني" },
+  { id: "4", title: "إدارة البيئة المدرسية", desc: "توفير بيئة آمنة", subTitle: "تقرير السلامة" },
+  { id: "5", title: "العلاقات المجتمعية", desc: "تعزيز الشراكة", subTitle: "سجل الشراكة المجتمعية" },
+  { id: "6", title: "التطوير المهني", desc: "دعم التطوير", subTitle: "خطة التدريب" },
+  { id: "7", title: "الإشراف على العملية التعليمية", desc: "متابعة العملية التعليمية", subTitle: "سجل الزيارات الصفية" },
+  { id: "8", title: "تحسين نتائج الطلاب", desc: "رفع مستوى التحصيل", subTitle: "تقرير تحليل النتائج" },
+  { id: "9", title: "إدارة الأزمات", desc: "الاستعداد للأزمات", subTitle: "خطة إدارة الأزمات" },
+]);
 
-const COUNSELOR_CRITERIA = [
-  { id: "c1", title: "التوجيه والإرشاد الفردي", maxScore: 5, description: "تقديم خدمات الإرشاد", subEvidences: [{ id: "c1-1", title: "سجل الحالات الفردية", type: "both" as const, description: "توثيق الحالات", formFields: [{ id: "cases", label: "الملخص", type: "textarea" as const }], aiSuggestions: ["سجل حالات فردية"] }] },
-  { id: "c2", title: "التوجيه الجماعي", maxScore: 5, description: "تنفيذ برامج جماعية", subEvidences: [{ id: "c2-1", title: "خطة البرامج الجماعية", type: "both" as const, description: "توثيق البرامج", formFields: [{ id: "programs", label: "الملخص", type: "textarea" as const }], aiSuggestions: ["برنامج إرشاد جماعي"] }] },
-  { id: "c3", title: "البرامج الوقائية", maxScore: 5, description: "تنفيذ البرامج الوقائية", subEvidences: [{ id: "c3-1", title: "خطة البرامج الوقائية", type: "both" as const, description: "توثيق البرامج", formFields: [{ id: "programs", label: "الملخص", type: "textarea" as const }], aiSuggestions: ["برنامج وقائي"] }] },
-  { id: "c4", title: "البرامج العلاجية", maxScore: 5, description: "تنفيذ البرامج العلاجية", subEvidences: [{ id: "c4-1", title: "خطط العلاج", type: "both" as const, description: "توثيق العلاج", formFields: [{ id: "plans", label: "الملخص", type: "textarea" as const }], aiSuggestions: ["برنامج علاجي"] }] },
-  { id: "c5", title: "التواصل مع أولياء الأمور", maxScore: 5, description: "التواصل المستمر", subEvidences: [{ id: "c5-1", title: "سجل التواصل", type: "both" as const, description: "توثيق التواصل", formFields: [{ id: "comm", label: "الملخص", type: "textarea" as const }], aiSuggestions: ["سجل تواصل"] }] },
-  { id: "c6", title: "دراسة الحالات السلوكية", maxScore: 5, description: "دراسة الحالات", subEvidences: [{ id: "c6-1", title: "ملفات الحالات", type: "both" as const, description: "توثيق الدراسة", formFields: [{ id: "cases", label: "الملخص", type: "textarea" as const }], aiSuggestions: ["دراسة حالة سلوكية"] }] },
-  { id: "c7", title: "التقارير والإحصاءات", maxScore: 5, description: "إعداد التقارير", subEvidences: [{ id: "c7-1", title: "التقارير الشهرية", type: "both" as const, description: "توثيق التقارير", formFields: [{ id: "reports", label: "الملخص", type: "textarea" as const }], aiSuggestions: ["تقرير شهري"] }] },
-];
+const VICE_PRINCIPAL_CRITERIA = makeSimpleCriteria("v", [
+  { id: "1", title: "المشاركة في التخطيط", desc: "المشاركة في إعداد الخطط", subTitle: "الخطة التشغيلية" },
+  { id: "2", title: "متابعة الحضور والغياب", desc: "متابعة الحضور", subTitle: "سجل الحضور" },
+  { id: "3", title: "الإشراف على الاختبارات", desc: "تنظيم الاختبارات", subTitle: "جدول الاختبارات" },
+  { id: "4", title: "متابعة النظام والانضباط", desc: "الحفاظ على النظام", subTitle: "سجل الملاحظات السلوكية" },
+  { id: "5", title: "إدارة شؤون الطلاب", desc: "إدارة الشؤون", subTitle: "سجل شؤون الطلاب" },
+  { id: "6", title: "التواصل مع أولياء الأمور", desc: "التواصل المستمر", subTitle: "سجل التواصل" },
+  { id: "7", title: "الإشراف على الأنشطة", desc: "الإشراف على الأنشطة", subTitle: "خطة الأنشطة" },
+]);
 
-const HEALTH_COUNSELOR_CRITERIA = [
-  { id: "h1", title: "التثقيف الصحي", maxScore: 5, description: "تنفيذ برامج التثقيف", subEvidences: [{ id: "h1-1", title: "خطة التثقيف الصحي", type: "both" as const, description: "توثيق البرامج", formFields: [{ id: "plan", label: "الملخص", type: "textarea" as const }], aiSuggestions: ["برنامج تثقيف صحي"] }] },
-  { id: "h2", title: "الإسعافات الأولية", maxScore: 5, description: "تقديم الإسعافات", subEvidences: [{ id: "h2-1", title: "سجل الإسعافات", type: "both" as const, description: "توثيق الإسعافات", formFields: [{ id: "record", label: "الملخص", type: "textarea" as const }], aiSuggestions: ["سجل إسعافات"] }] },
-  { id: "h3", title: "البيئة الصحية", maxScore: 5, description: "متابعة البيئة الصحية", subEvidences: [{ id: "h3-1", title: "تقارير المتابعة", type: "both" as const, description: "توثيق المتابعة", formFields: [{ id: "reports", label: "الملخص", type: "textarea" as const }], aiSuggestions: ["تقرير بيئة صحية"] }] },
-  { id: "h4", title: "متابعة الحالات الصحية", maxScore: 5, description: "متابعة الحالات المزمنة", subEvidences: [{ id: "h4-1", title: "سجل الحالات", type: "both" as const, description: "توثيق الحالات", formFields: [{ id: "cases", label: "الملخص", type: "textarea" as const }], aiSuggestions: ["سجل حالات صحية"] }] },
-  { id: "h5", title: "التقارير الصحية", maxScore: 5, description: "إعداد التقارير", subEvidences: [{ id: "h5-1", title: "التقارير الشهرية", type: "both" as const, description: "توثيق التقارير", formFields: [{ id: "reports", label: "الملخص", type: "textarea" as const }], aiSuggestions: ["تقرير صحي شهري"] }] },
-];
+const COUNSELOR_CRITERIA = makeSimpleCriteria("c", [
+  { id: "1", title: "التوجيه والإرشاد الفردي", desc: "تقديم خدمات الإرشاد", subTitle: "سجل الحالات الفردية" },
+  { id: "2", title: "التوجيه الجماعي", desc: "تنفيذ برامج جماعية", subTitle: "خطة البرامج الجماعية" },
+  { id: "3", title: "البرامج الوقائية", desc: "تنفيذ البرامج الوقائية", subTitle: "خطة البرامج الوقائية" },
+  { id: "4", title: "البرامج العلاجية", desc: "تنفيذ البرامج العلاجية", subTitle: "خطط العلاج" },
+  { id: "5", title: "التواصل مع أولياء الأمور", desc: "التواصل المستمر", subTitle: "سجل التواصل" },
+  { id: "6", title: "دراسة الحالات السلوكية", desc: "دراسة الحالات", subTitle: "ملفات الحالات" },
+  { id: "7", title: "التقارير والإحصاءات", desc: "إعداد التقارير", subTitle: "التقارير الشهرية" },
+]);
 
-const SUPERVISOR_CRITERIA = [
-  { id: "s1", title: "التخطيط للإشراف", maxScore: 5, description: "إعداد خطط إشرافية", subEvidences: [{ id: "s1-1", title: "الخطة الإشرافية", type: "both" as const, description: "توثيق الخطة", formFields: [{ id: "plan", label: "الملخص", type: "textarea" as const }], aiSuggestions: ["خطة إشرافية"] }] },
-  { id: "s2", title: "الزيارات الصفية", maxScore: 5, description: "تنفيذ الزيارات", subEvidences: [{ id: "s2-1", title: "سجل الزيارات", type: "both" as const, description: "توثيق الزيارات", formFields: [{ id: "visits", label: "الملخص", type: "textarea" as const }], aiSuggestions: ["سجل زيارات صفية"] }] },
-  { id: "s3", title: "تطوير المعلمين", maxScore: 5, description: "دعم التطوير المهني", subEvidences: [{ id: "s3-1", title: "خطة التطوير", type: "both" as const, description: "توثيق التطوير", formFields: [{ id: "plan", label: "الملخص", type: "textarea" as const }], aiSuggestions: ["خطة تطوير مهني"] }] },
-  { id: "s4", title: "تحليل نتائج الطلاب", maxScore: 5, description: "تحليل النتائج", subEvidences: [{ id: "s4-1", title: "تقارير التحليل", type: "both" as const, description: "توثيق التحليل", formFields: [{ id: "analysis", label: "الملخص", type: "textarea" as const }], aiSuggestions: ["تحليل نتائج"] }] },
-  { id: "s5", title: "البرامج التدريبية", maxScore: 5, description: "تنفيذ البرامج", subEvidences: [{ id: "s5-1", title: "خطة التدريب", type: "both" as const, description: "توثيق التدريب", formFields: [{ id: "plan", label: "الملخص", type: "textarea" as const }], aiSuggestions: ["برنامج تدريبي"] }] },
-];
+const HEALTH_COUNSELOR_CRITERIA = makeSimpleCriteria("h", [
+  { id: "1", title: "التثقيف الصحي", desc: "تنفيذ برامج التثقيف", subTitle: "خطة التثقيف الصحي" },
+  { id: "2", title: "الإسعافات الأولية", desc: "تقديم الإسعافات", subTitle: "سجل الإسعافات" },
+  { id: "3", title: "البيئة الصحية", desc: "متابعة البيئة الصحية", subTitle: "تقارير المتابعة" },
+  { id: "4", title: "متابعة الحالات الصحية", desc: "متابعة الحالات المزمنة", subTitle: "سجل الحالات" },
+  { id: "5", title: "التقارير الصحية", desc: "إعداد التقارير", subTitle: "التقارير الشهرية" },
+]);
 
-const LIBRARIAN_CRITERIA = [
-  { id: "l1", title: "تنظيم مصادر التعلم", maxScore: 5, description: "تنظيم وفهرسة المصادر", subEvidences: [{ id: "l1-1", title: "سجل المصادر", type: "both" as const, description: "توثيق المصادر", formFields: [{ id: "record", label: "الملخص", type: "textarea" as const }], aiSuggestions: ["سجل مصادر تعلم"] }] },
-  { id: "l2", title: "خدمة المستفيدين", maxScore: 5, description: "تقديم خدمات متميزة", subEvidences: [{ id: "l2-1", title: "سجل الإعارة", type: "both" as const, description: "توثيق الإعارة", formFields: [{ id: "record", label: "الملخص", type: "textarea" as const }], aiSuggestions: ["سجل إعارة"] }] },
-  { id: "l3", title: "التقنيات التعليمية", maxScore: 5, description: "توظيف التقنيات", subEvidences: [{ id: "l3-1", title: "تقرير التقنيات", type: "both" as const, description: "توثيق التقنيات", formFields: [{ id: "report", label: "الملخص", type: "textarea" as const }], aiSuggestions: ["تقرير تقنيات"] }] },
-  { id: "l4", title: "البرامج والأنشطة", maxScore: 5, description: "تنفيذ البرامج", subEvidences: [{ id: "l4-1", title: "خطة البرامج", type: "both" as const, description: "توثيق البرامج", formFields: [{ id: "plan", label: "الملخص", type: "textarea" as const }], aiSuggestions: ["برنامج تشجيع قراءة"] }] },
-];
+const SUPERVISOR_CRITERIA = makeSimpleCriteria("s", [
+  { id: "1", title: "التخطيط للإشراف", desc: "إعداد خطط إشرافية", subTitle: "الخطة الإشرافية" },
+  { id: "2", title: "الزيارات الصفية", desc: "تنفيذ الزيارات", subTitle: "سجل الزيارات" },
+  { id: "3", title: "تطوير المعلمين", desc: "دعم التطوير المهني", subTitle: "خطة التطوير" },
+  { id: "4", title: "تحليل نتائج الطلاب", desc: "تحليل النتائج", subTitle: "تقارير التحليل" },
+  { id: "5", title: "البرامج التدريبية", desc: "تنفيذ البرامج", subTitle: "خطة التدريب" },
+]);
 
-const KINDERGARTEN_CRITERIA = [
-  { id: "k1", title: "التخطيط للأنشطة", maxScore: 5, description: "التخطيط لأنشطة تعليمية", subEvidences: [{ id: "k1-1", title: "خطة الأنشطة الأسبوعية", type: "both" as const, description: "توثيق الخطة", formFields: [{ id: "plan", label: "الملخص", type: "textarea" as const }], aiSuggestions: ["خطة أنشطة أسبوعية"] }] },
-  { id: "k2", title: "تنفيذ الأنشطة التعليمية", maxScore: 5, description: "تنفيذ أنشطة إبداعية", subEvidences: [{ id: "k2-1", title: "صور الأنشطة", type: "upload" as const, description: "توثيق بصري", aiSuggestions: ["صور أنشطة رياض أطفال"] }] },
-  { id: "k3", title: "إدارة الصف", maxScore: 5, description: "إدارة الصف بطريقة مناسبة", subEvidences: [{ id: "k3-1", title: "قوانين الصف", type: "both" as const, description: "توثيق القوانين", formFields: [{ id: "rules", label: "القوانين", type: "textarea" as const }], aiSuggestions: ["قوانين صفية للأطفال"] }] },
-  { id: "k4", title: "التقويم والمتابعة", maxScore: 5, description: "تقويم نمو الأطفال", subEvidences: [{ id: "k4-1", title: "سجل الملاحظات", type: "both" as const, description: "توثيق الملاحظات", formFields: [{ id: "notes", label: "الملاحظات", type: "textarea" as const }], aiSuggestions: ["سجل متابعة نمو"] }] },
-  { id: "k5", title: "التواصل مع أولياء الأمور", maxScore: 5, description: "التواصل المستمر", subEvidences: [{ id: "k5-1", title: "سجل التواصل", type: "both" as const, description: "توثيق التواصل", formFields: [{ id: "comm", label: "الملخص", type: "textarea" as const }], aiSuggestions: ["سجل تواصل أولياء أمور"] }] },
-  { id: "k6", title: "البيئة التعليمية", maxScore: 5, description: "تهيئة بيئة آمنة", subEvidences: [{ id: "k6-1", title: "صور البيئة الصفية", type: "upload" as const, description: "توثيق بصري", aiSuggestions: ["صور بيئة صفية"] }] },
-];
+const LIBRARIAN_CRITERIA = makeSimpleCriteria("l", [
+  { id: "1", title: "تنظيم مصادر التعلم", desc: "تنظيم وفهرسة المصادر", subTitle: "سجل المصادر" },
+  { id: "2", title: "خدمة المستفيدين", desc: "تقديم خدمات متميزة", subTitle: "سجل الإعارة" },
+  { id: "3", title: "التقنيات التعليمية", desc: "توظيف التقنيات", subTitle: "تقرير التقنيات" },
+  { id: "4", title: "البرامج والأنشطة", desc: "تنفيذ البرامج", subTitle: "خطة البرامج" },
+]);
 
-const SPECIAL_ED_CRITERIA = [
-  { id: "se1", title: "إعداد الخطة التعليمية الفردية (IEP)", maxScore: 5, description: "إعداد خطط فردية", subEvidences: [{ id: "se1-1", title: "الخطة التعليمية الفردية", type: "both" as const, description: "توثيق الخطة", formFields: [{ id: "iep", label: "ملخص الخطة", type: "textarea" as const }], aiSuggestions: ["خطة تعليمية فردية"] }] },
-  { id: "se2", title: "تنفيذ البرامج التعليمية", maxScore: 5, description: "تنفيذ البرامج", subEvidences: [{ id: "se2-1", title: "سجل الجلسات", type: "both" as const, description: "توثيق الجلسات", formFields: [{ id: "sessions", label: "الملخص", type: "textarea" as const }], aiSuggestions: ["سجل جلسات تعليمية"] }] },
-  { id: "se3", title: "التقييم والتشخيص", maxScore: 5, description: "تقييم الاحتياجات", subEvidences: [{ id: "se3-1", title: "تقارير التقييم", type: "both" as const, description: "توثيق التقييم", formFields: [{ id: "assessment", label: "الملخص", type: "textarea" as const }], aiSuggestions: ["تقرير تقييم"] }] },
-  { id: "se4", title: "التواصل مع أولياء الأمور", maxScore: 5, description: "التواصل المستمر", subEvidences: [{ id: "se4-1", title: "سجل التواصل", type: "both" as const, description: "توثيق التواصل", formFields: [{ id: "comm", label: "الملخص", type: "textarea" as const }], aiSuggestions: ["سجل تواصل"] }] },
-  { id: "se5", title: "التعديل السلوكي", maxScore: 5, description: "تطبيق برامج التعديل", subEvidences: [{ id: "se5-1", title: "خطط التعديل السلوكي", type: "both" as const, description: "توثيق الخطط", formFields: [{ id: "plans", label: "الملخص", type: "textarea" as const }], aiSuggestions: ["خطة تعديل سلوكي"] }] },
-  { id: "se6", title: "التكامل مع المعلمين", maxScore: 5, description: "التعاون مع معلمي التعليم العام", subEvidences: [{ id: "se6-1", title: "خطط الدمج", type: "both" as const, description: "توثيق التعاون", formFields: [{ id: "plans", label: "الملخص", type: "textarea" as const }], aiSuggestions: ["خطة دمج"] }] },
-];
+const KINDERGARTEN_CRITERIA = makeSimpleCriteria("k", [
+  { id: "1", title: "التخطيط للأنشطة", desc: "التخطيط لأنشطة تعليمية", subTitle: "خطة الأنشطة الأسبوعية" },
+  { id: "2", title: "تنفيذ الأنشطة التعليمية", desc: "تنفيذ أنشطة إبداعية", subTitle: "صور الأنشطة" },
+  { id: "3", title: "إدارة الصف", desc: "إدارة الصف بطريقة مناسبة", subTitle: "قوانين الصف" },
+  { id: "4", title: "التقويم والمتابعة", desc: "تقويم نمو الأطفال", subTitle: "سجل الملاحظات" },
+  { id: "5", title: "التواصل مع أولياء الأمور", desc: "التواصل المستمر", subTitle: "سجل التواصل" },
+  { id: "6", title: "البيئة التعليمية", desc: "تهيئة بيئة آمنة", subTitle: "صور البيئة الصفية" },
+]);
 
-const ADMIN_ASSISTANT_CRITERIA = [
-  { id: "a1", title: "الأعمال الإدارية", maxScore: 5, description: "تنفيذ الأعمال الإدارية", subEvidences: [{ id: "a1-1", title: "سجل المهام", type: "both" as const, description: "توثيق المهام", formFields: [{ id: "tasks", label: "الملخص", type: "textarea" as const }], aiSuggestions: ["سجل مهام إدارية"] }] },
-  { id: "a2", title: "المراسلات والتقارير", maxScore: 5, description: "إعداد المراسلات", subEvidences: [{ id: "a2-1", title: "سجل الصادر والوارد", type: "both" as const, description: "توثيق المراسلات", formFields: [{ id: "record", label: "الملخص", type: "textarea" as const }], aiSuggestions: ["سجل مراسلات"] }] },
-  { id: "a3", title: "متابعة الحضور والغياب", maxScore: 5, description: "متابعة الحضور", subEvidences: [{ id: "a3-1", title: "سجل الحضور", type: "both" as const, description: "توثيق الحضور", formFields: [{ id: "record", label: "الملخص", type: "textarea" as const }], aiSuggestions: ["سجل حضور"] }] },
-  { id: "a4", title: "خدمة المراجعين", maxScore: 5, description: "تقديم خدمة متميزة", subEvidences: [{ id: "a4-1", title: "سجل المراجعين", type: "both" as const, description: "توثيق الخدمة", formFields: [{ id: "record", label: "الملخص", type: "textarea" as const }], aiSuggestions: ["سجل مراجعين"] }] },
-  { id: "a5", title: "الأرشفة والتوثيق", maxScore: 5, description: "أرشفة الملفات", subEvidences: [{ id: "a5-1", title: "نظام الأرشفة", type: "both" as const, description: "توثيق الأرشفة", formFields: [{ id: "system", label: "الملخص", type: "textarea" as const }], aiSuggestions: ["نظام أرشفة"] }] },
-];
+const SPECIAL_ED_CRITERIA = makeSimpleCriteria("se", [
+  { id: "1", title: "إعداد الخطة التعليمية الفردية (IEP)", desc: "إعداد خطط فردية", subTitle: "الخطة التعليمية الفردية" },
+  { id: "2", title: "تنفيذ البرامج التعليمية", desc: "تنفيذ البرامج", subTitle: "سجل الجلسات" },
+  { id: "3", title: "التقييم والتشخيص", desc: "تقييم الاحتياجات", subTitle: "تقارير التقييم" },
+  { id: "4", title: "التواصل مع أولياء الأمور", desc: "التواصل المستمر", subTitle: "سجل التواصل" },
+  { id: "5", title: "التعديل السلوكي", desc: "تطبيق برامج التعديل", subTitle: "خطط التعديل السلوكي" },
+  { id: "6", title: "التكامل مع المعلمين", desc: "التعاون مع معلمي التعليم العام", subTitle: "خطط الدمج" },
+]);
+
+const ADMIN_ASSISTANT_CRITERIA = makeSimpleCriteria("a", [
+  { id: "1", title: "الأعمال الإدارية", desc: "تنفيذ الأعمال الإدارية", subTitle: "سجل المهام" },
+  { id: "2", title: "المراسلات والتقارير", desc: "إعداد المراسلات", subTitle: "سجل الصادر والوارد" },
+  { id: "3", title: "متابعة الحضور والغياب", desc: "متابعة الحضور", subTitle: "سجل الحضور" },
+  { id: "4", title: "خدمة المراجعين", desc: "تقديم خدمة متميزة", subTitle: "سجل المراجعين" },
+  { id: "5", title: "الأرشفة والتوثيق", desc: "أرشفة الملفات", subTitle: "نظام الأرشفة" },
+]);
 
 // ===== أنواع الوظائف =====
 const JOB_TYPES = [
@@ -482,16 +480,24 @@ export default function PerformanceEvidence() {
   const [expandedSubEvidence, setExpandedSubEvidence] = useState<string | null>(null);
   const [isExporting, setIsExporting] = useState(false);
 
-  // AI State
-  const [aiApiKey, setAiApiKey] = useState(() => localStorage.getItem("sers_ai_key") || "");
-  const [showAiSettings, setShowAiSettings] = useState(false);
+  // AI State - using tRPC (no API key needed)
   const [aiLoading, setAiLoading] = useState<string | null>(null);
   const [aiChat, setAiChat] = useState<Record<string, string[]>>({});
   const [aiPrompt, setAiPrompt] = useState("");
 
-  // Add custom sub-evidence
+  // tRPC AI mutations
+  const suggestEvidenceMutation = trpc.ai.suggestEvidence.useMutation();
+  const fillFormMutation = trpc.ai.fillFormFields.useMutation();
+  const improveMutation = trpc.ai.improveText.useMutation();
+  const suggestMutation = trpc.ai.suggest.useMutation();
+
+  // Add custom sub-evidence / main section
   const [showAddSub, setShowAddSub] = useState<string | null>(null);
   const [newSubTitle, setNewSubTitle] = useState("");
+  const [showAddMainSection, setShowAddMainSection] = useState(false);
+  const [newMainSectionTitle, setNewMainSectionTitle] = useState("");
+  const [newMainSectionDesc, setNewMainSectionDesc] = useState("");
+  const [customCriteria, setCustomCriteria] = useState<Criterion[]>([]);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const activeUploadRef = useRef<{ criterionId: string; subEvidenceId: string } | null>(null);
@@ -505,20 +511,20 @@ export default function PerformanceEvidence() {
 
   const [criteriaData, setCriteriaData] = useState<Record<string, CriterionData>>({});
 
-  const initCriteriaData = (criteria: any[]) => {
+  // All criteria = job criteria + custom criteria
+  const allCriteria = [...(selectedJob?.criteria || []), ...customCriteria];
+
+  const initCriteriaData = (criteria: Criterion[]) => {
     const data: Record<string, CriterionData> = {};
-    criteria.forEach((c: any) => {
+    criteria.forEach((c) => {
       data[c.id] = { score: 0, notes: "", evidences: [], customSubEvidences: [] };
     });
     setCriteriaData(data);
   };
 
-  useEffect(() => {
-    if (aiApiKey) localStorage.setItem("sers_ai_key", aiApiKey);
-  }, [aiApiKey]);
-
   const handleSelectJob = (job: typeof JOB_TYPES[0]) => {
     setSelectedJob(job);
+    setCustomCriteria([]);
     initCriteriaData(job.criteria);
     setStep("criteria-list");
   };
@@ -568,7 +574,6 @@ export default function PerformanceEvidence() {
       id: `custom_${Date.now()}`, title: newSubTitle.trim(),
       description: "قسم فرعي مخصص", type: "both", isCustom: true,
       formFields: [{ id: "content", label: "المحتوى", type: "textarea" as const, placeholder: "أدخل المحتوى..." }],
-      aiSuggestions: ["محتوى مخصص"],
     };
     setCriteriaData((prev) => ({
       ...prev,
@@ -576,6 +581,22 @@ export default function PerformanceEvidence() {
     }));
     setNewSubTitle("");
     setShowAddSub(null);
+  };
+
+  const addCustomMainSection = () => {
+    if (!newMainSectionTitle.trim()) return;
+    const newCriterion: Criterion = {
+      id: `custom_main_${Date.now()}`,
+      title: newMainSectionTitle.trim(),
+      maxScore: 5,
+      description: newMainSectionDesc.trim() || "قسم رئيسي مخصص",
+      subEvidences: [{ id: `custom_main_${Date.now()}_sub1`, title: "شاهد عام", description: "شاهد عام", type: "both" as const, formFields: [{ id: "content", label: "المحتوى", type: "textarea" as const, placeholder: "أدخل التفاصيل..." }] }],
+    };
+    setCustomCriteria(prev => [...prev, newCriterion]);
+    setCriteriaData(prev => ({ ...prev, [newCriterion.id]: { score: 0, notes: "", evidences: [], customSubEvidences: [] } }));
+    setNewMainSectionTitle("");
+    setNewMainSectionDesc("");
+    setShowAddMainSection(false);
   };
 
   const handleFileUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
@@ -606,31 +627,24 @@ export default function PerformanceEvidence() {
     fileInputRef.current?.click();
   };
 
-  // ===== AI API Call =====
-  const callAI = async (criterionId: string, subId: string, context: string) => {
-    if (!aiApiKey) { setShowAiSettings(true); return; }
+  // ===== AI API Call via tRPC =====
+  const callAI = async (criterionId: string, subId: string, userPrompt: string) => {
     const key = `${criterionId}_${subId}`;
     setAiLoading(key);
     try {
-      const apiUrl = aiApiKey.startsWith("sk-") ? "https://api.openai.com/v1/chat/completions" : aiApiKey;
-      const response = await fetch(apiUrl.includes("http") ? apiUrl : "https://api.openai.com/v1/chat/completions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${aiApiKey}` },
-        body: JSON.stringify({
-          model: "gpt-3.5-turbo",
-          messages: [
-            { role: "system", content: "أنت مساعد تعليمي متخصص في إعداد شواهد الأداء الوظيفي للمعلمين والإداريين في المملكة العربية السعودية. ساعد المستخدم في كتابة شواهد احترافية ومفصلة. أجب باللغة العربية فقط." },
-            { role: "user", content: context || aiPrompt },
-          ],
-          max_tokens: 500,
-          temperature: 0.7,
-        }),
+      const currentCrit = allCriteria.find(c => c.id === criterionId);
+      const allSubs = [...(currentCrit?.subEvidences || []), ...(criteriaData[criterionId]?.customSubEvidences || [])];
+      const currentSub = allSubs.find(s => s.id === subId);
+
+      const result = await suggestMutation.mutateAsync({
+        prompt: userPrompt || `اقترح شاهد أداء وظيفي لبند "${currentCrit?.title}" - ${currentSub?.title}`,
+        context: `الوظيفة: ${selectedJob?.title}, البند: ${currentCrit?.title}, الشاهد الفرعي: ${currentSub?.title}`,
       });
-      const data = await response.json();
-      const aiResponse = data.choices?.[0]?.message?.content || "عذراً، لم أتمكن من الحصول على اقتراح. تأكد من صحة مفتاح API.";
-      setAiChat((prev) => ({ ...prev, [key]: [...(prev[key] || []), aiResponse] }));
+      if (result.content) {
+        setAiChat((prev) => ({ ...prev, [key]: [...(prev[key] || []), result.content] }));
+      }
     } catch (err) {
-      setAiChat((prev) => ({ ...prev, [key]: [...(prev[key] || []), "خطأ في الاتصال بالذكاء الاصطناعي. تأكد من مفتاح API والاتصال بالإنترنت."] }));
+      setAiChat((prev) => ({ ...prev, [key]: [...(prev[key] || []), "حدث خطأ في الاتصال بالذكاء الاصطناعي. يرجى المحاولة مرة أخرى."] }));
     }
     setAiLoading(null);
     setAiPrompt("");
@@ -646,46 +660,52 @@ export default function PerformanceEvidence() {
   };
 
   const fillFormWithAI = async (criterionId: string, subId: string, evId: string, fields: FormField[]) => {
-    if (!aiApiKey) { setShowAiSettings(true); return; }
     const key = `fill_${evId}`;
     setAiLoading(key);
     try {
-      const fieldNames = fields.map(f => f.label).join("، ");
-      const response = await fetch("https://api.openai.com/v1/chat/completions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${aiApiKey}` },
-        body: JSON.stringify({
-          model: "gpt-3.5-turbo",
-          messages: [
-            { role: "system", content: "أنت مساعد تعليمي. أعد بيانات JSON فقط بدون أي نص إضافي. المفاتيح هي معرفات الحقول." },
-            { role: "user", content: `املأ هذه الحقول ببيانات واقعية لمعلم سعودي: ${fieldNames}. أعد JSON بالمفاتيح: ${fields.map(f => f.id).join(", ")}` },
-          ],
-          max_tokens: 500,
-        }),
+      const currentCrit = allCriteria.find(c => c.id === criterionId);
+      const allSubs = [...(currentCrit?.subEvidences || []), ...(criteriaData[criterionId]?.customSubEvidences || [])];
+      const currentSub = allSubs.find(s => s.id === subId);
+
+      const result = await fillFormMutation.mutateAsync({
+        jobTitle: selectedJob?.title || "",
+        criterionName: currentCrit?.title || "",
+        subEvidenceName: currentSub?.title || "",
+        formFields: fields.map(f => ({ id: f.id, label: f.label, type: f.type })),
       });
-      const data = await response.json();
-      const content = data.choices?.[0]?.message?.content || "{}";
-      try {
-        const jsonMatch = content.match(/\{[\s\S]*\}/);
-        if (jsonMatch) {
-          const parsed = JSON.parse(jsonMatch[0]);
-          Object.entries(parsed).forEach(([fieldId, value]) => {
-            updateFormField(criterionId, evId, fieldId, String(value));
-          });
-        }
-      } catch { /* ignore parse errors */ }
-    } catch { /* ignore network errors */ }
+      if (result.success && result.filledData) {
+        Object.entries(result.filledData).forEach(([fieldId, value]) => {
+          updateFormField(criterionId, evId, fieldId, String(value));
+        });
+      }
+    } catch { /* ignore errors */ }
+    setAiLoading(null);
+  };
+
+  const improveFieldText = async (criterionId: string, evId: string, fieldId: string, currentText: string) => {
+    if (!currentText.trim()) return;
+    const key = `improve_${evId}_${fieldId}`;
+    setAiLoading(key);
+    try {
+      const result = await improveMutation.mutateAsync({
+        text: currentText,
+        context: `شاهد أداء وظيفي - ${selectedJob?.title}`,
+      });
+      if (result.improved) {
+        updateFormField(criterionId, evId, fieldId, result.improved);
+      }
+    } catch { /* ignore */ }
     setAiLoading(null);
   };
 
   const saveReport = () => {
-    const data = { personalInfo, criteriaData, jobId: selectedJob?.id, themeId: selectedTheme.id };
+    const data = { personalInfo, criteriaData, jobId: selectedJob?.id, themeId: selectedTheme.id, customCriteria };
     localStorage.setItem(`sers_perf_${personalInfo.name || "draft"}`, JSON.stringify(data));
-    alert("تم حفظ البيانات بنجاح!");
+    import("sonner").then(({ toast }) => toast.success("تم حفظ البيانات بنجاح!"));
   };
 
   const totalScore = Object.values(criteriaData).reduce((sum, c) => sum + c.score, 0);
-  const maxScore = selectedJob ? selectedJob.criteria.length * 5 : 0;
+  const maxScore = allCriteria.length * 5;
   const percentage = maxScore > 0 ? Math.round((totalScore / maxScore) * 100) : 0;
   const getGrade = (pct: number) => {
     if (pct >= 90) return { label: "ممتاز", color: "#16A34A" };
@@ -701,32 +721,7 @@ export default function PerformanceEvidence() {
     setIsExporting(false);
   };
 
-  const currentCriterion = selectedJob?.criteria[currentCriterionIndex];
-
-  // ===== AI Settings Modal =====
-  const AISettingsModal = () => (
-    <AnimatePresence>
-      {showAiSettings && (
-        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-          className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setShowAiSettings(false)}>
-          <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }} exit={{ scale: 0.9 }}
-            className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-black text-gray-900" style={{ fontFamily: "'Tajawal', sans-serif" }}>إعدادات الذكاء الاصطناعي</h3>
-              <button onClick={() => setShowAiSettings(false)} className="p-1 rounded-lg hover:bg-gray-100"><X className="w-5 h-5" /></button>
-            </div>
-            <p className="text-sm text-gray-500 mb-4">أدخل مفتاح API الخاص بك (OpenAI أو أي خدمة متوافقة) لتفعيل ميزات الذكاء الاصطناعي التفاعلية.</p>
-            <input type="password" value={aiApiKey} onChange={(e) => setAiApiKey(e.target.value)}
-              placeholder="sk-..." dir="ltr"
-              className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-400 mb-3" />
-            <p className="text-xs text-gray-400 mb-4">المفتاح يُحفظ محلياً في متصفحك فقط ولا يُرسل لأي جهة.</p>
-            <button onClick={() => setShowAiSettings(false)}
-              className="w-full bg-violet-600 text-white py-2.5 rounded-xl text-sm font-bold hover:bg-violet-700">حفظ</button>
-          </motion.div>
-        </motion.div>
-      )}
-    </AnimatePresence>
-  );
+  const currentCriterion = allCriteria[currentCriterionIndex];
 
   // ===== Render Evidence Item =====
   const renderEvidenceItem = (ev: EvidenceItem, criterionId: string) => (
@@ -808,21 +803,20 @@ export default function PerformanceEvidence() {
   if (step === "select") {
     return (
       <div className="min-h-screen bg-[#F8FAFC] p-6" dir="rtl">
-        <AISettingsModal />
         <div className="max-w-5xl mx-auto">
           <div className="flex items-center justify-between mb-6">
             <button onClick={() => navigate("/")} className="flex items-center gap-2 text-gray-500 hover:text-gray-700">
               <ArrowLeft className="w-4 h-4" /><span className="text-sm">العودة للرئيسية</span>
-            </button>
-            <button onClick={() => setShowAiSettings(true)} className="flex items-center gap-2 text-violet-600 hover:text-violet-700 text-sm bg-violet-50 px-3 py-2 rounded-lg">
-              <Settings className="w-4 h-4" />إعدادات AI
             </button>
           </div>
           <div className="text-center mb-10">
             <div className="w-16 h-16 rounded-2xl bg-emerald-100 flex items-center justify-center mx-auto mb-4"><span className="text-3xl">📊</span></div>
             <h1 className="text-3xl font-black text-gray-900 mb-2" style={{ fontFamily: "'Tajawal', sans-serif" }}>شواهد الأداء الوظيفي</h1>
             <p className="text-gray-500 max-w-lg mx-auto text-sm">اختر الوظيفة لبدء إعداد الشواهد. كل بند يحتوي على شواهد فرعية مع فورمات تفاعلية وذكاء اصطناعي حقيقي.</p>
-            {aiApiKey && <p className="text-xs text-emerald-600 mt-2 flex items-center justify-center gap-1"><Sparkles className="w-3 h-3" />الذكاء الاصطناعي مفعّل</p>}
+            <div className="flex items-center justify-center gap-2 mt-3">
+              <Sparkles className="w-4 h-4 text-violet-500" />
+              <span className="text-sm text-violet-600 font-medium">الذكاء الاصطناعي مفعّل تلقائياً</span>
+            </div>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {JOB_TYPES.map((job, i) => (
@@ -845,7 +839,6 @@ export default function PerformanceEvidence() {
   if (step === "criteria-list") {
     return (
       <div className="min-h-screen bg-[#F8FAFC] p-4 md:p-6" dir="rtl">
-        <AISettingsModal />
         <div className="max-w-5xl mx-auto">
           <div className="flex items-center justify-between mb-5 bg-white rounded-xl p-4 shadow-sm border border-gray-100">
             <div className="flex items-center gap-3">
@@ -853,7 +846,6 @@ export default function PerformanceEvidence() {
                 <ArrowLeft className="w-4 h-4" />تغيير الوظيفة
               </button>
               <button onClick={saveReport} className="flex items-center gap-1.5 text-blue-600 text-sm"><Save className="w-4 h-4" />حفظ</button>
-              <button onClick={() => setShowAiSettings(true)} className="flex items-center gap-1.5 text-violet-600 text-sm"><Sparkles className="w-4 h-4" />AI</button>
             </div>
             <div className="flex items-center gap-4">
               <div className="text-left">
@@ -897,20 +889,23 @@ export default function PerformanceEvidence() {
 
           {/* قائمة البنود */}
           <div className="space-y-3">
-            {selectedJob?.criteria.map((criterion: any, index: number) => {
+            {allCriteria.map((criterion, index) => {
               const data = criteriaData[criterion.id];
               if (!data) return null;
               const evidenceCount = data.evidences.length;
+              const isCustom = criterion.id.startsWith("custom_main_");
               return (
                 <motion.button key={criterion.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.02 }}
                   onClick={() => { setCurrentCriterionIndex(index); setStep("criterion-detail"); }}
                   className="w-full bg-white rounded-xl border border-gray-200 p-4 hover:border-emerald-300 hover:shadow-md transition-all text-right group">
                   <div className="flex items-center gap-4">
-                    <div className="w-10 h-10 rounded-lg bg-emerald-50 flex items-center justify-center text-emerald-700 font-bold text-sm shrink-0 group-hover:bg-emerald-100">
+                    <div className={`w-10 h-10 rounded-lg flex items-center justify-center font-bold text-sm shrink-0 group-hover:bg-emerald-100 ${isCustom ? 'bg-violet-50 text-violet-700' : 'bg-emerald-50 text-emerald-700'}`}>
                       {index + 1}
                     </div>
                     <div className="flex-1">
-                      <h3 className="font-bold text-gray-800 text-sm" style={{ fontFamily: "'Tajawal', sans-serif" }}>{criterion.title}</h3>
+                      <h3 className="font-bold text-gray-800 text-sm" style={{ fontFamily: "'Tajawal', sans-serif" }}>
+                        {criterion.title} {isCustom && <span className="text-xs text-violet-500 mr-1">(مخصص)</span>}
+                      </h3>
                       <p className="text-xs text-gray-500">{criterion.description}</p>
                     </div>
                     <div className="flex items-center gap-3 shrink-0">
@@ -926,6 +921,34 @@ export default function PerformanceEvidence() {
               );
             })}
           </div>
+
+          {/* إضافة قسم رئيسي جديد */}
+          <div className="mt-4">
+            {showAddMainSection ? (
+              <div className="bg-white rounded-xl border-2 border-dashed border-violet-300 p-5">
+                <h4 className="text-sm font-bold text-violet-700 mb-3 flex items-center gap-2"><PlusCircle className="w-4 h-4" />إضافة بند رئيسي جديد</h4>
+                <div className="space-y-3">
+                  <input type="text" value={newMainSectionTitle} onChange={(e) => setNewMainSectionTitle(e.target.value)}
+                    placeholder="اسم البند الرئيسي الجديد..."
+                    className="w-full px-3 py-2.5 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/20" />
+                  <input type="text" value={newMainSectionDesc} onChange={(e) => setNewMainSectionDesc(e.target.value)}
+                    placeholder="وصف مختصر (اختياري)..."
+                    className="w-full px-3 py-2.5 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/20" />
+                  <div className="flex gap-2">
+                    <button onClick={addCustomMainSection}
+                      className="px-4 py-2.5 rounded-lg bg-violet-600 text-white text-sm font-medium hover:bg-violet-700">إضافة</button>
+                    <button onClick={() => { setShowAddMainSection(false); setNewMainSectionTitle(""); setNewMainSectionDesc(""); }}
+                      className="px-3 py-2.5 rounded-lg bg-gray-100 text-gray-600 text-sm hover:bg-gray-200"><X className="w-4 h-4" /></button>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <button onClick={() => setShowAddMainSection(true)}
+                className="w-full flex items-center justify-center gap-2 p-4 rounded-xl border-2 border-dashed border-gray-300 text-gray-500 hover:border-violet-400 hover:text-violet-600 transition-colors text-sm">
+                <PlusCircle className="w-5 h-5" />إضافة بند رئيسي جديد
+              </button>
+            )}
+          </div>
         </div>
       </div>
     );
@@ -938,7 +961,6 @@ export default function PerformanceEvidence() {
 
     return (
       <div className="min-h-screen bg-[#F8FAFC] p-4 md:p-6" dir="rtl">
-        <AISettingsModal />
         <input type="file" ref={fileInputRef} className="hidden" accept="image/*,video/*,.pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx" onChange={handleFileUpload} />
         <div className="max-w-4xl mx-auto">
           {/* Header */}
@@ -949,10 +971,10 @@ export default function PerformanceEvidence() {
               </button>
               <div className="flex gap-1">
                 <button disabled={currentCriterionIndex === 0} onClick={() => setCurrentCriterionIndex(i => i - 1)} className="p-2 rounded-lg bg-white border border-gray-200 disabled:opacity-30"><ArrowRight className="w-4 h-4" /></button>
-                <button disabled={currentCriterionIndex === (selectedJob?.criteria.length || 0) - 1} onClick={() => setCurrentCriterionIndex(i => i + 1)} className="p-2 rounded-lg bg-white border border-gray-200 disabled:opacity-30"><ArrowLeft className="w-4 h-4" /></button>
+                <button disabled={currentCriterionIndex === allCriteria.length - 1} onClick={() => setCurrentCriterionIndex(i => i + 1)} className="p-2 rounded-lg bg-white border border-gray-200 disabled:opacity-30"><ArrowLeft className="w-4 h-4" /></button>
               </div>
             </div>
-            <span className="text-sm text-gray-500">البند {currentCriterionIndex + 1} من {selectedJob?.criteria.length}</span>
+            <span className="text-sm text-gray-500">البند {currentCriterionIndex + 1} من {allCriteria.length}</span>
           </div>
 
           {/* Criterion Header */}
@@ -979,22 +1001,18 @@ export default function PerformanceEvidence() {
 
           {/* Sub-Evidences */}
           <div className="space-y-4">
-            {allSubEvidences.map((sub: any) => {
+            {allSubEvidences.map((sub) => {
               const subEvidences = data.evidences.filter(e => e.subEvidenceId === sub.id);
               const isExpanded = expandedSubEvidence === sub.id;
               const aiKey = `${currentCriterion.id}_${sub.id}`;
               const aiMessages = aiChat[aiKey] || [];
-
-              // Auto-create form evidence for report types
               const hasFormEvidence = subEvidences.some(e => e.formData && Object.keys(e.formData).length > 0);
-              let formEvId = subEvidences.find(e => e.formData)?.id;
 
               return (
                 <div key={sub.id} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
                   {/* Sub Header */}
                   <div role="button" tabIndex={0} onClick={() => {
                     setExpandedSubEvidence(isExpanded ? null : sub.id);
-                    // Auto-create form evidence when expanding report type
                     if (!isExpanded && (sub.type === 'report' || sub.type === 'both') && sub.formFields && !hasFormEvidence) {
                       addEvidence(currentCriterion.id, sub.id, "text");
                     }
@@ -1029,21 +1047,29 @@ export default function PerformanceEvidence() {
                               <div className="bg-blue-50/50 rounded-xl p-4 border border-blue-100">
                                 <div className="flex items-center justify-between mb-3">
                                   <h4 className="text-sm font-bold text-gray-700 flex items-center gap-2"><FileText className="w-4 h-4 text-blue-500" />نموذج التقرير</h4>
-                                  {aiApiKey && (
-                                    <button onClick={() => fillFormWithAI(currentCriterion.id, sub.id, formEv.id, sub.formFields!)}
-                                      disabled={aiLoading === `fill_${formEv.id}`}
-                                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-violet-100 text-violet-700 text-xs font-medium hover:bg-violet-200 disabled:opacity-50">
-                                      {aiLoading === `fill_${formEv.id}` ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
-                                      تعبئة بالذكاء الاصطناعي
-                                    </button>
-                                  )}
+                                  <button onClick={() => fillFormWithAI(currentCriterion.id, sub.id, formEv.id, sub.formFields!)}
+                                    disabled={aiLoading === `fill_${formEv.id}`}
+                                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-violet-100 text-violet-700 text-xs font-medium hover:bg-violet-200 disabled:opacity-50">
+                                    {aiLoading === `fill_${formEv.id}` ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+                                    تعبئة بالذكاء الاصطناعي
+                                  </button>
                                 </div>
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                   {sub.formFields.map((field: FormField) => (
                                     <div key={field.id} className={field.type === 'textarea' ? 'md:col-span-2' : ''}>
-                                      <label className="block text-xs font-medium text-gray-600 mb-1">
-                                        {field.label} {field.required && <span className="text-red-500">*</span>}
-                                      </label>
+                                      <div className="flex items-center justify-between mb-1">
+                                        <label className="block text-xs font-medium text-gray-600">
+                                          {field.label} {field.required && <span className="text-red-500">*</span>}
+                                        </label>
+                                        {field.type === 'textarea' && formEv.formData?.[field.id] && (
+                                          <button onClick={() => improveFieldText(currentCriterion.id, formEv.id, field.id, formEv.formData?.[field.id] || '')}
+                                            disabled={aiLoading === `improve_${formEv.id}_${field.id}`}
+                                            className="text-[10px] text-violet-600 hover:text-violet-700 flex items-center gap-1">
+                                            {aiLoading === `improve_${formEv.id}_${field.id}` ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
+                                            تحسين
+                                          </button>
+                                        )}
+                                      </div>
                                       {field.type === 'textarea' ? (
                                         <textarea value={formEv.formData?.[field.id] || ''} onChange={(e) => updateFormField(currentCriterion.id, formEv.id, field.id, e.target.value)}
                                           placeholder={field.placeholder} rows={3}
@@ -1068,10 +1094,13 @@ export default function PerformanceEvidence() {
                           })()}
 
                           {/* Evidences List */}
-                          {subEvidences.filter(e => !(e.formData && Object.keys(e.formData).length === 0 && e.type === 'text' && !e.text)).length > 0 && (
+                          {subEvidences.filter(e => {
+                            if (e.formData && Object.keys(e.formData).some(k => e.formData![k])) return false;
+                            if (e.type === 'text' && !e.text && e.formData) return false;
+                            return true;
+                          }).length > 0 && (
                             <div className="space-y-2">
                               {subEvidences.filter(e => {
-                                // Don't show empty form evidences as separate items
                                 if (e.formData && Object.keys(e.formData).some(k => e.formData![k])) return false;
                                 if (e.type === 'text' && !e.text && e.formData) return false;
                                 return true;
@@ -1100,13 +1129,13 @@ export default function PerformanceEvidence() {
                             <div className="flex items-center gap-2 mb-3">
                               <Bot className="w-4 h-4 text-violet-600" />
                               <span className="text-sm font-bold text-violet-700">مساعد الذكاء الاصطناعي</span>
-                              {!aiApiKey && <span className="text-xs text-gray-400">(أدخل مفتاح API أولاً)</span>}
+                              <span className="text-[10px] bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full">مفعّل</span>
                             </div>
                             {aiMessages.length > 0 && (
                               <div className="space-y-2 mb-3 max-h-48 overflow-y-auto">
                                 {aiMessages.map((msg, idx) => (
                                   <div key={idx} className="bg-white rounded-lg p-3 border border-violet-200">
-                                    <p className="text-sm text-gray-700 leading-relaxed">{msg}</p>
+                                    <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">{msg}</p>
                                     <button onClick={() => applyAIText(currentCriterion.id, sub.id, msg)}
                                       className="mt-2 text-xs bg-violet-600 text-white px-3 py-1.5 rounded-md hover:bg-violet-700">
                                       استخدام كشاهد
@@ -1118,10 +1147,10 @@ export default function PerformanceEvidence() {
                             <div className="flex gap-2">
                               <input type="text" value={aiPrompt} onChange={(e) => setAiPrompt(e.target.value)}
                                 placeholder={`اطلب اقتراح لـ "${sub.title}"...`}
-                                onKeyDown={(e) => { if (e.key === 'Enter') callAI(currentCriterion.id, sub.id, aiPrompt || `اقترح شاهد أداء وظيفي لبند "${currentCriterion.title}" - ${sub.title}`); }}
+                                onKeyDown={(e) => { if (e.key === 'Enter') callAI(currentCriterion.id, sub.id, aiPrompt); }}
                                 className="flex-1 px-3 py-2.5 rounded-lg border border-violet-200 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/20 bg-white" />
-                              <button onClick={() => callAI(currentCriterion.id, sub.id, aiPrompt || `اقترح شاهد أداء وظيفي لبند "${currentCriterion.title}" - ${sub.title}`)}
-                                disabled={aiLoading === aiKey || !aiApiKey}
+                              <button onClick={() => callAI(currentCriterion.id, sub.id, aiPrompt)}
+                                disabled={aiLoading === aiKey}
                                 className="px-4 py-2.5 rounded-lg bg-violet-600 text-white text-sm font-medium hover:bg-violet-700 disabled:opacity-50 flex items-center gap-1.5">
                                 {aiLoading === aiKey ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
                               </button>
@@ -1165,7 +1194,7 @@ export default function PerformanceEvidence() {
               className="flex items-center gap-2 px-4 py-2 rounded-lg bg-gray-100 text-gray-700 text-sm disabled:opacity-30">
               <ArrowRight className="w-4 h-4" />البند السابق
             </button>
-            {currentCriterionIndex < (selectedJob?.criteria.length || 0) - 1 ? (
+            {currentCriterionIndex < allCriteria.length - 1 ? (
               <button onClick={() => setCurrentCriterionIndex(i => i + 1)}
                 className="flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm hover:bg-emerald-700">
                 البند التالي<ArrowLeft className="w-4 h-4" />
@@ -1224,7 +1253,7 @@ export default function PerformanceEvidence() {
                 </tr>
               </thead>
               <tbody>
-                {selectedJob?.criteria.map((c: any, i: number) => {
+                {allCriteria.map((c, i) => {
                   const d = criteriaData[c.id];
                   return (
                     <tr key={c.id} className="border-t border-gray-100 hover:bg-gray-50 cursor-pointer" onClick={() => { setCurrentCriterionIndex(i); setStep('criterion-detail'); }}>
@@ -1287,7 +1316,7 @@ export default function PerformanceEvidence() {
           <div id="preview-content" className="bg-white rounded-xl shadow-lg overflow-hidden" style={{ fontFamily: "'Cairo', 'Tajawal', sans-serif" }}>
             {/* Header */}
             <div style={{ background: theme.headerBg, color: theme.headerText, padding: '2rem', textAlign: 'center' }}>
-              <p className="text-sm opacity-80 mb-1">{personalInfo.department}</p>
+              <p className="text-sm opacity-80 mb-1" style={{ whiteSpace: 'pre-line' }}>{personalInfo.department}</p>
               <h1 className="text-2xl font-black mb-1">شواهد الأداء الوظيفي</h1>
               <p className="text-lg font-bold">{selectedJob?.title}</p>
               <p className="text-sm opacity-80 mt-1">{personalInfo.year} - {personalInfo.semester}</p>
@@ -1314,7 +1343,7 @@ export default function PerformanceEvidence() {
                   </tr>
                 </thead>
                 <tbody>
-                  {selectedJob?.criteria.map((c: any, i: number) => (
+                  {allCriteria.map((c, i) => (
                     <tr key={c.id} className={i % 2 === 0 ? '' : 'bg-gray-50'}>
                       <td className="p-2 border text-center" style={{ borderColor: theme.borderColor }}>{i + 1}</td>
                       <td className="p-2 border" style={{ borderColor: theme.borderColor }}>{c.title}</td>
@@ -1335,7 +1364,7 @@ export default function PerformanceEvidence() {
               </div>
 
               {/* Evidences */}
-              {selectedJob?.criteria.map((c: any, i: number) => {
+              {allCriteria.map((c, i) => {
                 const d = criteriaData[c.id];
                 if (!d || d.evidences.length === 0) return null;
                 return (
@@ -1365,9 +1394,9 @@ export default function PerformanceEvidence() {
                               <span className="text-xs text-gray-500">{ev.fileName}</span>
                             </div>
                           )}
-                          {ev.formData && Object.entries(ev.formData).some(([_, v]) => v) && (
+                          {ev.formData && Object.entries(ev.formData).some(([, v]) => v) && (
                             <div className="text-sm space-y-1">
-                              {Object.entries(ev.formData).filter(([_, v]) => v).map(([key, val]) => (
+                              {Object.entries(ev.formData).filter(([, v]) => v).map(([key, val]) => (
                                 <p key={key}><span className="text-gray-500">{key}:</span> {val}</p>
                               ))}
                             </div>
