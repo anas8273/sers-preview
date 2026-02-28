@@ -1028,8 +1028,9 @@ export default function PerformanceEvidence() {
               return (
                 <div key={sub.id} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
                   {/* Sub Header */}
-                  <button onClick={() => setExpandedSubEvidence(isExpanded ? null : sub.id)}
-                    className="w-full flex items-center justify-between p-4 hover:bg-gray-50 transition-colors text-right">
+                  <div role="button" tabIndex={0} onClick={() => setExpandedSubEvidence(isExpanded ? null : sub.id)}
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setExpandedSubEvidence(isExpanded ? null : sub.id); }}
+                    className="w-full flex items-center justify-between p-4 hover:bg-gray-50 transition-colors text-right cursor-pointer">
                     <div className="flex items-center gap-3">
                       <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm ${sub.type === 'report' ? 'bg-blue-50 text-blue-600' : sub.type === 'upload' ? 'bg-orange-50 text-orange-600' : 'bg-purple-50 text-purple-600'}`}>
                         {sub.type === 'report' ? <FileText className="w-4 h-4" /> : sub.type === 'upload' ? <Upload className="w-4 h-4" /> : <Layers className="w-4 h-4" />}
@@ -1048,7 +1049,7 @@ export default function PerformanceEvidence() {
                       )}
                       {isExpanded ? <ChevronUp className="w-5 h-5 text-gray-400" /> : <ChevronDown className="w-5 h-5 text-gray-400" />}
                     </div>
-                  </button>
+                  </div>
 
                   {/* AI Suggestions Popup */}
                   <AnimatePresence>
