@@ -209,6 +209,54 @@ function createEmptyEvidence(subEvidenceId: string = ""): EvidenceItem {
 }
 
 // ===== المكون الرئيسي =====
+// ===== مفاتيح sessionStorage =====
+const SESSION_KEY = "sers_perf_state";
+const SESSION_PENDING_UPLOAD = "sers_pending_upload";
+
+// ===== حفظ واستعادة الـ state من sessionStorage (لحل مشكلة الجوال) =====
+function saveStateToSession(data: {
+  step: string; jobId: string; themeId: string;
+  criteriaData: Record<string, CriterionData>; personalInfo: any;
+  customCriteria: Criterion[]; currentCriterionIndex: number;
+  activeTab: string; expandedSubEvidence: string | null;
+}) {
+  try {
+    // لا نحفظ fileData الكبيرة في sessionStorage لتجنب تجاوز الحد
+    const cleanCriteria: Record<string, any> = {};
+    for (const [key, val] of Object.entries(data.criteriaData)) {
+      cleanCriteria[key] = {
+        ...val,
+        evidences: val.evidences.map(ev => ({
+          ...ev,
+          fileData: ev.fileData && ev.fileData.length < 50000 ? ev.fileData : null, // حفظ الصور الصغيرة فقط
+        })),
+      };
+    }
+    sessionStorage.setItem(SESSION_KEY, JSON.stringify({ ...data, criteriaData: cleanCriteria, timestamp: Date.now() }));
+  } catch { /* sessionStorage full - ignore */ }
+}
+
+function loadStateFromSession(): any | null {
+  try {
+    const raw = sessionStorage.getItem(SESSION_KEY);
+    if (!raw) return null;
+    const data = JSON.parse(raw);
+    // تجاهل البيانات القديمة (أكثر من ساعة)
+    if (Date.now() - (data.timestamp || 0) > 3600000) {
+      sessionStorage.removeItem(SESSION_KEY);
+      return null;
+    }
+    return data;
+  } catch { return null; }
+}
+
+function clearSessionState() {
+  try {
+    sessionStorage.removeItem(SESSION_KEY);
+    sessionStorage.removeItem(SESSION_PENDING_UPLOAD);
+  } catch { /* ignore */ }
+}
+
 export default function PerformanceEvidence() {
   const [, navigate] = useLocation();
   const { user, isAuthenticated, loading: authLoading } = useAuth();
@@ -221,6 +269,7 @@ export default function PerformanceEvidence() {
   const [expandedSubEvidence, setExpandedSubEvidence] = useState<string | null>(null);
   const [isExporting, setIsExporting] = useState(false);
   const [activeTab, setActiveTab] = useState("criteria");
+  const [stateRestored, setStateRestored] = useState(false);
 
   // AI State
   const [aiLoading, setAiLoading] = useState<string | null>(null);
@@ -270,6 +319,61 @@ export default function PerformanceEvidence() {
     initCriteriaData(job.criteria);
     setStep("dashboard");
   };
+
+  // ===== استعادة الـ state من sessionStorage عند تحميل الصفحة (حل مشكلة الجوال) =====
+  useEffect(() => {
+    if (stateRestored) return;
+    const saved = loadStateFromSession();
+    if (saved && saved.jobId) {
+      const job = JOB_TYPES.find(j => j.id === saved.jobId);
+      if (job) {
+        setSelectedJob(job);
+        setStep((saved.step as any) || "dashboard");
+        setCurrentCriterionIndex(saved.currentCriterionIndex || 0);
+        setActiveTab(saved.activeTab || "criteria");
+        setExpandedSubEvidence(saved.expandedSubEvidence || null);
+        if (saved.personalInfo) setPersonalInfo(saved.personalInfo);
+        if (saved.customCriteria) setCustomCriteria(saved.customCriteria);
+        if (saved.themeId) {
+          const theme = THEMES.find(t => t.id === saved.themeId);
+          if (theme) setSelectedTheme(theme);
+        }
+        // استعادة criteriaData - دمج مع البيانات الافتراضية
+        if (saved.criteriaData) {
+          const allCrit = [...job.criteria, ...(saved.customCriteria || [])];
+          const merged: Record<string, CriterionData> = {};
+          allCrit.forEach(c => {
+            merged[c.id] = saved.criteriaData[c.id] || { score: 0, notes: "", evidences: [], customSubEvidences: [] };
+          });
+          setCriteriaData(merged);
+        } else {
+          initCriteriaData(job.criteria);
+        }
+        // إظهار رسالة استعادة
+        const wasPendingUpload = sessionStorage.getItem(SESSION_PENDING_UPLOAD);
+        if (wasPendingUpload) {
+          toast.info("تم استعادة بياناتك بعد العودة", {
+            description: "يرجى رفع الشاهد مرة أخرى - المتصفح أعاد تحميل الصفحة",
+            duration: 6000,
+          });
+          sessionStorage.removeItem(SESSION_PENDING_UPLOAD);
+        } else {
+          toast.success("تم استعادة بياناتك السابقة", { duration: 3000 });
+        }
+      }
+    }
+    setStateRestored(true);
+  }, [stateRestored]);
+
+  // ===== حفظ الـ state تلقائياً عند كل تغيير =====
+  useEffect(() => {
+    if (!selectedJob || step === "select") return;
+    saveStateToSession({
+      step, jobId: selectedJob.id, themeId: selectedTheme.id,
+      criteriaData, personalInfo, customCriteria,
+      currentCriterionIndex, activeTab, expandedSubEvidence,
+    });
+  }, [step, selectedJob, selectedTheme, criteriaData, personalInfo, customCriteria, currentCriterionIndex, activeTab, expandedSubEvidence]);
 
   // ===== حسابات تحليل الفجوات =====
   const gapAnalysis = useMemo(() => {
@@ -401,10 +505,12 @@ export default function PerformanceEvidence() {
     };
     reader.readAsDataURL(file);
     e.target.value = "";
+    try { sessionStorage.removeItem(SESSION_PENDING_UPLOAD); } catch {}
   }, []);
 
   const triggerFileUpload = (criterionId: string, subEvidenceId: string) => {
     activeUploadRef.current = { criterionId, subEvidenceId };
+    try { sessionStorage.setItem(SESSION_PENDING_UPLOAD, "file"); } catch {}
     fileInputRef.current?.click();
   };
 
@@ -552,6 +658,8 @@ export default function PerformanceEvidence() {
     };
     reader.readAsDataURL(file);
     e.target.value = "";
+    // إزالة pending upload flag بعد بدء الرفع بنجاح
+    try { sessionStorage.removeItem(SESSION_PENDING_UPLOAD); } catch {}
   }, [allCriteria, criteriaData, classifyMutation, compressImage]);
 
   // ===== AI Functions =====
@@ -848,7 +956,7 @@ export default function PerformanceEvidence() {
           {/* ===== Header Bar - Mobile Optimized ===== */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-3 mb-4 sm:mb-6 bg-card/80 backdrop-blur-sm rounded-xl p-2.5 sm:p-3 border border-border/40 shadow-sm">
             <div className="flex items-center gap-1.5 sm:gap-2">
-              <Button variant="ghost" size="sm" onClick={() => setStep("select")} className="gap-1 sm:gap-1.5 text-muted-foreground hover:text-foreground text-xs sm:text-sm h-8 sm:h-9 px-2 sm:px-3">
+              <Button variant="ghost" size="sm" onClick={() => { clearSessionState(); setStep("select"); }} className="gap-1 sm:gap-1.5 text-muted-foreground hover:text-foreground text-xs sm:text-sm h-8 sm:h-9 px-2 sm:px-3">
                 <ArrowRight className="w-3.5 h-3.5 sm:w-4 sm:h-4" />تغيير الوظيفة
               </Button>
               <div className="w-px h-4 sm:h-5 bg-border/60" />
@@ -897,7 +1005,7 @@ export default function PerformanceEvidence() {
                   </div>
                   <h2 className="font-bold text-foreground text-xs sm:text-sm" style={{ fontFamily: "var(--font-heading)" }}>تحليل الجاهزية</h2>
                 </div>
-                <Button onClick={() => smartUploadRef.current?.click()} disabled={isSmartUploading}
+                <Button onClick={() => { try { sessionStorage.setItem(SESSION_PENDING_UPLOAD, "smart"); } catch {} smartUploadRef.current?.click(); }} disabled={isSmartUploading}
                   variant="default" size="sm" className="gap-1.5 bg-violet-600 hover:bg-violet-700 shadow-sm text-xs h-8 sm:h-9 w-full sm:w-auto">
                   {isSmartUploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
                   {isSmartUploading ? "جاري التصنيف..." : "رفع شاهد مع تصنيف ذكي"}
