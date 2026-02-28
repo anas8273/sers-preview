@@ -212,7 +212,7 @@ function createEmptyEvidence(subEvidenceId: string = ""): EvidenceItem {
 export default function PerformanceEvidence() {
   const [, navigate] = useLocation();
   const { user, isAuthenticated, loading: authLoading } = useAuth();
-  const portfolio = usePortfolio();
+  const portfolio = usePortfolio(isAuthenticated);
   const [step, setStep] = useState<"select" | "dashboard" | "criterion-detail" | "final-review" | "preview">("select");
   const [selectedJob, setSelectedJob] = useState<typeof JOB_TYPES[0] | null>(null);
   const [selectedTheme, setSelectedTheme] = useState(THEMES[0]);
@@ -411,23 +411,57 @@ export default function PerformanceEvidence() {
   // ===== رفع ذكي مع تصنيف AI تلقائي =====
   const [isSmartUploading, setIsSmartUploading] = useState(false);
 
+  // ===== ضغط الصورة قبل إرسالها للـ AI =====
+  const compressImage = useCallback((base64: string, maxWidth = 800, quality = 0.6): Promise<string> => {
+    return new Promise((resolve) => {
+      const img = document.createElement('img');
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        let w = img.width, h = img.height;
+        if (w > maxWidth) { h = (maxWidth / w) * h; w = maxWidth; }
+        canvas.width = w; canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        ctx?.drawImage(img, 0, 0, w, h);
+        resolve(canvas.toDataURL('image/jpeg', quality));
+      };
+      img.onerror = () => resolve(base64); // fallback to original
+      img.src = base64;
+    });
+  }, []);
+
   const handleSmartUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    
+    // التحقق من حجم الملف (16MB حد أقصى)
+    if (file.size > 16 * 1024 * 1024) {
+      toast.error("حجم الملف كبير جداً", { description: "الحد الأقصى 16 ميجابايت. يرجى اختيار ملف أصغر." });
+      e.target.value = "";
+      return;
+    }
+    
     setIsSmartUploading(true);
+    toast.info("جاري تحليل الملف بالذكاء الاصطناعي...", { duration: 3000 });
+    
     const reader = new FileReader();
     reader.onload = async () => {
       try {
         const isImage = file.type.startsWith("image/");
         const isVideo = file.type.startsWith("video/");
-        const base64Data = reader.result as string;
+        const originalBase64 = reader.result as string;
+        
+        // ضغط الصورة قبل إرسالها للـ AI لتقليل حجم الـ payload
+        let aiImageUrl: string | undefined;
+        if (isImage) {
+          aiImageUrl = await compressImage(originalBase64, 800, 0.5);
+        }
 
-        // إرسال base64 مباشرة للـ AI للتحليل (publicProcedure - لا يحتاج تسجيل دخول)
+        // إرسال للـ AI للتحليل (publicProcedure - لا يحتاج تسجيل دخول)
         const result = await classifyMutation.mutateAsync({
           fileName: file.name,
           fileType: file.type,
           description: file.name.replace(/\.[^/.]+$/, "").replace(/[-_]/g, " "),
-          fileUrl: isImage ? base64Data : undefined,
+          fileUrl: aiImageUrl,
         });
 
         if (result.success && result.classification) {
@@ -440,7 +474,7 @@ export default function PerformanceEvidence() {
             const targetSub = (cls.indicatorIndex > 0 && subs[cls.indicatorIndex - 1]) ? subs[cls.indicatorIndex - 1] : subs[0];
             const newEv = createEmptyEvidence(targetSub?.id || "");
             newEv.type = isImage ? "image" : isVideo ? "video" : "file";
-            newEv.fileData = base64Data;
+            newEv.fileData = originalBase64; // حفظ الصورة الأصلية بدون ضغط
             newEv.fileName = file.name;
             newEv.text = cls.contentDescription || file.name;
             newEv.displayAs = isImage ? "image" : "qr";
@@ -458,7 +492,7 @@ export default function PerformanceEvidence() {
             if (firstCriterion) {
               const newEv = createEmptyEvidence(firstCriterion.subEvidences[0]?.id || "");
               newEv.type = isImage ? "image" : isVideo ? "video" : "file";
-              newEv.fileData = base64Data;
+              newEv.fileData = originalBase64;
               newEv.fileName = file.name;
               newEv.displayAs = isImage ? "image" : "qr";
               setCriteriaData((prev) => ({
@@ -467,22 +501,58 @@ export default function PerformanceEvidence() {
             }
           }
         } else {
-          toast.error("لم يتمكن النظام من تصنيف الشاهد، يرجى رفعه يدوياً");
+          // حتى لو فشل التصنيف، نضيف الشاهد للبند الأول
+          toast.warning("لم يتمكن النظام من تصنيف الشاهد تلقائياً", {
+            description: "تم إضافته للبند الأول. يمكنك نقله يدوياً للبند المناسب.",
+            duration: 5000,
+          });
+          const firstCriterion = allCriteria[0];
+          if (firstCriterion) {
+            const newEv = createEmptyEvidence(firstCriterion.subEvidences[0]?.id || "");
+            newEv.type = isImage ? "image" : isVideo ? "video" : "file";
+            newEv.fileData = originalBase64;
+            newEv.fileName = file.name;
+            newEv.displayAs = isImage ? "image" : "qr";
+            setCriteriaData((prev) => ({
+              ...prev, [firstCriterion.id]: { ...prev[firstCriterion.id], evidences: [...prev[firstCriterion.id].evidences, newEv] },
+            }));
+          }
         }
-      } catch (err) {
+      } catch (err: any) {
         console.error("Smart upload error:", err);
-        toast.error("فشل التصنيف التلقائي، يرجى رفع الشاهد يدوياً");
+        // منع الرجوع لصفحة تسجيل الدخول - إضافة الشاهد يدوياً
+        const isImage = file.type.startsWith("image/");
+        const isVideo = file.type.startsWith("video/");
+        const originalBase64 = reader.result as string;
+        
+        toast.warning("فشل التصنيف التلقائي", {
+          description: "تم إضافة الملف للبند الأول. يمكنك نقله يدوياً.",
+          duration: 5000,
+        });
+        
+        // إضافة الشاهد للبند الأول كـ fallback
+        const firstCriterion = allCriteria[0];
+        if (firstCriterion) {
+          const newEv = createEmptyEvidence(firstCriterion.subEvidences[0]?.id || "");
+          newEv.type = isImage ? "image" : isVideo ? "video" : "file";
+          newEv.fileData = originalBase64;
+          newEv.fileName = file.name;
+          newEv.displayAs = isImage ? "image" : "qr";
+          setCriteriaData((prev) => ({
+            ...prev, [firstCriterion.id]: { ...prev[firstCriterion.id], evidences: [...prev[firstCriterion.id].evidences, newEv] },
+          }));
+        }
       } finally {
         setIsSmartUploading(false);
       }
     };
     reader.onerror = () => {
-      toast.error("فشل قراءة الملف");
+      toast.error("فشل قراءة الملف", { description: "يرجى المحاولة مرة أخرى" });
       setIsSmartUploading(false);
     };
     reader.readAsDataURL(file);
     e.target.value = "";
-  }, [allCriteria, criteriaData, classifyMutation]);
+  }, [allCriteria, criteriaData, classifyMutation, compressImage]);
 
   // ===== AI Functions =====
   const callAI = async (criterionId: string, subId: string, userPrompt: string) => {

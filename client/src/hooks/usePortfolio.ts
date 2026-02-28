@@ -14,7 +14,7 @@ interface PortfolioState {
   isDirty: boolean;
 }
 
-export function usePortfolio() {
+export function usePortfolio(isAuthenticated: boolean = false) {
   const [state, setState] = useState<PortfolioState>({
     id: null,
     saving: false,
@@ -26,10 +26,11 @@ export function usePortfolio() {
   const utils = trpc.useUtils();
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Queries
+  // Queries - فقط عندما يكون المستخدم مسجل دخول
   const portfolioList = trpc.portfolio.list.useQuery(undefined, {
     retry: false,
     refetchOnWindowFocus: false,
+    enabled: isAuthenticated,
   });
 
   // Mutations
