@@ -69,3 +69,27 @@ export const shareLinks = mysqlTable("share_links", {
 
 export type ShareLink = typeof shareLinks.$inferSelect;
 export type InsertShareLink = typeof shareLinks.$inferInsert;
+
+// ─── PDF Templates (Themes) ────────────────────────────
+export const pdfTemplates = mysqlTable("pdf_templates", {
+  id: int("id").autoincrement().primaryKey(),
+  name: varchar("name", { length: 255 }).notNull(),
+  description: text("description"),
+  headerBg: varchar("headerBg", { length: 128 }).notNull().default("linear-gradient(135deg, #059669, #047857)"),
+  headerText: varchar("headerText", { length: 32 }).notNull().default("#ffffff"),
+  accent: varchar("accent", { length: 32 }).notNull().default("#059669"),
+  borderColor: varchar("borderColor", { length: 32 }).notNull().default("#e5e7eb"),
+  bodyBg: varchar("bodyBg", { length: 32 }).notNull().default("#ffffff"),
+  fontFamily: varchar("fontFamily", { length: 128 }).default("'Cairo', 'Tajawal', sans-serif"),
+  coverImageUrl: text("coverImageUrl"),
+  logoUrl: text("logoUrl"),
+  isDefault: boolean("isDefault").default(false),
+  isActive: boolean("isActive").default(true),
+  sortOrder: int("sortOrder").default(0),
+  createdBy: int("createdBy"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type PdfTemplate = typeof pdfTemplates.$inferSelect;
+export type InsertPdfTemplate = typeof pdfTemplates.$inferInsert;

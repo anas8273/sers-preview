@@ -2,7 +2,7 @@
  * لوحة تحليل الفجوات - على نمط معياري
  * تظهر نسبة الإنجاز لكل معيار (أخضر/أصفر/أحمر)
  */
-import { STANDARDS, getStandardProgress, getOverallProgress, type Evidence } from "@/lib/standards-data";
+import { STANDARDS, getStandardProgress, getOverallCoverage, type Evidence } from "@/lib/standards-data";
 import { CheckCircle, AlertTriangle, XCircle, TrendingUp } from "lucide-react";
 
 interface Props {
@@ -11,7 +11,7 @@ interface Props {
 }
 
 export default function GapAnalysis({ evidences, onSelectStandard }: Props) {
-  const overall = getOverallProgress(evidences);
+  const overall = getOverallCoverage(evidences);
 
   return (
     <div className="space-y-4">

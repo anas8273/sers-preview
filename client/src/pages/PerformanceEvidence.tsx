@@ -85,11 +85,11 @@ function buildTeacherCriteria(): Criterion[] {
     id: std.id,
     title: std.title,
     maxScore: 5,
-    description: `${std.indicators.length} مؤشر · الوزن ${std.weight}%`,
-    subEvidences: std.indicators.map(ind => ({
-      id: ind.id,
-      title: ind.text,
-      description: ind.suggestedEvidence.join(" · "),
+    description: `${std.items.length} بند · الوزن ${std.weight}%`,
+    subEvidences: std.items.map(item => ({
+      id: item.id,
+      title: item.text,
+      description: item.suggestedEvidence.join(" · "),
       type: "both" as const,
       formFields: [
         { id: "evidence_desc", label: "وصف الشاهد", type: "textarea" as const, placeholder: "اكتب وصفاً للشاهد المقدم..." },
@@ -481,10 +481,10 @@ export default function PerformanceEvidence() {
     let totalIndicators = 0;
     let coveredIndicators = 0;
     STANDARDS.forEach(std => {
-      std.indicators.forEach(ind => {
+      std.items.forEach(item => {
         totalIndicators++;
         const data = criteriaData[std.id];
-        if (data && data.evidences.some(e => e.subEvidenceId === ind.id)) {
+        if (data && data.evidences.some(e => e.subEvidenceId === item.id)) {
           coveredIndicators++;
         }
       });
@@ -896,36 +896,48 @@ export default function PerformanceEvidence() {
     }, 1000);
   }, [processSmartFile]);
 
-  // ===== رفع ملف عادي (بدون تصنيف ذكي) =====
+  // ===== رفع ملف عادي (بدون تصنيف ذكي) - يدعم رفع متعدد =====
   const handleFileUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     e.preventDefault();
     e.stopPropagation();
-    const file = e.target.files?.[0];
-    if (!file || !activeUploadRef.current) return;
+    const files = e.target.files;
+    if (!files || files.length === 0 || !activeUploadRef.current) return;
     
     // مسح قيمة input فوراً
+    const fileList = Array.from(files);
     e.target.value = "";
     
-    // التحقق من حجم الملف
-    if (file.size > 16 * 1024 * 1024) {
-      toast.error("حجم الملف كبير جداً", { description: "الحد الأقصى 16 ميجابايت" });
-      return;
+    // التحقق من حجم الملفات
+    const oversized = fileList.filter(f => f.size > 16 * 1024 * 1024);
+    if (oversized.length > 0) {
+      toast.error(`${oversized.length} ملف تجاوز الحد الأقصى (16MB)`, { description: oversized.map(f => f.name).join(', ') });
     }
+    const validFiles = fileList.filter(f => f.size <= 16 * 1024 * 1024);
+    if (validFiles.length === 0) return;
     
     // تفعيل flag منع الحفظ أثناء الرفع
     isUploadingRef.current = true;
     
     const { criterionId, subEvidenceId } = activeUploadRef.current;
-    const isImage = file.type.startsWith("image/");
-    const isVideo = file.type.startsWith("video/");
+    let addedCount = 0;
     
-    const reader = new FileReader();
-    reader.onload = async () => {
+    for (const file of validFiles) {
+      const isImage = file.type.startsWith("image/");
+      const isVideo = file.type.startsWith("video/");
+      
       try {
-        let fileData = reader.result as string;
+        const fileData = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = () => reject(new Error('Failed to read file'));
+          reader.readAsDataURL(file);
+        });
+        
+        let processedData = fileData;
         if (isImage) {
-          fileData = await compressImageForStorage(fileData, 1200, 0.7);
+          processedData = await compressImageForStorage(fileData, 1200, 0.7);
         }
+        
         const evId = `ev_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
         const newEv = createEmptyEvidence(subEvidenceId);
         newEv.id = evId;
@@ -938,33 +950,34 @@ export default function PerformanceEvidence() {
         try {
           await saveFileToIDB({
             id: evId,
-            data: fileData,
+            data: processedData,
             fileName: file.name,
             fileType: file.type,
             timestamp: Date.now(),
           });
-          if (isImage && fileData.length < 200000) {
-            newEv.fileData = fileData;
+          if (isImage && processedData.length < 200000) {
+            newEv.fileData = processedData;
           } else {
             newEv.fileData = `idb://${evId}`;
           }
         } catch {
-          newEv.fileData = fileData;
+          newEv.fileData = processedData;
         }
         
         addEvidenceToCriterion(criterionId, newEv);
-        toast.success("تم إضافة الشاهد بنجاح", { description: file.name, duration: 3000 });
+        addedCount++;
       } catch {
-        toast.error("فشل معالجة الملف", { description: "يرجى المحاولة مرة أخرى" });
-      } finally {
-        isUploadingRef.current = false;
+        toast.error(`فشل معالجة: ${file.name}`);
       }
-    };
-    reader.onerror = () => {
-      toast.error("فشل قراءة الملف", { description: "يرجى المحاولة مرة أخرى" });
-      isUploadingRef.current = false;
-    };
-    reader.readAsDataURL(file);
+    }
+    
+    isUploadingRef.current = false;
+    if (addedCount > 0) {
+      toast.success(
+        addedCount === 1 ? "تم إضافة الشاهد بنجاح" : `تم إضافة ${addedCount} شواهد بنجاح`,
+        { description: validFiles.map(f => f.name).join(', '), duration: 3000 }
+      );
+    }
     try { localStorage.removeItem(STORAGE_PENDING_UPLOAD); } catch {}
   }, [compressImageForStorage, addEvidenceToCriterion]);
 
@@ -1687,8 +1700,8 @@ export default function PerformanceEvidence() {
                   const isTeacherStandard = selectedJob?.isTeacher && criterion.id.startsWith("std-");
                   const standard = isTeacherStandard ? STANDARDS.find(s => s.id === criterion.id) : null;
                   const indicatorProgress = isTeacherStandard && standard ? (() => {
-                    const covered = standard.indicators.filter(ind => data.evidences.some(e => e.subEvidenceId === ind.id)).length;
-                    return { covered, total: standard.indicators.length, pct: standard.indicators.length > 0 ? Math.round((covered / standard.indicators.length) * 100) : 0 };
+                    const covered = standard.items.filter(item => data.evidences.some(e => e.subEvidenceId === item.id)).length;
+                    return { covered, total: standard.items.length, pct: standard.items.length > 0 ? Math.round((covered / standard.items.length) * 100) : 0 };
                   })() : null;
 
                   return (
@@ -1838,7 +1851,7 @@ export default function PerformanceEvidence() {
 
     return (
       <div className="min-h-screen bg-background p-3 sm:p-4 md:p-6" dir="rtl">
-        <input type="file" ref={fileInputRef} className="hidden" accept="image/*,video/*,.pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx" onChange={handleFileUpload} />
+        <input type="file" ref={fileInputRef} className="hidden" accept="image/*,video/*,.pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx" multiple onChange={handleFileUpload} />
         <div className="max-w-4xl mx-auto">
 
           {/* Header - Mobile Optimized */}
@@ -1875,7 +1888,7 @@ export default function PerformanceEvidence() {
                     {isTeacherStandard && standard && (
                       <div className="flex items-center gap-1.5 sm:gap-2 mt-1.5 sm:mt-2">
                         <Badge variant="outline" className="text-[9px] sm:text-[10px]">الوزن: {standard.weight}%</Badge>
-                        <Badge variant="outline" className="text-[9px] sm:text-[10px]">{standard.indicators.length} مؤشر</Badge>
+                        <Badge variant="outline" className="text-[9px] sm:text-[10px]">{standard.items.length} بند</Badge>
                       </div>
                     )}
                   </div>

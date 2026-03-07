@@ -1,6 +1,26 @@
 import html2canvas from "html2canvas";
 import { jsPDF } from "jspdf";
 
+export interface PdfTemplate {
+  headerBg: string;
+  headerText: string;
+  accent: string;
+  borderColor: string;
+  bodyBg: string;
+  fontFamily: string;
+  coverImageUrl?: string;
+  logoUrl?: string;
+}
+
+export const DEFAULT_TEMPLATE: PdfTemplate = {
+  headerBg: "#047857",
+  headerText: "#FFFFFF",
+  accent: "#059669",
+  borderColor: "#D1FAE5",
+  bodyBg: "#FFFFFF",
+  fontFamily: "Tajawal",
+};
+
 export async function exportToPDF(elementId: string, filename: string = "document.pdf") {
   const element = document.getElementById(elementId);
   if (!element) return;
@@ -46,7 +66,7 @@ export async function exportToPDF(elementId: string, filename: string = "documen
       // صفحة واحدة
       pdf.addImage(imgData, "JPEG", margin, margin, usableWidth, scaledHeight);
     } else {
-      // صفحات متعددة
+      // صفحات متعددة - مع تحسين القطع عند فواصل الأقسام
       const pageCanvasHeight = usableHeight / ratio;
       let remainingHeight = imgHeight;
       let sourceY = 0;
@@ -80,6 +100,42 @@ export async function exportToPDF(elementId: string, filename: string = "documen
   }
 }
 
+/**
+ * تطبيق ثيم القالب على عنصر HTML قبل التصدير
+ */
+export function applyTemplateToElement(element: HTMLElement, template: PdfTemplate) {
+  // تطبيق الألوان على العناصر
+  const headers = element.querySelectorAll('[data-pdf-header]');
+  headers.forEach(h => {
+    (h as HTMLElement).style.backgroundColor = template.headerBg;
+    (h as HTMLElement).style.color = template.headerText;
+  });
+
+  const accents = element.querySelectorAll('[data-pdf-accent]');
+  accents.forEach(a => {
+    (a as HTMLElement).style.color = template.accent;
+  });
+
+  const accentBgs = element.querySelectorAll('[data-pdf-accent-bg]');
+  accentBgs.forEach(a => {
+    (a as HTMLElement).style.backgroundColor = template.accent + '15';
+    (a as HTMLElement).style.borderColor = template.accent;
+  });
+
+  const borders = element.querySelectorAll('[data-pdf-border]');
+  borders.forEach(b => {
+    (b as HTMLElement).style.borderColor = template.borderColor;
+  });
+
+  const bodies = element.querySelectorAll('[data-pdf-body]');
+  bodies.forEach(b => {
+    (b as HTMLElement).style.backgroundColor = template.bodyBg;
+  });
+
+  // تطبيق الخط
+  element.style.fontFamily = `'${template.fontFamily}', sans-serif`;
+}
+
 export function printElement(elementId: string) {
   const element = document.getElementById(elementId);
   if (!element) return;
@@ -92,13 +148,14 @@ export function printElement(elementId: string) {
     <html lang="ar" dir="rtl">
     <head>
       <meta charset="UTF-8">
-      <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&family=Cairo:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+      <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&family=Cairo:wght@300;400;500;600;700&family=Almarai:wght@300;400;700;800&family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700&display=swap" rel="stylesheet">
       <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: 'Cairo', 'Tajawal', sans-serif; direction: rtl; }
         @media print {
           body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
           .page-break { page-break-before: always; }
+          [data-no-print] { display: none !important; }
         }
       </style>
     </head>

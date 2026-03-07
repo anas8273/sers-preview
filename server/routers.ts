@@ -11,6 +11,7 @@ import {
   getAllPortfolios, reviewPortfolio,
   createUploadedFile, getFilesByPortfolio, deleteUploadedFile,
   createShareLink, getShareLinkByToken, incrementShareLinkViews, getShareLinksByPortfolio, deactivateShareLink,
+  createPdfTemplate, updatePdfTemplate, deletePdfTemplate, getActivePdfTemplates, getAllPdfTemplates, seedDefaultTemplates,
 } from "./db";
 
 export const appRouter = router({
@@ -228,7 +229,70 @@ export const appRouter = router({
       }),
   }),
 
-  // ─── AI Services ──────────────────────────────────────
+  // ─── PDF Templates ──────────────────────────────────────────
+  templates: router({
+    list: publicProcedure.query(async () => {
+      return getActivePdfTemplates();
+    }),
+
+    listAll: adminProcedure.query(async () => {
+      return getAllPdfTemplates();
+    }),
+
+    create: adminProcedure
+      .input(z.object({
+        name: z.string(),
+        description: z.string().optional(),
+        headerBg: z.string(),
+        headerText: z.string(),
+        accent: z.string(),
+        borderColor: z.string(),
+        bodyBg: z.string(),
+        fontFamily: z.string().optional(),
+        coverImageUrl: z.string().optional(),
+        logoUrl: z.string().optional(),
+        isDefault: z.boolean().optional(),
+        sortOrder: z.number().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        return createPdfTemplate({ ...input, createdBy: ctx.user.id });
+      }),
+
+    update: adminProcedure
+      .input(z.object({
+        id: z.number(),
+        name: z.string().optional(),
+        description: z.string().optional(),
+        headerBg: z.string().optional(),
+        headerText: z.string().optional(),
+        accent: z.string().optional(),
+        borderColor: z.string().optional(),
+        bodyBg: z.string().optional(),
+        fontFamily: z.string().optional(),
+        coverImageUrl: z.string().optional(),
+        logoUrl: z.string().optional(),
+        isDefault: z.boolean().optional(),
+        isActive: z.boolean().optional(),
+        sortOrder: z.number().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const { id, ...data } = input;
+        return updatePdfTemplate(id, data);
+      }),
+
+    delete: adminProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input }) => {
+        return deletePdfTemplate(input.id);
+      }),
+
+    seed: adminProcedure.mutation(async () => {
+      await seedDefaultTemplates();
+      return { success: true };
+    }),
+  }),
+
+  // ─── AI Services ──────────────────────────────────────────────
   ai: router({
     classifyEvidence: publicProcedure
       .input(z.object({
@@ -241,26 +305,73 @@ export const appRouter = router({
       .mutation(async ({ input }) => {
         const SYSTEM_PROMPT = `أنت نظام تصنيف ذكي متقدم لشواهد الأداء الوظيفي للمعلمين وفق معايير وزارة التعليم السعودية 1447هـ.
 
-مهمتك:
+مهمتك (3 مستويات):
 1. حلل المحتوى بعمق (صورة، ملف، رابط، نص) واستخرج المعلومات الرئيسية
-2. حدد المعيار الأنسب من المعايير الـ 11
-3. حدد المؤشر الأنسب داخل المعيار
-4. اشرح سبب التصنيف بالتفصيل
-5. صف محتوى الملف/الصورة بدقة
+2. حدد المعيار الأنسب من المعايير الـ 11 (المستوى الأول)
+3. حدد البند الأنسب داخل المعيار (المستوى الثاني)
+4. حدد البند الفرعي الأنسب داخل البند (المستوى الثالث)
+5. اشرح سبب التصنيف بالتفصيل
+6. صف محتوى الملف/الصورة بدقة
+7. اقترح أولوية للشاهد (essential=أساسي، supporting=داعم، supplementary=إضافي)
+8. اقترح كلمات مفتاحية مناسبة
 
-المعايير الـ 11 ومؤشراتها:
+المعايير الـ 11 وبنودها الفرعية:
 
-1. أداء الواجبات الوظيفية (std-1): الالتزام بالحضور، تنفيذ التوجيهات، المشاركة في الأنشطة المدرسية، الإشراف اليومي
-2. التفاعل مع المجتمع المهني (std-2): المشاركة في التطوير المهني، التعاون مع الزملاء، المشاركة في مجتمعات التعلم
-3. التفاعل مع أولياء الأمور (std-3): التواصل مع الأسر، الاجتماعات، التقارير الدورية
-4. التنويع في استراتيجيات التدريس (std-4): التعلم النشط، التعلم التعاوني، التعلم باللعب، الصف المقلوب
-5. تحسين نتائج المتعلمين (std-5): خطط التحسين، البرامج الإثرائية، متابعة التقدم
-6. إعداد وتنفيذ خطة التعلم (std-6): تحضير الدروس، الأهداف التعليمية، التوزيع الزمني
-7. توظيف تقنيات ووسائل التعلم (std-7): التقنية في التعليم، الوسائل التعليمية، المنصات الرقمية
-8. تهيئة البيئة التعليمية (std-8): الفصل الدراسي، المعامل، البيئة الآمنة، الموارد
-9. الإدارة الصفية (std-9): ضبط الصف، إدارة الوقت، التعامل مع السلوك
-10. تحليل نتائج المتعلمين (std-10): الاختبارات، التحليل الإحصائي، تشخيص المستويات
-11. تنوع أساليب التقويم (std-11): التقويم التكويني، الختامي، الذاتي، الأقران، ملفات الإنجاز
+1. أداء الواجبات الوظيفية (std-1):
+   - البند 1: الالتزام بالحضور والانصراف
+   - البند 2: تنفيذ التوجيهات والتعاميم
+   - البند 3: المشاركة في الأنشطة المدرسية
+   - البند 4: الإشراف اليومي
+
+2. التفاعل مع المجتمع المهني (std-2):
+   - البند 1: المشاركة في التطوير المهني
+   - البند 2: التعاون مع الزملاء
+   - البند 3: المشاركة في مجتمعات التعلم المهنية
+
+3. التفاعل مع أولياء الأمور (std-3):
+   - البند 1: التواصل مع الأسر
+   - البند 2: عقد الاجتماعات
+   - البند 3: إعداد التقارير الدورية
+
+4. التنويع في استراتيجيات التدريس (std-4):
+   - البند 1: التعلم النشط
+   - البند 2: التعلم التعاوني
+   - البند 3: التعلم باللعب والصف المقلوب
+
+5. تحسين نتائج المتعلمين (std-5):
+   - البند 1: خطط التحسين
+   - البند 2: البرامج الإثرائية والعلاجية
+   - البند 3: متابعة التقدم
+
+6. إعداد وتنفيذ خطة التعلم (std-6):
+   - البند 1: تحضير الدروس
+   - البند 2: الأهداف التعليمية
+   - البند 3: التوزيع الزمني
+
+7. توظيف تقنيات ووسائل التعلم (std-7):
+   - البند 1: التقنية في التعليم
+   - البند 2: الوسائل التعليمية
+   - البند 3: المنصات الرقمية
+
+8. تهيئة البيئة التعليمية (std-8):
+   - البند 1: الفصل الدراسي
+   - البند 2: المعامل والمختبرات
+   - البند 3: البيئة الآمنة والموارد
+
+9. الإدارة الصفية (std-9):
+   - البند 1: ضبط الصف
+   - البند 2: إدارة الوقت
+   - البند 3: التعامل مع السلوك
+
+10. تحليل نتائج المتعلمين (std-10):
+   - البند 1: الاختبارات
+   - البند 2: التحليل الإحصائي
+   - البند 3: تشخيص المستويات
+
+11. تنوع أساليب التقويم (std-11):
+   - البند 1: التقويم التكويني والختامي
+   - البند 2: التقويم الذاتي وتقويم الأقران
+   - البند 3: ملفات الإنجاز
 
 عند تحليل الصور:
 - اقرأ أي نص عربي أو إنجليزي ظاهر في الصورة
@@ -328,13 +439,17 @@ export const appRouter = router({
                   standardId: { type: "string", description: "معرف المعيار مثل std-1" },
                   standardNumber: { type: "integer", description: "رقم المعيار من 1 إلى 11" },
                   standardName: { type: "string", description: "اسم المعيار" },
-                  indicatorIndex: { type: "integer", description: "رقم المؤشر داخل المعيار" },
-                  indicatorText: { type: "string", description: "نص المؤشر" },
+                  indicatorIndex: { type: "integer", description: "رقم البند داخل المعيار (يبدأ من 1)" },
+                  indicatorText: { type: "string", description: "نص البند" },
+                  subIndicatorIndex: { type: "integer", description: "رقم البند الفرعي داخل البند (يبدأ من 1، 0 إذا لم يتحدد)" },
+                  subIndicatorText: { type: "string", description: "نص البند الفرعي" },
                   confidence: { type: "number", description: "نسبة الثقة من 0 إلى 1" },
                   reasoning: { type: "string", description: "سبب التصنيف" },
                   contentDescription: { type: "string", description: "وصف محتوى الملف أو الصورة" },
+                  suggestedPriority: { type: "string", description: "الأولوية المقترحة: essential أو supporting أو supplementary" },
+                  suggestedKeywords: { type: "array", items: { type: "string" }, description: "كلمات مفتاحية مقترحة (3-5 كلمات)" },
                 },
-                required: ["standardId", "standardNumber", "standardName", "indicatorIndex", "indicatorText", "confidence", "reasoning", "contentDescription"],
+                required: ["standardId", "standardNumber", "standardName", "indicatorIndex", "indicatorText", "subIndicatorIndex", "subIndicatorText", "confidence", "reasoning", "contentDescription", "suggestedPriority", "suggestedKeywords"],
                 additionalProperties: false,
               },
             },

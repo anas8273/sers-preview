@@ -2,7 +2,7 @@
  * معاينة ملف الإنجاز - على نمط معياري
  * يعرض الملف النهائي قبل التصدير
  */
-import { STANDARDS, getStandardProgress, getOverallProgress, type Evidence, type UserProfile } from "@/lib/standards-data";
+import { STANDARDS, getStandardProgress, getOverallCoverage, type Evidence, type UserProfile } from "@/lib/standards-data";
 import { generateQRDataURL } from "@/lib/qr-utils";
 
 interface Theme {
@@ -21,7 +21,7 @@ interface Props {
 }
 
 export default function PortfolioPreview({ evidences, profile, theme }: Props) {
-  const overall = getOverallProgress(evidences);
+  const overall = getOverallCoverage(evidences);
 
   return (
     <div id="portfolio-preview" className="bg-white" style={{ fontFamily: "'Cairo', 'Tajawal', sans-serif" }}>
@@ -145,14 +145,14 @@ export default function PortfolioPreview({ evidences, profile, theme }: Props) {
             </h2>
 
             {/* تجميع الشواهد حسب المؤشر */}
-            {std.indicators.map((ind) => {
-              const indEvidences = stdEvidences.filter((e) => e.indicatorId === ind.id);
+            {(std.items || []).map((item) => {
+              const indEvidences = stdEvidences.filter((e) => e.indicatorId === item.id);
               if (indEvidences.length === 0) return null;
 
               return (
-                <div key={ind.id} className="mb-4 mr-4">
+                <div key={item.id} className="mb-4 mr-4">
                   <h3 className="text-sm font-medium text-gray-700 mb-2 border-r-2 pr-2" style={{ borderColor: theme.accent }}>
-                    {ind.text}
+                    {item.text}
                   </h3>
                   <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mr-4">
                     {indEvidences.map((ev) => (

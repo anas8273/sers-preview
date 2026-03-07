@@ -1,16 +1,17 @@
 /**
- * صفحة عرض ملف الإنجاز المشارك - عبر رابط آمن ومؤقت
- * لا تتطلب تسجيل دخول
+ * صفحة عرض ملف الإنجاز المشارك - موقع مصغر احترافي
+ * لا تتطلب تسجيل دخول - عرض إلكتروني تفاعلي
  */
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import { useParams } from "wouter";
 import { trpc } from "@/lib/trpc";
-import { generateQRDataURL } from "@/lib/qr-utils";
 import { STANDARDS } from "@/lib/standards-data";
 import {
   Lock, Eye, FileText, Image, Video, LinkIcon, Download,
   CheckCircle, AlertTriangle, XCircle, Loader2, ShieldCheck,
-  BarChart3, Calendar, Building2, User, Sparkles
+  BarChart3, Calendar, Building2, User, Sparkles, ChevronDown,
+  ChevronUp, Award, BookOpen, Printer, Share2, Star, ArrowUp,
+  GraduationCap, Briefcase, Hash, MessageSquare, Tag
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -30,12 +31,154 @@ const JOB_TITLES: Record<string, string> = {
   admin_assistant: "مساعد/ة إداري/ة",
 };
 
+const PRIORITY_CONFIG: Record<string, { label: string; color: string; icon: string; bg: string }> = {
+  essential: { label: "أساسي", color: "#059669", icon: "★", bg: "#ECFDF5" },
+  supporting: { label: "داعم", color: "#2563EB", icon: "◆", bg: "#EFF6FF" },
+  supplementary: { label: "إضافي", color: "#9333EA", icon: "○", bg: "#FAF5FF" },
+};
+
 function getGrade(pct: number) {
-  if (pct >= 90) return { label: "ممتاز", color: "#16A34A" };
-  if (pct >= 80) return { label: "جيد جداً", color: "#2563EB" };
-  if (pct >= 70) return { label: "جيد", color: "#CA8A04" };
-  if (pct >= 60) return { label: "مقبول", color: "#EA580C" };
-  return { label: "ضعيف", color: "#DC2626" };
+  if (pct >= 90) return { label: "ممتاز", color: "#16A34A", bg: "#DCFCE7", emoji: "🏆" };
+  if (pct >= 80) return { label: "جيد جداً", color: "#2563EB", bg: "#DBEAFE", emoji: "⭐" };
+  if (pct >= 70) return { label: "جيد", color: "#CA8A04", bg: "#FEF9C3", emoji: "👍" };
+  if (pct >= 60) return { label: "مقبول", color: "#EA580C", bg: "#FED7AA", emoji: "📋" };
+  return { label: "ضعيف", color: "#DC2626", bg: "#FEE2E2", emoji: "📌" };
+}
+
+function EvidenceCard({ ev }: { ev: any }) {
+  const priority = ev.priority || "essential";
+  const pc = PRIORITY_CONFIG[priority] || PRIORITY_CONFIG.essential;
+
+  return (
+    <div className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm hover:shadow-md transition-all" style={{ borderRightWidth: "4px", borderRightColor: pc.color }}>
+      {/* رأس الشاهد */}
+      <div className="flex items-center gap-2 mb-3 flex-wrap">
+        <span className="inline-flex items-center gap-1 text-[10px] px-2 py-1 rounded-full font-bold" style={{ backgroundColor: pc.bg, color: pc.color }}>
+          {pc.icon} {pc.label}
+        </span>
+        <span className="text-[10px] px-2 py-1 rounded-full bg-gray-100 text-gray-600 font-medium">
+          {ev.type === "text" ? "📝 نص" : ev.type === "image" ? "🖼️ صورة" : ev.type === "link" ? "🔗 رابط" : ev.type === "file" ? "📄 ملف" : "🎬 فيديو"}
+        </span>
+      </div>
+
+      {/* المحتوى */}
+      {ev.type === "text" && ev.text && (
+        <p className="text-sm text-gray-700 leading-relaxed bg-gray-50 rounded-lg p-3">{ev.text}</p>
+      )}
+      {ev.type === "link" && ev.link && (
+        <div className="flex items-center gap-2 bg-purple-50 rounded-lg p-3">
+          <LinkIcon className="w-4 h-4 text-purple-500 shrink-0" />
+          <a href={ev.link} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-600 hover:underline truncate">
+            {ev.link}
+          </a>
+        </div>
+      )}
+      {ev.type === "image" && ev.fileData && (
+        <img src={ev.fileData} alt="" className="max-h-64 rounded-lg border border-gray-100 mx-auto" />
+      )}
+      {(ev.type === "video" || ev.type === "file") && (
+        <div className="flex items-center gap-3 bg-gray-50 rounded-lg p-3">
+          {ev.type === "video" ? <Video className="w-5 h-5 text-red-500" /> : <FileText className="w-5 h-5 text-orange-500" />}
+          <span className="text-sm text-gray-700 font-medium">{ev.fileName}</span>
+        </div>
+      )}
+
+      {/* بيانات النموذج */}
+      {ev.formData && Object.entries(ev.formData).some(([, v]) => v) && (
+        <div className="mt-3 bg-blue-50/50 rounded-lg p-3 space-y-1.5">
+          {Object.entries(ev.formData).filter(([, v]) => v).map(([key, val]) => (
+            <p key={key} className="text-xs"><span className="text-gray-500 font-medium">{key}:</span> <span className="text-gray-800">{val as string}</span></p>
+          ))}
+        </div>
+      )}
+
+      {/* التعليق */}
+      {ev.comment && ev.comment.trim() && (
+        <div className="mt-3 flex items-start gap-2 bg-amber-50 rounded-lg p-3 border border-amber-100">
+          <MessageSquare className="w-3.5 h-3.5 text-amber-600 mt-0.5 shrink-0" />
+          <p className="text-xs text-amber-800 leading-relaxed">{ev.comment}</p>
+        </div>
+      )}
+
+      {/* الكلمات المفتاحية */}
+      {ev.keywords && ev.keywords.length > 0 && (
+        <div className="mt-3 flex items-center gap-1.5 flex-wrap">
+          <Tag className="w-3 h-3 text-sky-500" />
+          {ev.keywords.map((kw: string, ki: number) => (
+            <span key={ki} className="text-[10px] px-2 py-0.5 rounded-full bg-sky-50 text-sky-700 border border-sky-200 font-medium">{kw}</span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CriterionSection({ criterionId, data, index }: { criterionId: string; data: any; index: number }) {
+  const [expanded, setExpanded] = useState(false);
+  const evCount = data?.evidences?.length || 0;
+  const score = data?.score || 0;
+  const status = score >= 4 && evCount > 0 ? "complete" : evCount > 0 || score > 0 ? "partial" : "missing";
+  const standard = STANDARDS.find(s => s.id === criterionId);
+  const title = standard?.title || criterionId;
+
+  const statusConfig = {
+    complete: { bg: "bg-emerald-50", text: "text-emerald-700", border: "border-emerald-200", icon: <CheckCircle className="w-4 h-4 text-emerald-500" />, label: "مكتمل" },
+    partial: { bg: "bg-amber-50", text: "text-amber-700", border: "border-amber-200", icon: <AlertTriangle className="w-4 h-4 text-amber-500" />, label: "جزئي" },
+    missing: { bg: "bg-red-50", text: "text-red-600", border: "border-red-200", icon: <XCircle className="w-4 h-4 text-red-400" />, label: "ناقص" },
+  };
+  const sc = statusConfig[status];
+
+  return (
+    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden hover:shadow-md transition-all">
+      {/* رأس البند */}
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="w-full flex items-center justify-between p-5 text-right hover:bg-gray-50/50 transition-colors"
+      >
+        <div className="flex items-center gap-4 flex-1 min-w-0">
+          <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-sm font-bold shrink-0 ${sc.bg} ${sc.text}`}>
+            {index + 1}
+          </div>
+          <div className="min-w-0 flex-1">
+            <h3 className="text-sm font-bold text-gray-900 truncate" style={{ fontFamily: "'Tajawal', sans-serif" }}>{title}</h3>
+            <div className="flex items-center gap-2 mt-1">
+              <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${sc.bg} ${sc.text}`}>{sc.label}</span>
+              <span className="text-[10px] text-gray-500">{evCount} شاهد</span>
+            </div>
+          </div>
+        </div>
+        <div className="flex items-center gap-3 shrink-0">
+          <div className="flex items-center gap-1">
+            {[1, 2, 3, 4, 5].map(s => (
+              <Star key={s} className={`w-3.5 h-3.5 ${s <= score ? "text-amber-400 fill-amber-400" : "text-gray-200"}`} />
+            ))}
+          </div>
+          <Badge variant={score >= 4 ? "default" : score >= 3 ? "secondary" : "outline"} className="text-xs">
+            {score}/5
+          </Badge>
+          {expanded ? <ChevronUp className="w-4 h-4 text-gray-400" /> : <ChevronDown className="w-4 h-4 text-gray-400" />}
+        </div>
+      </button>
+
+      {/* محتوى الشواهد */}
+      {expanded && data?.evidences && data.evidences.length > 0 && (
+        <div className="px-5 pb-5 space-y-3 border-t border-gray-100 pt-4">
+          {data.evidences.map((ev: any) => (
+            <EvidenceCard key={ev.id} ev={ev} />
+          ))}
+        </div>
+      )}
+
+      {expanded && (!data?.evidences || data.evidences.length === 0) && (
+        <div className="px-5 pb-5 border-t border-gray-100 pt-4">
+          <div className="text-center py-6 text-gray-400">
+            <FileText className="w-8 h-8 mx-auto mb-2 opacity-50" />
+            <p className="text-sm">لا توجد شواهد مرفقة لهذا البند</p>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
 
 export default function SharedPortfolio() {
@@ -43,8 +186,16 @@ export default function SharedPortfolio() {
   const token = params.token || "";
   const [password, setPassword] = useState("");
   const [submitted, setSubmitted] = useState(false);
+  const [showScrollTop, setShowScrollTop] = useState(false);
+  const contentRef = useRef<HTMLDivElement>(null);
 
-  const { data, isLoading, error, refetch } = trpc.share.view.useQuery(
+  useEffect(() => {
+    const handleScroll = () => setShowScrollTop(window.scrollY > 400);
+    window.addEventListener("scroll", handleScroll);
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
+
+  const { data, isLoading, error } = trpc.share.view.useQuery(
     { token, password: submitted ? password : undefined },
     { enabled: !!token, retry: false }
   );
@@ -53,8 +204,13 @@ export default function SharedPortfolio() {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-emerald-50/30" dir="rtl">
         <div className="text-center">
-          <Loader2 className="w-10 h-10 animate-spin text-emerald-600 mx-auto mb-4" />
-          <p className="text-sm text-gray-500 font-medium">جاري تحميل ملف الإنجاز...</p>
+          <div className="relative w-20 h-20 mx-auto mb-6">
+            <div className="absolute inset-0 rounded-full border-4 border-emerald-100" />
+            <div className="absolute inset-0 rounded-full border-4 border-emerald-600 border-t-transparent animate-spin" />
+            <Sparkles className="absolute inset-0 m-auto w-8 h-8 text-emerald-600" />
+          </div>
+          <p className="text-sm text-gray-600 font-medium" style={{ fontFamily: "'Tajawal', sans-serif" }}>جاري تحميل ملف الإنجاز...</p>
+          <p className="text-xs text-gray-400 mt-1">يرجى الانتظار</p>
         </div>
       </div>
     );
@@ -63,25 +219,25 @@ export default function SharedPortfolio() {
   if (data?.requiresPassword && !submitted) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-emerald-50/30 p-4" dir="rtl">
-        <Card className="w-full max-w-md shadow-xl border-0">
-          <CardContent className="p-8 text-center">
-            <div className="w-16 h-16 rounded-2xl bg-emerald-100 flex items-center justify-center mx-auto mb-6">
-              <Lock className="w-8 h-8 text-emerald-600" />
+        <Card className="w-full max-w-md shadow-2xl border-0 overflow-hidden">
+          <div className="bg-gradient-to-l from-emerald-700 to-emerald-800 p-6 text-center">
+            <div className="w-16 h-16 rounded-2xl bg-white/10 backdrop-blur-sm flex items-center justify-center mx-auto mb-4">
+              <Lock className="w-8 h-8 text-white" />
             </div>
-            <h1 className="text-xl font-bold text-gray-900 mb-2" style={{ fontFamily: "'Tajawal', sans-serif" }}>
-              ملف إنجاز محمي
-            </h1>
-            <p className="text-sm text-gray-500 mb-6">هذا الملف محمي بكلمة مرور. أدخل كلمة المرور للمتابعة.</p>
+            <h1 className="text-xl font-bold text-white" style={{ fontFamily: "'Tajawal', sans-serif" }}>ملف إنجاز محمي</h1>
+            <p className="text-emerald-100 text-sm mt-1">أدخل كلمة المرور للمتابعة</p>
+          </div>
+          <CardContent className="p-6">
             <div className="space-y-4">
               <input
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter') setSubmitted(true); }}
+                onKeyDown={(e) => { if (e.key === "Enter") setSubmitted(true); }}
                 placeholder="كلمة المرور"
-                className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-400"
+                className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-400 text-center"
               />
-              <Button onClick={() => setSubmitted(true)} className="w-full gap-2 bg-emerald-600 hover:bg-emerald-700">
+              <Button onClick={() => setSubmitted(true)} className="w-full gap-2 bg-emerald-600 hover:bg-emerald-700 h-11">
                 <ShieldCheck className="w-4 h-4" />
                 عرض الملف
               </Button>
@@ -95,21 +251,17 @@ export default function SharedPortfolio() {
   if (data?.error) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-red-50/30 p-4" dir="rtl">
-        <Card className="w-full max-w-md shadow-xl border-0">
+        <Card className="w-full max-w-md shadow-2xl border-0">
           <CardContent className="p-8 text-center">
             <div className="w-16 h-16 rounded-2xl bg-red-100 flex items-center justify-center mx-auto mb-6">
               <XCircle className="w-8 h-8 text-red-500" />
             </div>
-            <h1 className="text-xl font-bold text-gray-900 mb-2" style={{ fontFamily: "'Tajawal', sans-serif" }}>
-              {data.error}
-            </h1>
+            <h1 className="text-xl font-bold text-gray-900 mb-2" style={{ fontFamily: "'Tajawal', sans-serif" }}>{data.error}</h1>
             <p className="text-sm text-gray-500">
               {data.error.includes("صلاحية") ? "يرجى طلب رابط جديد من صاحب الملف." : "تأكد من صحة الرابط وحاول مرة أخرى."}
             </p>
             {data.requiresPassword && (
-              <Button onClick={() => { setSubmitted(false); setPassword(""); }} variant="outline" className="mt-4">
-                إعادة المحاولة
-              </Button>
+              <Button onClick={() => { setSubmitted(false); setPassword(""); }} variant="outline" className="mt-4">إعادة المحاولة</Button>
             )}
           </CardContent>
         </Card>
@@ -132,239 +284,176 @@ export default function SharedPortfolio() {
   const percentage = maxScore > 0 ? Math.round((totalScore / maxScore) * 100) : 0;
   const grade = getGrade(percentage);
   const totalEvidences = criteriaEntries.reduce((sum, [, d]) => sum + ((d as any)?.evidences?.length || 0), 0);
+  const completedCriteria = criteriaEntries.filter(([, d]) => ((d as any)?.score || 0) >= 4 && ((d as any)?.evidences?.length || 0) > 0).length;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-emerald-50/20" dir="rtl">
-      {/* Header */}
-      <div className="bg-white border-b border-gray-100 sticky top-0 z-10">
-        <div className="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-emerald-50/20" dir="rtl" ref={contentRef}>
+      {/* Header - شريط علوي ثابت */}
+      <div className="bg-white/95 backdrop-blur-md border-b border-gray-100 sticky top-0 z-20 shadow-sm">
+        <div className="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-emerald-600 flex items-center justify-center">
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-600 to-emerald-700 flex items-center justify-center shadow-lg shadow-emerald-200">
               <Sparkles className="w-5 h-5 text-white" />
             </div>
             <div>
               <h1 className="text-sm font-bold text-gray-900" style={{ fontFamily: "'Tajawal', sans-serif" }}>SERS</h1>
-              <p className="text-[10px] text-gray-500">ملف إنجاز مشارك</p>
+              <p className="text-[10px] text-gray-500">ملف إنجاز إلكتروني</p>
             </div>
           </div>
-          <Badge variant="secondary" className="gap-1.5">
-            <Eye className="w-3 h-3" />
-            عرض فقط
-          </Badge>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" className="gap-1.5 text-xs h-8" onClick={() => window.print()} data-no-print>
+              <Printer className="w-3.5 h-3.5" />
+              طباعة
+            </Button>
+            <Badge variant="secondary" className="gap-1.5 h-8">
+              <Eye className="w-3 h-3" />
+              عرض فقط
+            </Badge>
+          </div>
         </div>
       </div>
 
-      <div className="max-w-4xl mx-auto px-4 py-8">
-        {/* بطاقة المعلومات الشخصية */}
-        <Card className="mb-6 overflow-hidden border-0 shadow-lg">
-          <div className="bg-gradient-to-l from-emerald-700 to-emerald-800 p-6 text-white">
-            <div className="flex items-start justify-between">
-              <div>
-                <p className="text-emerald-200 text-xs mb-1">{personalInfo.department || "وزارة التعليم"}</p>
-                <h2 className="text-2xl font-bold mb-1" style={{ fontFamily: "'Tajawal', sans-serif" }}>
-                  شواهد الأداء الوظيفي
-                </h2>
-                <p className="text-emerald-100 text-sm">{jobTitle}</p>
+      {/* Hero Section - بطاقة المعلومات الرئيسية */}
+      <div className="bg-gradient-to-l from-emerald-700 via-emerald-800 to-emerald-900 relative overflow-hidden">
+        <div className="absolute inset-0 opacity-10">
+          <div className="absolute top-0 left-0 w-96 h-96 bg-white rounded-full -translate-x-1/2 -translate-y-1/2" />
+          <div className="absolute bottom-0 right-0 w-64 h-64 bg-white rounded-full translate-x-1/3 translate-y-1/3" />
+        </div>
+        <div className="max-w-5xl mx-auto px-4 py-10 relative">
+          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+            <div className="flex-1">
+              <div className="flex items-center gap-2 mb-3">
+                <GraduationCap className="w-5 h-5 text-emerald-300" />
+                <p className="text-emerald-200 text-sm font-medium">{personalInfo.department || "وزارة التعليم"}</p>
               </div>
-              <div className="text-center bg-white/10 rounded-xl p-4 backdrop-blur-sm">
-                <div className="text-3xl font-black">{percentage}%</div>
-                <div className="text-sm font-medium text-emerald-100">{grade.label}</div>
+              <h2 className="text-3xl font-black text-white mb-2" style={{ fontFamily: "'Tajawal', sans-serif" }}>
+                شواهد الأداء الوظيفي
+              </h2>
+              <div className="flex items-center gap-3 flex-wrap">
+                <div className="flex items-center gap-2 bg-white/10 backdrop-blur-sm rounded-lg px-3 py-1.5">
+                  <User className="w-4 h-4 text-emerald-200" />
+                  <span className="text-sm text-white font-medium">{personalInfo.name || "—"}</span>
+                </div>
+                <div className="flex items-center gap-2 bg-white/10 backdrop-blur-sm rounded-lg px-3 py-1.5">
+                  <Briefcase className="w-4 h-4 text-emerald-200" />
+                  <span className="text-sm text-emerald-100">{jobTitle}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* بطاقة التقييم */}
+            <div className="bg-white/10 backdrop-blur-md rounded-2xl p-6 text-center border border-white/20 min-w-[160px]">
+              <div className="text-4xl font-black text-white mb-1">{percentage}%</div>
+              <div className="text-sm font-bold text-emerald-100 mb-2">{grade.label}</div>
+              <div className="flex justify-center gap-0.5">
+                {[1, 2, 3, 4, 5].map(s => (
+                  <Star key={s} className={`w-4 h-4 ${s <= Math.round(percentage / 20) ? "text-amber-400 fill-amber-400" : "text-white/30"}`} />
+                ))}
               </div>
             </div>
           </div>
-          <CardContent className="p-6">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <div className="flex items-center gap-2">
-                <User className="w-4 h-4 text-gray-400" />
-                <div>
-                  <p className="text-[10px] text-gray-500">الاسم</p>
-                  <p className="text-sm font-semibold text-gray-900">{personalInfo.name || "—"}</p>
+        </div>
+      </div>
+
+      <div className="max-w-5xl mx-auto px-4 py-8">
+        {/* بطاقات المعلومات الشخصية */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 -mt-6 mb-8 relative z-10">
+          {[
+            { icon: Building2, label: "المدرسة", value: personalInfo.school },
+            { icon: Calendar, label: "العام الدراسي", value: personalInfo.year },
+            { icon: Hash, label: "المجموع", value: `${totalScore}/${maxScore}` },
+            { icon: Award, label: "التقدير", value: grade.label },
+          ].map((item, i) => (
+            <Card key={i} className="border-0 shadow-lg bg-white">
+              <CardContent className="p-4 flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center shrink-0">
+                  <item.icon className="w-5 h-5 text-emerald-600" />
                 </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <Building2 className="w-4 h-4 text-gray-400" />
-                <div>
-                  <p className="text-[10px] text-gray-500">المدرسة</p>
-                  <p className="text-sm font-semibold text-gray-900">{personalInfo.school || "—"}</p>
+                <div className="min-w-0">
+                  <p className="text-[10px] text-gray-500 font-medium">{item.label}</p>
+                  <p className="text-sm font-bold text-gray-900 truncate">{item.value || "—"}</p>
                 </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <Calendar className="w-4 h-4 text-gray-400" />
-                <div>
-                  <p className="text-[10px] text-gray-500">العام الدراسي</p>
-                  <p className="text-sm font-semibold text-gray-900">{personalInfo.year || "—"}</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <BarChart3 className="w-4 h-4 text-gray-400" />
-                <div>
-                  <p className="text-[10px] text-gray-500">المجموع</p>
-                  <p className="text-sm font-semibold text-gray-900">{totalScore}/{maxScore}</p>
-                </div>
-              </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+
+        {/* إحصائيات سريعة */}
+        <div className="grid grid-cols-4 gap-3 mb-8">
+          {[
+            { value: criteriaEntries.length, label: "بند تقييم", color: "emerald", icon: BookOpen },
+            { value: totalEvidences, label: "شاهد مرفق", color: "blue", icon: FileText },
+            { value: completedCriteria, label: "بند مكتمل", color: "purple", icon: CheckCircle },
+            { value: files.length, label: "ملف مرفوع", color: "orange", icon: Download },
+          ].map((stat, i) => (
+            <Card key={i} className="border-0 shadow-sm hover:shadow-md transition-shadow">
+              <CardContent className="p-4 text-center">
+                <stat.icon className={`w-5 h-5 mx-auto mb-2 text-${stat.color}-500 opacity-60`} />
+                <div className={`text-2xl font-black text-${stat.color}-600`}>{stat.value}</div>
+                <p className="text-[10px] text-gray-500 font-medium mt-0.5">{stat.label}</p>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+
+        {/* شريط التقدم الإجمالي */}
+        <Card className="mb-8 border-0 shadow-sm overflow-hidden">
+          <CardContent className="p-5">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-bold text-gray-900 flex items-center gap-2" style={{ fontFamily: "'Tajawal', sans-serif" }}>
+                <BarChart3 className="w-4 h-4 text-emerald-600" />
+                نسبة الإنجاز الكلية
+              </h3>
+              <span className="text-sm font-bold" style={{ color: grade.color }}>{percentage}%</span>
+            </div>
+            <div className="w-full bg-gray-100 rounded-full h-3 overflow-hidden">
+              <div
+                className="h-full rounded-full transition-all duration-1000 ease-out"
+                style={{ width: `${percentage}%`, backgroundColor: grade.color }}
+              />
+            </div>
+            <div className="flex items-center justify-between mt-2 text-[10px] text-gray-500">
+              <span>{completedCriteria} بند مكتمل من {criteriaEntries.length}</span>
+              <span>{totalEvidences} شاهد إجمالي</span>
             </div>
           </CardContent>
         </Card>
 
-        {/* إحصائيات سريعة */}
-        <div className="grid grid-cols-3 gap-4 mb-6">
-          <Card className="border-0 shadow-sm">
-            <CardContent className="p-4 text-center">
-              <div className="text-2xl font-black text-emerald-600">{criteriaEntries.length}</div>
-              <p className="text-xs text-gray-500">بند تقييم</p>
-            </CardContent>
-          </Card>
-          <Card className="border-0 shadow-sm">
-            <CardContent className="p-4 text-center">
-              <div className="text-2xl font-black text-blue-600">{totalEvidences}</div>
-              <p className="text-xs text-gray-500">شاهد مرفق</p>
-            </CardContent>
-          </Card>
-          <Card className="border-0 shadow-sm">
-            <CardContent className="p-4 text-center">
-              <div className="text-2xl font-black" style={{ color: grade.color }}>{percentage}%</div>
-              <p className="text-xs text-gray-500">{grade.label}</p>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* جدول البنود */}
-        <Card className="mb-6 border-0 shadow-sm overflow-hidden">
-          <CardHeader className="bg-gray-50 border-b border-gray-100">
-            <CardTitle className="text-sm flex items-center gap-2">
-              <FileText className="w-4 h-4 text-emerald-600" />
-              تفاصيل البنود والشواهد
-            </CardTitle>
-          </CardHeader>
-          <div className="divide-y divide-gray-100">
-            {criteriaEntries.map(([criterionId, d], i) => {
-              const data = d as any;
-              const evCount = data?.evidences?.length || 0;
-              const score = data?.score || 0;
-              const status = score >= 4 && evCount > 0 ? "complete" : evCount > 0 || score > 0 ? "partial" : "missing";
-              const standard = STANDARDS.find(s => s.id === criterionId);
-              const title = standard?.title || criterionId;
-
-              return (
-                <div key={criterionId} className="p-4">
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-3">
-                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold ${
-                        status === "complete" ? "bg-emerald-100 text-emerald-700"
-                        : status === "partial" ? "bg-amber-100 text-amber-700"
-                        : "bg-gray-100 text-gray-500"
-                      }`}>
-                        {standard?.icon || i + 1}
-                      </div>
-                      <div>
-                        <h3 className="text-sm font-bold text-gray-900">{title}</h3>
-                        <p className="text-xs text-gray-500">{evCount} شاهد</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <Badge variant={score >= 4 ? "default" : score >= 3 ? "secondary" : "outline"}>
-                        {score}/5
-                      </Badge>
-                      {status === "complete" && <CheckCircle className="w-4 h-4 text-emerald-500" />}
-                      {status === "partial" && <AlertTriangle className="w-4 h-4 text-amber-500" />}
-                      {status === "missing" && <XCircle className="w-4 h-4 text-red-400" />}
-                    </div>
-                  </div>
-
-                  {/* عرض الشواهد */}
-                  {data?.evidences && data.evidences.length > 0 && (
-                    <div className="mr-11 space-y-2">
-                      {data.evidences.map((ev: any) => {
-                        const priority = ev.priority || 'essential';
-                        const priorityConfig: Record<string, { label: string; color: string; icon: string }> = {
-                          essential: { label: 'أساسي', color: '#059669', icon: '★' },
-                          supporting: { label: 'داعم', color: '#2563EB', icon: '◆' },
-                          supplementary: { label: 'إضافي', color: '#9333EA', icon: '○' },
-                        };
-                        const pc = priorityConfig[priority] || priorityConfig.essential;
-                        return (
-                          <div key={ev.id} className="bg-gray-50 rounded-lg p-3 border border-gray-100" style={{ borderRightWidth: '3px', borderRightColor: pc.color }}>
-                            {/* رأس الشاهد مع الأولوية */}
-                            <div className="flex items-center gap-2 mb-2">
-                              <span className="text-[9px] px-1.5 py-0.5 rounded-full font-medium" style={{ backgroundColor: pc.color + '15', color: pc.color }}>
-                                {pc.icon} {pc.label}
-                              </span>
-                              <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-gray-200 text-gray-600">
-                                {ev.type === 'text' ? 'نص' : ev.type === 'image' ? 'صورة' : ev.type === 'link' ? 'رابط' : ev.type === 'file' ? 'ملف' : 'فيديو'}
-                              </span>
-                            </div>
-                            {ev.type === 'text' && ev.text && (
-                              <p className="text-sm text-gray-700 leading-relaxed">{ev.text}</p>
-                            )}
-                            {ev.type === 'link' && ev.link && (
-                              <div className="flex items-center gap-2">
-                                <LinkIcon className="w-4 h-4 text-purple-500" />
-                                <a href={ev.link} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-600 hover:underline truncate">
-                                  {ev.link}
-                                </a>
-                              </div>
-                            )}
-                            {ev.type === 'image' && ev.fileData && (
-                              <img src={ev.fileData} alt="" className="max-h-48 rounded-lg" />
-                            )}
-                            {(ev.type === 'video' || ev.type === 'file') && (
-                              <div className="flex items-center gap-2">
-                                {ev.type === 'video' ? <Video className="w-4 h-4 text-red-500" /> : <FileText className="w-4 h-4 text-orange-500" />}
-                                <span className="text-sm text-gray-600">{ev.fileName}</span>
-                              </div>
-                            )}
-                            {ev.formData && Object.entries(ev.formData).some(([, v]) => v) && (
-                              <div className="text-sm space-y-1 mt-2 bg-white rounded-lg p-2">
-                                {Object.entries(ev.formData).filter(([, v]) => v).map(([key, val]) => (
-                                  <p key={key}><span className="text-gray-500">{key}:</span> <span className="text-gray-800">{val as string}</span></p>
-                                ))}
-                              </div>
-                            )}
-                            {/* التعليق */}
-                            {ev.comment && ev.comment.trim() && (
-                              <div className="mt-2 bg-amber-50 rounded-lg p-2 text-xs text-amber-800 border border-amber-200/50">
-                                <strong>تعليق:</strong> {ev.comment}
-                              </div>
-                            )}
-                            {/* الكلمات المفتاحية */}
-                            {ev.keywords && ev.keywords.length > 0 && (
-                              <div className="mt-2 flex items-center gap-1 flex-wrap">
-                                {ev.keywords.map((kw: string, ki: number) => (
-                                  <span key={ki} className="text-[9px] px-1.5 py-0.5 rounded-full bg-sky-50 text-sky-700 border border-sky-200/50">{kw}</span>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+        {/* قائمة البنود والشواهد */}
+        <div className="mb-8">
+          <h2 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2" style={{ fontFamily: "'Tajawal', sans-serif" }}>
+            <FileText className="w-5 h-5 text-emerald-600" />
+            تفاصيل البنود والشواهد
+          </h2>
+          <div className="space-y-3">
+            {criteriaEntries.map(([criterionId, d], i) => (
+              <CriterionSection key={criterionId} criterionId={criterionId} data={d} index={i} />
+            ))}
           </div>
-        </Card>
+        </div>
 
         {/* الملفات المرفوعة */}
         {files.length > 0 && (
-          <Card className="mb-6 border-0 shadow-sm">
-            <CardHeader>
+          <Card className="mb-8 border-0 shadow-sm overflow-hidden">
+            <CardHeader className="bg-gradient-to-l from-blue-50 to-white border-b border-blue-100/50">
               <CardTitle className="text-sm flex items-center gap-2">
                 <Download className="w-4 h-4 text-blue-600" />
                 الملفات المرفوعة ({files.length})
               </CardTitle>
             </CardHeader>
-            <CardContent>
+            <CardContent className="p-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {files.map((file: any) => (
                   <a key={file.id} href={file.url} target="_blank" rel="noopener noreferrer"
-                    className="flex items-center gap-3 p-3 rounded-lg border border-gray-100 hover:bg-gray-50 transition-colors">
-                    {file.mimeType?.startsWith('image/') ? <Image className="w-5 h-5 text-blue-500" /> : <FileText className="w-5 h-5 text-orange-500" />}
+                    className="flex items-center gap-3 p-3 rounded-xl border border-gray-100 hover:bg-blue-50/50 hover:border-blue-200 transition-all group">
+                    <div className="w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center group-hover:bg-blue-100 transition-colors">
+                      {file.mimeType?.startsWith("image/") ? <Image className="w-5 h-5 text-blue-500" /> : <FileText className="w-5 h-5 text-orange-500" />}
+                    </div>
                     <div className="min-w-0 flex-1">
                       <p className="text-sm font-medium text-gray-900 truncate">{file.originalName}</p>
                       <p className="text-xs text-gray-500">{file.mimeType}</p>
                     </div>
-                    <Download className="w-4 h-4 text-gray-400" />
+                    <Download className="w-4 h-4 text-gray-300 group-hover:text-blue-500 transition-colors" />
                   </a>
                 ))}
               </div>
@@ -373,12 +462,25 @@ export default function SharedPortfolio() {
         )}
 
         {/* Footer */}
-        <div className="text-center py-8">
-          <p className="text-xs text-gray-400">
-            تم إنشاء هذا الملف عبر نظام SERS - السجلات التعليمية الذكية
-          </p>
+        <div className="text-center py-10 border-t border-gray-100">
+          <div className="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center mx-auto mb-3">
+            <Sparkles className="w-5 h-5 text-emerald-600" />
+          </div>
+          <p className="text-xs text-gray-500 font-medium">نظام SERS - السجلات التعليمية الذكية</p>
+          <p className="text-[10px] text-gray-400 mt-1">تم إنشاء هذا الملف إلكترونياً</p>
         </div>
       </div>
+
+      {/* زر العودة للأعلى */}
+      {showScrollTop && (
+        <button
+          onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+          className="fixed bottom-6 left-6 w-10 h-10 rounded-full bg-emerald-600 text-white shadow-lg hover:bg-emerald-700 transition-all flex items-center justify-center z-30"
+          data-no-print
+        >
+          <ArrowUp className="w-5 h-5" />
+        </button>
+      )}
     </div>
   );
 }

@@ -1,6 +1,6 @@
 import { eq, and, desc, sql, gt, lt } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, users, portfolios, uploadedFiles, shareLinks, type InsertPortfolio, type InsertUploadedFile, type InsertShareLink } from "../drizzle/schema";
+import { InsertUser, users, portfolios, uploadedFiles, shareLinks, pdfTemplates, type InsertPortfolio, type InsertUploadedFile, type InsertShareLink, type InsertPdfTemplate } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -194,4 +194,57 @@ export async function deactivateShareLink(id: number, userId: number) {
   if (!db) throw new Error("Database not available");
   await db.update(shareLinks).set({ isActive: false }).where(and(eq(shareLinks.id, id), eq(shareLinks.userId, userId)));
   return { success: true };
+}
+
+// ─── PDF Templates ─────────────────────────────────
+export async function createPdfTemplate(data: InsertPdfTemplate) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(pdfTemplates).values(data);
+  return { id: Number(result[0].insertId) };
+}
+
+export async function updatePdfTemplate(id: number, data: Partial<InsertPdfTemplate>) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(pdfTemplates).set(data).where(eq(pdfTemplates.id, id));
+  return { success: true };
+}
+
+export async function deletePdfTemplate(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.delete(pdfTemplates).where(eq(pdfTemplates.id, id));
+  return { success: true };
+}
+
+export async function getActivePdfTemplates() {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(pdfTemplates).where(eq(pdfTemplates.isActive, true)).orderBy(pdfTemplates.sortOrder);
+}
+
+export async function getAllPdfTemplates() {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(pdfTemplates).orderBy(pdfTemplates.sortOrder);
+}
+
+export async function seedDefaultTemplates() {
+  const db = await getDb();
+  if (!db) return;
+  const existing = await db.select().from(pdfTemplates).limit(1);
+  if (existing.length > 0) return;
+  
+  const defaults: InsertPdfTemplate[] = [
+    { name: "كلاسيكي", description: "تصميم كلاسيكي احترافي", headerBg: "linear-gradient(135deg, #059669, #047857)", headerText: "#ffffff", accent: "#059669", borderColor: "#e5e7eb", bodyBg: "#ffffff", isDefault: true, sortOrder: 1 },
+    { name: "أزرق رسمي", description: "تصميم أزرق رسمي للتقارير", headerBg: "linear-gradient(135deg, #1e40af, #1e3a8a)", headerText: "#ffffff", accent: "#2563EB", borderColor: "#dbeafe", bodyBg: "#ffffff", isDefault: false, sortOrder: 2 },
+    { name: "بنفسجي عصري", description: "تصميم بنفسجي عصري", headerBg: "linear-gradient(135deg, #7c3aed, #6d28d9)", headerText: "#ffffff", accent: "#7C3AED", borderColor: "#ede9fe", bodyBg: "#ffffff", isDefault: false, sortOrder: 3 },
+    { name: "ذهبي فاخر", description: "تصميم ذهبي فاخر", headerBg: "linear-gradient(135deg, #92400e, #78350f)", headerText: "#fef3c7", accent: "#b45309", borderColor: "#fde68a", bodyBg: "#fffbeb", isDefault: false, sortOrder: 4 },
+    { name: "أحمر وطني", description: "تصميم بألوان العلم السعودي", headerBg: "linear-gradient(135deg, #166534, #15803d)", headerText: "#ffffff", accent: "#166534", borderColor: "#bbf7d0", bodyBg: "#f0fdf4", isDefault: false, sortOrder: 5 },
+  ];
+  
+  for (const t of defaults) {
+    await db.insert(pdfTemplates).values(t);
+  }
 }

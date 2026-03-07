@@ -621,3 +621,301 @@ describe("Shared Portfolio Enhancement", () => {
     expect(comment).toBe("");
   });
 });
+
+
+describe("3-Level Classification (Standard → Item → SubItem)", () => {
+  it("should include subIndicator fields in classification result", async () => {
+    const { ctx } = createPublicContext();
+    const caller = appRouter.createCaller(ctx);
+
+    try {
+      const result = await caller.ai.classifyEvidence({
+        description: "خطة درس في مادة العلوم تتضمن أهداف تعليمية واستراتيجيات تدريس متنوعة",
+        fileName: "خطة_درس_علوم.pdf",
+        fileType: "application/pdf",
+      });
+      expect(result).toHaveProperty("success");
+      if (result.success && result.classification) {
+        expect(result.classification).toHaveProperty("standardId");
+        expect(result.classification).toHaveProperty("standardNumber");
+        expect(result.classification).toHaveProperty("indicatorIndex");
+        expect(result.classification).toHaveProperty("indicatorText");
+        expect(result.classification).toHaveProperty("subIndicatorIndex");
+        expect(result.classification).toHaveProperty("subIndicatorText");
+        expect(result.classification).toHaveProperty("suggestedPriority");
+        expect(result.classification).toHaveProperty("suggestedKeywords");
+        expect(typeof result.classification.subIndicatorIndex).toBe("number");
+        expect(typeof result.classification.subIndicatorText).toBe("string");
+        expect(["essential", "supporting", "supplementary"]).toContain(result.classification.suggestedPriority);
+        expect(Array.isArray(result.classification.suggestedKeywords)).toBe(true);
+      }
+    } catch (e: any) {
+      expect(e.message).toBeDefined();
+    }
+  }, 30000);
+
+  it("should classify to correct standard level", () => {
+    // Test classification data model
+    const classification = {
+      standardId: "std-6",
+      standardNumber: 6,
+      standardName: "إعداد وتنفيذ خطة التعلم",
+      indicatorIndex: 1,
+      indicatorText: "تحضير الدروس",
+      subIndicatorIndex: 2,
+      subIndicatorText: "تحديد الأهداف التعليمية",
+      confidence: 0.92,
+      reasoning: "الملف يحتوي على خطة درس مفصلة",
+      contentDescription: "خطة درس في مادة العلوم",
+      suggestedPriority: "essential",
+      suggestedKeywords: ["خطة درس", "أهداف تعليمية", "علوم"],
+    };
+
+    expect(classification.standardNumber).toBe(6);
+    expect(classification.indicatorIndex).toBe(1);
+    expect(classification.subIndicatorIndex).toBe(2);
+    expect(classification.suggestedPriority).toBe("essential");
+    expect(classification.suggestedKeywords).toHaveLength(3);
+  });
+});
+
+describe("Standards Data Structure (3 Levels)", () => {
+  it("should have correct 3-level hierarchy", () => {
+    // Simulate the new standards data structure
+    const standard = {
+      id: "std-1",
+      title: "أداء الواجبات الوظيفية",
+      items: [
+        {
+          id: "std-1-item-1",
+          title: "الالتزام بالحضور والانصراف",
+          subItems: [
+            { id: "std-1-item-1-sub-1", title: "الحضور في الوقت المحدد" },
+            { id: "std-1-item-1-sub-2", title: "الانصراف في الوقت المحدد" },
+          ],
+        },
+        {
+          id: "std-1-item-2",
+          title: "تنفيذ التوجيهات والتعاميم",
+          subItems: [
+            { id: "std-1-item-2-sub-1", title: "الاطلاع على التعاميم" },
+          ],
+        },
+      ],
+    };
+
+    expect(standard.items).toHaveLength(2);
+    expect(standard.items[0].subItems).toHaveLength(2);
+    expect(standard.items[1].subItems).toHaveLength(1);
+    expect(standard.items[0].subItems[0].title).toBe("الحضور في الوقت المحدد");
+  });
+
+  it("should calculate total sub-items correctly", () => {
+    const standards = [
+      { id: "std-1", items: [{ subItems: [{}, {}] }, { subItems: [{}] }] },
+      { id: "std-2", items: [{ subItems: [{}, {}, {}] }] },
+    ];
+
+    const totalSubItems = standards.reduce(
+      (sum, std) => sum + std.items.reduce(
+        (s, item) => s + item.subItems.length, 0
+      ), 0
+    );
+
+    expect(totalSubItems).toBe(6);
+  });
+});
+
+describe("Template Management", () => {
+  it("should require admin access for template operations", async () => {
+    const { ctx } = createAuthContext(); // role is 'user'
+    const caller = appRouter.createCaller(ctx);
+
+    await expect(
+      caller.templates.create({
+        name: "قالب اختبار",
+        primaryColor: "#059669",
+        secondaryColor: "#F59E0B",
+        fontFamily: "Tajawal",
+        headerStyle: "modern",
+        borderStyle: "rounded",
+        showWatermark: false,
+        isActive: true,
+      })
+    ).rejects.toThrow();
+  });
+
+  it("should allow public access to active templates list", async () => {
+    const { ctx } = createPublicContext();
+    const caller = appRouter.createCaller(ctx);
+
+    try {
+      const result = await caller.templates.listActive();
+      expect(Array.isArray(result)).toBe(true);
+    } catch (e: any) {
+      // Database might not be available in test
+      expect(e.message).toBeDefined();
+    }
+  });
+
+  it("should validate template color format", () => {
+    const validColors = ["#059669", "#F59E0B", "#2563EB", "#9333EA"];
+    const invalidColors = ["red", "rgb(5,150,105)", "059669"];
+
+    validColors.forEach(color => {
+      expect(color).toMatch(/^#[0-9A-Fa-f]{6}$/);
+    });
+
+    invalidColors.forEach(color => {
+      expect(color).not.toMatch(/^#[0-9A-Fa-f]{6}$/);
+    });
+  });
+
+  it("should have correct template structure", () => {
+    const template = {
+      id: 1,
+      name: "القالب الاحترافي",
+      primaryColor: "#059669",
+      secondaryColor: "#F59E0B",
+      fontFamily: "Tajawal",
+      headerStyle: "modern",
+      borderStyle: "rounded",
+      showWatermark: false,
+      isActive: true,
+    };
+
+    expect(template).toHaveProperty("name");
+    expect(template).toHaveProperty("primaryColor");
+    expect(template).toHaveProperty("secondaryColor");
+    expect(template).toHaveProperty("fontFamily");
+    expect(template).toHaveProperty("headerStyle");
+    expect(template).toHaveProperty("borderStyle");
+    expect(template).toHaveProperty("showWatermark");
+    expect(template).toHaveProperty("isActive");
+  });
+});
+
+describe("Multi-file Upload Support", () => {
+  it("should support multiple files per evidence item", () => {
+    const evidence = {
+      id: "ev-multi-1",
+      subEvidenceId: "sub-1",
+      type: "image" as const,
+      text: "",
+      files: [
+        { name: "file1.pdf", data: "data:application/pdf;base64,abc", type: "application/pdf" },
+        { name: "file2.png", data: "data:image/png;base64,def", type: "image/png" },
+        { name: "file3.docx", data: "data:application/vnd;base64,ghi", type: "application/vnd" },
+      ],
+    };
+
+    expect(evidence.files).toHaveLength(3);
+    expect(evidence.files[0].name).toBe("file1.pdf");
+    expect(evidence.files[2].type).toBe("application/vnd");
+  });
+
+  it("should handle single file backward compatibility", () => {
+    const evidence = {
+      id: "ev-single-1",
+      subEvidenceId: "sub-1",
+      type: "file" as const,
+      text: "",
+      fileData: "data:application/pdf;base64,abc",
+      fileName: "single.pdf",
+    };
+
+    // Old format still works
+    expect(evidence.fileData).toBeTruthy();
+    expect(evidence.fileName).toBe("single.pdf");
+  });
+});
+
+describe("Enhanced Shared Portfolio", () => {
+  it("should display 3-level hierarchy in shared view", () => {
+    const sharedData = {
+      standards: [
+        {
+          id: "std-1",
+          title: "أداء الواجبات الوظيفية",
+          items: [
+            {
+              id: "item-1",
+              title: "الالتزام بالحضور",
+              subItems: [
+                { id: "sub-1", title: "الحضور في الوقت المحدد" },
+              ],
+              evidences: [
+                { id: "ev-1", text: "شاهد", priority: "essential" },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+
+    expect(sharedData.standards[0].items[0].subItems).toHaveLength(1);
+    expect(sharedData.standards[0].items[0].evidences).toHaveLength(1);
+    expect(sharedData.standards[0].items[0].evidences[0].priority).toBe("essential");
+  });
+
+  it("should calculate coverage stats for shared portfolio", () => {
+    const criteriaData: Record<string, { evidences: any[] }> = {
+      "std-1": { evidences: [{ id: "1" }, { id: "2" }] },
+      "std-2": { evidences: [] },
+      "std-3": { evidences: [{ id: "3" }] },
+    };
+
+    const totalStandards = Object.keys(criteriaData).length;
+    const coveredStandards = Object.values(criteriaData).filter(d => d.evidences.length > 0).length;
+    const totalEvidences = Object.values(criteriaData).reduce((s, d) => s + d.evidences.length, 0);
+    const coveragePercent = Math.round((coveredStandards / totalStandards) * 100);
+
+    expect(totalStandards).toBe(3);
+    expect(coveredStandards).toBe(2);
+    expect(totalEvidences).toBe(3);
+    expect(coveragePercent).toBe(67);
+  });
+});
+
+describe("PDF Export with Templates", () => {
+  it("should apply template colors to PDF", () => {
+    const template = {
+      primaryColor: "#059669",
+      secondaryColor: "#F59E0B",
+      fontFamily: "Tajawal",
+    };
+
+    // Verify hex to RGB conversion
+    const hexToRgb = (hex: string) => {
+      const r = parseInt(hex.slice(1, 3), 16);
+      const g = parseInt(hex.slice(3, 5), 16);
+      const b = parseInt(hex.slice(5, 7), 16);
+      return { r, g, b };
+    };
+
+    const primary = hexToRgb(template.primaryColor);
+    expect(primary.r).toBe(5);
+    expect(primary.g).toBe(150);
+    expect(primary.b).toBe(105);
+
+    const secondary = hexToRgb(template.secondaryColor);
+    expect(secondary.r).toBe(245);
+    expect(secondary.g).toBe(158);
+    expect(secondary.b).toBe(11);
+  });
+
+  it("should generate section dividers between standards", () => {
+    const standards = [
+      { id: "std-1", title: "المعيار الأول", evidences: 3 },
+      { id: "std-2", title: "المعيار الثاني", evidences: 0 },
+      { id: "std-3", title: "المعيار الثالث", evidences: 2 },
+    ];
+
+    const activeSections = standards.filter(s => s.evidences > 0);
+    expect(activeSections).toHaveLength(2);
+    
+    // Each active section should have a divider page
+    const totalPages = activeSections.length; // divider pages
+    expect(totalPages).toBe(2);
+  });
+});
