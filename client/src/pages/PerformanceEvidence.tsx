@@ -59,7 +59,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 type EvidenceType = "text" | "image" | "link" | "file" | "video";
 type EvidencePriority = "essential" | "supporting" | "additional";
 interface FormField { id: string; label: string; type: "text" | "textarea" | "date" | "number" | "select"; placeholder?: string; required?: boolean; options?: string[]; }
-interface SubEvidence { id: string; title: string; description: string; type: "report" | "upload" | "both"; isCustom?: boolean; formFields?: FormField[]; }
+interface SubEvidence { id: string; title: string; description: string; type: "report" | "upload" | "both"; isCustom?: boolean; isSubItem?: boolean; parentTitle?: string; formFields?: FormField[]; }
 interface Criterion { id: string; title: string; maxScore: number; description: string; subEvidences: SubEvidence[]; }
 interface EvidenceItem {
   id: string; subEvidenceId: string; type: EvidenceType; text: string; link: string;
@@ -83,29 +83,6 @@ function makeSimpleCriteria(prefix: string, items: { id: string; title: string; 
     }],
   }));
 }
-
-// ===== بنود المعلم/المعلمة (نظام المعايير الـ 11) =====
-function buildTeacherCriteria(): Criterion[] {
-  return STANDARDS.map(std => ({
-    id: std.id,
-    title: std.title,
-    maxScore: 5,
-    description: `${std.items.length} بند · الوزن ${std.weight}%`,
-    subEvidences: std.items.map(item => ({
-      id: item.id,
-      title: item.text,
-      description: item.suggestedEvidence.join(" · "),
-      type: "both" as const,
-      formFields: [
-        { id: "evidence_desc", label: "وصف الشاهد", type: "textarea" as const, placeholder: "اكتب وصفاً للشاهد المقدم..." },
-        { id: "date", label: "التاريخ", type: "date" as const },
-        { id: "notes", label: "ملاحظات", type: "textarea" as const, placeholder: "ملاحظات إضافية..." },
-      ],
-    })),
-  }));
-}
-
-const TEACHER_CRITERIA = buildTeacherCriteria();
 
 // ===== دالة عامة لبناء بنود أي وظيفة من النظام المعياري (3 مستويات) =====
 function buildStandardsCriteria(standards: Standard[]): Criterion[] {
@@ -131,6 +108,8 @@ function buildStandardsCriteria(standards: Standard[]): Criterion[] {
         title: sub.title,
         description: sub.suggestedEvidence.join(" \u00B7 "),
         type: "both" as const,
+        isSubItem: true,
+        parentTitle: item.text,
         formFields: [
           { id: "evidence_desc", label: "\u0648\u0635\u0641 \u0627\u0644\u0634\u0627\u0647\u062F", type: "textarea" as const, placeholder: "\u0627\u0643\u062A\u0628 \u0648\u0635\u0641\u0627\u064B \u0644\u0644\u0634\u0627\u0647\u062F \u0627\u0644\u0645\u0642\u062F\u0645..." },
           { id: "date", label: "\u0627\u0644\u062A\u0627\u0631\u064A\u062E", type: "date" as const },
@@ -141,7 +120,8 @@ function buildStandardsCriteria(standards: Standard[]): Criterion[] {
   }));
 }
 
-// ===== بنود الوظائف (نظام معياري رسمي - 3 مستويات) =====
+// ===== بنود جميع الوظائف (نظام معياري رسمي - 3 مستويات) =====
+const TEACHER_CRITERIA = buildStandardsCriteria(STANDARDS);
 const PRINCIPAL_CRITERIA = buildStandardsCriteria(PRINCIPAL_STANDARDS);
 const VICE_PRINCIPAL_CRITERIA = buildStandardsCriteria(VICE_PRINCIPAL_STANDARDS);
 const COUNSELOR_CRITERIA = buildStandardsCriteria(COUNSELOR_STANDARDS);
@@ -1705,8 +1685,17 @@ export default function PerformanceEvidence() {
                   const hasStd = selectedJob?.hasStandards;
                   const standard = hasStd ? jobStandards.find(s => s.id === criterion.id) : null;
                   const indicatorProgress = hasStd && standard ? (() => {
-                    const covered = standard.items.filter(item => data.evidences.some(e => e.subEvidenceId === item.id)).length;
-                    return { covered, total: standard.items.length, pct: standard.items.length > 0 ? Math.round((covered / standard.items.length) * 100) : 0 };
+                    let total = 0;
+                    let covered = 0;
+                    standard.items.forEach(item => {
+                      total++;
+                      if (data.evidences.some(e => e.subEvidenceId === item.id)) covered++;
+                      (item.subItems || []).forEach(sub => {
+                        total++;
+                        if (data.evidences.some(e => e.subEvidenceId === sub.id)) covered++;
+                      });
+                    });
+                    return { covered, total, pct: total > 0 ? Math.round((covered / total) * 100) : 0 };
                   })() : null;
 
                   return (
@@ -1928,7 +1917,7 @@ export default function PerformanceEvidence() {
                   onDragOver={(e) => handleDragOver(e, currentCriterion.id, sub.id)}
                   onDragLeave={handleDragLeave}
                   onDrop={(e) => handleDrop(e, currentCriterion.id, sub.id)}
-                  className={`overflow-hidden transition-all ${isExpanded ? 'border-primary/30 shadow-sm' : 'border-border/50'} ${isDropTarget ? 'border-2 border-dashed border-primary bg-primary/5 shadow-lg scale-[1.01]' : ''} ${draggedEvidence ? 'hover:border-primary/50' : ''}`}>
+                  className={`overflow-hidden transition-all ${sub.isSubItem ? 'mr-6 sm:mr-8 border-r-2 border-r-primary/20' : ''} ${isExpanded ? 'border-primary/30 shadow-sm' : 'border-border/50'} ${isDropTarget ? 'border-2 border-dashed border-primary bg-primary/5 shadow-lg scale-[1.01]' : ''} ${draggedEvidence ? 'hover:border-primary/50' : ''}`}>
                   <div role="button" tabIndex={0} onClick={() => {
                     setExpandedSubEvidence(isExpanded ? null : sub.id);
                     if (!isExpanded && (sub.type === 'report' || sub.type === 'both') && sub.formFields && !hasFormEvidence) {
@@ -1936,19 +1925,22 @@ export default function PerformanceEvidence() {
                     }
                   }}
                     onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setExpandedSubEvidence(isExpanded ? null : sub.id); }}
-                    className="w-full flex items-center justify-between p-3 sm:p-4 hover:bg-muted/30 transition-colors text-right cursor-pointer">
+                    className={`w-full flex items-center justify-between p-3 sm:p-4 hover:bg-muted/30 transition-colors text-right cursor-pointer ${sub.isSubItem ? 'bg-muted/20' : ''}`}>
                     <div className="flex items-center gap-2 sm:gap-3 min-w-0">
                       <div className={`w-7 h-7 sm:w-8 sm:h-8 rounded-lg flex items-center justify-center text-sm shrink-0 ${
-                        subEvidences.length > 0 ? 'bg-emerald-100 text-emerald-600' : 'bg-muted text-muted-foreground'
+                        subEvidences.length > 0 ? 'bg-emerald-100 text-emerald-600' : sub.isSubItem ? 'bg-primary/10 text-primary/60' : 'bg-muted text-muted-foreground'
                       }`}>
-                        {subEvidences.length > 0 ? <CheckCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> : <Layers className="w-3.5 h-3.5 sm:w-4 sm:h-4" />}
+                        {subEvidences.length > 0 ? <CheckCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> : sub.isSubItem ? <span className="text-[10px]">◇</span> : <Layers className="w-3.5 h-3.5 sm:w-4 sm:h-4" />}
                       </div>
                       <div className="min-w-0">
-                        <h3 className="font-bold text-foreground text-xs sm:text-sm truncate">
+                        <h3 className={`text-foreground text-xs sm:text-sm truncate ${sub.isSubItem ? 'font-medium' : 'font-bold'}`}>
                           {sub.title}
                           {sub.isCustom && <Badge variant="outline" className="mr-1 text-[8px] sm:text-[9px]">مخصص</Badge>}
                         </h3>
-                        <p className="text-[10px] sm:text-xs text-muted-foreground truncate">{subEvidences.length} شاهد مرفق</p>
+                        <p className="text-[10px] sm:text-xs text-muted-foreground truncate">
+                          {sub.isSubItem && sub.parentTitle ? <span className="text-primary/60">← {sub.parentTitle} · </span> : ''}
+                          {subEvidences.length} شاهد مرفق
+                        </p>
                       </div>
                     </div>
                     {isExpanded ? <ChevronUp className="w-4 h-4 sm:w-5 sm:h-5 text-muted-foreground shrink-0" /> : <ChevronDown className="w-4 h-4 sm:w-5 sm:h-5 text-muted-foreground shrink-0" />}
