@@ -28,10 +28,8 @@ export const DEFAULT_TEMPLATE: PdfTemplate = {
 function convertOklchToRgb(element: HTMLElement): (() => void) {
   const originalStyles: { el: HTMLElement; prop: string; value: string }[] = [];
 
-  // الحصول على جميع العناصر داخل الحاوية
   const allElements = [element, ...Array.from(element.querySelectorAll("*"))] as HTMLElement[];
 
-  // خصائص CSS التي قد تحتوي على ألوان
   const colorProps = [
     "color",
     "backgroundColor",
@@ -53,15 +51,12 @@ function convertOklchToRgb(element: HTMLElement): (() => void) {
         prop.replace(/([A-Z])/g, "-$1").toLowerCase()
       );
       if (value && value.includes("oklch")) {
-        // حفظ القيمة الأصلية
-        const inlineProp = prop as keyof CSSStyleDeclaration;
         originalStyles.push({
           el,
           prop: prop,
           value: (el.style as any)[prop] || "",
         });
 
-        // تحويل oklch إلى RGB باستخدام canvas
         const rgb = oklchToRgbString(value);
         if (rgb) {
           (el.style as any)[prop] = rgb;
@@ -70,12 +65,10 @@ function convertOklchToRgb(element: HTMLElement): (() => void) {
     }
   }
 
-  // أيضاً تحويل CSS variables في :root التي تحتوي على oklch
   const rootEl = document.documentElement;
   const rootComputed = window.getComputedStyle(rootEl);
   const cssVarOverrides: { name: string; original: string }[] = [];
 
-  // الحصول على جميع CSS variables المستخدمة
   const cssVarNames = [
     "--background", "--foreground", "--card", "--card-foreground",
     "--popover", "--popover-foreground", "--primary", "--primary-foreground",
@@ -98,7 +91,6 @@ function convertOklchToRgb(element: HTMLElement): (() => void) {
     }
   }
 
-  // إرجاع دالة لاستعادة القيم الأصلية
   return () => {
     for (const { el, prop, value } of originalStyles) {
       (el.style as any)[prop] = value;
@@ -113,24 +105,17 @@ function convertOklchToRgb(element: HTMLElement): (() => void) {
   };
 }
 
-/**
- * تحويل قيمة oklch إلى سلسلة RGB
- * يستخدم canvas 2D context لتحويل الألوان
- */
 function oklchToRgbString(oklchValue: string): string | null {
   try {
-    // إنشاء canvas مؤقت لتحويل اللون
     const canvas = document.createElement("canvas");
     canvas.width = 1;
     canvas.height = 1;
     const ctx = canvas.getContext("2d");
     if (!ctx) return null;
 
-    // استخدام fillStyle لتحويل اللون
     ctx.fillStyle = oklchValue;
     ctx.fillRect(0, 0, 1, 1);
 
-    // قراءة اللون الناتج كـ RGB
     const imageData = ctx.getImageData(0, 0, 1, 1);
     const r = imageData.data[0];
     const g = imageData.data[1];
@@ -146,6 +131,10 @@ function oklchToRgbString(oklchValue: string): string | null {
   }
 }
 
+/**
+ * تصدير PDF بنظام صفحات A4 منفصلة
+ * يلتقط كل صفحة (div مباشر داخل preview-content) كصورة منفصلة ويضيفها كصفحة PDF
+ */
 export async function exportToPDF(elementId: string, filename: string = "document.pdf") {
   const element = document.getElementById(elementId);
   if (!element) return;
@@ -158,26 +147,8 @@ export async function exportToPDF(elementId: string, filename: string = "documen
     // تحويل ألوان oklch إلى RGB قبل html2canvas
     const restoreColors = convertOklchToRgb(element);
 
-    // انتظار قليل لتطبيق التغييرات
-    await new Promise(resolve => setTimeout(resolve, 50));
+    await new Promise(resolve => setTimeout(resolve, 100));
 
-    const canvas = await html2canvas(element, {
-      scale: 2,
-      useCORS: true,
-      allowTaint: true,
-      backgroundColor: "#ffffff",
-      logging: false,
-      windowWidth: element.scrollWidth,
-      windowHeight: element.scrollHeight,
-    });
-
-    // استعادة الألوان الأصلية
-    restoreColors();
-
-    // إعادة إظهار الأزرار
-    buttons.forEach(btn => (btn as HTMLElement).style.display = '');
-
-    const imgData = canvas.toDataURL("image/jpeg", 0.95);
     const pdf = new jsPDF({
       orientation: "portrait",
       unit: "mm",
@@ -186,47 +157,120 @@ export async function exportToPDF(elementId: string, filename: string = "documen
 
     const pdfWidth = pdf.internal.pageSize.getWidth();
     const pdfHeight = pdf.internal.pageSize.getHeight();
-    const margin = 5;
-    const usableWidth = pdfWidth - margin * 2;
-    const usableHeight = pdfHeight - margin * 2;
 
-    const imgWidth = canvas.width;
-    const imgHeight = canvas.height;
-    const ratio = usableWidth / imgWidth;
-    const scaledHeight = imgHeight * ratio;
-
-    // تقسيم المحتوى على صفحات متعددة
-    if (scaledHeight <= usableHeight) {
-      // صفحة واحدة
-      pdf.addImage(imgData, "JPEG", margin, margin, usableWidth, scaledHeight);
-    } else {
-      // صفحات متعددة - مع تحسين القطع عند فواصل الأقسام
-      const pageCanvasHeight = usableHeight / ratio;
-      let remainingHeight = imgHeight;
-      let sourceY = 0;
-      let pageNum = 0;
-
-      while (remainingHeight > 0) {
-        if (pageNum > 0) pdf.addPage();
-
-        const sliceHeight = Math.min(pageCanvasHeight, remainingHeight);
+    // البحث عن الصفحات المنفصلة (divs المباشرة داخل preview-content)
+    const pages = element.querySelectorAll(':scope > div');
+    
+    if (pages.length > 0) {
+      // نظام الصفحات المنفصلة - كل div هو صفحة A4
+      for (let i = 0; i < pages.length; i++) {
+        const page = pages[i] as HTMLElement;
         
-        // إنشاء canvas مقطع لكل صفحة
-        const pageCanvas = document.createElement('canvas');
-        pageCanvas.width = imgWidth;
-        pageCanvas.height = sliceHeight;
-        const ctx = pageCanvas.getContext('2d');
-        if (ctx) {
-          ctx.drawImage(canvas, 0, sourceY, imgWidth, sliceHeight, 0, 0, imgWidth, sliceHeight);
-          const pageImgData = pageCanvas.toDataURL("image/jpeg", 0.95);
-          pdf.addImage(pageImgData, "JPEG", margin, margin, usableWidth, sliceHeight * ratio);
-        }
+        if (i > 0) pdf.addPage();
 
-        sourceY += sliceHeight;
-        remainingHeight -= sliceHeight;
-        pageNum++;
+        const canvas = await html2canvas(page, {
+          scale: 2,
+          useCORS: true,
+          allowTaint: true,
+          backgroundColor: "#ffffff",
+          logging: false,
+          windowWidth: page.scrollWidth,
+          windowHeight: page.scrollHeight,
+        });
+
+        const imgData = canvas.toDataURL("image/jpeg", 0.95);
+        const imgWidth = canvas.width;
+        const imgHeight = canvas.height;
+        const ratio = pdfWidth / imgWidth;
+        const scaledHeight = imgHeight * ratio;
+
+        if (scaledHeight <= pdfHeight) {
+          // الصفحة تناسب صفحة PDF واحدة
+          pdf.addImage(imgData, "JPEG", 0, 0, pdfWidth, scaledHeight);
+        } else {
+          // الصفحة أطول من A4 - تقسيمها على عدة صفحات PDF
+          const pageCanvasHeight = pdfHeight / ratio;
+          let remainingHeight = imgHeight;
+          let sourceY = 0;
+          let subPage = 0;
+
+          while (remainingHeight > 0) {
+            if (subPage > 0) pdf.addPage();
+
+            const sliceHeight = Math.min(pageCanvasHeight, remainingHeight);
+            
+            const pageCanvas = document.createElement('canvas');
+            pageCanvas.width = imgWidth;
+            pageCanvas.height = sliceHeight;
+            const ctx = pageCanvas.getContext('2d');
+            if (ctx) {
+              ctx.drawImage(canvas, 0, sourceY, imgWidth, sliceHeight, 0, 0, imgWidth, sliceHeight);
+              const pageImgData = pageCanvas.toDataURL("image/jpeg", 0.95);
+              pdf.addImage(pageImgData, "JPEG", 0, 0, pdfWidth, sliceHeight * ratio);
+            }
+
+            sourceY += sliceHeight;
+            remainingHeight -= sliceHeight;
+            subPage++;
+          }
+        }
+      }
+    } else {
+      // Fallback: التقاط العنصر بالكامل كصورة واحدة
+      const canvas = await html2canvas(element, {
+        scale: 2,
+        useCORS: true,
+        allowTaint: true,
+        backgroundColor: "#ffffff",
+        logging: false,
+        windowWidth: element.scrollWidth,
+        windowHeight: element.scrollHeight,
+      });
+
+      const imgData = canvas.toDataURL("image/jpeg", 0.95);
+      const margin = 5;
+      const usableWidth = pdfWidth - margin * 2;
+      const usableHeight = pdfHeight - margin * 2;
+      const imgWidth = canvas.width;
+      const imgHeight = canvas.height;
+      const ratio = usableWidth / imgWidth;
+      const scaledHeight = imgHeight * ratio;
+
+      if (scaledHeight <= usableHeight) {
+        pdf.addImage(imgData, "JPEG", margin, margin, usableWidth, scaledHeight);
+      } else {
+        const pageCanvasHeight = usableHeight / ratio;
+        let remainingHeight = imgHeight;
+        let sourceY = 0;
+        let pageNum = 0;
+
+        while (remainingHeight > 0) {
+          if (pageNum > 0) pdf.addPage();
+
+          const sliceHeight = Math.min(pageCanvasHeight, remainingHeight);
+          
+          const pageCanvas = document.createElement('canvas');
+          pageCanvas.width = imgWidth;
+          pageCanvas.height = sliceHeight;
+          const ctx = pageCanvas.getContext('2d');
+          if (ctx) {
+            ctx.drawImage(canvas, 0, sourceY, imgWidth, sliceHeight, 0, 0, imgWidth, sliceHeight);
+            const pageImgData = pageCanvas.toDataURL("image/jpeg", 0.95);
+            pdf.addImage(pageImgData, "JPEG", margin, margin, usableWidth, sliceHeight * ratio);
+          }
+
+          sourceY += sliceHeight;
+          remainingHeight -= sliceHeight;
+          pageNum++;
+        }
       }
     }
+
+    // استعادة الألوان الأصلية
+    restoreColors();
+
+    // إعادة إظهار الأزرار
+    buttons.forEach(btn => (btn as HTMLElement).style.display = '');
 
     pdf.save(filename);
   } catch (err) {
@@ -239,7 +283,6 @@ export async function exportToPDF(elementId: string, filename: string = "documen
  * تطبيق ثيم القالب على عنصر HTML قبل التصدير
  */
 export function applyTemplateToElement(element: HTMLElement, template: PdfTemplate) {
-  // تطبيق الألوان على العناصر
   const headers = element.querySelectorAll('[data-pdf-header]');
   headers.forEach(h => {
     (h as HTMLElement).style.backgroundColor = template.headerBg;
@@ -267,7 +310,6 @@ export function applyTemplateToElement(element: HTMLElement, template: PdfTempla
     (b as HTMLElement).style.backgroundColor = template.bodyBg;
   });
 
-  // تطبيق الخط
   element.style.fontFamily = `'${template.fontFamily}', sans-serif`;
 }
 
@@ -286,11 +328,21 @@ export function printElement(elementId: string) {
       <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&family=Cairo:wght@300;400;500;600;700&family=Almarai:wght@300;400;700;800&family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700&display=swap" rel="stylesheet">
       <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: 'Cairo', 'Tajawal', sans-serif; direction: rtl; }
+        body { font-family: 'Cairo', 'Tajawal', sans-serif; direction: rtl; background: #f5f5f5; }
         @media print {
-          body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-          .page-break { page-break-before: always; }
+          body { -webkit-print-color-adjust: exact; print-color-adjust: exact; background: white; }
           [data-no-print] { display: none !important; }
+        }
+        /* تنسيق صفحات A4 للطباعة */
+        @media print {
+          body > div > div { 
+            page-break-after: always; 
+            margin: 0 !important;
+            box-shadow: none !important;
+          }
+          body > div > div:last-child { 
+            page-break-after: avoid; 
+          }
         }
       </style>
     </head>

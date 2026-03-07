@@ -30,7 +30,7 @@ import {
   BookOpen, Baby, Accessibility, Briefcase, ClipboardList,
   ClipboardCheck, Handshake, UserCheck, Target,
   NotebookPen, Monitor, School, Award, PieChart, ListChecks,
-  GripVertical, Move, FlaskConical, Activity, Megaphone
+  GripVertical, Move, FlaskConical, Activity, Megaphone, Share2, Globe, Copy, Link2
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -151,18 +151,18 @@ const ADMIN_ASSISTANT_CRITERIA = makeSimpleCriteria("a", [
 
 // ===== أنواع الوظائف =====
 const JOB_TYPES = [
-  { id: "teacher", title: "معلم / معلمة", icon: GraduationCap, emoji: "👨‍🏫", criteria: TEACHER_CRITERIA, hasStandards: true, color: "#059669" },
-  { id: "principal", title: "مدير / مديرة مدرسة", icon: Building2, emoji: "👔", criteria: PRINCIPAL_CRITERIA, hasStandards: true, color: "#2563EB" },
-  { id: "vice_principal", title: "وكيل / وكيلة مدرسة", icon: ClipboardList, emoji: "📋", criteria: VICE_PRINCIPAL_CRITERIA, hasStandards: true, color: "#7C3AED" },
-  { id: "counselor", title: "موجه/ة طلابي/ة", icon: Users, emoji: "🤝", criteria: COUNSELOR_CRITERIA, hasStandards: true, color: "#0891B2" },
-  { id: "health_counselor", title: "معلم/ة مسند له توجيه صحي", icon: Heart, emoji: "🏥", criteria: HEALTH_COUNSELOR_CRITERIA, hasStandards: true, color: "#DC2626" },
-  { id: "activity_leader", title: "معلم/ة مسند له نشاط (رائد/ة نشاط)", icon: Megaphone, emoji: "🏆", criteria: ACTIVITY_LEADER_CRITERIA, hasStandards: true, color: "#F59E0B" },
-  { id: "lab_technician", title: "محضر/ة مختبر", icon: FlaskConical, emoji: "🧪", criteria: LAB_TECHNICIAN_CRITERIA, hasStandards: true, color: "#8B5CF6" },
-  { id: "supervisor", title: "مشرف/ة تربوي/ة (التشكيلات الإشرافية)", icon: SearchIcon, emoji: "🔍", criteria: SUPERVISOR_CRITERIA, hasStandards: true, color: "#CA8A04" },
-  { id: "kindergarten", title: "معلمة رياض أطفال", icon: Baby, emoji: "🧒", criteria: KINDERGARTEN_CRITERIA, hasStandards: true, color: "#EC4899" },
-  { id: "librarian", title: "أمين/ة مصادر تعلم", icon: BookOpen, emoji: "📚", criteria: LIBRARIAN_CRITERIA, hasStandards: false, color: "#9333EA" },
-  { id: "special_ed", title: "معلم/ة تربية خاصة", icon: Accessibility, emoji: "♿", criteria: SPECIAL_ED_CRITERIA, hasStandards: true, color: "#F97316" },
-  { id: "admin_assistant", title: "مساعد/ة إداري/ة", icon: Briefcase, emoji: "🗂️", criteria: ADMIN_ASSISTANT_CRITERIA, hasStandards: false, color: "#6B7280" },
+  { id: "teacher", title: "معلم / معلمة", icon: GraduationCap, emoji: "👨‍🏫", criteria: TEACHER_CRITERIA, hasStandards: true, color: "#059669", desc: "نظام شامل يغطي 11 معيار و 45 مؤشر أداء وفق المعايير الرسمية" },
+  { id: "principal", title: "مدير / مديرة مدرسة", icon: Building2, emoji: "👔", criteria: PRINCIPAL_CRITERIA, hasStandards: true, color: "#2563EB", desc: "معايير القيادة المدرسية والإدارة التعليمية والتطوير المهني" },
+  { id: "vice_principal", title: "وكيل / وكيلة مدرسة", icon: ClipboardList, emoji: "📋", criteria: VICE_PRINCIPAL_CRITERIA, hasStandards: true, color: "#7C3AED", desc: "معايير الإشراف على الشؤون التعليمية والإدارية بالمدرسة" },
+  { id: "counselor", title: "موجه/ة طلابي/ة", icon: Users, emoji: "🤝", criteria: COUNSELOR_CRITERIA, hasStandards: true, color: "#0891B2", desc: "معايير التوجيه والإرشاد الطلابي والدعم النفسي والاجتماعي" },
+  { id: "health_counselor", title: "معلم/ة مسند له توجيه صحي", icon: Heart, emoji: "🏥", criteria: HEALTH_COUNSELOR_CRITERIA, hasStandards: true, color: "#DC2626", desc: "معايير التوعية الصحية والإسعافات الأولية والبيئة المدرسية" },
+  { id: "activity_leader", title: "معلم/ة مسند له نشاط (رائد/ة نشاط)", icon: Megaphone, emoji: "🏆", criteria: ACTIVITY_LEADER_CRITERIA, hasStandards: true, color: "#F59E0B", desc: "معايير تخطيط وتنفيذ الأنشطة الطلابية والبرامج اللاصفية" },
+  { id: "lab_technician", title: "محضر/ة مختبر", icon: FlaskConical, emoji: "🧪", criteria: LAB_TECHNICIAN_CRITERIA, hasStandards: true, color: "#8B5CF6", desc: "معايير إعداد وتجهيز المختبرات وتطبيق معايير السلامة" },
+  { id: "supervisor", title: "مشرف/ة تربوي/ة (التشكيلات الإشرافية)", icon: SearchIcon, emoji: "🔍", criteria: SUPERVISOR_CRITERIA, hasStandards: true, color: "#CA8A04", desc: "معايير الإشراف التربوي والمتابعة الميدانية وتطوير الأداء" },
+  { id: "kindergarten", title: "معلمة رياض أطفال", icon: Baby, emoji: "🧒", criteria: KINDERGARTEN_CRITERIA, hasStandards: true, color: "#EC4899", desc: "معايير رعاية الطفولة المبكرة والتعلم باللعب والتنمية الشاملة" },
+  { id: "librarian", title: "أمين/ة مصادر تعلم", icon: BookOpen, emoji: "📚", criteria: LIBRARIAN_CRITERIA, hasStandards: false, color: "#9333EA", desc: "معايير إدارة مصادر التعلم وتنظيم المكتبة وخدمة المستفيدين" },
+  { id: "special_ed", title: "معلم/ة تربية خاصة", icon: Accessibility, emoji: "♿", criteria: SPECIAL_ED_CRITERIA, hasStandards: true, color: "#F97316", desc: "معايير التربية الخاصة والخطط الفردية والتقييم والتشخيص والدمج" },
+  { id: "admin_assistant", title: "مساعد/ة إداري/ة", icon: Briefcase, emoji: "🗂️", criteria: ADMIN_ASSISTANT_CRITERIA, hasStandards: false, color: "#6B7280", desc: "معايير الدعم الإداري والتنظيم المكتبي والمتابعة اليومية" },
 ];
 
 // ===== الثيمات =====
@@ -292,6 +292,8 @@ export default function PerformanceEvidence() {
   const [isExporting, setIsExporting] = useState(false);
   const [activeTab, setActiveTab] = useState("criteria");
   const [stateRestored, setStateRestored] = useState(false);
+  const [isSharing, setIsSharing] = useState(false);
+  const [shareUrl, setShareUrl] = useState<string | null>(null);
 
   // Lightbox state
   const [lightboxImage, setLightboxImage] = useState<string | null>(null);
@@ -300,6 +302,9 @@ export default function PerformanceEvidence() {
   const [aiLoading, setAiLoading] = useState<string | null>(null);
   const [aiChat, setAiChat] = useState<Record<string, string[]>>({});
   const [aiPrompt, setAiPrompt] = useState("");
+
+  // tRPC share mutation
+  const shareMutation = trpc.share.create.useMutation();
 
   // tRPC AI mutations
   const suggestMutation = trpc.ai.suggest.useMutation();
@@ -1100,6 +1105,45 @@ export default function PerformanceEvidence() {
     setIsExporting(false);
   };
 
+  const handleShareLink = async () => {
+    if (!isAuthenticated) {
+      toast.error("يجب تسجيل الدخول أولاً لمشاركة الملف كرابط");
+      return;
+    }
+    // حفظ أولاً إذا لم يكن محفوظاً
+    if (!portfolio.id) {
+      toast.info("جاري حفظ الملف أولاً...");
+      const saved = await portfolio.savePortfolio({
+        jobId: selectedJob!.id,
+        jobTitle: selectedJob!.title,
+        personalInfo,
+        criteriaData,
+        customCriteria,
+        themeId: selectedTheme.id,
+        completionPercentage: percentage,
+      });
+      if (!saved) {
+        toast.error("فشل حفظ الملف");
+        return;
+      }
+    }
+    setIsSharing(true);
+    try {
+      const result = await shareMutation.mutateAsync({
+        portfolioId: portfolio.id!,
+        expiresInDays: 30,
+        maxViews: 0,
+      });
+      const url = `${window.location.origin}/shared/${result.token}`;
+      setShareUrl(url);
+      await navigator.clipboard.writeText(url);
+      toast.success("تم نسخ رابط المشاركة!");
+    } catch {
+      toast.error("فشل إنشاء رابط المشاركة");
+    }
+    setIsSharing(false);
+  };
+
   const currentCriterion = allCriteria[currentCriterionIndex];
 
   // ===== Render Evidence Item =====
@@ -1187,6 +1231,13 @@ export default function PerformanceEvidence() {
   const renderEvidenceItem = (ev: EvidenceItem, criterionId: string) => {
     const priority = ev.priority || 'essential';
     const priorityConfig = PRIORITY_CONFIG[priority];
+    // البحث عن formFields من sub-evidence المرتبط
+    const criterion = allCriteria.find(c => c.id === criterionId);
+    const critData = criteriaData[criterionId];
+    const allSubs = [...(criterion?.subEvidences || []), ...(critData?.customSubEvidences || [])];
+    const linkedSub = allSubs.find(s => s.id === ev.subEvidenceId);
+    const hasFormFields = linkedSub?.formFields && linkedSub.formFields.length > 0;
+    const isFormDataEmpty = !ev.formData || Object.keys(ev.formData).length === 0 || !Object.values(ev.formData).some(v => v && v.trim());
     return (
     <motion.div key={ev.id} initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }}
       draggable
@@ -1204,7 +1255,7 @@ export default function PerformanceEvidence() {
           {ev.type === 'file' && <FileText className="w-4 h-4 text-orange-500" />}
           {ev.type === 'video' && <Video className="w-4 h-4 text-red-500" />}
           <span className="text-xs font-medium text-muted-foreground">
-            {ev.type === 'text' ? 'نص' : ev.type === 'image' ? 'صورة' : ev.type === 'link' ? 'رابط' : ev.type === 'file' ? 'ملف' : 'فيديو'}
+            {ev.type === 'text' ? (hasFormFields ? 'نموذج' : 'نص') : ev.type === 'image' ? 'صورة' : ev.type === 'link' ? 'رابط' : ev.type === 'file' ? 'ملف' : 'فيديو'}
           </span>
           {ev.fileName && <span className="text-xs text-muted-foreground/70">({ev.fileName})</span>}
           {/* شارة الأولوية */}
@@ -1257,7 +1308,57 @@ export default function PerformanceEvidence() {
         </div>
       </div>
 
-      {ev.type === 'text' && !ev.formData && (
+      {/* عرض حقول النموذج إذا كان الـ sub-evidence يحتوي على formFields */}
+      {ev.type === 'text' && hasFormFields && ev.formData !== undefined && (
+        <div className="bg-primary/5 rounded-lg p-3 border border-primary/10">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+            {linkedSub!.formFields!.map((field: FormField) => (
+              <div key={field.id} className={field.type === 'textarea' ? 'md:col-span-2' : ''}>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-medium text-foreground">
+                    {field.label} {field.required && <span className="text-destructive">*</span>}
+                  </label>
+                  {field.type === 'textarea' && ev.formData?.[field.id] && (
+                    <button type="button" onClick={() => improveFieldText(criterionId, ev.id, field.id, ev.formData?.[field.id] || '')}
+                      disabled={aiLoading === `improve_${ev.id}_${field.id}`}
+                      className="text-[10px] text-violet-600 hover:text-violet-700 flex items-center gap-1">
+                      {aiLoading === `improve_${ev.id}_${field.id}` ? <Loader2 className="w-3 h-3 animate-spin" /> : <Wand2 className="w-3 h-3" />}
+                      تحسين
+                    </button>
+                  )}
+                </div>
+                {field.type === 'textarea' ? (
+                  <textarea value={ev.formData?.[field.id] || ''} onChange={(e) => updateFormField(criterionId, ev.id, field.id, e.target.value)}
+                    placeholder={field.placeholder} rows={3}
+                    className="w-full px-3 py-2 rounded-lg border border-border text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/20 bg-background" />
+                ) : field.type === 'select' ? (
+                  <select value={ev.formData?.[field.id] || ''} onChange={(e) => updateFormField(criterionId, ev.id, field.id, e.target.value)}
+                    className="w-full px-3 py-2.5 rounded-lg border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 bg-background">
+                    <option value="">اختر...</option>
+                    {field.options?.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                  </select>
+                ) : (
+                  <input type={field.type === 'date' ? 'date' : field.type === 'number' ? 'number' : 'text'}
+                    value={ev.formData?.[field.id] || ''} onChange={(e) => updateFormField(criterionId, ev.id, field.id, e.target.value)}
+                    placeholder={field.placeholder}
+                    className="w-full px-3 py-2.5 rounded-lg border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 bg-background" />
+                )}
+              </div>
+            ))}
+          </div>
+          <div className="flex justify-end mt-2">
+            <Button variant="secondary" size="sm" className="gap-1.5 text-xs"
+              onClick={() => fillFormWithAI(criterionId, ev.subEvidenceId, ev.id, linkedSub!.formFields!)}
+              disabled={aiLoading === `fill_${ev.id}`}>
+              {aiLoading === `fill_${ev.id}` ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5 text-violet-500" />}
+              تعبئة بالذكاء الاصطناعي
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* عرض textarea عادي إذا لم تكن هناك formFields */}
+      {ev.type === 'text' && !hasFormFields && (
         <textarea value={ev.text} onChange={(e) => updateEvidence(criterionId, ev.id, { text: e.target.value })}
           placeholder="اكتب نص الشاهد هنا..." rows={2}
           className="w-full px-3 py-2 rounded-lg border border-border text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/20 bg-background" />
@@ -1357,82 +1458,62 @@ export default function PerformanceEvidence() {
             </div>
           </div>
 
-          {/* Featured: معلم/معلمة */}
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="mb-4 sm:mb-6">
-            <Card className="cursor-pointer hover:shadow-xl transition-all duration-300 border-emerald-200 bg-gradient-to-l from-emerald-50/80 to-background hover:border-emerald-300 overflow-hidden relative group"
-              onClick={() => handleSelectJob(JOB_TYPES[0])}>
-              <CardContent className="p-4 sm:p-6 md:p-8">
-                <div className="flex items-center gap-3 sm:gap-5">
-                  <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-xl sm:rounded-2xl bg-gradient-to-br from-emerald-500 to-emerald-700 flex items-center justify-center shrink-0 shadow-md shadow-emerald-500/20 group-hover:scale-105 transition-transform">
-                    <GraduationCap className="w-6 h-6 sm:w-8 sm:h-8 text-white" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1.5 sm:gap-2 mb-0.5 sm:mb-1 flex-wrap">
-                      <h3 className="text-base sm:text-xl font-black text-foreground" style={{ fontFamily: "var(--font-heading)" }}>معلم / معلمة</h3>
-                      <Badge className="bg-emerald-600 text-white text-[9px] sm:text-[10px] hover:bg-emerald-700">الأكثر استخداماً</Badge>
-                    </div>
-                    <p className="text-[11px] sm:text-sm text-muted-foreground mb-1.5 sm:mb-2 line-clamp-2">نظام شامل يغطي 11 معيار و 45 مؤشر أداء وفق المعايير الرسمية</p>
-                    <div className="flex items-center gap-1.5 sm:gap-3 flex-wrap">
-                      <Badge variant="outline" className="text-[9px] sm:text-[10px] gap-0.5 sm:gap-1 border-emerald-300 text-emerald-700">
-                        <Sparkles className="w-2.5 h-2.5 sm:w-3 sm:h-3" />11 معيار
-                      </Badge>
-                      <Badge variant="outline" className="text-[9px] sm:text-[10px] gap-0.5 sm:gap-1 border-emerald-300 text-emerald-700">
-                        45 مؤشر
-                      </Badge>
-                      <Badge variant="outline" className="text-[9px] sm:text-[10px] gap-0.5 sm:gap-1 border-emerald-300 text-emerald-700">
-                        11 بند تقييم
-                      </Badge>
-                    </div>
-                  </div>
-                  <ArrowLeft className="w-4 h-4 sm:w-5 sm:h-5 text-muted-foreground group-hover:text-emerald-600 transition-colors shrink-0" />
-                </div>
-              </CardContent>
-            </Card>
-          </motion.div>
-
-          {/* باقي الوظائف */}
-          <div className="mb-3 sm:mb-4">
-            <h2 className="text-xs sm:text-sm font-bold text-muted-foreground mb-2 sm:mb-3" style={{ fontFamily: "var(--font-heading)" }}>وظائف أخرى</h2>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-3">
-            {JOB_TYPES.slice(1).map((job, i) => {
+          {/* جميع الوظائف - تصميم موحد */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+            {JOB_TYPES.map((job, i) => {
               const Icon = job.icon;
-              // حساب عدد المعايير والمؤشرات (البنود الفرعية)
               const standards = job.id === "teacher" ? STANDARDS :
                 job.id === "special_ed" ? SPECIAL_ED_STANDARDS :
                 getStandardsForJob(job.id);
               const standardsCount = standards.length;
               const indicatorsCount = standards.reduce((sum, s) => sum + s.items.reduce((si, item) => si + (item.subItems?.length || 0) + 1, 0), 0);
+              const isTeacher = job.id === "teacher";
               return (
-                <motion.div key={job.id} initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: (i + 1) * 0.04 }}>
-                  <Card className="cursor-pointer hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 border-border/60 hover:border-opacity-100 h-full group"
-                    style={{ ['--hover-border' as string]: job.color }}
+                <motion.div key={job.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.04 }}
+                  className={isTeacher ? "sm:col-span-2" : ""}>
+                  <Card className={`cursor-pointer hover:shadow-xl transition-all duration-300 overflow-hidden relative group h-full ${
+                    isTeacher ? 'border-emerald-200 bg-gradient-to-l from-emerald-50/80 to-background hover:border-emerald-300' : 'border-border/60 hover:border-opacity-100'
+                  }`}
+                    style={!isTeacher ? { ['--hover-border' as string]: job.color } : {}}
                     onClick={() => handleSelectJob(job)}>
-                    <CardContent className="p-3 sm:p-4">
-                      <div className="flex items-start gap-2.5 sm:gap-3">
-                        <div className="w-9 h-9 sm:w-11 sm:h-11 rounded-lg sm:rounded-xl flex items-center justify-center shrink-0 transition-transform group-hover:scale-105"
-                          style={{ backgroundColor: job.color + "12", border: `1.5px solid ${job.color}25` }}>
-                          <Icon className="w-4 h-4 sm:w-5 sm:h-5" style={{ color: job.color }} />
+                    <CardContent className="p-4 sm:p-5 md:p-6">
+                      <div className="flex items-center gap-3 sm:gap-4">
+                        <div className={`w-11 h-11 sm:w-14 sm:h-14 rounded-xl sm:rounded-2xl flex items-center justify-center shrink-0 shadow-md group-hover:scale-105 transition-transform ${
+                          isTeacher ? 'bg-gradient-to-br from-emerald-500 to-emerald-700 shadow-emerald-500/20' : ''
+                        }`}
+                          style={!isTeacher ? { background: `linear-gradient(135deg, ${job.color}dd, ${job.color})`, boxShadow: `0 4px 12px ${job.color}30` } : {}}>
+                          <Icon className={`w-5 h-5 sm:w-7 sm:h-7 text-white`} />
                         </div>
                         <div className="flex-1 min-w-0">
-                          <h3 className="font-bold text-foreground text-xs sm:text-sm truncate mb-1" style={{ fontFamily: "var(--font-heading)" }}>{job.title}</h3>
-                          {job.hasStandards && standardsCount > 0 ? (
-                            <div className="flex items-center gap-1 sm:gap-1.5 flex-wrap">
-                              <Badge variant="outline" className="text-[8px] sm:text-[9px] gap-0.5 py-0 px-1.5" style={{ borderColor: job.color + '40', color: job.color }}>
-                                {standardsCount} معيار
+                          <div className="flex items-center gap-1.5 sm:gap-2 mb-0.5 sm:mb-1 flex-wrap">
+                            <h3 className={`font-black text-foreground ${isTeacher ? 'text-base sm:text-xl' : 'text-sm sm:text-base'}`} style={{ fontFamily: "var(--font-heading)" }}>{job.title}</h3>
+                            {isTeacher && <Badge className="bg-emerald-600 text-white text-[9px] sm:text-[10px] hover:bg-emerald-700">الأكثر استخداماً</Badge>}
+                          </div>
+                          <p className="text-[10px] sm:text-xs text-muted-foreground mb-1.5 sm:mb-2 line-clamp-2">{job.desc}</p>
+                          <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+                            {job.hasStandards && standardsCount > 0 ? (
+                              <>
+                                <Badge variant="outline" className="text-[9px] sm:text-[10px] gap-0.5 sm:gap-1 py-0.5 px-2"
+                                  style={{ borderColor: job.color + '40', color: job.color }}>
+                                  <Sparkles className="w-2.5 h-2.5 sm:w-3 sm:h-3" />{standardsCount} معيار
+                                </Badge>
+                                <Badge variant="outline" className="text-[9px] sm:text-[10px] gap-0.5 py-0.5 px-2"
+                                  style={{ borderColor: job.color + '40', color: job.color }}>
+                                  {indicatorsCount} مؤشر
+                                </Badge>
+                                <Badge variant="outline" className="text-[9px] sm:text-[10px] gap-0.5 py-0.5 px-2"
+                                  style={{ borderColor: job.color + '40', color: job.color }}>
+                                  {job.criteria.length} بند
+                                </Badge>
+                              </>
+                            ) : (
+                              <Badge variant="outline" className="text-[9px] sm:text-[10px] gap-0.5 py-0.5 px-2" style={{ borderColor: job.color + '40', color: job.color }}>
+                                {job.criteria.length} بند تقييم
                               </Badge>
-                              <Badge variant="outline" className="text-[8px] sm:text-[9px] gap-0.5 py-0 px-1.5" style={{ borderColor: job.color + '40', color: job.color }}>
-                                {indicatorsCount} مؤشر
-                              </Badge>
-                              <Badge variant="outline" className="text-[8px] sm:text-[9px] gap-0.5 py-0 px-1.5" style={{ borderColor: job.color + '40', color: job.color }}>
-                                {job.criteria.length} بند
-                              </Badge>
-                            </div>
-                          ) : (
-                            <p className="text-[10px] sm:text-[11px] text-muted-foreground">{job.criteria.length} بند تقييم</p>
-                          )}
+                            )}
+                          </div>
                         </div>
-                        <ArrowLeft className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-muted-foreground/50 group-hover:text-foreground transition-colors shrink-0 mt-1" />
+                        <ArrowLeft className="w-4 h-4 sm:w-5 sm:h-5 text-muted-foreground group-hover:text-foreground transition-colors shrink-0" />
                       </div>
                     </CardContent>
                   </Card>
@@ -2181,11 +2262,7 @@ export default function PerformanceEvidence() {
                           )}
 
                           {/* Evidences List */}
-                          {subEvidences.filter(e => {
-                            if (e.formData && Object.keys(e.formData).some(k => e.formData![k])) return false;
-                            if (e.type === 'text' && !e.text && e.formData) return false;
-                            return true;
-                          }).map((ev) => renderEvidenceItem(ev, currentCriterion.id))}
+                          {subEvidences.map((ev) => renderEvidenceItem(ev, currentCriterion.id))}
 
                           {/* Add Evidence Buttons + Drag & Drop Zone */}
                           <div className="space-y-2">
@@ -2533,6 +2610,10 @@ export default function PerformanceEvidence() {
               <Button size="sm" onClick={() => setStep('preview')} className="gap-1.5">
                 <Eye className="w-4 h-4" />معاينة وتصدير
               </Button>
+              <Button size="sm" variant="outline" onClick={handleShareLink} disabled={isSharing} className="gap-1.5 text-blue-600 border-blue-200 hover:bg-blue-50">
+                {isSharing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Share2 className="w-4 h-4" />}
+                {isSharing ? 'جاري...' : 'مشاركة كرابط'}
+              </Button>
             </div>
           </div>
 
@@ -2669,7 +2750,7 @@ export default function PerformanceEvidence() {
             <Button variant="outline" size="sm" onClick={() => setStep('final-review')}>
               <ArrowRight className="w-4 h-4 ml-1" />العودة
             </Button>
-            <div className="flex gap-2">
+            <div className="flex gap-2 flex-wrap">
               <Button size="sm" onClick={handleExportPDF} disabled={isExporting} className="gap-1.5">
                 {isExporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
                 {isExporting ? 'جاري التصدير...' : 'تحميل PDF'}
@@ -2677,104 +2758,166 @@ export default function PerformanceEvidence() {
               <Button size="sm" variant="outline" onClick={() => printElement('preview-content')} className="gap-1.5">
                 <Printer className="w-4 h-4" />طباعة
               </Button>
+              <Button size="sm" variant="outline" onClick={handleShareLink} disabled={isSharing} className="gap-1.5 text-blue-600 border-blue-200 hover:bg-blue-50">
+                {isSharing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Share2 className="w-4 h-4" />}
+                {isSharing ? 'جاري...' : 'مشاركة كرابط'}
+              </Button>
             </div>
           </div>
 
-          <div id="preview-content" className="bg-white rounded-xl shadow-lg overflow-hidden" style={{ fontFamily: "'Cairo', 'Tajawal', sans-serif" }}>
-            {/* غلاف احترافي محسّن */}
-            <div style={{ background: theme.headerBg, color: theme.headerText, padding: '3.5rem 2.5rem', textAlign: 'center', position: 'relative', overflow: 'hidden' }}>
-              {/* زخارف الخلفية */}
-              <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, background: 'linear-gradient(135deg, rgba(255,255,255,0.12) 0%, transparent 40%, rgba(0,0,0,0.1) 100%)', pointerEvents: 'none' }} />
-              <div style={{ position: 'absolute', top: '-30px', right: '-30px', width: '120px', height: '120px', borderRadius: '50%', background: 'rgba(255,255,255,0.06)', pointerEvents: 'none' }} />
-              <div style={{ position: 'absolute', bottom: '-20px', left: '-20px', width: '80px', height: '80px', borderRadius: '50%', background: 'rgba(255,255,255,0.04)', pointerEvents: 'none' }} />
-              {/* إطار زخرفي */}
-              <div style={{ position: 'absolute', top: '12px', left: '12px', right: '12px', bottom: '12px', border: '1px solid rgba(255,255,255,0.15)', borderRadius: '8px', pointerEvents: 'none' }} />
-              <div style={{ position: 'relative', zIndex: 1 }}>
-                <div style={{ fontSize: '0.65rem', opacity: 0.6, marginBottom: '0.3rem', letterSpacing: '0.15em', textTransform: 'uppercase' }}>المملكة العربية السعودية</div>
-                <div style={{ fontSize: '0.75rem', opacity: 0.7, marginBottom: '0.5rem' }}>وزارة التعليم</div>
-                {personalInfo.department && <p style={{ fontSize: '0.8rem', opacity: 0.85, marginBottom: '0.75rem', lineHeight: 1.6, whiteSpace: 'pre-line' }}>{personalInfo.department}</p>}
-                <div style={{ width: '60px', height: '2px', background: 'rgba(255,255,255,0.3)', margin: '0 auto 1rem' }} />
-                <h1 style={{ fontSize: '2rem', fontWeight: 900, marginBottom: '0.5rem', fontFamily: "'Tajawal', sans-serif", letterSpacing: '-0.01em' }}>شواهد الأداء الوظيفي</h1>
-                <p style={{ fontSize: '1.15rem', fontWeight: 700, opacity: 0.95 }}>{selectedJob?.title}</p>
-                <div style={{ width: '40px', height: '2px', background: 'rgba(255,255,255,0.25)', margin: '0.75rem auto' }} />
-                <p style={{ fontSize: '0.85rem', opacity: 0.8 }}>{personalInfo.year} - {personalInfo.semester}</p>
-                <div style={{ marginTop: '1.5rem', display: 'flex', justifyContent: 'center', gap: '2rem', fontSize: '0.8rem', opacity: 0.9 }}>
-                  <div style={{ textAlign: 'center' }}>
-                    <div style={{ fontSize: '0.6rem', opacity: 0.6, marginBottom: '0.2rem' }}>الاسم</div>
-                    <div style={{ fontWeight: 700 }}>{personalInfo.name || '—'}</div>
+          {/* رابط المشاركة */}
+          {shareUrl && (
+            <div className="mb-4 bg-blue-50 border border-blue-200 rounded-xl p-4 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2 min-w-0">
+                <Globe className="w-5 h-5 text-blue-600 shrink-0" />
+                <div className="min-w-0">
+                  <p className="text-xs font-bold text-blue-800 mb-0.5">رابط العرض الإلكتروني</p>
+                  <p className="text-xs text-blue-600 truncate" dir="ltr">{shareUrl}</p>
+                </div>
+              </div>
+              <div className="flex gap-2 shrink-0">
+                <Button size="sm" variant="outline" className="gap-1 text-xs h-7 border-blue-300 text-blue-700 hover:bg-blue-100"
+                  onClick={() => { navigator.clipboard.writeText(shareUrl); toast.success('تم نسخ الرابط!'); }}>
+                  <Copy className="w-3 h-3" />نسخ
+                </Button>
+                <Button size="sm" variant="outline" className="gap-1 text-xs h-7 border-blue-300 text-blue-700 hover:bg-blue-100"
+                  onClick={() => window.open(shareUrl, '_blank')}>
+                  <Globe className="w-3 h-3" />فتح
+                </Button>
+              </div>
+            </div>
+          )}
+
+          <div id="preview-content" style={{ fontFamily: "'Cairo', 'Tajawal', sans-serif" }}>
+            {/* === صفحة الغلاف === */}
+            <div className="bg-white shadow-lg mx-auto mb-6" style={{ width: '210mm', minHeight: '297mm', maxWidth: '100%', position: 'relative', overflow: 'hidden', pageBreakAfter: 'always' }}>
+              {/* غلاف احترافي */}
+              <div style={{ background: theme.headerBg, color: theme.headerText, padding: '4rem 2.5rem', textAlign: 'center', position: 'relative', overflow: 'hidden', minHeight: '297mm', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                {/* زخارف الخلفية */}
+                <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, background: 'linear-gradient(135deg, rgba(255,255,255,0.12) 0%, transparent 40%, rgba(0,0,0,0.1) 100%)', pointerEvents: 'none' }} />
+                <div style={{ position: 'absolute', top: '-50px', right: '-50px', width: '200px', height: '200px', borderRadius: '50%', background: 'rgba(255,255,255,0.06)', pointerEvents: 'none' }} />
+                <div style={{ position: 'absolute', bottom: '-40px', left: '-40px', width: '150px', height: '150px', borderRadius: '50%', background: 'rgba(255,255,255,0.04)', pointerEvents: 'none' }} />
+                <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', width: '350px', height: '350px', borderRadius: '50%', background: 'rgba(255,255,255,0.03)', pointerEvents: 'none' }} />
+                {/* إطار زخرفي */}
+                <div style={{ position: 'absolute', top: '16px', left: '16px', right: '16px', bottom: '16px', border: '1.5px solid rgba(255,255,255,0.15)', borderRadius: '12px', pointerEvents: 'none' }} />
+                <div style={{ position: 'relative', zIndex: 1 }}>
+                  <div style={{ fontSize: '0.8rem', opacity: 0.65, marginBottom: '0.3rem', letterSpacing: '0.2em' }}>المملكة العربية السعودية</div>
+                  <div style={{ fontSize: '0.95rem', opacity: 0.8, marginBottom: '0.5rem', fontWeight: 600 }}>وزارة التعليم</div>
+                  {personalInfo.department && <p style={{ fontSize: '0.9rem', opacity: 0.85, marginBottom: '1rem', lineHeight: 1.7, whiteSpace: 'pre-line' }}>{personalInfo.department}</p>}
+                  <div style={{ width: '80px', height: '2px', background: 'rgba(255,255,255,0.3)', margin: '0 auto 1.5rem' }} />
+                  <h1 style={{ fontSize: '2.5rem', fontWeight: 900, marginBottom: '0.75rem', fontFamily: "'Tajawal', sans-serif", letterSpacing: '-0.01em' }}>شواهد الأداء الوظيفي</h1>
+                  <p style={{ fontSize: '1.4rem', fontWeight: 700, opacity: 0.95, marginBottom: '0.5rem' }}>{selectedJob?.title}</p>
+                  <div style={{ width: '50px', height: '2px', background: 'rgba(255,255,255,0.25)', margin: '1rem auto' }} />
+                  <p style={{ fontSize: '1rem', opacity: 0.85 }}>{personalInfo.year} - {personalInfo.semester}</p>
+                  <div style={{ marginTop: '3rem', display: 'flex', justifyContent: 'center', gap: '3rem', fontSize: '0.9rem', opacity: 0.9 }}>
+                    <div style={{ textAlign: 'center', minWidth: '120px' }}>
+                      <div style={{ fontSize: '0.7rem', opacity: 0.6, marginBottom: '0.3rem' }}>الاسم</div>
+                      <div style={{ fontWeight: 700, fontSize: '1.1rem' }}>{personalInfo.name || '—'}</div>
+                    </div>
+                    <div style={{ width: '1px', background: 'rgba(255,255,255,0.2)' }} />
+                    <div style={{ textAlign: 'center', minWidth: '120px' }}>
+                      <div style={{ fontSize: '0.7rem', opacity: 0.6, marginBottom: '0.3rem' }}>المدرسة</div>
+                      <div style={{ fontWeight: 700, fontSize: '1.1rem' }}>{personalInfo.school || '—'}</div>
+                    </div>
                   </div>
-                  <div style={{ width: '1px', background: 'rgba(255,255,255,0.2)' }} />
-                  <div style={{ textAlign: 'center' }}>
-                    <div style={{ fontSize: '0.6rem', opacity: 0.6, marginBottom: '0.2rem' }}>المدرسة</div>
-                    <div style={{ fontWeight: 700 }}>{personalInfo.school || '—'}</div>
+                  {/* تذييل الغلاف */}
+                  <div style={{ marginTop: '4rem', fontSize: '0.7rem', opacity: 0.5 }}>
+                    نظام SERS - السجلات التعليمية الذكية
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* فهرس المحتويات */}
-            <div className="p-6 border-b" style={{ borderColor: theme.borderColor }}>
-              <h2 className="text-base font-bold mb-3" style={{ color: theme.accent, fontFamily: "'Tajawal', sans-serif" }}>فهرس المحتويات</h2>
-              <div className="space-y-1">
-                <div className="flex items-center gap-2 text-xs text-gray-600 py-1 border-b border-dashed border-gray-200">
-                  <span className="font-bold" style={{ color: theme.accent }}>1</span>
+            {/* === صفحة فهرس المحتويات + البيانات الشخصية === */}
+            <div className="bg-white shadow-lg mx-auto mb-6" style={{ width: '210mm', minHeight: '297mm', maxWidth: '100%', padding: '2rem 2.5rem', position: 'relative', pageBreakAfter: 'always' }}>
+              {/* ترويسة الصفحة */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: `2px solid ${theme.accent}`, paddingBottom: '0.75rem', marginBottom: '1.5rem' }}>
+                <div style={{ fontSize: '0.7rem', color: '#9CA3AF' }}>شواهد الأداء الوظيفي - {personalInfo.name}</div>
+                <div style={{ fontSize: '0.7rem', color: theme.accent, fontWeight: 700 }}>{selectedJob?.title}</div>
+              </div>
+
+              {/* فهرس المحتويات */}
+              <h2 style={{ fontSize: '1rem', fontWeight: 800, color: theme.accent, fontFamily: "'Tajawal', sans-serif", marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <span style={{ width: '4px', height: '20px', borderRadius: '2px', backgroundColor: theme.accent, display: 'inline-block' }} />
+                فهرس المحتويات
+              </h2>
+              <div style={{ marginBottom: '2rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8rem', color: '#4B5563', padding: '0.5rem 0', borderBottom: '1px dashed #E5E7EB' }}>
+                  <span style={{ fontWeight: 700, color: theme.accent, minWidth: '20px' }}>1</span>
                   <span>البيانات الشخصية</span>
                 </div>
-                <div className="flex items-center gap-2 text-xs text-gray-600 py-1 border-b border-dashed border-gray-200">
-                  <span className="font-bold" style={{ color: theme.accent }}>2</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8rem', color: '#4B5563', padding: '0.5rem 0', borderBottom: '1px dashed #E5E7EB' }}>
+                  <span style={{ fontWeight: 700, color: theme.accent, minWidth: '20px' }}>2</span>
                   <span>جدول التقييم</span>
                 </div>
                 {allCriteria.map((c, i) => {
                   const d = criteriaData[c.id];
                   if (!d || d.evidences.length === 0) return null;
                   return (
-                    <div key={c.id} className="flex items-center gap-2 text-xs text-gray-600 py-1 border-b border-dashed border-gray-200">
-                      <span className="font-bold" style={{ color: theme.accent }}>{i + 3}</span>
+                    <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8rem', color: '#4B5563', padding: '0.5rem 0', borderBottom: '1px dashed #E5E7EB' }}>
+                      <span style={{ fontWeight: 700, color: theme.accent, minWidth: '20px' }}>{i + 3}</span>
                       <span>{c.title} ({d.evidences.length} شاهد)</span>
                     </div>
                   );
                 })}
               </div>
-            </div>
 
-            {/* البيانات الشخصية */}
-            <div className="p-6 border-b" style={{ borderColor: theme.borderColor }}>
-              <h2 className="text-sm font-bold mb-3 flex items-center gap-2" style={{ color: theme.accent, fontFamily: "'Tajawal', sans-serif" }}>
-                <span style={{ width: '4px', height: '18px', borderRadius: '2px', backgroundColor: theme.accent, display: 'inline-block' }} />
+              {/* البيانات الشخصية */}
+              <h2 style={{ fontSize: '1rem', fontWeight: 800, color: theme.accent, fontFamily: "'Tajawal', sans-serif", marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <span style={{ width: '4px', height: '20px', borderRadius: '2px', backgroundColor: theme.accent, display: 'inline-block' }} />
                 البيانات الشخصية
               </h2>
-              <div className="grid grid-cols-2 gap-3 text-sm">
-                <div className="bg-gray-50 rounded-lg p-3 border border-gray-100"><span className="text-gray-500 text-[10px] block mb-0.5">الاسم الكامل</span><strong className="text-gray-800">{personalInfo.name || '—'}</strong></div>
-                <div className="bg-gray-50 rounded-lg p-3 border border-gray-100"><span className="text-gray-500 text-[10px] block mb-0.5">المدرسة</span><strong className="text-gray-800">{personalInfo.school || '—'}</strong></div>
-                <div className="bg-gray-50 rounded-lg p-3 border border-gray-100"><span className="text-gray-500 text-[10px] block mb-0.5">الوظيفة</span><strong className="text-gray-800">{selectedJob?.title || '—'}</strong></div>
-                <div className="bg-gray-50 rounded-lg p-3 border border-gray-100"><span className="text-gray-500 text-[10px] block mb-0.5">العام الدراسي</span><strong className="text-gray-800">{personalInfo.year || '—'}</strong></div>
-                <div className="bg-gray-50 rounded-lg p-3 border border-gray-100"><span className="text-gray-500 text-[10px] block mb-0.5">الفصل الدراسي</span><strong className="text-gray-800">{personalInfo.semester || '—'}</strong></div>
-                <div className="bg-gray-50 rounded-lg p-3 border border-gray-100"><span className="text-gray-500 text-[10px] block mb-0.5">اسم المقيّم</span><strong className="text-gray-800">{personalInfo.evaluator || '—'}</strong></div>
-                <div className="bg-gray-50 rounded-lg p-3 border border-gray-100"><span className="text-gray-500 text-[10px] block mb-0.5">صفة المقيّم</span><strong className="text-gray-800">{personalInfo.evaluatorRole || '—'}</strong></div>
-                <div className="bg-gray-50 rounded-lg p-3 border border-gray-100"><span className="text-gray-500 text-[10px] block mb-0.5">تاريخ التقييم</span><strong className="text-gray-800">{personalInfo.date || '—'}</strong></div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                {[
+                  { label: 'الاسم الكامل', value: personalInfo.name },
+                  { label: 'المدرسة', value: personalInfo.school },
+                  { label: 'الوظيفة', value: selectedJob?.title },
+                  { label: 'العام الدراسي', value: personalInfo.year },
+                  { label: 'الفصل الدراسي', value: personalInfo.semester },
+                  { label: 'اسم المقيّم', value: personalInfo.evaluator },
+                  { label: 'صفة المقيّم', value: personalInfo.evaluatorRole },
+                  { label: 'تاريخ التقييم', value: personalInfo.date },
+                ].map((item, idx) => (
+                  <div key={idx} style={{ backgroundColor: '#F9FAFB', borderRadius: '8px', padding: '0.75rem', border: '1px solid #F3F4F6' }}>
+                    <span style={{ fontSize: '0.65rem', color: '#9CA3AF', display: 'block', marginBottom: '0.2rem' }}>{item.label}</span>
+                    <strong style={{ fontSize: '0.85rem', color: '#1F2937' }}>{item.value || '—'}</strong>
+                  </div>
+                ))}
               </div>
               {personalInfo.department && (
-                <div className="mt-3 bg-gray-50 rounded-lg p-3 border border-gray-100">
-                  <span className="text-gray-500 text-[10px] block mb-0.5">الجهة / الإدارة</span>
-                  <strong className="text-gray-800 text-sm whitespace-pre-line">{personalInfo.department}</strong>
+                <div style={{ marginTop: '0.75rem', backgroundColor: '#F9FAFB', borderRadius: '8px', padding: '0.75rem', border: '1px solid #F3F4F6' }}>
+                  <span style={{ fontSize: '0.65rem', color: '#9CA3AF', display: 'block', marginBottom: '0.2rem' }}>الجهة / الإدارة</span>
+                  <strong style={{ fontSize: '0.85rem', color: '#1F2937', whiteSpace: 'pre-line' as const }}>{personalInfo.department}</strong>
                 </div>
               )}
+
+              {/* تذييل الصفحة */}
+              <div style={{ position: 'absolute', bottom: '1.5rem', left: '2.5rem', right: '2.5rem', borderTop: `1px solid ${theme.borderColor}`, paddingTop: '0.5rem', display: 'flex', justifyContent: 'space-between', fontSize: '0.6rem', color: '#9CA3AF' }}>
+                <span>نظام SERS - السجلات التعليمية الذكية</span>
+                <span>صفحة 2</span>
+              </div>
             </div>
 
-            {/* جدول التقييم - محسّن */}
-            <div className="p-6">
-              <h2 className="text-sm font-bold mb-3 flex items-center gap-2" style={{ color: theme.accent, fontFamily: "'Tajawal', sans-serif" }}>
-                <span style={{ width: '4px', height: '18px', borderRadius: '2px', backgroundColor: theme.accent, display: 'inline-block' }} />
+            {/* === صفحة جدول التقييم === */}
+            <div className="bg-white shadow-lg mx-auto mb-6" style={{ width: '210mm', minHeight: '297mm', maxWidth: '100%', padding: '2rem 2.5rem', position: 'relative', pageBreakAfter: 'always' }}>
+              {/* ترويسة */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: `2px solid ${theme.accent}`, paddingBottom: '0.75rem', marginBottom: '1.5rem' }}>
+                <div style={{ fontSize: '0.7rem', color: '#9CA3AF' }}>شواهد الأداء الوظيفي - {personalInfo.name}</div>
+                <div style={{ fontSize: '0.7rem', color: theme.accent, fontWeight: 700 }}>جدول التقييم</div>
+              </div>
+
+              <h2 style={{ fontSize: '1rem', fontWeight: 800, color: theme.accent, fontFamily: "'Tajawal', sans-serif", marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <span style={{ width: '4px', height: '20px', borderRadius: '2px', backgroundColor: theme.accent, display: 'inline-block' }} />
                 جدول التقييم
               </h2>
-              <table className="w-full border-collapse text-sm" style={{ borderColor: theme.borderColor }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
                 <thead>
                   <tr style={{ background: theme.accent, color: '#fff' }}>
-                    <th className="p-2.5 border text-center" style={{ borderColor: theme.borderColor, width: '40px' }}>م</th>
-                    <th className="p-2.5 border text-right" style={{ borderColor: theme.borderColor }}>البند</th>
-                    <th className="p-2.5 border text-center" style={{ borderColor: theme.borderColor, width: '80px' }}>الدرجة</th>
-                    <th className="p-2.5 border text-center" style={{ borderColor: theme.borderColor, width: '80px' }}>الشواهد</th>
-                    <th className="p-2.5 border text-center" style={{ borderColor: theme.borderColor, width: '60px' }}>الحالة</th>
+                    <th style={{ padding: '10px', border: `1px solid ${theme.borderColor}`, textAlign: 'center', width: '40px' }}>م</th>
+                    <th style={{ padding: '10px', border: `1px solid ${theme.borderColor}`, textAlign: 'right' }}>البند</th>
+                    <th style={{ padding: '10px', border: `1px solid ${theme.borderColor}`, textAlign: 'center', width: '70px' }}>الدرجة</th>
+                    <th style={{ padding: '10px', border: `1px solid ${theme.borderColor}`, textAlign: 'center', width: '70px' }}>الشواهد</th>
+                    <th style={{ padding: '10px', border: `1px solid ${theme.borderColor}`, textAlign: 'center', width: '60px' }}>الحالة</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -2785,11 +2928,11 @@ export default function PerformanceEvidence() {
                     const scoreColor = score >= 4 ? '#16A34A' : score >= 2 ? '#CA8A04' : score > 0 ? '#EA580C' : '#9CA3AF';
                     return (
                       <tr key={c.id} style={{ backgroundColor: i % 2 === 0 ? '#fff' : '#f9fafb' }}>
-                        <td className="p-2 border text-center text-xs" style={{ borderColor: theme.borderColor }}>{i + 1}</td>
-                        <td className="p-2 border" style={{ borderColor: theme.borderColor }}>{c.title}</td>
-                        <td className="p-2 border text-center font-bold" style={{ borderColor: theme.borderColor, color: scoreColor }}>{score}/{c.maxScore}</td>
-                        <td className="p-2 border text-center" style={{ borderColor: theme.borderColor }}>{evCount}</td>
-                        <td className="p-2 border text-center" style={{ borderColor: theme.borderColor }}>
+                        <td style={{ padding: '8px', border: `1px solid ${theme.borderColor}`, textAlign: 'center', fontSize: '0.75rem' }}>{i + 1}</td>
+                        <td style={{ padding: '8px', border: `1px solid ${theme.borderColor}` }}>{c.title}</td>
+                        <td style={{ padding: '8px', border: `1px solid ${theme.borderColor}`, textAlign: 'center', fontWeight: 700, color: scoreColor }}>{score}/{c.maxScore}</td>
+                        <td style={{ padding: '8px', border: `1px solid ${theme.borderColor}`, textAlign: 'center' }}>{evCount}</td>
+                        <td style={{ padding: '8px', border: `1px solid ${theme.borderColor}`, textAlign: 'center' }}>
                           <span style={{ fontSize: '0.65rem', padding: '2px 6px', borderRadius: '9999px', fontWeight: 600, backgroundColor: score >= 4 ? '#dcfce7' : score >= 2 ? '#fef9c3' : score > 0 ? '#ffedd5' : '#f3f4f6', color: scoreColor }}>
                             {score >= 4 ? 'مكتمل' : score >= 2 ? 'جزئي' : score > 0 ? 'ضعيف' : '—'}
                           </span>
@@ -2798,113 +2941,143 @@ export default function PerformanceEvidence() {
                     );
                   })}
                   <tr style={{ background: theme.accent, color: '#fff' }}>
-                    <td colSpan={2} className="p-2.5 border text-center font-bold" style={{ borderColor: theme.borderColor }}>المجموع</td>
-                    <td className="p-2.5 border text-center font-bold" style={{ borderColor: theme.borderColor }}>{totalScore}/{maxScore}</td>
-                    <td className="p-2.5 border text-center font-bold" style={{ borderColor: theme.borderColor }}>{Object.values(criteriaData).reduce((s, d) => s + d.evidences.length, 0)}</td>
-                    <td className="p-2.5 border text-center font-bold" style={{ borderColor: theme.borderColor }}>{percentage}%</td>
+                    <td colSpan={2} style={{ padding: '10px', border: `1px solid ${theme.borderColor}`, textAlign: 'center', fontWeight: 700 }}>المجموع</td>
+                    <td style={{ padding: '10px', border: `1px solid ${theme.borderColor}`, textAlign: 'center', fontWeight: 700 }}>{totalScore}/{maxScore}</td>
+                    <td style={{ padding: '10px', border: `1px solid ${theme.borderColor}`, textAlign: 'center', fontWeight: 700 }}>{Object.values(criteriaData).reduce((s, d) => s + d.evidences.length, 0)}</td>
+                    <td style={{ padding: '10px', border: `1px solid ${theme.borderColor}`, textAlign: 'center', fontWeight: 700 }}>{percentage}%</td>
                   </tr>
                 </tbody>
               </table>
 
-              <div className="text-center mt-6 p-5 rounded-xl" style={{ background: `${grade.color}12` }}>
-                <p className="text-xs text-gray-500 mb-1">التقدير النهائي</p>
-                <p className="text-3xl font-black" style={{ color: grade.color }}>{percentage}%</p>
-                <p className="text-lg font-bold mt-1" style={{ color: grade.color }}>{grade.label}</p>
+              <div style={{ textAlign: 'center', marginTop: '2rem', padding: '1.5rem', borderRadius: '12px', background: `${grade.color}12` }}>
+                <p style={{ fontSize: '0.75rem', color: '#6B7280', marginBottom: '0.25rem' }}>التقدير النهائي</p>
+                <p style={{ fontSize: '2.5rem', fontWeight: 900, color: grade.color }}>{percentage}%</p>
+                <p style={{ fontSize: '1.2rem', fontWeight: 700, color: grade.color, marginTop: '0.25rem' }}>{grade.label}</p>
                 {indicatorsCoverage && (
-                  <p className="text-xs text-gray-500 mt-2">المؤشرات المغطاة: {indicatorsCoverage.covered} من {indicatorsCoverage.total}</p>
+                  <p style={{ fontSize: '0.75rem', color: '#6B7280', marginTop: '0.5rem' }}>المؤشرات المغطاة: {indicatorsCoverage.covered} من {indicatorsCoverage.total}</p>
                 )}
               </div>
 
-              {/* الشواهد مع الأولوية والكلمات المفتاحية - محسّن */}
-              {allCriteria.map((c, i) => {
+              {/* تذييل */}
+              <div style={{ position: 'absolute', bottom: '1.5rem', left: '2.5rem', right: '2.5rem', borderTop: `1px solid ${theme.borderColor}`, paddingTop: '0.5rem', display: 'flex', justifyContent: 'space-between', fontSize: '0.6rem', color: '#9CA3AF' }}>
+                <span>نظام SERS - السجلات التعليمية الذكية</span>
+                <span>صفحة 3</span>
+              </div>
+            </div>
+
+            {/* === صفحات الشواهد - كل بند في صفحة منفصلة === */}
+            {(() => {
+              let pageCounter = 4;
+              return allCriteria.map((c, i) => {
                 const d = criteriaData[c.id];
                 if (!d || d.evidences.length === 0) return null;
+                const currentPage = pageCounter++;
+                const allSubs = [...(c.subEvidences || []), ...(d.customSubEvidences || [])];
                 return (
-                  <div key={c.id} className="mt-10" style={{ pageBreakBefore: i > 0 ? 'auto' : undefined, pageBreakInside: 'avoid' }}>
-                    <div className="flex items-center gap-3 mb-4 pb-3" style={{ borderBottom: `3px solid ${theme.accent}` }}>
-                      <div className="w-8 h-8 rounded-lg flex items-center justify-center text-white text-xs font-bold shadow-sm" style={{ backgroundColor: theme.accent }}>{i + 1}</div>
-                      <div className="flex-1">
-                        <h3 className="font-bold text-sm" style={{ color: theme.accent, fontFamily: "'Tajawal', sans-serif" }}>{c.title}</h3>
-                        <div className="flex items-center gap-3 mt-0.5">
-                          <span className="text-[10px] text-gray-500">الدرجة: <strong style={{ color: d.score >= 4 ? '#16A34A' : d.score >= 2 ? '#CA8A04' : '#9CA3AF' }}>{d.score}/{c.maxScore}</strong></span>
-                          <span className="text-[10px] text-gray-400">•</span>
-                          <span className="text-[10px] text-gray-500">{d.evidences.length} شاهد</span>
+                  <div key={c.id} className="bg-white shadow-lg mx-auto mb-6" style={{ width: '210mm', minHeight: '297mm', maxWidth: '100%', padding: '2rem 2.5rem', position: 'relative', pageBreakAfter: 'always', pageBreakInside: 'avoid' }}>
+                    {/* ترويسة */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: `2px solid ${theme.accent}`, paddingBottom: '0.75rem', marginBottom: '1.5rem' }}>
+                      <div style={{ fontSize: '0.7rem', color: '#9CA3AF' }}>شواهد الأداء الوظيفي - {personalInfo.name}</div>
+                      <div style={{ fontSize: '0.7rem', color: theme.accent, fontWeight: 700 }}>بند {i + 1}</div>
+                    </div>
+
+                    {/* رأس البند */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.25rem', paddingBottom: '0.75rem', borderBottom: `3px solid ${theme.accent}` }}>
+                      <div style={{ width: '36px', height: '36px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: '0.85rem', fontWeight: 700, backgroundColor: theme.accent, flexShrink: 0 }}>{i + 1}</div>
+                      <div style={{ flex: 1 }}>
+                        <h3 style={{ fontWeight: 800, fontSize: '0.95rem', color: theme.accent, fontFamily: "'Tajawal', sans-serif" }}>{c.title}</h3>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginTop: '0.25rem' }}>
+                          <span style={{ fontSize: '0.7rem', color: '#6B7280' }}>الدرجة: <strong style={{ color: d.score >= 4 ? '#16A34A' : d.score >= 2 ? '#CA8A04' : '#9CA3AF' }}>{d.score}/{c.maxScore}</strong></span>
+                          <span style={{ fontSize: '0.7rem', color: '#9CA3AF' }}>•</span>
+                          <span style={{ fontSize: '0.7rem', color: '#6B7280' }}>{d.evidences.length} شاهد</span>
                         </div>
                       </div>
                     </div>
-                    <div className="space-y-3">
+
+                    {/* الشواهد */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                       {d.evidences.map((ev, evIdx) => {
                         const evPriority = ev.priority || 'essential';
                         const evPriorityConfig = PRIORITY_CONFIG[evPriority];
+                        const linkedSub = allSubs.find(s => s.id === ev.subEvidenceId);
+                        const formFields = linkedSub?.formFields;
                         return (
-                          <div key={ev.id} className="p-3 rounded-lg border" style={{ borderColor: theme.borderColor, borderRightWidth: '3px', borderRightColor: evPriorityConfig.color }}>
+                          <div key={ev.id} style={{ padding: '0.75rem', borderRadius: '8px', border: `1px solid ${theme.borderColor}`, borderRight: `3px solid ${evPriorityConfig.color}`, pageBreakInside: 'avoid' }}>
                             {/* رأس الشاهد */}
-                            <div className="flex items-center gap-2 mb-2">
-                              <span className="text-[10px] font-bold text-gray-400">شاهد {evIdx + 1}</span>
-                              <span className="text-[9px] px-1.5 py-0.5 rounded-full font-medium" style={{ backgroundColor: evPriorityConfig.color + '15', color: evPriorityConfig.color }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                              <span style={{ fontSize: '0.65rem', fontWeight: 700, color: '#9CA3AF' }}>شاهد {evIdx + 1}</span>
+                              {linkedSub && <span style={{ fontSize: '0.6rem', color: '#6B7280', backgroundColor: '#F3F4F6', padding: '1px 6px', borderRadius: '4px' }}>{linkedSub.title.length > 50 ? linkedSub.title.substring(0, 50) + '...' : linkedSub.title}</span>}
+                              <span style={{ fontSize: '0.6rem', padding: '1px 6px', borderRadius: '9999px', fontWeight: 600, backgroundColor: evPriorityConfig.color + '15', color: evPriorityConfig.color }}>
                                 {evPriorityConfig.icon} {evPriorityConfig.label}
-                              </span>
-                              <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-500">
-                                {ev.type === 'text' ? 'نص' : ev.type === 'image' ? 'صورة' : ev.type === 'link' ? 'رابط' : ev.type === 'file' ? 'ملف' : 'فيديو'}
                               </span>
                             </div>
                             {/* محتوى الشاهد */}
-                            {ev.type === 'text' && ev.text && <p className="text-sm leading-relaxed">{ev.text}</p>}
+                            {ev.type === 'text' && ev.text && <p style={{ fontSize: '0.8rem', lineHeight: 1.7, color: '#374151' }}>{ev.text}</p>}
                             {ev.type === 'link' && ev.link && (
-                              <div className="flex items-center gap-3">
-                                {ev.showBarcode !== false && <img src={generateQRDataURL(ev.link)} alt="QR" className="w-20 h-20 rounded" />}
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                                {ev.showBarcode !== false && <img src={generateQRDataURL(ev.link)} alt="QR" style={{ width: '80px', height: '80px', borderRadius: '4px' }} />}
                                 <div>
-                                  <span className="text-xs text-gray-500 block">رابط إلكتروني</span>
-                                  <span className="text-xs text-blue-600 break-all">{ev.link}</span>
+                                  <span style={{ fontSize: '0.7rem', color: '#6B7280', display: 'block' }}>رابط إلكتروني</span>
+                                  <span style={{ fontSize: '0.7rem', color: '#2563EB', wordBreak: 'break-all' as const }}>{ev.link}</span>
                                 </div>
                               </div>
                             )}
                             {ev.type === 'image' && ev.fileData && (
                               ev.displayAs === 'image'
-                                ? <img src={ev.fileData.startsWith('idb://') ? '' : ev.fileData} alt="" className="max-h-48 rounded-lg border border-gray-200" />
-                                : <div className="flex items-center gap-3">
-                                    {ev.showBarcode !== false && <img src={generateQRDataURL((ev.fileData.startsWith('idb://') ? ev.fileName || '' : ev.fileData).substring(0, 200))} alt="QR" className="w-20 h-20 rounded" />}
+                                ? <img src={ev.fileData.startsWith('idb://') ? '' : ev.fileData} alt="" style={{ maxHeight: '200px', borderRadius: '8px', border: '1px solid #E5E7EB' }} />
+                                : <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                                    {ev.showBarcode !== false && <img src={generateQRDataURL((ev.fileData.startsWith('idb://') ? ev.fileName || '' : ev.fileData).substring(0, 200))} alt="QR" style={{ width: '80px', height: '80px', borderRadius: '4px' }} />}
                                     <div>
-                                      <span className="text-xs text-gray-500 block">صورة {ev.showBarcode !== false ? '(باركود)' : ''}</span>
-                                      <span className="text-xs text-gray-600">{ev.fileName}</span>
+                                      <span style={{ fontSize: '0.7rem', color: '#6B7280', display: 'block' }}>صورة {ev.showBarcode !== false ? '(باركود)' : ''}</span>
+                                      <span style={{ fontSize: '0.7rem', color: '#4B5563' }}>{ev.fileName}</span>
                                     </div>
                                   </div>
                             )}
                             {(ev.type === 'video' || ev.type === 'file') && ev.fileData && (
-                              <div className="flex items-center gap-3">
-                                {ev.showBarcode !== false && <img src={generateQRDataURL(ev.fileName || 'file')} alt="QR" className="w-20 h-20 rounded" />}
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                                {ev.showBarcode !== false && <img src={generateQRDataURL(ev.fileName || 'file')} alt="QR" style={{ width: '80px', height: '80px', borderRadius: '4px' }} />}
                                 <div>
-                                  <span className="text-xs text-gray-500 block">{ev.type === 'video' ? 'فيديو' : 'ملف مرفق'}</span>
-                                  <span className="text-xs text-gray-600">{ev.fileName}</span>
+                                  <span style={{ fontSize: '0.7rem', color: '#6B7280', display: 'block' }}>{ev.type === 'video' ? 'فيديو' : 'ملف مرفق'}</span>
+                                  <span style={{ fontSize: '0.7rem', color: '#4B5563' }}>{ev.fileName}</span>
                                 </div>
                               </div>
                             )}
+                            {/* عرض بيانات النموذج باستخدام أسماء الحقول الفعلية */}
                             {ev.formData && Object.entries(ev.formData).some(([, v]) => v) && (
-                              <div className="mt-2 bg-gray-50 rounded-lg p-3 border border-gray-100">
-                                <div className="grid grid-cols-1 gap-2">
-                                  {Object.entries(ev.formData).filter(([, v]) => v).map(([key, val]) => {
-                                    const fieldLabel = key === 'evidence_desc' ? 'وصف الشاهد' : key === 'date' ? 'التاريخ' : key === 'notes' ? 'ملاحظات' : key;
-                                    return (
-                                      <div key={key} className="flex items-start gap-2">
-                                        <span className="text-gray-500 text-[10px] font-medium shrink-0 mt-0.5 min-w-[60px]">{fieldLabel}:</span>
-                                        <span className="text-gray-800 text-xs leading-relaxed">{val}</span>
-                                      </div>
-                                    );
-                                  })}
+                              <div style={{ marginTop: '0.5rem', border: `1px solid ${theme.accent}20`, borderRadius: '8px', overflow: 'hidden' }}>
+                                <div style={{ background: `${theme.accent}10`, borderBottom: `1px solid ${theme.accent}15`, padding: '6px 12px' }}>
+                                  <span style={{ fontSize: '0.7rem', fontWeight: 700, color: theme.accent }}>بيانات النموذج</span>
+                                </div>
+                                <div style={{ padding: '8px 12px' }}>
+                                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                                    <tbody>
+                                      {Object.entries(ev.formData).filter(([, v]) => v).map(([key, val], fi, arr) => {
+                                        // البحث عن اسم الحقل الفعلي من formFields
+                                        const matchedField = formFields?.find(f => f.id === key);
+                                        const fieldLabel = matchedField?.label || (key === 'evidence_desc' ? 'وصف الشاهد' : key === 'date' ? 'التاريخ' : key === 'notes' ? 'ملاحظات' : key === 'title' ? 'العنوان' : key === 'details' ? 'التفاصيل' : key === 'content' ? 'المحتوى' : key);
+                                        return (
+                                          <tr key={key} style={{ borderBottom: fi < arr.length - 1 ? '1px solid #f0f0f0' : 'none' }}>
+                                            <td style={{ padding: '6px 8px', fontSize: '0.7rem', fontWeight: 600, color: theme.accent, width: '110px', verticalAlign: 'top' }}>{fieldLabel}</td>
+                                            <td style={{ padding: '6px 8px', fontSize: '0.78rem', color: '#374151', lineHeight: 1.7, whiteSpace: 'pre-wrap' as const }}>{val}</td>
+                                          </tr>
+                                        );
+                                      })}
+                                    </tbody>
+                                  </table>
                                 </div>
                               </div>
                             )}
                             {/* التعليق */}
                             {ev.comment && ev.comment.trim() && (
-                              <div className="mt-2 bg-amber-50 rounded-lg p-2 text-xs text-amber-800 border border-amber-200/50">
+                              <div style={{ marginTop: '0.5rem', backgroundColor: '#FFFBEB', borderRadius: '6px', padding: '0.5rem', fontSize: '0.75rem', color: '#92400E', border: '1px solid #FDE68A' }}>
                                 <strong>تعليق:</strong> {ev.comment}
                               </div>
                             )}
                             {/* الكلمات المفتاحية */}
                             {ev.keywords && ev.keywords.length > 0 && (
-                              <div className="mt-2 flex items-center gap-1 flex-wrap">
+                              <div style={{ marginTop: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.25rem', flexWrap: 'wrap' as const }}>
                                 {ev.keywords.map((kw, ki) => (
-                                  <span key={ki} className="text-[9px] px-1.5 py-0.5 rounded-full bg-sky-50 text-sky-700 border border-sky-200/50">{kw}</span>
+                                  <span key={ki} style={{ fontSize: '0.6rem', padding: '1px 6px', borderRadius: '9999px', backgroundColor: '#F0F9FF', color: '#0369A1', border: '1px solid #BAE6FD' }}>{kw}</span>
                                 ))}
                               </div>
                             )}
@@ -2912,30 +3085,42 @@ export default function PerformanceEvidence() {
                         );
                       })}
                     </div>
+
+                    {/* تذييل */}
+                    <div style={{ position: 'absolute', bottom: '1.5rem', left: '2.5rem', right: '2.5rem', borderTop: `1px solid ${theme.borderColor}`, paddingTop: '0.5rem', display: 'flex', justifyContent: 'space-between', fontSize: '0.6rem', color: '#9CA3AF' }}>
+                      <span>نظام SERS - السجلات التعليمية الذكية</span>
+                      <span>صفحة {currentPage}</span>
+                    </div>
                   </div>
                 );
-              })}
+              });
+            })()}
 
-              {/* التوقيعات */}
-              <div className="mt-12 grid grid-cols-2 gap-8 text-center text-sm">
+            {/* === صفحة التوقيعات === */}
+            <div className="bg-white shadow-lg mx-auto mb-6" style={{ width: '210mm', minHeight: '297mm', maxWidth: '100%', padding: '2rem 2.5rem', position: 'relative', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+              {/* ترويسة */}
+              <div style={{ position: 'absolute', top: '2rem', left: '2.5rem', right: '2.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: `2px solid ${theme.accent}`, paddingBottom: '0.75rem' }}>
+                <div style={{ fontSize: '0.7rem', color: '#9CA3AF' }}>شواهد الأداء الوظيفي - {personalInfo.name}</div>
+                <div style={{ fontSize: '0.7rem', color: theme.accent, fontWeight: 700 }}>التوقيعات</div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '3rem', textAlign: 'center', padding: '0 2rem' }}>
                 <div>
-                  <p className="text-gray-500 mb-10">توقيع المقيّم</p>
-                  <div className="border-t-2 border-gray-300 pt-2 font-bold">{personalInfo.evaluator || '____________'}</div>
-                  <p className="text-xs text-gray-400 mt-1">{personalInfo.evaluatorRole}</p>
+                  <p style={{ color: '#6B7280', marginBottom: '5rem', fontSize: '0.9rem' }}>توقيع المقيّم</p>
+                  <div style={{ borderTop: '2px solid #D1D5DB', paddingTop: '0.75rem', fontWeight: 700, fontSize: '0.95rem' }}>{personalInfo.evaluator || '____________'}</div>
+                  <p style={{ fontSize: '0.75rem', color: '#9CA3AF', marginTop: '0.25rem' }}>{personalInfo.evaluatorRole}</p>
                 </div>
                 <div>
-                  <p className="text-gray-500 mb-10">توقيع الموظف</p>
-                  <div className="border-t-2 border-gray-300 pt-2 font-bold">{personalInfo.name || '____________'}</div>
-                  <p className="text-xs text-gray-400 mt-1">{selectedJob?.title}</p>
+                  <p style={{ color: '#6B7280', marginBottom: '5rem', fontSize: '0.9rem' }}>توقيع الموظف</p>
+                  <div style={{ borderTop: '2px solid #D1D5DB', paddingTop: '0.75rem', fontWeight: 700, fontSize: '0.95rem' }}>{personalInfo.name || '____________'}</div>
+                  <p style={{ fontSize: '0.75rem', color: '#9CA3AF', marginTop: '0.25rem' }}>{selectedJob?.title}</p>
                 </div>
               </div>
 
-              {/* تذييل محسّن */}
-              <div className="mt-10 pt-4 border-t-2 text-center" style={{ borderColor: theme.borderColor }}>
-                <div className="flex items-center justify-between text-[9px] text-gray-400">
-                  <span>تم إنشاء هذا الملف بواسطة نظام SERS - السجلات التعليمية الذكية</span>
-                  <span>{personalInfo.name} • {selectedJob?.title} • {personalInfo.year}</span>
-                </div>
+              {/* تذييل */}
+              <div style={{ position: 'absolute', bottom: '1.5rem', left: '2.5rem', right: '2.5rem', borderTop: `1px solid ${theme.borderColor}`, paddingTop: '0.5rem', display: 'flex', justifyContent: 'space-between', fontSize: '0.6rem', color: '#9CA3AF' }}>
+                <span>نظام SERS - السجلات التعليمية الذكية</span>
+                <span>{personalInfo.name} • {selectedJob?.title} • {personalInfo.year}</span>
               </div>
             </div>
           </div>
