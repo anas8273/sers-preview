@@ -52,13 +52,14 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 
 // ===== أنواع البيانات =====
 type EvidenceType = "text" | "image" | "link" | "file" | "video";
+type EvidencePriority = "essential" | "supporting" | "additional";
 interface FormField { id: string; label: string; type: "text" | "textarea" | "date" | "number" | "select"; placeholder?: string; required?: boolean; options?: string[]; }
 interface SubEvidence { id: string; title: string; description: string; type: "report" | "upload" | "both"; isCustom?: boolean; formFields?: FormField[]; }
 interface Criterion { id: string; title: string; maxScore: number; description: string; subEvidences: SubEvidence[]; }
 interface EvidenceItem {
   id: string; subEvidenceId: string; type: EvidenceType; text: string; link: string;
   fileData: string | null; fileName: string; displayAs: "image" | "qr"; formData?: Record<string, string>;
-  comment?: string;
+  comment?: string; priority?: EvidencePriority; keywords?: string[];
 }
 interface CriterionData { score: number; notes: string; evidences: EvidenceItem[]; customSubEvidences: SubEvidence[]; }
 
@@ -204,11 +205,19 @@ const THEMES = [
   { id: "simple", name: "بسيط", headerBg: "#f8f9fa", headerText: "#1a1a1a", accent: "#059669", borderColor: "#e5e7eb" },
 ];
 
+// ===== إعدادات الأولوية =====
+const PRIORITY_CONFIG: Record<EvidencePriority, { label: string; color: string; bgColor: string; borderColor: string; icon: string }> = {
+  essential: { label: "أساسي", color: "#059669", bgColor: "bg-emerald-50 dark:bg-emerald-950/30", borderColor: "border-emerald-300", icon: "★" },
+  supporting: { label: "داعم", color: "#2563EB", bgColor: "bg-blue-50 dark:bg-blue-950/30", borderColor: "border-blue-300", icon: "◆" },
+  additional: { label: "إضافي", color: "#9333EA", bgColor: "bg-violet-50 dark:bg-violet-950/30", borderColor: "border-violet-300", icon: "○" },
+};
+
 function createEmptyEvidence(subEvidenceId: string = ""): EvidenceItem {
   return {
     id: `ev_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
     subEvidenceId, type: "text", text: "", link: "",
     fileData: null, fileName: "", displayAs: "image", formData: {},
+    priority: "essential", keywords: [],
   };
 }
 
@@ -299,6 +308,10 @@ export default function PerformanceEvidence() {
   const fillFormMutation = trpc.ai.fillFormFields.useMutation();
   const improveMutation = trpc.ai.improveText.useMutation();
   const classifyMutation = trpc.ai.classifyEvidence.useMutation();
+
+  // Search & Filter
+  const [searchQuery, setSearchQuery] = useState("");
+  const [filterPriority, setFilterPriority] = useState<EvidencePriority | "all">("all");
 
   // Custom sections
   const [showAddSub, setShowAddSub] = useState<string | null>(null);
@@ -1130,12 +1143,15 @@ export default function PerformanceEvidence() {
     );
   };
 
-  const renderEvidenceItem = (ev: EvidenceItem, criterionId: string) => (
+  const renderEvidenceItem = (ev: EvidenceItem, criterionId: string) => {
+    const priority = ev.priority || 'essential';
+    const priorityConfig = PRIORITY_CONFIG[priority];
+    return (
     <motion.div key={ev.id} initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }}
       draggable
       onDragStart={() => handleDragStart(ev, criterionId, ev.subEvidenceId)}
       onDragEnd={handleDragEnd}
-      className={`bg-muted/50 rounded-xl p-4 border border-border group cursor-grab active:cursor-grabbing transition-all ${draggedEvidence?.evidence.id === ev.id ? 'opacity-40 scale-95 border-dashed border-primary' : ''}`}>
+      className={`bg-muted/50 rounded-xl p-4 border group cursor-grab active:cursor-grabbing transition-all ${draggedEvidence?.evidence.id === ev.id ? 'opacity-40 scale-95 border-dashed border-primary' : priorityConfig.borderColor}`}>
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-2">
           <div className="cursor-grab active:cursor-grabbing text-muted-foreground/50 hover:text-muted-foreground transition-colors" title="اسحب لنقل الشاهد">
@@ -1150,6 +1166,18 @@ export default function PerformanceEvidence() {
             {ev.type === 'text' ? 'نص' : ev.type === 'image' ? 'صورة' : ev.type === 'link' ? 'رابط' : ev.type === 'file' ? 'ملف' : 'فيديو'}
           </span>
           {ev.fileName && <span className="text-xs text-muted-foreground/70">({ev.fileName})</span>}
+          {/* شارة الأولوية */}
+          <select
+            value={priority}
+            onChange={(e) => updateEvidence(criterionId, ev.id, { priority: e.target.value as EvidencePriority })}
+            className="text-[10px] px-1.5 py-0.5 rounded-full border-0 font-medium cursor-pointer focus:outline-none focus:ring-1 focus:ring-primary/30"
+            style={{ backgroundColor: priorityConfig.color + '15', color: priorityConfig.color }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {(Object.entries(PRIORITY_CONFIG) as [EvidencePriority, typeof PRIORITY_CONFIG[EvidencePriority]][]).map(([k, v]) => (
+              <option key={k} value={k}>{v.icon} {v.label}</option>
+            ))}
+          </select>
         </div>
         <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
           {ev.type === 'image' && (
@@ -1214,8 +1242,39 @@ export default function PerformanceEvidence() {
           </button>
         )}
       </div>
+
+      {/* كلمات مفتاحية */}
+      <div className="mt-2">
+        {ev.keywords && ev.keywords.length > 0 ? (
+          <div className="flex items-center gap-1 flex-wrap">
+            {ev.keywords.map((kw, ki) => (
+              <span key={ki} className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[9px] font-medium bg-sky-50 dark:bg-sky-950/30 text-sky-700 dark:text-sky-400 border border-sky-200/50">
+                {kw}
+                <button type="button" onClick={() => updateEvidence(criterionId, ev.id, { keywords: ev.keywords?.filter((_, idx) => idx !== ki) })}
+                  className="text-sky-400 hover:text-red-500 mr-0.5">
+                  <X className="w-2.5 h-2.5" />
+                </button>
+              </span>
+            ))}
+            <button type="button" onClick={() => {
+              const kw = prompt('أضف كلمة مفتاحية:');
+              if (kw?.trim()) updateEvidence(criterionId, ev.id, { keywords: [...(ev.keywords || []), kw.trim()] });
+            }} className="text-[9px] text-sky-500 hover:text-sky-700 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+              <Plus className="w-2.5 h-2.5" />إضافة
+            </button>
+          </div>
+        ) : (
+          <button type="button" onClick={() => {
+            const kw = prompt('أضف كلمة مفتاحية:');
+            if (kw?.trim()) updateEvidence(criterionId, ev.id, { keywords: [kw.trim()] });
+          }} className="text-[10px] text-muted-foreground hover:text-sky-600 transition-colors flex items-center gap-1 opacity-0 group-hover:opacity-100">
+            <Plus className="w-3 h-3" />إضافة كلمات مفتاحية
+          </button>
+        )}
+      </div>
     </motion.div>
   );
+  };
 
   // ======================================================================
   // ===== الخطوة 1: اختيار الوظيفة =====
@@ -1532,6 +1591,91 @@ export default function PerformanceEvidence() {
 
             {/* ===== تبويب البنود ===== */}
             <TabsContent value="criteria">
+              {/* ===== شريط البحث والفلتر ===== */}
+              <div className="mb-4 space-y-2">
+                <div className="relative">
+                  <SearchIcon className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="ابحث في الشواهد بالعنوان أو الوصف أو الكلمات المفتاحية..."
+                    className="w-full pr-10 pl-4 py-2.5 rounded-xl border border-border text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40"
+                  />
+                  {searchQuery && (
+                    <button type="button" onClick={() => setSearchQuery("")} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                      <X className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-[10px] text-muted-foreground">فلتر الأولوية:</span>
+                  <button type="button" onClick={() => setFilterPriority('all')}
+                    className={`px-2.5 py-1 rounded-full text-[10px] font-medium transition-all ${filterPriority === 'all' ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:bg-muted/80'}`}>
+                    الكل
+                  </button>
+                  {(Object.entries(PRIORITY_CONFIG) as [EvidencePriority, typeof PRIORITY_CONFIG[EvidencePriority]][]).map(([key, config]) => (
+                    <button key={key} type="button" onClick={() => setFilterPriority(key)}
+                      className={`px-2.5 py-1 rounded-full text-[10px] font-medium transition-all flex items-center gap-1 ${filterPriority === key ? 'text-white' : 'bg-muted text-muted-foreground hover:bg-muted/80'}`}
+                      style={filterPriority === key ? { backgroundColor: config.color } : {}}>
+                      <span>{config.icon}</span>{config.label}
+                    </button>
+                  ))}
+                </div>
+                {/* نتائج البحث */}
+                {searchQuery && (() => {
+                  const results: { criterionId: string; criterionTitle: string; evidence: EvidenceItem; criterionIndex: number }[] = [];
+                  const q = searchQuery.toLowerCase();
+                  allCriteria.forEach((c, idx) => {
+                    const data = criteriaData[c.id];
+                    if (!data) return;
+                    data.evidences.forEach(ev => {
+                      const matchText = ev.text?.toLowerCase().includes(q);
+                      const matchFile = ev.fileName?.toLowerCase().includes(q);
+                      const matchComment = ev.comment?.toLowerCase().includes(q);
+                      const matchKeywords = ev.keywords?.some(k => k.toLowerCase().includes(q));
+                      const matchFormData = ev.formData && Object.values(ev.formData).some(v => v?.toLowerCase().includes(q));
+                      if (matchText || matchFile || matchComment || matchKeywords || matchFormData) {
+                        results.push({ criterionId: c.id, criterionTitle: c.title, evidence: ev, criterionIndex: idx });
+                      }
+                    });
+                  });
+                  if (results.length === 0) return (
+                    <div className="text-center py-4 text-muted-foreground text-xs">
+                      <SearchIcon className="w-8 h-8 mx-auto mb-2 opacity-30" />
+                      <p>لا توجد نتائج مطابقة لـ "{searchQuery}"</p>
+                    </div>
+                  );
+                  return (
+                    <Card className="border-primary/20 bg-primary/5">
+                      <CardContent className="p-3">
+                        <h4 className="text-xs font-bold text-foreground mb-2 flex items-center gap-1.5">
+                          <SearchIcon className="w-3.5 h-3.5 text-primary" />
+                          {results.length} نتيجة لـ "{searchQuery}"
+                        </h4>
+                        <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                          {results.map(r => (
+                            <div key={r.evidence.id}
+                              className="flex items-center justify-between gap-2 p-2 rounded-lg bg-background border border-border/50 cursor-pointer hover:border-primary/30 transition-colors"
+                              onClick={() => { setCurrentCriterionIndex(r.criterionIndex); setStep('criterion-detail'); setSearchQuery(''); }}>
+                              <div className="flex items-center gap-2 min-w-0">
+                                {r.evidence.priority && (
+                                  <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium" style={{ backgroundColor: PRIORITY_CONFIG[r.evidence.priority].color + '15', color: PRIORITY_CONFIG[r.evidence.priority].color }}>
+                                    {PRIORITY_CONFIG[r.evidence.priority].icon}
+                                  </span>
+                                )}
+                                <span className="text-xs text-foreground truncate">{r.evidence.text || r.evidence.fileName || 'شاهد'}</span>
+                              </div>
+                              <Badge variant="outline" className="text-[9px] shrink-0">{r.criterionTitle}</Badge>
+                            </div>
+                          ))}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  );
+                })()}
+              </div>
+
               {/* قائمة البنود */}
               <div className="space-y-3">
                 {allCriteria.map((criterion, index) => {
@@ -2294,111 +2438,203 @@ export default function PerformanceEvidence() {
           </div>
 
           <div id="preview-content" className="bg-white rounded-xl shadow-lg overflow-hidden" style={{ fontFamily: "'Cairo', 'Tajawal', sans-serif" }}>
-            {/* Header */}
-            <div style={{ background: theme.headerBg, color: theme.headerText, padding: '2rem', textAlign: 'center' }}>
-              <p className="text-sm opacity-80 mb-1" style={{ whiteSpace: 'pre-line' }}>{personalInfo.department}</p>
-              <h1 className="text-2xl font-black mb-1">شواهد الأداء الوظيفي</h1>
-              <p className="text-lg font-bold">{selectedJob?.title}</p>
-              <p className="text-sm opacity-80 mt-1">{personalInfo.year} - {personalInfo.semester}</p>
-            </div>
-
-            {/* Personal Info */}
-            <div className="p-6 border-b" style={{ borderColor: theme.borderColor }}>
-              <div className="grid grid-cols-2 gap-4 text-sm">
-                <div><span className="text-gray-500">الاسم:</span> <strong>{personalInfo.name || '—'}</strong></div>
-                <div><span className="text-gray-500">المدرسة:</span> <strong>{personalInfo.school || '—'}</strong></div>
-                <div><span className="text-gray-500">المقيّم:</span> <strong>{personalInfo.evaluator || '—'}</strong></div>
-                <div><span className="text-gray-500">التاريخ:</span> <strong>{personalInfo.date || '—'}</strong></div>
+            {/* غلاف احترافي */}
+            <div style={{ background: theme.headerBg, color: theme.headerText, padding: '3rem 2rem', textAlign: 'center', position: 'relative' }}>
+              <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, background: 'linear-gradient(135deg, rgba(255,255,255,0.1) 0%, transparent 50%)', pointerEvents: 'none' }} />
+              <div style={{ fontSize: '0.7rem', opacity: 0.7, marginBottom: '0.5rem', letterSpacing: '0.1em' }}>وزارة التعليم - المملكة العربية السعودية</div>
+              {personalInfo.department && <p style={{ fontSize: '0.8rem', opacity: 0.8, marginBottom: '0.25rem' }}>{personalInfo.department}</p>}
+              <h1 style={{ fontSize: '1.75rem', fontWeight: 900, marginBottom: '0.5rem', fontFamily: "'Tajawal', sans-serif" }}>شواهد الأداء الوظيفي</h1>
+              <p style={{ fontSize: '1.1rem', fontWeight: 700 }}>{selectedJob?.title}</p>
+              <p style={{ fontSize: '0.8rem', opacity: 0.8, marginTop: '0.5rem' }}>{personalInfo.year} - {personalInfo.semester}</p>
+              <div style={{ marginTop: '1rem', display: 'flex', justifyContent: 'center', gap: '1rem', fontSize: '0.75rem', opacity: 0.9 }}>
+                <span>الاسم: {personalInfo.name || '—'}</span>
+                <span>| المدرسة: {personalInfo.school || '—'}</span>
               </div>
             </div>
 
-            {/* Criteria Table */}
+            {/* فهرس المحتويات */}
+            <div className="p-6 border-b" style={{ borderColor: theme.borderColor }}>
+              <h2 className="text-base font-bold mb-3" style={{ color: theme.accent, fontFamily: "'Tajawal', sans-serif" }}>فهرس المحتويات</h2>
+              <div className="space-y-1">
+                <div className="flex items-center gap-2 text-xs text-gray-600 py-1 border-b border-dashed border-gray-200">
+                  <span className="font-bold" style={{ color: theme.accent }}>1</span>
+                  <span>البيانات الشخصية</span>
+                </div>
+                <div className="flex items-center gap-2 text-xs text-gray-600 py-1 border-b border-dashed border-gray-200">
+                  <span className="font-bold" style={{ color: theme.accent }}>2</span>
+                  <span>جدول التقييم</span>
+                </div>
+                {allCriteria.map((c, i) => {
+                  const d = criteriaData[c.id];
+                  if (!d || d.evidences.length === 0) return null;
+                  return (
+                    <div key={c.id} className="flex items-center gap-2 text-xs text-gray-600 py-1 border-b border-dashed border-gray-200">
+                      <span className="font-bold" style={{ color: theme.accent }}>{i + 3}</span>
+                      <span>{c.title} ({d.evidences.length} شاهد)</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* البيانات الشخصية */}
+            <div className="p-6 border-b" style={{ borderColor: theme.borderColor }}>
+              <h2 className="text-sm font-bold mb-3" style={{ color: theme.accent, fontFamily: "'Tajawal', sans-serif" }}>البيانات الشخصية</h2>
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div className="bg-gray-50 rounded-lg p-3"><span className="text-gray-500 text-xs">الاسم الكامل</span><br /><strong>{personalInfo.name || '—'}</strong></div>
+                <div className="bg-gray-50 rounded-lg p-3"><span className="text-gray-500 text-xs">المدرسة</span><br /><strong>{personalInfo.school || '—'}</strong></div>
+                <div className="bg-gray-50 rounded-lg p-3"><span className="text-gray-500 text-xs">اسم المقيّم</span><br /><strong>{personalInfo.evaluator || '—'}</strong></div>
+                <div className="bg-gray-50 rounded-lg p-3"><span className="text-gray-500 text-xs">تاريخ التقييم</span><br /><strong>{personalInfo.date || '—'}</strong></div>
+                <div className="bg-gray-50 rounded-lg p-3"><span className="text-gray-500 text-xs">صفة المقيّم</span><br /><strong>{personalInfo.evaluatorRole || '—'}</strong></div>
+                <div className="bg-gray-50 rounded-lg p-3"><span className="text-gray-500 text-xs">الوظيفة</span><br /><strong>{selectedJob?.title || '—'}</strong></div>
+              </div>
+            </div>
+
+            {/* جدول التقييم */}
             <div className="p-6">
+              <h2 className="text-sm font-bold mb-3" style={{ color: theme.accent, fontFamily: "'Tajawal', sans-serif" }}>جدول التقييم</h2>
               <table className="w-full border-collapse text-sm" style={{ borderColor: theme.borderColor }}>
                 <thead>
                   <tr style={{ background: theme.accent, color: '#fff' }}>
-                    <th className="p-2 border text-center" style={{ borderColor: theme.borderColor }}>م</th>
-                    <th className="p-2 border text-right" style={{ borderColor: theme.borderColor }}>البند</th>
-                    <th className="p-2 border text-center" style={{ borderColor: theme.borderColor }}>الدرجة</th>
+                    <th className="p-2.5 border text-center" style={{ borderColor: theme.borderColor, width: '40px' }}>م</th>
+                    <th className="p-2.5 border text-right" style={{ borderColor: theme.borderColor }}>البند</th>
+                    <th className="p-2.5 border text-center" style={{ borderColor: theme.borderColor, width: '80px' }}>الدرجة</th>
+                    <th className="p-2.5 border text-center" style={{ borderColor: theme.borderColor, width: '80px' }}>الشواهد</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {allCriteria.map((c, i) => (
-                    <tr key={c.id} className={i % 2 === 0 ? '' : 'bg-gray-50'}>
-                      <td className="p-2 border text-center" style={{ borderColor: theme.borderColor }}>{i + 1}</td>
-                      <td className="p-2 border" style={{ borderColor: theme.borderColor }}>{c.title}</td>
-                      <td className="p-2 border text-center font-bold" style={{ borderColor: theme.borderColor }}>{criteriaData[c.id]?.score || 0}/{c.maxScore}</td>
-                    </tr>
-                  ))}
+                  {allCriteria.map((c, i) => {
+                    const d = criteriaData[c.id];
+                    return (
+                      <tr key={c.id} className={i % 2 === 0 ? '' : 'bg-gray-50'}>
+                        <td className="p-2 border text-center" style={{ borderColor: theme.borderColor }}>{i + 1}</td>
+                        <td className="p-2 border" style={{ borderColor: theme.borderColor }}>{c.title}</td>
+                        <td className="p-2 border text-center font-bold" style={{ borderColor: theme.borderColor }}>{d?.score || 0}/{c.maxScore}</td>
+                        <td className="p-2 border text-center" style={{ borderColor: theme.borderColor }}>{d?.evidences.length || 0}</td>
+                      </tr>
+                    );
+                  })}
                   <tr style={{ background: theme.accent, color: '#fff' }}>
-                    <td colSpan={2} className="p-2 border text-center font-bold" style={{ borderColor: theme.borderColor }}>المجموع</td>
-                    <td className="p-2 border text-center font-bold" style={{ borderColor: theme.borderColor }}>{totalScore}/{maxScore}</td>
+                    <td colSpan={2} className="p-2.5 border text-center font-bold" style={{ borderColor: theme.borderColor }}>المجموع</td>
+                    <td className="p-2.5 border text-center font-bold" style={{ borderColor: theme.borderColor }}>{totalScore}/{maxScore}</td>
+                    <td className="p-2.5 border text-center font-bold" style={{ borderColor: theme.borderColor }}>{Object.values(criteriaData).reduce((s, d) => s + d.evidences.length, 0)}</td>
                   </tr>
                 </tbody>
               </table>
 
-              <div className="text-center mt-6 p-4 rounded-xl" style={{ background: `${grade.color}15` }}>
-                <p className="text-sm text-gray-600">التقدير النهائي</p>
-                <p className="text-3xl font-black" style={{ color: grade.color }}>{percentage}% - {grade.label}</p>
+              <div className="text-center mt-6 p-5 rounded-xl" style={{ background: `${grade.color}12` }}>
+                <p className="text-xs text-gray-500 mb-1">التقدير النهائي</p>
+                <p className="text-3xl font-black" style={{ color: grade.color }}>{percentage}%</p>
+                <p className="text-lg font-bold mt-1" style={{ color: grade.color }}>{grade.label}</p>
+                {indicatorsCoverage && (
+                  <p className="text-xs text-gray-500 mt-2">المؤشرات المغطاة: {indicatorsCoverage.covered} من {indicatorsCoverage.total}</p>
+                )}
               </div>
 
-              {/* Evidences */}
+              {/* الشواهد مع الأولوية والكلمات المفتاحية */}
               {allCriteria.map((c, i) => {
                 const d = criteriaData[c.id];
                 if (!d || d.evidences.length === 0) return null;
                 return (
-                  <div key={c.id} className="mt-6" style={{ pageBreakInside: 'avoid' }}>
-                    <h3 className="font-bold text-sm mb-2" style={{ color: theme.accent }}>{i + 1}. {c.title}</h3>
-                    <div className="space-y-2">
-                      {d.evidences.map((ev) => (
-                        <div key={ev.id} className="p-3 rounded-lg border" style={{ borderColor: theme.borderColor }}>
-                          {ev.type === 'text' && ev.text && <p className="text-sm">{ev.text}</p>}
-                          {ev.type === 'link' && ev.link && (
-                            <div className="flex items-center gap-3">
-                              <img src={generateQRDataURL(ev.link)} alt="QR" className="w-16 h-16" />
-                              <span className="text-xs text-gray-500">{ev.link}</span>
+                  <div key={c.id} className="mt-8" style={{ pageBreakInside: 'avoid' }}>
+                    <div className="flex items-center gap-2 mb-3 pb-2 border-b-2" style={{ borderColor: theme.accent }}>
+                      <div className="w-7 h-7 rounded-lg flex items-center justify-center text-white text-xs font-bold" style={{ backgroundColor: theme.accent }}>{i + 1}</div>
+                      <h3 className="font-bold text-sm" style={{ color: theme.accent }}>{c.title}</h3>
+                      <span className="text-[10px] text-gray-400 mr-auto">الدرجة: {d.score}/{c.maxScore} | {d.evidences.length} شاهد</span>
+                    </div>
+                    <div className="space-y-3">
+                      {d.evidences.map((ev, evIdx) => {
+                        const evPriority = ev.priority || 'essential';
+                        const evPriorityConfig = PRIORITY_CONFIG[evPriority];
+                        return (
+                          <div key={ev.id} className="p-3 rounded-lg border" style={{ borderColor: theme.borderColor, borderRightWidth: '3px', borderRightColor: evPriorityConfig.color }}>
+                            {/* رأس الشاهد */}
+                            <div className="flex items-center gap-2 mb-2">
+                              <span className="text-[10px] font-bold text-gray-400">شاهد {evIdx + 1}</span>
+                              <span className="text-[9px] px-1.5 py-0.5 rounded-full font-medium" style={{ backgroundColor: evPriorityConfig.color + '15', color: evPriorityConfig.color }}>
+                                {evPriorityConfig.icon} {evPriorityConfig.label}
+                              </span>
+                              <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-500">
+                                {ev.type === 'text' ? 'نص' : ev.type === 'image' ? 'صورة' : ev.type === 'link' ? 'رابط' : ev.type === 'file' ? 'ملف' : 'فيديو'}
+                              </span>
                             </div>
-                          )}
-                          {ev.type === 'image' && ev.fileData && (
-                            ev.displayAs === 'image'
-                              ? <img src={ev.fileData} alt="" className="max-h-40 rounded" />
-                              : <div className="flex items-center gap-3">
-                                  <img src={generateQRDataURL(ev.fileData.substring(0, 200))} alt="QR" className="w-16 h-16" />
-                                  <span className="text-xs text-gray-500">{ev.fileName}</span>
+                            {/* محتوى الشاهد */}
+                            {ev.type === 'text' && ev.text && <p className="text-sm leading-relaxed">{ev.text}</p>}
+                            {ev.type === 'link' && ev.link && (
+                              <div className="flex items-center gap-3">
+                                <img src={generateQRDataURL(ev.link)} alt="QR" className="w-20 h-20 rounded" />
+                                <div>
+                                  <span className="text-xs text-gray-500 block">رابط إلكتروني</span>
+                                  <span className="text-xs text-blue-600 break-all">{ev.link}</span>
                                 </div>
-                          )}
-                          {(ev.type === 'video' || ev.type === 'file') && ev.fileData && (
-                            <div className="flex items-center gap-3">
-                              <img src={generateQRDataURL(ev.fileName || 'file')} alt="QR" className="w-16 h-16" />
-                              <span className="text-xs text-gray-500">{ev.fileName}</span>
-                            </div>
-                          )}
-                          {ev.formData && Object.entries(ev.formData).some(([, v]) => v) && (
-                            <div className="text-sm space-y-1">
-                              {Object.entries(ev.formData).filter(([, v]) => v).map(([key, val]) => (
-                                <p key={key}><span className="text-gray-500">{key}:</span> {val}</p>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      ))}
+                              </div>
+                            )}
+                            {ev.type === 'image' && ev.fileData && (
+                              ev.displayAs === 'image'
+                                ? <img src={ev.fileData.startsWith('idb://') ? '' : ev.fileData} alt="" className="max-h-48 rounded-lg border border-gray-200" />
+                                : <div className="flex items-center gap-3">
+                                    <img src={generateQRDataURL((ev.fileData.startsWith('idb://') ? ev.fileName || '' : ev.fileData).substring(0, 200))} alt="QR" className="w-20 h-20 rounded" />
+                                    <div>
+                                      <span className="text-xs text-gray-500 block">صورة (باركود)</span>
+                                      <span className="text-xs text-gray-600">{ev.fileName}</span>
+                                    </div>
+                                  </div>
+                            )}
+                            {(ev.type === 'video' || ev.type === 'file') && ev.fileData && (
+                              <div className="flex items-center gap-3">
+                                <img src={generateQRDataURL(ev.fileName || 'file')} alt="QR" className="w-20 h-20 rounded" />
+                                <div>
+                                  <span className="text-xs text-gray-500 block">{ev.type === 'video' ? 'فيديو' : 'ملف مرفق'}</span>
+                                  <span className="text-xs text-gray-600">{ev.fileName}</span>
+                                </div>
+                              </div>
+                            )}
+                            {ev.formData && Object.entries(ev.formData).some(([, v]) => v) && (
+                              <div className="text-sm space-y-1 mt-2 bg-gray-50 rounded-lg p-3">
+                                {Object.entries(ev.formData).filter(([, v]) => v).map(([key, val]) => (
+                                  <p key={key}><span className="text-gray-500 text-xs">{key}:</span> <span className="text-gray-800">{val}</span></p>
+                                ))}
+                              </div>
+                            )}
+                            {/* التعليق */}
+                            {ev.comment && ev.comment.trim() && (
+                              <div className="mt-2 bg-amber-50 rounded-lg p-2 text-xs text-amber-800 border border-amber-200/50">
+                                <strong>تعليق:</strong> {ev.comment}
+                              </div>
+                            )}
+                            {/* الكلمات المفتاحية */}
+                            {ev.keywords && ev.keywords.length > 0 && (
+                              <div className="mt-2 flex items-center gap-1 flex-wrap">
+                                {ev.keywords.map((kw, ki) => (
+                                  <span key={ki} className="text-[9px] px-1.5 py-0.5 rounded-full bg-sky-50 text-sky-700 border border-sky-200/50">{kw}</span>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 );
               })}
 
-              {/* Signatures */}
-              <div className="mt-10 grid grid-cols-2 gap-8 text-center text-sm">
+              {/* التوقيعات */}
+              <div className="mt-12 grid grid-cols-2 gap-8 text-center text-sm">
                 <div>
-                  <p className="text-gray-500 mb-8">توقيع المقيّم</p>
-                  <div className="border-t border-gray-300 pt-2">{personalInfo.evaluator || '____________'}</div>
+                  <p className="text-gray-500 mb-10">توقيع المقيّم</p>
+                  <div className="border-t-2 border-gray-300 pt-2 font-bold">{personalInfo.evaluator || '____________'}</div>
                   <p className="text-xs text-gray-400 mt-1">{personalInfo.evaluatorRole}</p>
                 </div>
                 <div>
-                  <p className="text-gray-500 mb-8">توقيع الموظف</p>
-                  <div className="border-t border-gray-300 pt-2">{personalInfo.name || '____________'}</div>
+                  <p className="text-gray-500 mb-10">توقيع الموظف</p>
+                  <div className="border-t-2 border-gray-300 pt-2 font-bold">{personalInfo.name || '____________'}</div>
                   <p className="text-xs text-gray-400 mt-1">{selectedJob?.title}</p>
                 </div>
+              </div>
+
+              {/* تذييل */}
+              <div className="mt-8 pt-4 border-t border-gray-200 text-center text-[9px] text-gray-400">
+                <p>تم إنشاء هذا الملف بواسطة نظام SERS - السجلات التعليمية الذكية</p>
               </div>
             </div>
           </div>

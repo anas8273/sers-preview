@@ -6,30 +6,74 @@ export async function exportToPDF(elementId: string, filename: string = "documen
   if (!element) return;
 
   try {
+    // إخفاء الأزرار والعناصر التفاعلية أثناء التصدير
+    const buttons = element.querySelectorAll('button, [data-no-print]');
+    buttons.forEach(btn => (btn as HTMLElement).style.display = 'none');
+
     const canvas = await html2canvas(element, {
       scale: 2,
       useCORS: true,
       allowTaint: true,
       backgroundColor: "#ffffff",
       logging: false,
+      windowWidth: element.scrollWidth,
+      windowHeight: element.scrollHeight,
     });
 
-    const imgData = canvas.toDataURL("image/png");
+    // إعادة إظهار الأزرار
+    buttons.forEach(btn => (btn as HTMLElement).style.display = '');
+
+    const imgData = canvas.toDataURL("image/jpeg", 0.95);
     const pdf = new jsPDF({
-      orientation: canvas.width > canvas.height ? "landscape" : "portrait",
+      orientation: "portrait",
       unit: "mm",
       format: "a4",
     });
 
     const pdfWidth = pdf.internal.pageSize.getWidth();
     const pdfHeight = pdf.internal.pageSize.getHeight();
+    const margin = 5;
+    const usableWidth = pdfWidth - margin * 2;
+    const usableHeight = pdfHeight - margin * 2;
+
     const imgWidth = canvas.width;
     const imgHeight = canvas.height;
-    const ratio = Math.min(pdfWidth / imgWidth, pdfHeight / imgHeight);
-    const imgX = (pdfWidth - imgWidth * ratio) / 2;
-    const imgY = 5;
+    const ratio = usableWidth / imgWidth;
+    const scaledHeight = imgHeight * ratio;
 
-    pdf.addImage(imgData, "PNG", imgX, imgY, imgWidth * ratio, imgHeight * ratio);
+    // تقسيم المحتوى على صفحات متعددة
+    if (scaledHeight <= usableHeight) {
+      // صفحة واحدة
+      pdf.addImage(imgData, "JPEG", margin, margin, usableWidth, scaledHeight);
+    } else {
+      // صفحات متعددة
+      const pageCanvasHeight = usableHeight / ratio;
+      let remainingHeight = imgHeight;
+      let sourceY = 0;
+      let pageNum = 0;
+
+      while (remainingHeight > 0) {
+        if (pageNum > 0) pdf.addPage();
+
+        const sliceHeight = Math.min(pageCanvasHeight, remainingHeight);
+        
+        // إنشاء canvas مقطع لكل صفحة
+        const pageCanvas = document.createElement('canvas');
+        pageCanvas.width = imgWidth;
+        pageCanvas.height = sliceHeight;
+        const ctx = pageCanvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(canvas, 0, sourceY, imgWidth, sliceHeight, 0, 0, imgWidth, sliceHeight);
+          const pageImgData = pageCanvas.toDataURL("image/jpeg", 0.95);
+          pdf.addImage(pageImgData, "JPEG", margin, margin, usableWidth, sliceHeight * ratio);
+        }
+
+        sourceY += sliceHeight;
+        remainingHeight -= sliceHeight;
+        pageNum++;
+      }
+    }
+
     pdf.save(filename);
   } catch (err) {
     console.error("PDF export error:", err);
@@ -52,7 +96,10 @@ export function printElement(elementId: string) {
       <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: 'Cairo', 'Tajawal', sans-serif; direction: rtl; }
-        @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
+        @media print {
+          body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          .page-break { page-break-before: always; }
+        }
       </style>
     </head>
     <body>${element.innerHTML}</body>

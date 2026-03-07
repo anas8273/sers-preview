@@ -274,37 +274,69 @@ export default function SharedPortfolio() {
                   {/* عرض الشواهد */}
                   {data?.evidences && data.evidences.length > 0 && (
                     <div className="mr-11 space-y-2">
-                      {data.evidences.map((ev: any) => (
-                        <div key={ev.id} className="bg-gray-50 rounded-lg p-3 border border-gray-100">
-                          {ev.type === 'text' && ev.text && (
-                            <p className="text-sm text-gray-700">{ev.text}</p>
-                          )}
-                          {ev.type === 'link' && ev.link && (
-                            <div className="flex items-center gap-2">
-                              <LinkIcon className="w-4 h-4 text-purple-500" />
-                              <a href={ev.link} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-600 hover:underline truncate">
-                                {ev.link}
-                              </a>
+                      {data.evidences.map((ev: any) => {
+                        const priority = ev.priority || 'essential';
+                        const priorityConfig: Record<string, { label: string; color: string; icon: string }> = {
+                          essential: { label: 'أساسي', color: '#059669', icon: '★' },
+                          supporting: { label: 'داعم', color: '#2563EB', icon: '◆' },
+                          supplementary: { label: 'إضافي', color: '#9333EA', icon: '○' },
+                        };
+                        const pc = priorityConfig[priority] || priorityConfig.essential;
+                        return (
+                          <div key={ev.id} className="bg-gray-50 rounded-lg p-3 border border-gray-100" style={{ borderRightWidth: '3px', borderRightColor: pc.color }}>
+                            {/* رأس الشاهد مع الأولوية */}
+                            <div className="flex items-center gap-2 mb-2">
+                              <span className="text-[9px] px-1.5 py-0.5 rounded-full font-medium" style={{ backgroundColor: pc.color + '15', color: pc.color }}>
+                                {pc.icon} {pc.label}
+                              </span>
+                              <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-gray-200 text-gray-600">
+                                {ev.type === 'text' ? 'نص' : ev.type === 'image' ? 'صورة' : ev.type === 'link' ? 'رابط' : ev.type === 'file' ? 'ملف' : 'فيديو'}
+                              </span>
                             </div>
-                          )}
-                          {ev.type === 'image' && ev.fileData && (
-                            <img src={ev.fileData} alt="" className="max-h-48 rounded-lg" />
-                          )}
-                          {(ev.type === 'video' || ev.type === 'file') && (
-                            <div className="flex items-center gap-2">
-                              {ev.type === 'video' ? <Video className="w-4 h-4 text-red-500" /> : <FileText className="w-4 h-4 text-orange-500" />}
-                              <span className="text-sm text-gray-600">{ev.fileName}</span>
-                            </div>
-                          )}
-                          {ev.formData && Object.entries(ev.formData).some(([, v]) => v) && (
-                            <div className="text-sm space-y-1 mt-1">
-                              {Object.entries(ev.formData).filter(([, v]) => v).map(([key, val]) => (
-                                <p key={key}><span className="text-gray-500">{key}:</span> <span className="text-gray-800">{val as string}</span></p>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      ))}
+                            {ev.type === 'text' && ev.text && (
+                              <p className="text-sm text-gray-700 leading-relaxed">{ev.text}</p>
+                            )}
+                            {ev.type === 'link' && ev.link && (
+                              <div className="flex items-center gap-2">
+                                <LinkIcon className="w-4 h-4 text-purple-500" />
+                                <a href={ev.link} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-600 hover:underline truncate">
+                                  {ev.link}
+                                </a>
+                              </div>
+                            )}
+                            {ev.type === 'image' && ev.fileData && (
+                              <img src={ev.fileData} alt="" className="max-h-48 rounded-lg" />
+                            )}
+                            {(ev.type === 'video' || ev.type === 'file') && (
+                              <div className="flex items-center gap-2">
+                                {ev.type === 'video' ? <Video className="w-4 h-4 text-red-500" /> : <FileText className="w-4 h-4 text-orange-500" />}
+                                <span className="text-sm text-gray-600">{ev.fileName}</span>
+                              </div>
+                            )}
+                            {ev.formData && Object.entries(ev.formData).some(([, v]) => v) && (
+                              <div className="text-sm space-y-1 mt-2 bg-white rounded-lg p-2">
+                                {Object.entries(ev.formData).filter(([, v]) => v).map(([key, val]) => (
+                                  <p key={key}><span className="text-gray-500">{key}:</span> <span className="text-gray-800">{val as string}</span></p>
+                                ))}
+                              </div>
+                            )}
+                            {/* التعليق */}
+                            {ev.comment && ev.comment.trim() && (
+                              <div className="mt-2 bg-amber-50 rounded-lg p-2 text-xs text-amber-800 border border-amber-200/50">
+                                <strong>تعليق:</strong> {ev.comment}
+                              </div>
+                            )}
+                            {/* الكلمات المفتاحية */}
+                            {ev.keywords && ev.keywords.length > 0 && (
+                              <div className="mt-2 flex items-center gap-1 flex-wrap">
+                                {ev.keywords.map((kw: string, ki: number) => (
+                                  <span key={ki} className="text-[9px] px-1.5 py-0.5 rounded-full bg-sky-50 text-sky-700 border border-sky-200/50">{kw}</span>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
                 </div>
