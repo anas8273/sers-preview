@@ -17,6 +17,11 @@ import { generateQRDataURL } from "@/lib/qr-utils";
 import { exportToPDF, printElement } from "@/lib/pdf-export";
 import { STANDARDS, type Standard, type Indicator } from "@/lib/standards-data";
 import {
+  PRINCIPAL_STANDARDS, VICE_PRINCIPAL_STANDARDS, COUNSELOR_STANDARDS,
+  HEALTH_COUNSELOR_STANDARDS, ACTIVITY_LEADER_STANDARDS, LAB_TECHNICIAN_STANDARDS,
+  KINDERGARTEN_STANDARDS, SUPERVISOR_STANDARDS, getStandardsForJob,
+} from "@/lib/all-jobs-standards";
+import {
   ArrowLeft, ArrowRight, Sparkles, Upload, Plus, Trash2, Save,
   Eye, Download, Printer, FileText, Image, Video, QrCode, Type,
   LinkIcon, Loader2, ChevronDown, ChevronUp, Layers, BarChart3,
@@ -25,7 +30,7 @@ import {
   BookOpen, Baby, Accessibility, Briefcase, ClipboardList,
   ClipboardCheck, Handshake, UserCheck, Target,
   NotebookPen, Monitor, School, Award, PieChart, ListChecks,
-  GripVertical, Move
+  GripVertical, Move, FlaskConical, Activity, Megaphone
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -102,67 +107,56 @@ function buildTeacherCriteria(): Criterion[] {
 
 const TEACHER_CRITERIA = buildTeacherCriteria();
 
-// ===== بنود الوظائف الأخرى =====
-const PRINCIPAL_CRITERIA = makeSimpleCriteria("p", [
-  { id: "1", title: "التخطيط المدرسي", desc: "إعداد الخطط التشغيلية والاستراتيجية", subTitle: "الخطة التشغيلية السنوية" },
-  { id: "2", title: "القيادة التعليمية", desc: "قيادة العملية التعليمية وتطويرها", subTitle: "تقارير الزيارات الصفية" },
-  { id: "3", title: "إدارة الموارد البشرية", desc: "إدارة وتطوير الكوادر", subTitle: "خطة التطوير المهني" },
-  { id: "4", title: "البيئة المدرسية", desc: "تهيئة بيئة تعليمية آمنة وجاذبة", subTitle: "تقرير البيئة المدرسية" },
-  { id: "5", title: "العلاقات المجتمعية", desc: "تعزيز الشراكة المجتمعية", subTitle: "سجل الشراكات المجتمعية" },
-  { id: "6", title: "التقويم والمتابعة", desc: "متابعة وتقويم الأداء المدرسي", subTitle: "تقارير المتابعة الدورية" },
-  { id: "7", title: "الإدارة المالية", desc: "إدارة الميزانية والموارد المالية", subTitle: "التقرير المالي" },
-]);
+// ===== دالة عامة لبناء بنود أي وظيفة من النظام المعياري (3 مستويات) =====
+function buildStandardsCriteria(standards: Standard[]): Criterion[] {
+  return standards.map(std => ({
+    id: std.id,
+    title: std.title,
+    maxScore: 5,
+    description: `${std.items.length} بند \u00B7 الوزن ${std.weight}%`,
+    subEvidences: std.items.flatMap(item => [
+      {
+        id: item.id,
+        title: item.text,
+        description: item.suggestedEvidence.join(" \u00B7 "),
+        type: "both" as const,
+        formFields: [
+          { id: "evidence_desc", label: "\u0648\u0635\u0641 \u0627\u0644\u0634\u0627\u0647\u062F", type: "textarea" as const, placeholder: "\u0627\u0643\u062A\u0628 \u0648\u0635\u0641\u0627\u064B \u0644\u0644\u0634\u0627\u0647\u062F \u0627\u0644\u0645\u0642\u062F\u0645..." },
+          { id: "date", label: "\u0627\u0644\u062A\u0627\u0631\u064A\u062E", type: "date" as const },
+          { id: "notes", label: "\u0645\u0644\u0627\u062D\u0638\u0627\u062A", type: "textarea" as const, placeholder: "\u0645\u0644\u0627\u062D\u0638\u0627\u062A \u0625\u0636\u0627\u0641\u064A\u0629..." },
+        ],
+      },
+      ...(item.subItems || []).map(sub => ({
+        id: sub.id,
+        title: sub.title,
+        description: sub.suggestedEvidence.join(" \u00B7 "),
+        type: "both" as const,
+        formFields: [
+          { id: "evidence_desc", label: "\u0648\u0635\u0641 \u0627\u0644\u0634\u0627\u0647\u062F", type: "textarea" as const, placeholder: "\u0627\u0643\u062A\u0628 \u0648\u0635\u0641\u0627\u064B \u0644\u0644\u0634\u0627\u0647\u062F \u0627\u0644\u0645\u0642\u062F\u0645..." },
+          { id: "date", label: "\u0627\u0644\u062A\u0627\u0631\u064A\u062E", type: "date" as const },
+          { id: "notes", label: "\u0645\u0644\u0627\u062D\u0638\u0627\u062A", type: "textarea" as const, placeholder: "\u0645\u0644\u0627\u062D\u0638\u0627\u062A \u0625\u0636\u0627\u0641\u064A\u0629..." },
+        ],
+      })),
+    ]),
+  }));
+}
 
-const VICE_PRINCIPAL_CRITERIA = makeSimpleCriteria("v", [
-  { id: "1", title: "المشاركة في التخطيط", desc: "المشاركة في إعداد الخطط", subTitle: "الخطة التشغيلية" },
-  { id: "2", title: "متابعة الحضور والغياب", desc: "متابعة الحضور", subTitle: "سجل الحضور" },
-  { id: "3", title: "الإشراف على الاختبارات", desc: "تنظيم الاختبارات", subTitle: "جدول الاختبارات" },
-  { id: "4", title: "متابعة النظام والانضباط", desc: "الحفاظ على النظام", subTitle: "سجل الملاحظات السلوكية" },
-  { id: "5", title: "إدارة شؤون الطلاب", desc: "إدارة الشؤون", subTitle: "سجل شؤون الطلاب" },
-  { id: "6", title: "التواصل مع أولياء الأمور", desc: "التواصل المستمر", subTitle: "سجل التواصل" },
-  { id: "7", title: "الإشراف على الأنشطة", desc: "الإشراف على الأنشطة", subTitle: "خطة الأنشطة" },
-]);
+// ===== بنود الوظائف (نظام معياري رسمي - 3 مستويات) =====
+const PRINCIPAL_CRITERIA = buildStandardsCriteria(PRINCIPAL_STANDARDS);
+const VICE_PRINCIPAL_CRITERIA = buildStandardsCriteria(VICE_PRINCIPAL_STANDARDS);
+const COUNSELOR_CRITERIA = buildStandardsCriteria(COUNSELOR_STANDARDS);
+const HEALTH_COUNSELOR_CRITERIA = buildStandardsCriteria(HEALTH_COUNSELOR_STANDARDS);
+const ACTIVITY_LEADER_CRITERIA = buildStandardsCriteria(ACTIVITY_LEADER_STANDARDS);
+const LAB_TECHNICIAN_CRITERIA = buildStandardsCriteria(LAB_TECHNICIAN_STANDARDS);
+const KINDERGARTEN_CRITERIA = buildStandardsCriteria(KINDERGARTEN_STANDARDS);
+const SUPERVISOR_CRITERIA = buildStandardsCriteria(SUPERVISOR_STANDARDS);
 
-const COUNSELOR_CRITERIA = makeSimpleCriteria("c", [
-  { id: "1", title: "التوجيه والإرشاد الفردي", desc: "تقديم خدمات الإرشاد", subTitle: "سجل الحالات الفردية" },
-  { id: "2", title: "التوجيه الجماعي", desc: "تنفيذ برامج جماعية", subTitle: "خطة البرامج الجماعية" },
-  { id: "3", title: "البرامج الوقائية", desc: "تنفيذ البرامج الوقائية", subTitle: "خطة البرامج الوقائية" },
-  { id: "4", title: "البرامج العلاجية", desc: "تنفيذ البرامج العلاجية", subTitle: "خطط العلاج" },
-  { id: "5", title: "التواصل مع أولياء الأمور", desc: "التواصل المستمر", subTitle: "سجل التواصل" },
-  { id: "6", title: "دراسة الحالات السلوكية", desc: "دراسة الحالات", subTitle: "ملفات الحالات" },
-  { id: "7", title: "التقارير والإحصاءات", desc: "إعداد التقارير", subTitle: "التقارير الشهرية" },
-]);
-
-const HEALTH_COUNSELOR_CRITERIA = makeSimpleCriteria("h", [
-  { id: "1", title: "التثقيف الصحي", desc: "تنفيذ برامج التثقيف", subTitle: "خطة التثقيف الصحي" },
-  { id: "2", title: "الإسعافات الأولية", desc: "تقديم الإسعافات", subTitle: "سجل الإسعافات" },
-  { id: "3", title: "البيئة الصحية", desc: "متابعة البيئة الصحية", subTitle: "تقارير المتابعة" },
-  { id: "4", title: "متابعة الحالات الصحية", desc: "متابعة الحالات المزمنة", subTitle: "سجل الحالات" },
-  { id: "5", title: "التقارير الصحية", desc: "إعداد التقارير", subTitle: "التقارير الشهرية" },
-]);
-
-const SUPERVISOR_CRITERIA = makeSimpleCriteria("s", [
-  { id: "1", title: "التخطيط للإشراف", desc: "إعداد خطط إشرافية", subTitle: "الخطة الإشرافية" },
-  { id: "2", title: "الزيارات الصفية", desc: "تنفيذ الزيارات", subTitle: "سجل الزيارات" },
-  { id: "3", title: "تطوير المعلمين", desc: "دعم التطوير المهني", subTitle: "خطة التطوير" },
-  { id: "4", title: "تحليل نتائج الطلاب", desc: "تحليل النتائج", subTitle: "تقارير التحليل" },
-  { id: "5", title: "البرامج التدريبية", desc: "تنفيذ البرامج", subTitle: "خطة التدريب" },
-]);
-
+// ===== بنود الوظائف التي ليس لها معايير رسمية (تبقى بسيطة) =====
 const LIBRARIAN_CRITERIA = makeSimpleCriteria("l", [
   { id: "1", title: "تنظيم مصادر التعلم", desc: "تنظيم وفهرسة المصادر", subTitle: "سجل المصادر" },
   { id: "2", title: "خدمة المستفيدين", desc: "تقديم خدمات متميزة", subTitle: "سجل الإعارة" },
   { id: "3", title: "التقنيات التعليمية", desc: "توظيف التقنيات", subTitle: "تقرير التقنيات" },
   { id: "4", title: "البرامج والأنشطة", desc: "تنفيذ البرامج", subTitle: "خطة البرامج" },
-]);
-
-const KINDERGARTEN_CRITERIA = makeSimpleCriteria("k", [
-  { id: "1", title: "التخطيط للأنشطة", desc: "التخطيط لأنشطة تعليمية", subTitle: "خطة الأنشطة الأسبوعية" },
-  { id: "2", title: "تنفيذ الأنشطة التعليمية", desc: "تنفيذ أنشطة إبداعية", subTitle: "صور الأنشطة" },
-  { id: "3", title: "إدارة الصف", desc: "إدارة الصف بطريقة مناسبة", subTitle: "قوانين الصف" },
-  { id: "4", title: "التقويم والمتابعة", desc: "تقويم نمو الأطفال", subTitle: "سجل الملاحظات" },
-  { id: "5", title: "التواصل مع أولياء الأمور", desc: "التواصل المستمر", subTitle: "سجل التواصل" },
-  { id: "6", title: "البيئة التعليمية", desc: "تهيئة بيئة آمنة", subTitle: "صور البيئة الصفية" },
 ]);
 
 const SPECIAL_ED_CRITERIA = makeSimpleCriteria("se", [
@@ -184,16 +178,18 @@ const ADMIN_ASSISTANT_CRITERIA = makeSimpleCriteria("a", [
 
 // ===== أنواع الوظائف =====
 const JOB_TYPES = [
-  { id: "teacher", title: "معلم / معلمة", icon: GraduationCap, emoji: "👨‍🏫", criteria: TEACHER_CRITERIA, isTeacher: true, color: "#059669" },
-  { id: "principal", title: "مدير / مديرة مدرسة", icon: Building2, emoji: "👔", criteria: PRINCIPAL_CRITERIA, isTeacher: false, color: "#2563EB" },
-  { id: "vice_principal", title: "وكيل / وكيلة مدرسة", icon: ClipboardList, emoji: "📋", criteria: VICE_PRINCIPAL_CRITERIA, isTeacher: false, color: "#7C3AED" },
-  { id: "counselor", title: "موجه/ة طلابي/ة", icon: Users, emoji: "🤝", criteria: COUNSELOR_CRITERIA, isTeacher: false, color: "#0891B2" },
-  { id: "health_counselor", title: "موجه/ة صحي/ة", icon: Heart, emoji: "🏥", criteria: HEALTH_COUNSELOR_CRITERIA, isTeacher: false, color: "#DC2626" },
-  { id: "supervisor", title: "مشرف/ة تربوي/ة", icon: SearchIcon, emoji: "🔍", criteria: SUPERVISOR_CRITERIA, isTeacher: false, color: "#CA8A04" },
-  { id: "librarian", title: "أمين/ة مصادر تعلم", icon: BookOpen, emoji: "📚", criteria: LIBRARIAN_CRITERIA, isTeacher: false, color: "#9333EA" },
-  { id: "kindergarten", title: "معلمة رياض أطفال", icon: Baby, emoji: "🧒", criteria: KINDERGARTEN_CRITERIA, isTeacher: false, color: "#EC4899" },
-  { id: "special_ed", title: "معلم/ة تربية خاصة", icon: Accessibility, emoji: "♿", criteria: SPECIAL_ED_CRITERIA, isTeacher: false, color: "#F97316" },
-  { id: "admin_assistant", title: "مساعد/ة إداري/ة", icon: Briefcase, emoji: "🗂️", criteria: ADMIN_ASSISTANT_CRITERIA, isTeacher: false, color: "#6B7280" },
+  { id: "teacher", title: "معلم / معلمة", icon: GraduationCap, emoji: "👨‍🏫", criteria: TEACHER_CRITERIA, hasStandards: true, color: "#059669" },
+  { id: "principal", title: "مدير / مديرة مدرسة", icon: Building2, emoji: "👔", criteria: PRINCIPAL_CRITERIA, hasStandards: true, color: "#2563EB" },
+  { id: "vice_principal", title: "وكيل / وكيلة مدرسة", icon: ClipboardList, emoji: "📋", criteria: VICE_PRINCIPAL_CRITERIA, hasStandards: true, color: "#7C3AED" },
+  { id: "counselor", title: "موجه/ة طلابي/ة", icon: Users, emoji: "🤝", criteria: COUNSELOR_CRITERIA, hasStandards: true, color: "#0891B2" },
+  { id: "health_counselor", title: "معلم/ة مسند له توجيه صحي", icon: Heart, emoji: "🏥", criteria: HEALTH_COUNSELOR_CRITERIA, hasStandards: true, color: "#DC2626" },
+  { id: "activity_leader", title: "معلم/ة مسند له نشاط (رائد/ة نشاط)", icon: Megaphone, emoji: "🏆", criteria: ACTIVITY_LEADER_CRITERIA, hasStandards: true, color: "#F59E0B" },
+  { id: "lab_technician", title: "محضر/ة مختبر", icon: FlaskConical, emoji: "🧪", criteria: LAB_TECHNICIAN_CRITERIA, hasStandards: true, color: "#8B5CF6" },
+  { id: "supervisor", title: "مشرف/ة تربوي/ة (التشكيلات الإشرافية)", icon: SearchIcon, emoji: "🔍", criteria: SUPERVISOR_CRITERIA, hasStandards: true, color: "#CA8A04" },
+  { id: "kindergarten", title: "معلمة رياض أطفال", icon: Baby, emoji: "🧒", criteria: KINDERGARTEN_CRITERIA, hasStandards: true, color: "#EC4899" },
+  { id: "librarian", title: "أمين/ة مصادر تعلم", icon: BookOpen, emoji: "📚", criteria: LIBRARIAN_CRITERIA, hasStandards: false, color: "#9333EA" },
+  { id: "special_ed", title: "معلم/ة تربية خاصة", icon: Accessibility, emoji: "♿", criteria: SPECIAL_ED_CRITERIA, hasStandards: false, color: "#F97316" },
+  { id: "admin_assistant", title: "مساعد/ة إداري/ة", icon: Briefcase, emoji: "🗂️", criteria: ADMIN_ASSISTANT_CRITERIA, hasStandards: false, color: "#6B7280" },
 ];
 
 // ===== الثيمات =====
@@ -477,16 +473,24 @@ export default function PerformanceEvidence() {
 
   // ===== عدد المؤشرات المغطاة (للمعلم) =====
   const indicatorsCoverage = useMemo(() => {
-    if (!selectedJob?.isTeacher) return null;
+    if (!selectedJob?.hasStandards) return null;
+    const jobStds = selectedJob.id === "teacher" ? STANDARDS : getStandardsForJob(selectedJob.id);
     let totalIndicators = 0;
     let coveredIndicators = 0;
-    STANDARDS.forEach(std => {
+    jobStds.forEach(std => {
       std.items.forEach(item => {
         totalIndicators++;
         const data = criteriaData[std.id];
         if (data && data.evidences.some(e => e.subEvidenceId === item.id)) {
           coveredIndicators++;
         }
+        // حساب البنود الفرعية أيضاً
+        (item.subItems || []).forEach(sub => {
+          totalIndicators++;
+          if (data && data.evidences.some(e => e.subEvidenceId === sub.id)) {
+            coveredIndicators++;
+          }
+        });
       });
     });
     return { total: totalIndicators, covered: coveredIndicators, percentage: totalIndicators > 0 ? Math.round((coveredIndicators / totalIndicators) * 100) : 0 };
@@ -1459,8 +1463,8 @@ export default function PerformanceEvidence() {
                 <h1 className="text-lg sm:text-xl md:text-2xl font-black text-foreground truncate" style={{ fontFamily: "var(--font-heading)" }}>
                   {selectedJob?.title}
                 </h1>
-                {selectedJob?.isTeacher && (
-                  <p className="text-[10px] sm:text-xs text-muted-foreground mt-0.5 truncate">نظام المعايير الـ 11 · {indicatorsCoverage?.covered || 0}/{indicatorsCoverage?.total || 45} مؤشر مغطى</p>
+                {selectedJob?.hasStandards && (
+                  <p className="text-[10px] sm:text-xs text-muted-foreground mt-0.5 truncate">نظام المعايير الرسمي · {indicatorsCoverage?.covered || 0}/{indicatorsCoverage?.total || 0} بند مغطى</p>
                 )}
               </div>
             </div>
@@ -1697,9 +1701,10 @@ export default function PerformanceEvidence() {
                   const evidenceCount = data.evidences.length;
                   const isCustom = criterion.id.startsWith("custom_main_");
                   const status = data.score >= 4 && evidenceCount > 0 ? "complete" : evidenceCount > 0 || data.score > 0 ? "partial" : "missing";
-                  const isTeacherStandard = selectedJob?.isTeacher && criterion.id.startsWith("std-");
-                  const standard = isTeacherStandard ? STANDARDS.find(s => s.id === criterion.id) : null;
-                  const indicatorProgress = isTeacherStandard && standard ? (() => {
+                  const jobStandards = selectedJob?.id === "teacher" ? STANDARDS : (selectedJob ? getStandardsForJob(selectedJob.id) : []);
+                  const hasStd = selectedJob?.hasStandards;
+                  const standard = hasStd ? jobStandards.find(s => s.id === criterion.id) : null;
+                  const indicatorProgress = hasStd && standard ? (() => {
                     const covered = standard.items.filter(item => data.evidences.some(e => e.subEvidenceId === item.id)).length;
                     return { covered, total: standard.items.length, pct: standard.items.length > 0 ? Math.round((covered / standard.items.length) * 100) : 0 };
                   })() : null;
@@ -1732,7 +1737,7 @@ export default function PerformanceEvidence() {
                               </h3>
                               {isCustom && <Badge variant="outline" className="text-[9px] sm:text-[10px] shrink-0">مخصص</Badge>}
                             </div>
-                            {isTeacherStandard && standard && indicatorProgress ? (
+                            {hasStd && standard && indicatorProgress ? (
                               <div className="flex items-center gap-1.5 sm:gap-2 mt-0.5 sm:mt-1">
                                 <span className="text-[10px] sm:text-[11px] text-muted-foreground shrink-0">{indicatorProgress.covered}/{indicatorProgress.total} مؤشر</span>
                                 <div className="flex-1 h-1 sm:h-1.5 bg-muted rounded-full overflow-hidden max-w-[80px] sm:max-w-[120px]">
@@ -1846,8 +1851,9 @@ export default function PerformanceEvidence() {
   if (step === "criterion-detail" && currentCriterion) {
     const data = criteriaData[currentCriterion.id] || { score: 0, notes: "", evidences: [], customSubEvidences: [] };
     const allSubEvidences = [...(currentCriterion.subEvidences || []), ...(data.customSubEvidences || [])];
-    const isTeacherStandard = selectedJob?.isTeacher && currentCriterion.id.startsWith("std-");
-    const standard = isTeacherStandard ? STANDARDS.find(s => s.id === currentCriterion.id) : null;
+    const jobStandardsDetail = selectedJob?.id === "teacher" ? STANDARDS : (selectedJob ? getStandardsForJob(selectedJob.id) : []);
+    const isStandardBased = selectedJob?.hasStandards;
+    const standard = isStandardBased ? jobStandardsDetail.find(s => s.id === currentCriterion.id) : null;
 
     return (
       <div className="min-h-screen bg-background p-3 sm:p-4 md:p-6" dir="rtl">
@@ -1885,7 +1891,7 @@ export default function PerformanceEvidence() {
                       {currentCriterion.title}
                     </h1>
                     <p className="text-[11px] sm:text-sm text-muted-foreground leading-relaxed">{currentCriterion.description}</p>
-                    {isTeacherStandard && standard && (
+                    {isStandardBased && standard && (
                       <div className="flex items-center gap-1.5 sm:gap-2 mt-1.5 sm:mt-2">
                         <Badge variant="outline" className="text-[9px] sm:text-[10px]">الوزن: {standard.weight}%</Badge>
                         <Badge variant="outline" className="text-[9px] sm:text-[10px]">{standard.items.length} بند</Badge>

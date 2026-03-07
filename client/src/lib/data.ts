@@ -41,7 +41,9 @@ export const sections: Section[] = [
       { id: "1-8", slug: "kindergarten-performance-evidence", title: "شواهد الأداء الوظيفي لمعلمة رياض الأطفال", description: "توثيق شواهد الأداء الوظيفي لمعلمة رياض الأطفال", type: "interactive", price: 0, category: "رياض أطفال" },
       { id: "1-9", slug: "special-ed-performance-evidence", title: "شواهد الأداء الوظيفي لمعلم/ة التربية الخاصة", description: "توثيق شواهد الأداء الوظيفي لمعلم ومعلمة التربية الخاصة", type: "interactive", price: 0, category: "تربية خاصة" },
       { id: "1-10", slug: "admin-assistant-performance-evidence", title: "شواهد الأداء الوظيفي للمساعد/ة الإداري/ة", description: "توثيق شواهد الأداء الوظيفي للمساعد والمساعدة الإدارية", type: "interactive", price: 0, category: "إداري" },
-      { id: "1-11", slug: "classroom-evaluation-visit", title: "زيارة التقييم الصفيّة", description: "نموذج زيارة التقييم الصفية للمعلم وفق معايير التقييم المعتمدة", type: "interactive", price: 0, category: "معلم" },
+      { id: "1-11", slug: "activity-leader-performance-evidence", title: "شواهد الأداء الوظيفي لرائد/ة النشاط", description: "توثيق شواهد الأداء الوظيفي للمعلم المسند له نشاط طلابي (رائد/ة النشاط) وفق المعايير الرسمية", type: "interactive", price: 0, category: "معلم", tags: ["رائد نشاط", "نشاط طلابي"] },
+      { id: "1-12", slug: "lab-technician-performance-evidence", title: "شواهد الأداء الوظيفي لمحضر/ة المختبر", description: "توثيق شواهد الأداء الوظيفي لمحضر ومحضرة المختبر وفق المعايير الرسمية", type: "interactive", price: 0, category: "إداري", tags: ["محضر مختبر", "مختبر"] },
+      { id: "1-13", slug: "classroom-evaluation-visit", title: "زيارة التقييم الصفيّة", description: "نموذج زيارة التقييم الصفية للمعلم وفق معايير التقييم المعتمدة", type: "interactive", price: 0, category: "معلم" },
     ],
   },
   {
