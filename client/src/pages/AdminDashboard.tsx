@@ -1,27 +1,25 @@
 /**
- * لوحة تحكم المدير - مراجعة ملفات الإنجاز المقدمة
+ * لوحة تحكم المدير - مراجعة ملفات الإنجاز + إدارة القوالب + إدارة الأقسام
  */
-import { useState, useMemo } from "react";
+import { useState, useMemo, lazy, Suspense } from "react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import {
   ArrowLeft, CheckCircle, XCircle, Clock, Eye, FileText,
-  Search, Filter, ChevronDown, Loader2, MessageSquare,
-  Users, BarChart3, TrendingUp, AlertTriangle, Sparkles,
-  ShieldCheck, ThumbsUp, ThumbsDown, RotateCcw
+  Search, Loader2, MessageSquare,
+  Users, BarChart3, ShieldCheck, ThumbsUp, ThumbsDown,
+  Palette, FolderOpen, Settings, LayoutDashboard, ChevronLeft,
+  ChevronRight, Menu, X, Plus, Trash2, Edit3, Save, ToggleLeft,
+  ToggleRight, Upload, Star, GripVertical, AlertTriangle
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
+  Dialog, DialogContent, DialogDescription, DialogFooter,
+  DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 
 const STATUS_MAP: Record<string, { label: string; color: string; icon: any; bg: string }> = {
@@ -45,9 +43,271 @@ const JOB_TITLES: Record<string, string> = {
   admin_assistant: "مساعد/ة إداري/ة",
 };
 
-export default function AdminDashboard() {
-  const [, navigate] = useLocation();
-  const { user, loading: authLoading } = useAuth();
+type AdminTab = "portfolios" | "templates" | "settings";
+
+// ─── مكون إدارة القوالب المدمج ────────────────────────────
+function TemplatesPanel() {
+  const { data: templates, isLoading, refetch } = trpc.templates.listAll.useQuery();
+  const createMutation = trpc.templates.create.useMutation({ onSuccess: () => { refetch(); toast.success("تم إنشاء القالب"); } });
+  const updateMutation = trpc.templates.update.useMutation({ onSuccess: () => { refetch(); toast.success("تم تحديث القالب"); } });
+  const deleteMutation = trpc.templates.delete.useMutation({ onSuccess: () => { refetch(); toast.success("تم حذف القالب"); } });
+  const seedMutation = trpc.templates.seed.useMutation({ onSuccess: () => { refetch(); toast.success("تم إضافة القوالب الافتراضية"); } });
+
+  const [editingTemplate, setEditingTemplate] = useState<any | null>(null);
+  const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const [formData, setFormData] = useState({
+    name: "", description: "", headerBg: "linear-gradient(135deg, #059669, #047857)",
+    headerText: "#ffffff", accent: "#059669", borderColor: "#e5e7eb",
+    bodyBg: "#ffffff", fontFamily: "'Cairo', 'Tajawal', sans-serif",
+    coverImageUrl: "", logoUrl: "", isDefault: false, sortOrder: 0,
+  });
+
+  const resetForm = () => {
+    setFormData({
+      name: "", description: "", headerBg: "linear-gradient(135deg, #059669, #047857)",
+      headerText: "#ffffff", accent: "#059669", borderColor: "#e5e7eb",
+      bodyBg: "#ffffff", fontFamily: "'Cairo', 'Tajawal', sans-serif",
+      coverImageUrl: "", logoUrl: "", isDefault: false, sortOrder: 0,
+    });
+  };
+
+  const handleCreate = () => {
+    if (!formData.name.trim()) { toast.error("يرجى إدخال اسم القالب"); return; }
+    createMutation.mutate(formData);
+    setShowCreateDialog(false);
+    resetForm();
+  };
+
+  const handleUpdate = () => {
+    if (!editingTemplate) return;
+    updateMutation.mutate({ id: editingTemplate.id, ...formData });
+    setEditingTemplate(null);
+    resetForm();
+  };
+
+  const startEdit = (t: any) => {
+    setFormData({
+      name: t.name, description: t.description || "", headerBg: t.headerBg,
+      headerText: t.headerText, accent: t.accent, borderColor: t.borderColor,
+      bodyBg: t.bodyBg, fontFamily: t.fontFamily || "", coverImageUrl: t.coverImageUrl || "",
+      logoUrl: t.logoUrl || "", isDefault: t.isDefault || false, sortOrder: t.sortOrder || 0,
+    });
+    setEditingTemplate(t);
+  };
+
+  const TemplateForm = ({ onSubmit, submitLabel }: { onSubmit: () => void; submitLabel: string }) => (
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">اسم القالب *</label>
+          <input value={formData.name} onChange={(e) => setFormData(p => ({ ...p, name: e.target.value }))}
+            className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20" />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">الوصف</label>
+          <input value={formData.description} onChange={(e) => setFormData(p => ({ ...p, description: e.target.value }))}
+            className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20" />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">خلفية الرأس</label>
+          <input value={formData.headerBg} onChange={(e) => setFormData(p => ({ ...p, headerBg: e.target.value }))}
+            className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20" />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">نص الرأس</label>
+          <div className="flex gap-2">
+            <input type="color" value={formData.headerText} onChange={(e) => setFormData(p => ({ ...p, headerText: e.target.value }))}
+              className="w-10 h-10 rounded border cursor-pointer" />
+            <input value={formData.headerText} onChange={(e) => setFormData(p => ({ ...p, headerText: e.target.value }))}
+              className="flex-1 px-3 py-2 rounded-lg border border-gray-200 text-sm" />
+          </div>
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">اللون الرئيسي</label>
+          <div className="flex gap-2">
+            <input type="color" value={formData.accent} onChange={(e) => setFormData(p => ({ ...p, accent: e.target.value }))}
+              className="w-10 h-10 rounded border cursor-pointer" />
+            <input value={formData.accent} onChange={(e) => setFormData(p => ({ ...p, accent: e.target.value }))}
+              className="flex-1 px-3 py-2 rounded-lg border border-gray-200 text-sm" />
+          </div>
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">لون الحدود</label>
+          <div className="flex gap-2">
+            <input type="color" value={formData.borderColor} onChange={(e) => setFormData(p => ({ ...p, borderColor: e.target.value }))}
+              className="w-10 h-10 rounded border cursor-pointer" />
+            <input value={formData.borderColor} onChange={(e) => setFormData(p => ({ ...p, borderColor: e.target.value }))}
+              className="flex-1 px-3 py-2 rounded-lg border border-gray-200 text-sm" />
+          </div>
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">خلفية المحتوى</label>
+          <div className="flex gap-2">
+            <input type="color" value={formData.bodyBg} onChange={(e) => setFormData(p => ({ ...p, bodyBg: e.target.value }))}
+              className="w-10 h-10 rounded border cursor-pointer" />
+            <input value={formData.bodyBg} onChange={(e) => setFormData(p => ({ ...p, bodyBg: e.target.value }))}
+              className="flex-1 px-3 py-2 rounded-lg border border-gray-200 text-sm" />
+          </div>
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">الخط</label>
+          <input value={formData.fontFamily} onChange={(e) => setFormData(p => ({ ...p, fontFamily: e.target.value }))}
+            className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20" />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">رابط صورة الغلاف</label>
+          <input value={formData.coverImageUrl} onChange={(e) => setFormData(p => ({ ...p, coverImageUrl: e.target.value }))}
+            placeholder="https://..." className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm" />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">رابط الشعار</label>
+          <input value={formData.logoUrl} onChange={(e) => setFormData(p => ({ ...p, logoUrl: e.target.value }))}
+            placeholder="https://..." className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm" />
+        </div>
+      </div>
+
+      {/* معاينة الألوان */}
+      <div className="border rounded-xl overflow-hidden">
+        <div className="p-4 text-center" style={{ background: formData.headerBg, color: formData.headerText }}>
+          <p className="font-bold text-sm">معاينة الرأس</p>
+        </div>
+        <div className="p-4" style={{ backgroundColor: formData.bodyBg }}>
+          <p className="text-sm" style={{ color: formData.accent }}>نص باللون الرئيسي</p>
+          <div className="mt-2 p-2 rounded border" style={{ borderColor: formData.borderColor }}>
+            <p className="text-xs text-gray-500">محتوى مع حدود</p>
+          </div>
+        </div>
+      </div>
+
+      <div className="flex justify-end gap-2">
+        <Button variant="outline" onClick={() => { setEditingTemplate(null); setShowCreateDialog(false); resetForm(); }}>إلغاء</Button>
+        <Button onClick={onSubmit} className="bg-emerald-600 hover:bg-emerald-700 gap-1.5">
+          <Save className="w-4 h-4" />{submitLabel}
+        </Button>
+      </div>
+    </div>
+  );
+
+  if (isLoading) {
+    return (
+      <div className="text-center py-16">
+        <Loader2 className="w-8 h-8 animate-spin text-emerald-600 mx-auto mb-3" />
+        <p className="text-sm text-gray-500">جاري تحميل القوالب...</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-xl font-bold text-gray-900" style={{ fontFamily: "'Tajawal', sans-serif" }}>إدارة القوالب</h2>
+          <p className="text-sm text-gray-500 mt-1">إنشاء وتعديل قوالب تصدير PDF</p>
+        </div>
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={() => seedMutation.mutate()} disabled={seedMutation.isPending}>
+            {seedMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Star className="w-4 h-4" />}
+            <span className="mr-1">قوالب افتراضية</span>
+          </Button>
+          <Button size="sm" onClick={() => { resetForm(); setShowCreateDialog(true); }} className="bg-emerald-600 hover:bg-emerald-700 gap-1.5">
+            <Plus className="w-4 h-4" />إضافة قالب
+          </Button>
+        </div>
+      </div>
+
+      {/* Create Dialog */}
+      {showCreateDialog && (
+        <Card className="border-emerald-200 shadow-lg">
+          <CardHeader className="bg-emerald-50/50 border-b">
+            <CardTitle className="text-sm flex items-center gap-2">
+              <Plus className="w-4 h-4 text-emerald-600" />إنشاء قالب جديد
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-6">
+            <TemplateForm onSubmit={handleCreate} submitLabel="إنشاء القالب" />
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Edit Dialog */}
+      {editingTemplate && (
+        <Card className="border-blue-200 shadow-lg">
+          <CardHeader className="bg-blue-50/50 border-b">
+            <CardTitle className="text-sm flex items-center gap-2">
+              <Edit3 className="w-4 h-4 text-blue-600" />تعديل: {editingTemplate.name}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-6">
+            <TemplateForm onSubmit={handleUpdate} submitLabel="حفظ التعديلات" />
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Templates List */}
+      {!templates || templates.length === 0 ? (
+        <div className="text-center py-16">
+          <Palette className="w-12 h-12 text-gray-300 mx-auto mb-4" />
+          <p className="text-gray-500 mb-4">لا توجد قوالب حتى الآن</p>
+          <Button variant="outline" onClick={() => seedMutation.mutate()} disabled={seedMutation.isPending}>
+            إضافة القوالب الافتراضية
+          </Button>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          {templates.map((t: any) => (
+            <Card key={t.id} className={`border-0 shadow-sm hover:shadow-md transition-all ${!t.isActive ? "opacity-60" : ""}`}>
+              {/* معاينة الألوان */}
+              <div className="h-16 rounded-t-xl" style={{ background: t.headerBg }}>
+                <div className="h-full flex items-center justify-center">
+                  <span className="text-sm font-bold" style={{ color: t.headerText }}>{t.name}</span>
+                </div>
+              </div>
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    {t.isDefault && <Badge className="bg-amber-100 text-amber-700 text-[10px]">افتراضي</Badge>}
+                    <Badge className={t.isActive ? "bg-emerald-100 text-emerald-700 text-[10px]" : "bg-gray-100 text-gray-500 text-[10px]"}>
+                      {t.isActive ? "نشط" : "معطل"}
+                    </Badge>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <div className="w-4 h-4 rounded-full border" style={{ backgroundColor: t.accent }} />
+                    <div className="w-4 h-4 rounded-full border" style={{ backgroundColor: t.borderColor }} />
+                  </div>
+                </div>
+                {t.description && <p className="text-xs text-gray-500 mb-3 line-clamp-2">{t.description}</p>}
+                <div className="flex items-center gap-2">
+                  <Button variant="outline" size="sm" className="flex-1 text-xs h-8" onClick={() => startEdit(t)}>
+                    <Edit3 className="w-3 h-3 ml-1" />تعديل
+                  </Button>
+                  <Button variant="outline" size="sm" className="text-xs h-8"
+                    onClick={() => updateMutation.mutate({ id: t.id, isActive: !t.isActive })}>
+                    {t.isActive ? <ToggleRight className="w-4 h-4 text-emerald-600" /> : <ToggleLeft className="w-4 h-4 text-gray-400" />}
+                  </Button>
+                  <Button variant="outline" size="sm" className="text-xs h-8 text-red-500 hover:text-red-700"
+                    onClick={() => { if (confirm("هل أنت متأكد من حذف هذا القالب؟")) deleteMutation.mutate({ id: t.id }); }}>
+                    <Trash2 className="w-3 h-3" />
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── مكون إدارة ملفات الإنجاز ────────────────────────────
+function PortfoliosPanel() {
+  const { user } = useAuth();
   const [page, setPage] = useState(1);
   const [statusFilter, setStatusFilter] = useState<string | undefined>(undefined);
   const [searchQuery, setSearchQuery] = useState("");
@@ -60,68 +320,35 @@ export default function AdminDashboard() {
     { enabled: user?.role === "admin" }
   );
 
-  const { data: portfolioDetail, isLoading: detailLoading } = trpc.admin.portfolioDetail.useQuery(
-    { id: selectedPortfolioId! },
-    { enabled: !!selectedPortfolioId && user?.role === "admin" }
-  );
-
   const reviewMutation = trpc.admin.review.useMutation({
-    onSuccess: () => {
-      toast.success("تم تحديث حالة الملف بنجاح");
-      refetch();
-      setReviewDialog(null);
-      setReviewNotes("");
-    },
-    onError: () => {
-      toast.error("فشل تحديث الحالة");
-    },
+    onSuccess: () => { refetch(); setReviewDialog(null); setReviewNotes(""); toast.success("تم تحديث حالة الملف"); },
+    onError: () => toast.error("فشل تحديث الحالة"),
   });
 
-  if (authLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50" dir="rtl">
-        <Loader2 className="w-8 h-8 animate-spin text-emerald-600" />
-      </div>
-    );
-  }
-
-  if (!user || user.role !== "admin") {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4" dir="rtl">
-        <Card className="w-full max-w-md">
-          <CardContent className="p-8 text-center">
-            <ShieldCheck className="w-12 h-12 text-red-400 mx-auto mb-4" />
-            <h1 className="text-xl font-bold text-gray-900 mb-2" style={{ fontFamily: "'Tajawal', sans-serif" }}>
-              غير مصرح بالوصول
-            </h1>
-            <p className="text-sm text-gray-500 mb-4">هذه الصفحة مخصصة لمدير النظام فقط.</p>
-            <Button onClick={() => navigate("/")} variant="outline">العودة للرئيسية</Button>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
+  const { data: portfolioDetail } = trpc.admin.portfolioDetail.useQuery(
+    { id: selectedPortfolioId! },
+    { enabled: !!selectedPortfolioId }
+  );
 
   const items = portfoliosData?.items || [];
   const total = portfoliosData?.total || 0;
 
-  // إحصائيات سريعة
+  // حساب الإحصائيات من البيانات المتاحة
   const stats = useMemo(() => {
-    return {
-      total,
-      submitted: items.filter(i => i.status === "submitted").length,
-      approved: items.filter(i => i.status === "approved").length,
-      rejected: items.filter(i => i.status === "rejected").length,
-    };
-  }, [items, total]);
+    const s = { draft: 0, submitted: 0, reviewed: 0, approved: 0, rejected: 0 };
+    items.forEach((item: any) => {
+      if (item.status in s) (s as any)[item.status]++;
+    });
+    return s;
+  }, [items]);
 
   const filteredItems = useMemo(() => {
     if (!searchQuery.trim()) return items;
     const q = searchQuery.toLowerCase();
-    return items.filter(i =>
-      i.userName?.toLowerCase().includes(q) ||
-      i.jobTitle?.toLowerCase().includes(q) ||
-      i.userEmail?.toLowerCase().includes(q)
+    return items.filter((item: any) =>
+      (item.userName || "").toLowerCase().includes(q) ||
+      (item.userEmail || "").toLowerCase().includes(q) ||
+      (item.jobTitle || "").toLowerCase().includes(q)
     );
   }, [items, searchQuery]);
 
@@ -134,313 +361,199 @@ export default function AdminDashboard() {
     });
   };
 
-  // عرض تفاصيل ملف الإنجاز
+  // عرض تفاصيل ملف إنجاز
   if (selectedPortfolioId && portfolioDetail) {
     const p = portfolioDetail;
     const personalInfo = (p.personalInfo || {}) as Record<string, string>;
-    const criteriaData = (p.criteriaData || {}) as Record<string, any>;
-    const criteriaEntries = Object.entries(criteriaData);
-    const totalScore = criteriaEntries.reduce((sum, [, d]) => sum + ((d as any)?.score || 0), 0);
-    const maxScore = criteriaEntries.length * 5;
-    const percentage = maxScore > 0 ? Math.round((totalScore / maxScore) * 100) : 0;
-    const statusInfo = STATUS_MAP[p.status] || STATUS_MAP.draft;
-
     return (
-      <div className="min-h-screen bg-slate-50 p-4 md:p-6" dir="rtl">
-        <div className="max-w-5xl mx-auto">
-          <div className="flex items-center justify-between mb-6">
-            <Button variant="outline" size="sm" onClick={() => setSelectedPortfolioId(null)} className="gap-1.5">
-              <ArrowLeft className="w-4 h-4" />العودة للقائمة
-            </Button>
-            <div className="flex gap-2">
-              {p.status !== "approved" && (
-                <Button size="sm" className="gap-1.5 bg-emerald-600 hover:bg-emerald-700"
-                  onClick={() => setReviewDialog({ id: p.id, action: "approved" })}>
-                  <ThumbsUp className="w-4 h-4" />اعتماد
-                </Button>
-              )}
-              {p.status !== "rejected" && (
-                <Button size="sm" variant="destructive" className="gap-1.5"
-                  onClick={() => setReviewDialog({ id: p.id, action: "rejected" })}>
-                  <ThumbsDown className="w-4 h-4" />رفض
-                </Button>
-              )}
-            </div>
-          </div>
-
-          {/* معلومات الملف */}
-          <Card className="mb-6 border-0 shadow-sm">
-            <CardContent className="p-6">
-              <div className="flex items-start justify-between mb-4">
-                <div>
-                  <h2 className="text-xl font-bold text-gray-900 mb-1" style={{ fontFamily: "'Tajawal', sans-serif" }}>
-                    {personalInfo.name || "بدون اسم"}
-                  </h2>
-                  <p className="text-sm text-gray-500">{JOB_TITLES[p.jobId] || p.jobTitle}</p>
+      <div>
+        <Button variant="outline" size="sm" onClick={() => setSelectedPortfolioId(null)} className="mb-4 gap-1.5">
+          <ArrowLeft className="w-4 h-4" />العودة
+        </Button>
+        <Card className="border-0 shadow-sm mb-4">
+          <CardHeader>
+            <CardTitle className="text-sm">بيانات المعلم</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+              {Object.entries(personalInfo).map(([key, val]) => (
+                <div key={key} className="bg-gray-50 rounded-lg p-3">
+                  <p className="text-[10px] text-gray-500 mb-0.5">{key}</p>
+                  <p className="text-sm font-medium text-gray-900">{val || "—"}</p>
                 </div>
-                <Badge className={statusInfo.bg}>{statusInfo.label}</Badge>
+              ))}
+              <div className="bg-gray-50 rounded-lg p-3">
+                <p className="text-[10px] text-gray-500 mb-0.5">الوظيفة</p>
+                <p className="text-sm font-medium text-gray-900">{JOB_TITLES[p.jobId] || p.jobTitle}</p>
               </div>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                <div><span className="text-gray-500">المدرسة:</span> <strong>{personalInfo.school || "—"}</strong></div>
-                <div><span className="text-gray-500">العام:</span> <strong>{personalInfo.year || "—"}</strong></div>
-                <div><span className="text-gray-500">المجموع:</span> <strong>{totalScore}/{maxScore} ({percentage}%)</strong></div>
-                <div><span className="text-gray-500">الاكتمال:</span> <strong>{p.completionPercentage || 0}%</strong></div>
-              </div>
-              {p.reviewNotes && (
-                <div className="mt-4 p-3 bg-amber-50 rounded-lg border border-amber-200">
-                  <p className="text-xs font-bold text-amber-700 mb-1">ملاحظات المراجعة:</p>
-                  <p className="text-sm text-amber-800">{p.reviewNotes}</p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* البنود */}
-          <Card className="border-0 shadow-sm overflow-hidden">
-            <CardHeader className="bg-gray-50 border-b">
-              <CardTitle className="text-sm">البنود والشواهد ({criteriaEntries.length} بند)</CardTitle>
-            </CardHeader>
-            <div className="divide-y divide-gray-100">
-              {criteriaEntries.map(([criterionId, d], i) => {
-                const data = d as any;
-                const evCount = data?.evidences?.length || 0;
-                const score = data?.score || 0;
-                return (
-                  <div key={criterionId} className="p-4">
-                    <div className="flex items-center justify-between mb-2">
-                      <h3 className="text-sm font-bold text-gray-900">
-                        <span className="text-gray-400 ml-2">#{i + 1}</span>
-                        {criterionId}
-                      </h3>
-                      <div className="flex items-center gap-2">
-                        <Badge variant={score >= 4 ? "default" : "outline"}>{score}/5</Badge>
-                        <span className="text-xs text-gray-500">{evCount} شاهد</span>
-                      </div>
-                    </div>
-                    {data?.evidences?.map((ev: any) => (
-                      <div key={ev.id} className="mr-6 mb-2 p-3 bg-gray-50 rounded-lg text-sm">
-                        {ev.type === 'text' && ev.text && <p>{ev.text}</p>}
-                        {ev.type === 'link' && ev.link && <a href={ev.link} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">{ev.link}</a>}
-                        {ev.type === 'image' && ev.fileData && <img src={ev.fileData} alt="" className="max-h-32 rounded" />}
-                        {ev.formData && Object.entries(ev.formData).some(([, v]) => v) && (
-                          <div className="space-y-1">
-                            {Object.entries(ev.formData).filter(([, v]) => v).map(([key, val]) => (
-                              <p key={key}><span className="text-gray-500">{key}:</span> {val as string}</p>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                );
-              })}
-            </div>
-          </Card>
-
-          {/* الملفات المرفوعة */}
-          {(p as any).files?.length > 0 && (
-            <Card className="mt-6 border-0 shadow-sm">
-              <CardHeader>
-                <CardTitle className="text-sm">الملفات المرفوعة ({(p as any).files.length})</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {(p as any).files.map((file: any) => (
-                    <a key={file.id} href={file.url} target="_blank" rel="noopener noreferrer"
-                      className="flex items-center gap-2 p-3 rounded-lg border hover:bg-gray-50">
-                      <FileText className="w-4 h-4 text-gray-400" />
-                      <span className="text-sm truncate">{file.originalName}</span>
-                    </a>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          )}
-        </div>
-      </div>
-    );
-  }
-
-  // القائمة الرئيسية
-  return (
-    <div className="min-h-screen bg-slate-50 p-4 md:p-6" dir="rtl">
-      <div className="max-w-6xl mx-auto">
-        {/* Header */}
-        <div className="flex items-center justify-between mb-8">
-          <div className="flex items-center gap-3">
-            <Button variant="outline" size="sm" onClick={() => navigate("/")} className="gap-1.5">
-              <ArrowLeft className="w-4 h-4" />الرئيسية
-            </Button>
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900" style={{ fontFamily: "'Tajawal', sans-serif" }}>
-                لوحة تحكم المدير
-              </h1>
-              <p className="text-sm text-gray-500">مراجعة واعتماد ملفات الإنجاز</p>
-            </div>
-          </div>
-          <Badge variant="secondary" className="gap-1.5">
-            <ShieldCheck className="w-3.5 h-3.5" />
-            مدير النظام
-          </Badge>
-        </div>
-
-        {/* إحصائيات */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-          <Card className="border-0 shadow-sm">
-            <CardContent className="p-4 flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center">
-                <Users className="w-5 h-5 text-blue-600" />
-              </div>
-              <div>
-                <div className="text-xl font-bold text-gray-900">{total}</div>
-                <p className="text-xs text-gray-500">إجمالي الملفات</p>
-              </div>
-            </CardContent>
-          </Card>
-          <Card className="border-0 shadow-sm">
-            <CardContent className="p-4 flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center">
-                <Clock className="w-5 h-5 text-amber-600" />
-              </div>
-              <div>
-                <div className="text-xl font-bold text-gray-900">{stats.submitted}</div>
-                <p className="text-xs text-gray-500">بانتظار المراجعة</p>
-              </div>
-            </CardContent>
-          </Card>
-          <Card className="border-0 shadow-sm">
-            <CardContent className="p-4 flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center">
-                <CheckCircle className="w-5 h-5 text-emerald-600" />
-              </div>
-              <div>
-                <div className="text-xl font-bold text-gray-900">{stats.approved}</div>
-                <p className="text-xs text-gray-500">معتمد</p>
-              </div>
-            </CardContent>
-          </Card>
-          <Card className="border-0 shadow-sm">
-            <CardContent className="p-4 flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-red-100 flex items-center justify-center">
-                <XCircle className="w-5 h-5 text-red-500" />
-              </div>
-              <div>
-                <div className="text-xl font-bold text-gray-900">{stats.rejected}</div>
-                <p className="text-xs text-gray-500">مرفوض</p>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* أدوات البحث والفلترة */}
-        <Card className="mb-6 border-0 shadow-sm">
-          <CardContent className="p-4">
-            <div className="flex flex-col sm:flex-row gap-3">
-              <div className="relative flex-1">
-                <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="بحث بالاسم أو الوظيفة..."
-                  className="w-full pr-10 pl-4 py-2.5 rounded-xl bg-gray-50 border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
-                />
-              </div>
-              <div className="flex gap-2 flex-wrap">
-                <Button variant={!statusFilter ? "default" : "outline"} size="sm" onClick={() => setStatusFilter(undefined)}>الكل</Button>
-                {Object.entries(STATUS_MAP).map(([key, val]) => (
-                  <Button key={key} variant={statusFilter === key ? "default" : "outline"} size="sm"
-                    onClick={() => setStatusFilter(key)}>{val.label}</Button>
-                ))}
+              <div className="bg-gray-50 rounded-lg p-3">
+                <p className="text-[10px] text-gray-500 mb-0.5">نسبة الإكمال</p>
+                <p className="text-sm font-medium text-gray-900">{p.completionPercentage || 0}%</p>
               </div>
             </div>
           </CardContent>
         </Card>
 
-        {/* قائمة الملفات */}
-        {isLoading ? (
-          <div className="text-center py-16">
-            <Loader2 className="w-8 h-8 animate-spin text-emerald-600 mx-auto mb-3" />
-            <p className="text-sm text-gray-500">جاري التحميل...</p>
+        {(p as any).files && (p as any).files.length > 0 && (
+          <Card className="border-0 shadow-sm">
+            <CardHeader>
+              <CardTitle className="text-sm">الملفات المرفوعة ({(p as any).files.length})</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {(p as any).files.map((file: any) => (
+                  <a key={file.id} href={file.url} target="_blank" rel="noopener noreferrer"
+                    className="flex items-center gap-2 p-3 rounded-lg border hover:bg-gray-50">
+                    <FileText className="w-4 h-4 text-gray-400" />
+                    <span className="text-sm truncate">{file.originalName}</span>
+                  </a>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* إحصائيات */}
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+        <Card className="border-0 shadow-sm">
+          <CardContent className="p-4 flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center">
+              <Users className="w-5 h-5 text-blue-600" />
+            </div>
+            <div>
+              <div className="text-xl font-bold text-gray-900">{total}</div>
+              <p className="text-xs text-gray-500">إجمالي</p>
+            </div>
+          </CardContent>
+        </Card>
+        {Object.entries(STATUS_MAP).slice(1, 4).map(([key, val]) => {
+          const count = (stats as any)[key] || 0;
+          const StatusIcon = val.icon;
+          return (
+            <Card key={key} className="border-0 shadow-sm">
+              <CardContent className="p-4 flex items-center gap-3">
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${val.bg.split(" ")[0]}`}>
+                  <StatusIcon className={`w-5 h-5 ${val.bg.split(" ")[1]}`} />
+                </div>
+                <div>
+                  <div className="text-xl font-bold text-gray-900">{count}</div>
+                  <p className="text-xs text-gray-500">{val.label}</p>
+                </div>
+              </CardContent>
+            </Card>
+          );
+        })}
+      </div>
+
+      {/* بحث وفلترة */}
+      <Card className="border-0 shadow-sm">
+        <CardContent className="p-4">
+          <div className="flex flex-col sm:flex-row gap-3">
+            <div className="relative flex-1">
+              <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="بحث بالاسم أو الوظيفة..."
+                className="w-full pr-10 pl-4 py-2.5 rounded-xl bg-gray-50 border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20" />
+            </div>
+            <div className="flex gap-2 flex-wrap">
+              <Button variant={!statusFilter ? "default" : "outline"} size="sm" onClick={() => setStatusFilter(undefined)}>الكل</Button>
+              {Object.entries(STATUS_MAP).map(([key, val]) => (
+                <Button key={key} variant={statusFilter === key ? "default" : "outline"} size="sm"
+                  onClick={() => setStatusFilter(key)}>{val.label}</Button>
+              ))}
+            </div>
           </div>
-        ) : filteredItems.length === 0 ? (
-          <div className="text-center py-16">
-            <FileText className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-            <p className="text-gray-500">لا توجد ملفات إنجاز</p>
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {filteredItems.map((item) => {
-              const statusInfo = STATUS_MAP[item.status] || STATUS_MAP.draft;
-              const StatusIcon = statusInfo.icon;
-              return (
-                <Card key={item.id} className="border-0 shadow-sm hover:shadow-md transition-shadow cursor-pointer"
-                  onClick={() => setSelectedPortfolioId(item.id)}>
-                  <CardContent className="p-4">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-4">
-                        <div className="w-11 h-11 rounded-xl bg-gray-100 flex items-center justify-center">
-                          <FileText className="w-5 h-5 text-gray-500" />
-                        </div>
-                        <div>
-                          <h3 className="font-bold text-gray-900 text-sm">{item.userName || "بدون اسم"}</h3>
-                          <div className="flex items-center gap-3 text-xs text-gray-500 mt-0.5">
-                            <span>{JOB_TITLES[item.jobId] || item.jobTitle}</span>
-                            <span>·</span>
-                            <span>{item.userEmail || "—"}</span>
-                          </div>
-                        </div>
+        </CardContent>
+      </Card>
+
+      {/* قائمة الملفات */}
+      {isLoading ? (
+        <div className="text-center py-16">
+          <Loader2 className="w-8 h-8 animate-spin text-emerald-600 mx-auto mb-3" />
+          <p className="text-sm text-gray-500">جاري التحميل...</p>
+        </div>
+      ) : filteredItems.length === 0 ? (
+        <div className="text-center py-16">
+          <FileText className="w-12 h-12 text-gray-300 mx-auto mb-4" />
+          <p className="text-gray-500">لا توجد ملفات إنجاز</p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {filteredItems.map((item: any) => {
+            const statusInfo = STATUS_MAP[item.status] || STATUS_MAP.draft;
+            const StatusIcon = statusInfo.icon;
+            return (
+              <Card key={item.id} className="border-0 shadow-sm hover:shadow-md transition-shadow cursor-pointer"
+                onClick={() => setSelectedPortfolioId(item.id)}>
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                      <div className="w-11 h-11 rounded-xl bg-gray-100 flex items-center justify-center">
+                        <FileText className="w-5 h-5 text-gray-500" />
                       </div>
-                      <div className="flex items-center gap-3">
-                        <div className="text-center hidden sm:block">
-                          <p className="text-sm font-bold text-gray-900">{item.completionPercentage || 0}%</p>
-                          <p className="text-[10px] text-gray-500">اكتمال</p>
-                        </div>
-                        <Badge className={statusInfo.bg}>
-                          <StatusIcon className="w-3 h-3 ml-1" />
-                          {statusInfo.label}
-                        </Badge>
-                        <div className="flex gap-1">
-                          <Button variant="ghost" size="icon" className="h-8 w-8"
-                            onClick={(e) => { e.stopPropagation(); setSelectedPortfolioId(item.id); }}>
-                            <Eye className="w-4 h-4" />
-                          </Button>
-                          {item.status === "submitted" && (
-                            <>
-                              <Button variant="ghost" size="icon" className="h-8 w-8 text-emerald-600"
-                                onClick={(e) => { e.stopPropagation(); setReviewDialog({ id: item.id, action: "approved" }); }}>
-                                <ThumbsUp className="w-4 h-4" />
-                              </Button>
-                              <Button variant="ghost" size="icon" className="h-8 w-8 text-red-500"
-                                onClick={(e) => { e.stopPropagation(); setReviewDialog({ id: item.id, action: "rejected" }); }}>
-                                <ThumbsDown className="w-4 h-4" />
-                              </Button>
-                            </>
-                          )}
+                      <div>
+                        <h3 className="font-bold text-gray-900 text-sm">{item.userName || "بدون اسم"}</h3>
+                        <div className="flex items-center gap-3 text-xs text-gray-500 mt-0.5">
+                          <span>{JOB_TITLES[item.jobId] || item.jobTitle}</span>
+                          <span>·</span>
+                          <span>{item.userEmail || "—"}</span>
                         </div>
                       </div>
                     </div>
-                    {item.reviewNotes && (
-                      <div className="mt-3 mr-15 p-2 bg-gray-50 rounded-lg">
-                        <p className="text-xs text-gray-600"><MessageSquare className="w-3 h-3 inline ml-1" />{item.reviewNotes}</p>
+                    <div className="flex items-center gap-3">
+                      <div className="text-center hidden sm:block">
+                        <p className="text-sm font-bold text-gray-900">{item.completionPercentage || 0}%</p>
+                        <p className="text-[10px] text-gray-500">اكتمال</p>
                       </div>
-                    )}
-                  </CardContent>
-                </Card>
-              );
-            })}
-          </div>
-        )}
+                      <Badge className={statusInfo.bg}>
+                        <StatusIcon className="w-3 h-3 ml-1" />
+                        {statusInfo.label}
+                      </Badge>
+                      <div className="flex gap-1">
+                        <Button variant="ghost" size="icon" className="h-8 w-8"
+                          onClick={(e) => { e.stopPropagation(); setSelectedPortfolioId(item.id); }}>
+                          <Eye className="w-4 h-4" />
+                        </Button>
+                        {item.status === "submitted" && (
+                          <>
+                            <Button variant="ghost" size="icon" className="h-8 w-8 text-emerald-600"
+                              onClick={(e) => { e.stopPropagation(); setReviewDialog({ id: item.id, action: "approved" }); }}>
+                              <ThumbsUp className="w-4 h-4" />
+                            </Button>
+                            <Button variant="ghost" size="icon" className="h-8 w-8 text-red-500"
+                              onClick={(e) => { e.stopPropagation(); setReviewDialog({ id: item.id, action: "rejected" }); }}>
+                              <ThumbsDown className="w-4 h-4" />
+                            </Button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  {item.reviewNotes && (
+                    <div className="mt-3 mr-15 p-2 bg-gray-50 rounded-lg">
+                      <p className="text-xs text-gray-600"><MessageSquare className="w-3 h-3 inline ml-1" />{item.reviewNotes}</p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+      )}
 
-        {/* Pagination */}
-        {total > 20 && (
-          <div className="flex items-center justify-center gap-2 mt-6">
-            <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage(p => p - 1)}>السابق</Button>
-            <span className="text-sm text-gray-500">صفحة {page} من {Math.ceil(total / 20)}</span>
-            <Button variant="outline" size="sm" disabled={page >= Math.ceil(total / 20)} onClick={() => setPage(p => p + 1)}>التالي</Button>
-          </div>
-        )}
-      </div>
+      {/* Pagination */}
+      {total > 20 && (
+        <div className="flex items-center justify-center gap-2 mt-6">
+          <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage(p => p - 1)}>السابق</Button>
+          <span className="text-sm text-gray-500">صفحة {page} من {Math.ceil(total / 20)}</span>
+          <Button variant="outline" size="sm" disabled={page >= Math.ceil(total / 20)} onClick={() => setPage(p => p + 1)}>التالي</Button>
+        </div>
+      )}
 
       {/* Review Dialog */}
       <Dialog open={!!reviewDialog} onOpenChange={() => setReviewDialog(null)}>
@@ -457,18 +570,13 @@ export default function AdminDashboard() {
           </DialogHeader>
           <div className="py-4">
             <label className="block text-sm font-medium text-gray-700 mb-2">ملاحظات المراجعة (اختياري)</label>
-            <textarea
-              value={reviewNotes}
-              onChange={(e) => setReviewNotes(e.target.value)}
-              placeholder="أضف ملاحظاتك هنا..."
-              rows={3}
-              className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
-            />
+            <textarea value={reviewNotes} onChange={(e) => setReviewNotes(e.target.value)}
+              placeholder="أضف ملاحظاتك هنا..." rows={3}
+              className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-emerald-500/20" />
           </div>
           <DialogFooter className="gap-2">
             <Button variant="outline" onClick={() => setReviewDialog(null)}>إلغاء</Button>
-            <Button
-              onClick={() => handleReview(reviewDialog?.action || "reviewed")}
+            <Button onClick={() => handleReview(reviewDialog?.action || "reviewed")}
               disabled={reviewMutation.isPending}
               className={reviewDialog?.action === "approved" ? "bg-emerald-600 hover:bg-emerald-700" : "bg-red-600 hover:bg-red-700"}>
               {reviewMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin ml-2" /> : null}
@@ -477,6 +585,203 @@ export default function AdminDashboard() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+// ─── مكون الإعدادات ────────────────────────────
+function SettingsPanel() {
+  return (
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-xl font-bold text-gray-900" style={{ fontFamily: "'Tajawal', sans-serif" }}>الإعدادات</h2>
+        <p className="text-sm text-gray-500 mt-1">إعدادات النظام العامة</p>
+      </div>
+
+      <Card className="border-0 shadow-sm">
+        <CardHeader>
+          <CardTitle className="text-sm flex items-center gap-2">
+            <Settings className="w-4 h-4 text-gray-500" />
+            إعدادات عامة
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="bg-blue-50 rounded-xl p-4 border border-blue-100">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="w-5 h-5 text-blue-500 mt-0.5 shrink-0" />
+              <div>
+                <p className="text-sm font-medium text-blue-800">معلومات النظام</p>
+                <p className="text-xs text-blue-600 mt-1">
+                  النظام يدعم تعدد المستخدمين مع فصل كامل للبيانات. كل مستخدم يرى بياناته فقط.
+                  المدير يمكنه مراجعة جميع الملفات واعتمادها أو رفضها.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="bg-gray-50 rounded-xl p-4">
+              <h4 className="text-sm font-bold text-gray-900 mb-2">صلاحيات المستخدمين</h4>
+              <ul className="space-y-2 text-xs text-gray-600">
+                <li className="flex items-center gap-2"><CheckCircle className="w-3 h-3 text-emerald-500" />رفع وإدارة الشواهد</li>
+                <li className="flex items-center gap-2"><CheckCircle className="w-3 h-3 text-emerald-500" />تصدير PDF بقوالب متعددة</li>
+                <li className="flex items-center gap-2"><CheckCircle className="w-3 h-3 text-emerald-500" />مشاركة الملف برابط</li>
+                <li className="flex items-center gap-2"><CheckCircle className="w-3 h-3 text-emerald-500" />التصنيف الذكي بالذكاء الاصطناعي</li>
+              </ul>
+            </div>
+            <div className="bg-gray-50 rounded-xl p-4">
+              <h4 className="text-sm font-bold text-gray-900 mb-2">صلاحيات المدير</h4>
+              <ul className="space-y-2 text-xs text-gray-600">
+                <li className="flex items-center gap-2"><CheckCircle className="w-3 h-3 text-emerald-500" />مراجعة جميع الملفات</li>
+                <li className="flex items-center gap-2"><CheckCircle className="w-3 h-3 text-emerald-500" />اعتماد أو رفض الملفات</li>
+                <li className="flex items-center gap-2"><CheckCircle className="w-3 h-3 text-emerald-500" />إدارة القوالب والثيمات</li>
+                <li className="flex items-center gap-2"><CheckCircle className="w-3 h-3 text-emerald-500" />عرض إحصائيات النظام</li>
+              </ul>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+// ─── المكون الرئيسي ────────────────────────────
+export default function AdminDashboard() {
+  const [, navigate] = useLocation();
+  const { user, loading: authLoading } = useAuth();
+  const [activeTab, setActiveTab] = useState<AdminTab>("portfolios");
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50" dir="rtl">
+        <Loader2 className="w-8 h-8 animate-spin text-emerald-600" />
+      </div>
+    );
+  }
+
+  if (!user || user.role !== "admin") {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4" dir="rtl">
+        <Card className="w-full max-w-md shadow-xl border-0">
+          <CardContent className="p-8 text-center">
+            <ShieldCheck className="w-16 h-16 text-red-400 mx-auto mb-4" />
+            <h1 className="text-xl font-bold text-gray-900 mb-2" style={{ fontFamily: "'Tajawal', sans-serif" }}>
+              صلاحية غير كافية
+            </h1>
+            <p className="text-sm text-gray-500 mb-6">هذه الصفحة متاحة للمديرين فقط</p>
+            <Button onClick={() => navigate("/")} className="bg-emerald-600 hover:bg-emerald-700">العودة للرئيسية</Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  const TABS: { id: AdminTab; label: string; icon: any; description: string }[] = [
+    { id: "portfolios", label: "ملفات الإنجاز", icon: FileText, description: "مراجعة واعتماد الملفات" },
+    { id: "templates", label: "القوالب", icon: Palette, description: "إدارة قوالب PDF" },
+    { id: "settings", label: "الإعدادات", icon: Settings, description: "إعدادات النظام" },
+  ];
+
+  return (
+    <div className="min-h-screen bg-slate-50 flex" dir="rtl">
+      {/* Mobile sidebar overlay */}
+      {mobileSidebarOpen && (
+        <div className="fixed inset-0 bg-black/30 z-40 lg:hidden" onClick={() => setMobileSidebarOpen(false)} />
+      )}
+
+      {/* Sidebar */}
+      <aside className={`fixed top-0 right-0 h-full bg-white border-l border-gray-200 z-50 transition-all duration-300 flex flex-col
+        ${mobileSidebarOpen ? "translate-x-0" : "translate-x-full lg:translate-x-0"}
+        ${sidebarCollapsed ? "w-16" : "w-64"}`}>
+        
+        {/* Logo */}
+        <div className="p-4 border-b border-gray-100 flex items-center justify-between">
+          {!sidebarCollapsed && (
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-emerald-600 flex items-center justify-center">
+                <ShieldCheck className="w-5 h-5 text-white" />
+              </div>
+              <div>
+                <h1 className="text-sm font-bold text-gray-900" style={{ fontFamily: "'Tajawal', sans-serif" }}>لوحة الإدارة</h1>
+                <p className="text-[10px] text-gray-500">SERS Admin</p>
+              </div>
+            </div>
+          )}
+          <button onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+            className="hidden lg:flex w-8 h-8 rounded-lg hover:bg-gray-100 items-center justify-center text-gray-400">
+            {sidebarCollapsed ? <ChevronLeft className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+          </button>
+          <button onClick={() => setMobileSidebarOpen(false)} className="lg:hidden text-gray-400">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Navigation */}
+        <nav className="flex-1 p-2 space-y-1">
+          {TABS.map((tab) => {
+            const Icon = tab.icon;
+            const isActive = activeTab === tab.id;
+            return (
+              <button key={tab.id}
+                onClick={() => { setActiveTab(tab.id); setMobileSidebarOpen(false); }}
+                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all
+                  ${isActive ? "bg-emerald-50 text-emerald-700 font-semibold" : "text-gray-600 hover:bg-gray-50"}
+                  ${sidebarCollapsed ? "justify-center" : ""}`}
+                title={sidebarCollapsed ? tab.label : undefined}>
+                <Icon className={`w-5 h-5 shrink-0 ${isActive ? "text-emerald-600" : "text-gray-400"}`} />
+                {!sidebarCollapsed && (
+                  <div className="text-right flex-1">
+                    <span className="block">{tab.label}</span>
+                    <span className="block text-[10px] text-gray-400 font-normal">{tab.description}</span>
+                  </div>
+                )}
+              </button>
+            );
+          })}
+        </nav>
+
+        {/* Footer */}
+        <div className="p-3 border-t border-gray-100">
+          <button onClick={() => navigate("/")}
+            className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-gray-500 hover:bg-gray-50 transition-all
+              ${sidebarCollapsed ? "justify-center" : ""}`}>
+            <ArrowLeft className="w-4 h-4" />
+            {!sidebarCollapsed && <span>العودة للموقع</span>}
+          </button>
+        </div>
+      </aside>
+
+      {/* Main content */}
+      <main className={`flex-1 min-h-screen transition-all duration-300 ${sidebarCollapsed ? "lg:mr-16" : "lg:mr-64"}`}>
+        {/* Top bar */}
+        <header className="sticky top-0 z-30 bg-white/80 backdrop-blur-md border-b border-gray-100">
+          <div className="flex items-center justify-between px-6 py-3">
+            <div className="flex items-center gap-3">
+              <button onClick={() => setMobileSidebarOpen(true)} className="lg:hidden text-gray-600">
+                <Menu className="w-5 h-5" />
+              </button>
+              <h2 className="text-lg font-bold text-gray-900" style={{ fontFamily: "'Tajawal', sans-serif" }}>
+                {TABS.find(t => t.id === activeTab)?.label}
+              </h2>
+            </div>
+            <div className="flex items-center gap-2">
+              <Badge variant="secondary" className="gap-1.5">
+                <ShieldCheck className="w-3.5 h-3.5" />
+                {user.name || "مدير"}
+              </Badge>
+            </div>
+          </div>
+        </header>
+
+        {/* Content */}
+        <div className="p-6">
+          {activeTab === "portfolios" && <PortfoliosPanel />}
+          {activeTab === "templates" && <TemplatesPanel />}
+          {activeTab === "settings" && <SettingsPanel />}
+        </div>
+      </main>
     </div>
   );
 }

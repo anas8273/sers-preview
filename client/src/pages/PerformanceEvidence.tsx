@@ -267,6 +267,28 @@ export default function PerformanceEvidence() {
   const [step, setStep] = useState<"select" | "dashboard" | "criterion-detail" | "final-review" | "preview">("select");
   const [selectedJob, setSelectedJob] = useState<typeof JOB_TYPES[0] | null>(null);
   const [selectedTheme, setSelectedTheme] = useState(THEMES[0]);
+  // جلب القوالب من قاعدة البيانات
+  const { data: dbTemplates } = trpc.templates.list.useQuery(undefined, { staleTime: 60000 });
+  // دمج القوالب المحلية مع قوالب DB
+  const allThemes = useMemo(() => {
+    const local = [...THEMES];
+    if (dbTemplates && dbTemplates.length > 0) {
+      const dbMapped = dbTemplates.map((t: any) => ({
+        id: `db-${t.id}`,
+        name: t.name,
+        headerBg: t.headerBg,
+        headerText: t.headerText,
+        accent: t.accent,
+        borderColor: t.borderColor,
+        bodyBg: t.bodyBg || '#ffffff',
+        fontFamily: t.fontFamily || "'Cairo', 'Tajawal', sans-serif",
+        coverImageUrl: t.coverImageUrl,
+        logoUrl: t.logoUrl,
+      }));
+      return [...local, ...dbMapped];
+    }
+    return local;
+  }, [dbTemplates]);
   const [portfolioId, setPortfolioId] = useState<number | null>(null);
   const [currentCriterionIndex, setCurrentCriterionIndex] = useState(0);
   const [expandedSubEvidence, setExpandedSubEvidence] = useState<string | null>(null);
@@ -2544,9 +2566,12 @@ export default function PerformanceEvidence() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex flex-wrap gap-2">
-                {THEMES.map((t) => (
+                {allThemes.map((t) => (
                   <Button key={t.id} variant={selectedTheme.id === t.id ? "default" : "outline"} size="sm"
-                    onClick={() => setSelectedTheme(t)}>{t.name}</Button>
+                    onClick={() => setSelectedTheme(t)}>
+                    {t.id.startsWith('db-') && <span className="inline-block w-2 h-2 rounded-full ml-1" style={{ backgroundColor: t.accent }} />}
+                    {t.name}
+                  </Button>
                 ))}
               </div>
               {/* خيارات الباركود */}
