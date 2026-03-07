@@ -451,4 +451,10 @@
 
 ### اختبارات
 - [x] تحديث الاختبارات لتغطي التغييرات الجديدة (176 اختبار ناجح عبر 7 ملفات)
-- [ ] حفظ checkpoint
+- [x] حفظ checkpoint (3193f760)
+
+## 64. إصلاح خطأ تصدير PDF - ألوان oklch غير مدعومة
+- [x] إصلاح خطأ html2canvas: "Attempting to parse an unsupported color function oklch"
+- [x] تحويل ألوان oklch إلى RGB/HSL قبل التصدير
+- [x] اختبار التصدير بعد الإصلاح (176 اختبار ناجح)
+- [x] حفظ checkpoint

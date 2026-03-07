@@ -21,6 +21,131 @@ export const DEFAULT_TEMPLATE: PdfTemplate = {
   fontFamily: "Tajawal",
 };
 
+/**
+ * تحويل جميع ألوان oklch في العنصر إلى RGB قبل التصدير
+ * html2canvas لا يدعم oklch - يجب تحويلها إلى ألوان مدعومة
+ */
+function convertOklchToRgb(element: HTMLElement): (() => void) {
+  const originalStyles: { el: HTMLElement; prop: string; value: string }[] = [];
+
+  // الحصول على جميع العناصر داخل الحاوية
+  const allElements = [element, ...Array.from(element.querySelectorAll("*"))] as HTMLElement[];
+
+  // خصائص CSS التي قد تحتوي على ألوان
+  const colorProps = [
+    "color",
+    "backgroundColor",
+    "borderColor",
+    "borderTopColor",
+    "borderRightColor",
+    "borderBottomColor",
+    "borderLeftColor",
+    "outlineColor",
+    "textDecorationColor",
+    "boxShadow",
+    "caretColor",
+  ];
+
+  for (const el of allElements) {
+    const computed = window.getComputedStyle(el);
+    for (const prop of colorProps) {
+      const value = computed.getPropertyValue(
+        prop.replace(/([A-Z])/g, "-$1").toLowerCase()
+      );
+      if (value && value.includes("oklch")) {
+        // حفظ القيمة الأصلية
+        const inlineProp = prop as keyof CSSStyleDeclaration;
+        originalStyles.push({
+          el,
+          prop: prop,
+          value: (el.style as any)[prop] || "",
+        });
+
+        // تحويل oklch إلى RGB باستخدام canvas
+        const rgb = oklchToRgbString(value);
+        if (rgb) {
+          (el.style as any)[prop] = rgb;
+        }
+      }
+    }
+  }
+
+  // أيضاً تحويل CSS variables في :root التي تحتوي على oklch
+  const rootEl = document.documentElement;
+  const rootComputed = window.getComputedStyle(rootEl);
+  const cssVarOverrides: { name: string; original: string }[] = [];
+
+  // الحصول على جميع CSS variables المستخدمة
+  const cssVarNames = [
+    "--background", "--foreground", "--card", "--card-foreground",
+    "--popover", "--popover-foreground", "--primary", "--primary-foreground",
+    "--secondary", "--secondary-foreground", "--muted", "--muted-foreground",
+    "--accent", "--accent-foreground", "--destructive", "--destructive-foreground",
+    "--border", "--input", "--ring",
+    "--sidebar", "--sidebar-foreground", "--sidebar-primary", "--sidebar-primary-foreground",
+    "--sidebar-accent", "--sidebar-accent-foreground", "--sidebar-border", "--sidebar-ring",
+    "--chart-1", "--chart-2", "--chart-3", "--chart-4", "--chart-5",
+  ];
+
+  for (const varName of cssVarNames) {
+    const val = rootComputed.getPropertyValue(varName).trim();
+    if (val && val.includes("oklch")) {
+      const rgb = oklchToRgbString(val);
+      if (rgb) {
+        cssVarOverrides.push({ name: varName, original: rootEl.style.getPropertyValue(varName) });
+        rootEl.style.setProperty(varName, rgb);
+      }
+    }
+  }
+
+  // إرجاع دالة لاستعادة القيم الأصلية
+  return () => {
+    for (const { el, prop, value } of originalStyles) {
+      (el.style as any)[prop] = value;
+    }
+    for (const { name, original } of cssVarOverrides) {
+      if (original) {
+        rootEl.style.setProperty(name, original);
+      } else {
+        rootEl.style.removeProperty(name);
+      }
+    }
+  };
+}
+
+/**
+ * تحويل قيمة oklch إلى سلسلة RGB
+ * يستخدم canvas 2D context لتحويل الألوان
+ */
+function oklchToRgbString(oklchValue: string): string | null {
+  try {
+    // إنشاء canvas مؤقت لتحويل اللون
+    const canvas = document.createElement("canvas");
+    canvas.width = 1;
+    canvas.height = 1;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return null;
+
+    // استخدام fillStyle لتحويل اللون
+    ctx.fillStyle = oklchValue;
+    ctx.fillRect(0, 0, 1, 1);
+
+    // قراءة اللون الناتج كـ RGB
+    const imageData = ctx.getImageData(0, 0, 1, 1);
+    const r = imageData.data[0];
+    const g = imageData.data[1];
+    const b = imageData.data[2];
+    const a = imageData.data[3];
+
+    if (a < 255) {
+      return `rgba(${r}, ${g}, ${b}, ${(a / 255).toFixed(3)})`;
+    }
+    return `rgb(${r}, ${g}, ${b})`;
+  } catch {
+    return null;
+  }
+}
+
 export async function exportToPDF(elementId: string, filename: string = "document.pdf") {
   const element = document.getElementById(elementId);
   if (!element) return;
@@ -29,6 +154,12 @@ export async function exportToPDF(elementId: string, filename: string = "documen
     // إخفاء الأزرار والعناصر التفاعلية أثناء التصدير
     const buttons = element.querySelectorAll('button, [data-no-print]');
     buttons.forEach(btn => (btn as HTMLElement).style.display = 'none');
+
+    // تحويل ألوان oklch إلى RGB قبل html2canvas
+    const restoreColors = convertOklchToRgb(element);
+
+    // انتظار قليل لتطبيق التغييرات
+    await new Promise(resolve => setTimeout(resolve, 50));
 
     const canvas = await html2canvas(element, {
       scale: 2,
@@ -39,6 +170,9 @@ export async function exportToPDF(elementId: string, filename: string = "documen
       windowWidth: element.scrollWidth,
       windowHeight: element.scrollHeight,
     });
+
+    // استعادة الألوان الأصلية
+    restoreColors();
 
     // إعادة إظهار الأزرار
     buttons.forEach(btn => (btn as HTMLElement).style.display = '');
@@ -97,6 +231,7 @@ export async function exportToPDF(elementId: string, filename: string = "documen
     pdf.save(filename);
   } catch (err) {
     console.error("PDF export error:", err);
+    throw err;
   }
 }
 
