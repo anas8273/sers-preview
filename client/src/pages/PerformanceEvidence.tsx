@@ -64,7 +64,7 @@ interface Criterion { id: string; title: string; maxScore: number; description: 
 interface EvidenceItem {
   id: string; subEvidenceId: string; type: EvidenceType; text: string; link: string;
   fileData: string | null; fileName: string; displayAs: "image" | "qr"; formData?: Record<string, string>;
-  comment?: string; priority?: EvidencePriority; keywords?: string[];
+  comment?: string; priority?: EvidencePriority; keywords?: string[]; showBarcode?: boolean;
 }
 interface CriterionData { score: number; notes: string; evidences: EvidenceItem[]; customSubEvidences: SubEvidence[]; }
 
@@ -193,7 +193,7 @@ function createEmptyEvidence(subEvidenceId: string = ""): EvidenceItem {
     id: `ev_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
     subEvidenceId, type: "text", text: "", link: "",
     fileData: null, fileName: "", displayAs: "image", formData: {},
-    priority: "essential", keywords: [],
+    priority: "essential", keywords: [], showBarcode: true,
   };
 }
 
@@ -273,6 +273,9 @@ export default function PerformanceEvidence() {
   const [isExporting, setIsExporting] = useState(false);
   const [activeTab, setActiveTab] = useState("criteria");
   const [stateRestored, setStateRestored] = useState(false);
+
+  // Lightbox state
+  const [lightboxImage, setLightboxImage] = useState<string | null>(null);
 
   // AI State
   const [aiLoading, setAiLoading] = useState<string | null>(null);
@@ -1081,7 +1084,7 @@ export default function PerformanceEvidence() {
   const currentCriterion = allCriteria[currentCriterionIndex];
 
   // ===== Render Evidence Item =====
-  // ===== مكون عرض ملف الشاهد (يدعم IndexedDB references) =====
+  // ===== مكون عرض ملف الشاهد (يدعم IndexedDB references) مع lightbox =====
   const EvidenceFilePreview = ({ ev, criterionId }: { ev: EvidenceItem; criterionId: string }) => {
     const [resolvedData, setResolvedData] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
@@ -1116,7 +1119,17 @@ export default function PerformanceEvidence() {
     return (
       <div className="mt-2">
         {ev.type === 'image' && ev.displayAs === 'image' && (
-          <img src={displayData.startsWith('idb://') ? '' : displayData} alt="" className="max-h-48 rounded-lg border border-border" />
+          <div className="relative group/img cursor-pointer" onClick={() => setLightboxImage(displayData.startsWith('idb://') ? '' : displayData)}>
+            <img src={displayData.startsWith('idb://') ? '' : displayData} alt="" className="max-h-56 rounded-xl border border-border shadow-sm transition-all group-hover/img:shadow-md group-hover/img:scale-[1.01]" />
+            <div className="absolute inset-0 bg-black/0 group-hover/img:bg-black/10 rounded-xl transition-all flex items-center justify-center">
+              <div className="opacity-0 group-hover/img:opacity-100 transition-opacity bg-white/90 dark:bg-black/70 rounded-full p-2 shadow-lg">
+                <Eye className="w-5 h-5 text-foreground" />
+              </div>
+            </div>
+            <div className="absolute bottom-2 left-2 opacity-0 group-hover/img:opacity-100 transition-opacity">
+              <span className="text-[9px] bg-black/60 text-white px-2 py-0.5 rounded-full">{ev.fileName}</span>
+            </div>
+          </div>
         )}
         {ev.type === 'image' && ev.displayAs === 'qr' && (
           <div className="flex items-center gap-3 bg-violet-50 dark:bg-violet-950/30 p-3 rounded-lg">
@@ -1125,15 +1138,27 @@ export default function PerformanceEvidence() {
           </div>
         )}
         {ev.type === 'video' && (
-          <div className="flex items-center gap-3 bg-red-50 dark:bg-red-950/30 p-3 rounded-lg">
-            <Video className="w-8 h-8 text-red-500" />
-            <div><p className="text-sm font-medium">{ev.fileName}</p><p className="text-xs text-red-500">سيتحول لباركود QR عند الطباعة</p></div>
+          <div className="flex items-center gap-3 bg-red-50 dark:bg-red-950/30 p-4 rounded-xl border border-red-200/30">
+            <div className="w-12 h-12 rounded-xl bg-red-100 dark:bg-red-900/50 flex items-center justify-center shrink-0">
+              <Video className="w-6 h-6 text-red-500" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-foreground truncate">{ev.fileName}</p>
+              <p className="text-[10px] text-red-500 mt-0.5">سيتحول لباركود QR عند الطباعة</p>
+            </div>
           </div>
         )}
         {ev.type === 'file' && (
-          <div className="flex items-center gap-3 bg-orange-50 dark:bg-orange-950/30 p-3 rounded-lg">
-            <FileText className="w-8 h-8 text-orange-500" />
-            <div><p className="text-sm font-medium">{ev.fileName}</p><p className="text-xs text-orange-500">سيتحول لباركود QR عند الطباعة</p></div>
+          <div className="flex items-center gap-3 bg-orange-50 dark:bg-orange-950/30 p-4 rounded-xl border border-orange-200/30">
+            <div className="w-12 h-12 rounded-xl bg-orange-100 dark:bg-orange-900/50 flex items-center justify-center shrink-0">
+              <FileText className="w-6 h-6 text-orange-500" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-foreground truncate">{ev.fileName}</p>
+              <p className="text-[10px] text-orange-500 mt-0.5">
+                {ev.fileName?.endsWith('.pdf') ? 'ملف PDF' : ev.fileName?.endsWith('.docx') || ev.fileName?.endsWith('.doc') ? 'مستند Word' : ev.fileName?.endsWith('.xlsx') || ev.fileName?.endsWith('.xls') ? 'جدول Excel' : ev.fileName?.endsWith('.pptx') || ev.fileName?.endsWith('.ppt') ? 'عرض تقديمي' : 'ملف مرفق'}
+              </p>
+            </div>
           </div>
         )}
       </div>
@@ -1175,6 +1200,16 @@ export default function PerformanceEvidence() {
               <option key={k} value={k}>{v.icon} {v.label}</option>
             ))}
           </select>
+          {/* زر التحكم بالباركود */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button type="button" onClick={(e) => { e.stopPropagation(); updateEvidence(criterionId, ev.id, { showBarcode: !(ev.showBarcode !== false) }); }}
+                className={`p-1 rounded-full text-[10px] transition-colors ${ev.showBarcode !== false ? 'bg-violet-100 dark:bg-violet-950/30 text-violet-600' : 'bg-gray-100 dark:bg-gray-800 text-gray-400'}`}>
+                <QrCode className="w-3 h-3" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>{ev.showBarcode !== false ? 'الباركود مفعّل - اضغط لتعطيل' : 'الباركود معطّل - اضغط لتفعيل'}</TooltipContent>
+          </Tooltip>
         </div>
         <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
           {ev.type === 'image' && (
@@ -1747,6 +1782,54 @@ export default function PerformanceEvidence() {
                               {status === "partial" && <AlertTriangle className="w-3 h-3 text-amber-500" />}
                               {status === "missing" && <XCircle className="w-3 h-3 text-red-400" />}
                             </div>
+                            {/* Thumbnails مصغرة للشواهد */}
+                            {evidenceCount > 0 && (() => {
+                              const imageEvs = data.evidences.filter(e => e.type === 'image' && e.fileData && !e.fileData.startsWith('idb://'));
+                              const fileEvs = data.evidences.filter(e => e.type === 'file');
+                              const textEvs = data.evidences.filter(e => e.type === 'text');
+                              const linkEvs = data.evidences.filter(e => e.type === 'link');
+                              const videoEvs = data.evidences.filter(e => e.type === 'video');
+                              return (
+                                <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+                                  {/* مصغرات الصور */}
+                                  {imageEvs.slice(0, 3).map((img, idx) => (
+                                    <div key={idx} className="w-8 h-8 sm:w-9 sm:h-9 rounded-lg overflow-hidden border border-border/50 shrink-0">
+                                      <img src={img.fileData!} alt="" className="w-full h-full object-cover" />
+                                    </div>
+                                  ))}
+                                  {imageEvs.length > 3 && (
+                                    <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-lg bg-muted/80 border border-border/50 flex items-center justify-center shrink-0">
+                                      <span className="text-[9px] font-bold text-muted-foreground">+{imageEvs.length - 3}</span>
+                                    </div>
+                                  )}
+                                  {/* أيقونات الأنواع الأخرى */}
+                                  {fileEvs.length > 0 && (
+                                    <div className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-orange-50 dark:bg-orange-950/30 border border-orange-200/30">
+                                      <FileText className="w-3 h-3 text-orange-500" />
+                                      <span className="text-[9px] font-medium text-orange-600">{fileEvs.length}</span>
+                                    </div>
+                                  )}
+                                  {textEvs.length > 0 && (
+                                    <div className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-blue-50 dark:bg-blue-950/30 border border-blue-200/30">
+                                      <Type className="w-3 h-3 text-blue-500" />
+                                      <span className="text-[9px] font-medium text-blue-600">{textEvs.length}</span>
+                                    </div>
+                                  )}
+                                  {linkEvs.length > 0 && (
+                                    <div className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-purple-50 dark:bg-purple-950/30 border border-purple-200/30">
+                                      <LinkIcon className="w-3 h-3 text-purple-500" />
+                                      <span className="text-[9px] font-medium text-purple-600">{linkEvs.length}</span>
+                                    </div>
+                                  )}
+                                  {videoEvs.length > 0 && (
+                                    <div className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-red-50 dark:bg-red-950/30 border border-red-200/30">
+                                      <Video className="w-3 h-3 text-red-500" />
+                                      <span className="text-[9px] font-medium text-red-600">{videoEvs.length}</span>
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })()}
                           </div>
 
                           {/* الإحصائيات - Desktop Only */}
@@ -1847,6 +1930,10 @@ export default function PerformanceEvidence() {
     return (
       <div className="min-h-screen bg-background p-3 sm:p-4 md:p-6" dir="rtl">
         <input type="file" ref={fileInputRef} className="hidden" accept="image/*,video/*,.pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx" multiple onChange={handleFileUpload} />
+        {/* Lightbox Overlay */}
+        <AnimatePresence>
+          {lightboxImage && <LightboxOverlay src={lightboxImage} onClose={() => setLightboxImage(null)} />}
+        </AnimatePresence>
         <div className="max-w-4xl mx-auto">
 
           {/* Header - Mobile Optimized */}
@@ -1868,6 +1955,23 @@ export default function PerformanceEvidence() {
           {/* Criterion Header Card - Mobile Optimized */}
           <Card className="mb-4 sm:mb-5">
             <CardContent className="p-3 sm:p-5">
+              {/* Breadcrumb مسار التصنيف */}
+              {isStandardBased && standard && (
+                <div className="flex items-center gap-1.5 text-[10px] sm:text-[11px] text-muted-foreground mb-2.5 sm:mb-3 flex-wrap">
+                  <span className="font-medium" style={{ color: selectedJob?.color }}>{selectedJob?.title}</span>
+                  <ChevronDown className="w-3 h-3 rotate-[-90deg]" />
+                  <span className="font-medium" style={{ color: standard.color }}>معيار {standard.number}: {standard.title}</span>
+                  <ChevronDown className="w-3 h-3 rotate-[-90deg]" />
+                  <span className="text-foreground font-bold">{standard.items.length} بند</span>
+                </div>
+              )}
+              {!isStandardBased && (
+                <div className="flex items-center gap-1.5 text-[10px] sm:text-[11px] text-muted-foreground mb-2.5 sm:mb-3 flex-wrap">
+                  <span className="font-medium" style={{ color: selectedJob?.color }}>{selectedJob?.title}</span>
+                  <ChevronDown className="w-3 h-3 rotate-[-90deg]" />
+                  <span className="text-foreground font-bold">بند {currentCriterionIndex + 1}</span>
+                </div>
+              )}
               {/* Mobile: Stack layout */}
               <div className="flex flex-col gap-3">
                 <div className="flex items-start gap-2.5 sm:gap-3">
@@ -2023,20 +2127,48 @@ export default function PerformanceEvidence() {
                             return true;
                           }).map((ev) => renderEvidenceItem(ev, currentCriterion.id))}
 
-                          {/* Add Evidence Buttons */}
-                          <div className="flex flex-wrap gap-1.5 sm:gap-2">
-                            <Button variant="outline" size="sm" className="gap-1 sm:gap-1.5 border-dashed border-primary/40 text-primary text-[10px] sm:text-xs h-7 sm:h-8 px-2 sm:px-3"
-                              onClick={() => addEvidence(currentCriterion.id, sub.id, "text")}>
-                              <Plus className="w-3 h-3 sm:w-3.5 sm:h-3.5" />شاهد نصي
-                            </Button>
-                            <Button variant="outline" size="sm" className="gap-1 sm:gap-1.5 border-dashed border-blue-400 text-blue-600 text-[10px] sm:text-xs h-7 sm:h-8 px-2 sm:px-3"
-                              onClick={(e) => { e.preventDefault(); e.stopPropagation(); triggerFileUpload(currentCriterion.id, sub.id); }}>
-                              <Upload className="w-3 h-3 sm:w-3.5 sm:h-3.5" /><span className="hidden sm:inline">صورة / ملف / فيديو</span><span className="sm:hidden">ملف</span>
-                            </Button>
-                            <Button variant="outline" size="sm" className="gap-1 sm:gap-1.5 border-dashed border-purple-400 text-purple-600 text-[10px] sm:text-xs h-7 sm:h-8 px-2 sm:px-3"
-                              onClick={() => addEvidence(currentCriterion.id, sub.id, "link")}>
-                              <LinkIcon className="w-3 h-3 sm:w-3.5 sm:h-3.5" />رابط
-                            </Button>
+                          {/* Add Evidence Buttons + Drag & Drop Zone */}
+                          <div className="space-y-2">
+                            {/* Drag & Drop Zone - محسّن */}
+                            <div
+                              className="relative border-2 border-dashed rounded-2xl p-5 sm:p-7 text-center transition-all duration-300 cursor-pointer hover:border-primary/60 hover:bg-gradient-to-br hover:from-primary/5 hover:to-primary/10 group/drop"
+                              style={{ borderColor: 'var(--border)' }}
+                              onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); e.currentTarget.classList.add('border-primary', 'bg-primary/5', 'scale-[1.02]', 'shadow-lg', 'shadow-primary/10'); e.currentTarget.classList.remove('border-border'); }}
+                              onDragLeave={(e) => { e.preventDefault(); e.currentTarget.classList.remove('border-primary', 'bg-primary/5', 'scale-[1.02]', 'shadow-lg', 'shadow-primary/10'); }}
+                              onDrop={(e) => { e.preventDefault(); e.stopPropagation(); e.currentTarget.classList.remove('border-primary', 'bg-primary/5', 'scale-[1.02]', 'shadow-lg', 'shadow-primary/10'); const files = e.dataTransfer.files; if (files.length > 0) { activeUploadRef.current = { criterionId: currentCriterion.id, subEvidenceId: sub.id }; const dt = new DataTransfer(); Array.from(files).forEach(f => dt.items.add(f)); const input = fileInputRef.current; if (input) { input.files = dt.files; input.dispatchEvent(new Event('change', { bubbles: true })); } } }}
+                              onClick={(e) => { e.preventDefault(); e.stopPropagation(); triggerFileUpload(currentCriterion.id, sub.id); }}
+                            >
+                              <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-3 group-hover/drop:bg-primary/20 group-hover/drop:scale-110 transition-all duration-300">
+                                <Upload className="w-5 h-5 sm:w-6 sm:h-6 text-primary/50 group-hover/drop:text-primary/80 transition-colors" />
+                              </div>
+                              <p className="text-xs sm:text-sm font-bold text-muted-foreground group-hover/drop:text-primary transition-colors">اسحب الملفات هنا أو اضغط للرفع</p>
+                              <p className="text-[10px] text-muted-foreground/50 mt-1">يدعم رفع ملفات متعددة دفعة واحدة</p>
+                              <div className="flex items-center justify-center gap-2 sm:gap-3 mt-3">
+                                <span className="flex items-center gap-1 text-[9px] sm:text-[10px] text-muted-foreground/60 bg-muted/50 px-2 py-0.5 rounded-full">
+                                  <Image className="w-3 h-3" />صور
+                                </span>
+                                <span className="flex items-center gap-1 text-[9px] sm:text-[10px] text-muted-foreground/60 bg-muted/50 px-2 py-0.5 rounded-full">
+                                  <FileText className="w-3 h-3" />PDF
+                                </span>
+                                <span className="flex items-center gap-1 text-[9px] sm:text-[10px] text-muted-foreground/60 bg-muted/50 px-2 py-0.5 rounded-full">
+                                  <Video className="w-3 h-3" />فيديو
+                                </span>
+                                <span className="flex items-center gap-1 text-[9px] sm:text-[10px] text-muted-foreground/60 bg-muted/50 px-2 py-0.5 rounded-full">
+                                  <FileText className="w-3 h-3" />Word
+                                </span>
+                              </div>
+                            </div>
+                            {/* Quick Action Buttons */}
+                            <div className="flex flex-wrap gap-1.5 sm:gap-2">
+                              <Button variant="outline" size="sm" className="gap-1 sm:gap-1.5 border-dashed border-primary/40 text-primary text-[10px] sm:text-xs h-7 sm:h-8 px-2 sm:px-3"
+                                onClick={() => addEvidence(currentCriterion.id, sub.id, "text")}>
+                                <Plus className="w-3 h-3 sm:w-3.5 sm:h-3.5" />شاهد نصي
+                              </Button>
+                              <Button variant="outline" size="sm" className="gap-1 sm:gap-1.5 border-dashed border-purple-400 text-purple-600 text-[10px] sm:text-xs h-7 sm:h-8 px-2 sm:px-3"
+                                onClick={() => addEvidence(currentCriterion.id, sub.id, "link")}>
+                                <LinkIcon className="w-3 h-3 sm:w-3.5 sm:h-3.5" />رابط
+                              </Button>
+                            </div>
                           </div>
 
                           {/* AI Assistant */}
@@ -2410,12 +2542,49 @@ export default function PerformanceEvidence() {
             <CardHeader>
               <CardTitle className="text-sm">اختر ثيم التصدير</CardTitle>
             </CardHeader>
-            <CardContent>
+            <CardContent className="space-y-4">
               <div className="flex flex-wrap gap-2">
                 {THEMES.map((t) => (
                   <Button key={t.id} variant={selectedTheme.id === t.id ? "default" : "outline"} size="sm"
                     onClick={() => setSelectedTheme(t)}>{t.name}</Button>
                 ))}
+              </div>
+              {/* خيارات الباركود */}
+              <div className="border-t border-border pt-4">
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="text-sm font-bold text-foreground flex items-center gap-2">
+                    <QrCode className="w-4 h-4 text-primary" />خيارات الباركود
+                  </h4>
+                  <div className="flex gap-2">
+                    <Button variant="outline" size="sm" className="text-xs h-7 gap-1"
+                      onClick={() => {
+                        setCriteriaData(prev => {
+                          const updated = { ...prev };
+                          Object.keys(updated).forEach(k => {
+                            updated[k] = { ...updated[k], evidences: updated[k].evidences.map(e => ({ ...e, showBarcode: true })) };
+                          });
+                          return updated;
+                        });
+                        toast.success('تم تفعيل الباركود لجميع الشواهد');
+                      }}>
+                      <CheckCircle className="w-3 h-3" />تفعيل الكل
+                    </Button>
+                    <Button variant="outline" size="sm" className="text-xs h-7 gap-1"
+                      onClick={() => {
+                        setCriteriaData(prev => {
+                          const updated = { ...prev };
+                          Object.keys(updated).forEach(k => {
+                            updated[k] = { ...updated[k], evidences: updated[k].evidences.map(e => ({ ...e, showBarcode: false })) };
+                          });
+                          return updated;
+                        });
+                        toast.success('تم تعطيل الباركود لجميع الشواهد');
+                      }}>
+                      <XCircle className="w-3 h-3" />تعطيل الكل
+                    </Button>
+                  </div>
+                </div>
+                <p className="text-[10px] text-muted-foreground">يمكنك التحكم في ظهور الباركود لكل شاهد على حدة من صفحة البند، أو تفعيل/تعطيل الكل من هنا</p>
               </div>
             </CardContent>
           </Card>
@@ -2449,17 +2618,34 @@ export default function PerformanceEvidence() {
           </div>
 
           <div id="preview-content" className="bg-white rounded-xl shadow-lg overflow-hidden" style={{ fontFamily: "'Cairo', 'Tajawal', sans-serif" }}>
-            {/* غلاف احترافي */}
-            <div style={{ background: theme.headerBg, color: theme.headerText, padding: '3rem 2rem', textAlign: 'center', position: 'relative' }}>
-              <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, background: 'linear-gradient(135deg, rgba(255,255,255,0.1) 0%, transparent 50%)', pointerEvents: 'none' }} />
-              <div style={{ fontSize: '0.7rem', opacity: 0.7, marginBottom: '0.5rem', letterSpacing: '0.1em' }}>وزارة التعليم - المملكة العربية السعودية</div>
-              {personalInfo.department && <p style={{ fontSize: '0.8rem', opacity: 0.8, marginBottom: '0.25rem' }}>{personalInfo.department}</p>}
-              <h1 style={{ fontSize: '1.75rem', fontWeight: 900, marginBottom: '0.5rem', fontFamily: "'Tajawal', sans-serif" }}>شواهد الأداء الوظيفي</h1>
-              <p style={{ fontSize: '1.1rem', fontWeight: 700 }}>{selectedJob?.title}</p>
-              <p style={{ fontSize: '0.8rem', opacity: 0.8, marginTop: '0.5rem' }}>{personalInfo.year} - {personalInfo.semester}</p>
-              <div style={{ marginTop: '1rem', display: 'flex', justifyContent: 'center', gap: '1rem', fontSize: '0.75rem', opacity: 0.9 }}>
-                <span>الاسم: {personalInfo.name || '—'}</span>
-                <span>| المدرسة: {personalInfo.school || '—'}</span>
+            {/* غلاف احترافي محسّن */}
+            <div style={{ background: theme.headerBg, color: theme.headerText, padding: '3.5rem 2.5rem', textAlign: 'center', position: 'relative', overflow: 'hidden' }}>
+              {/* زخارف الخلفية */}
+              <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, background: 'linear-gradient(135deg, rgba(255,255,255,0.12) 0%, transparent 40%, rgba(0,0,0,0.1) 100%)', pointerEvents: 'none' }} />
+              <div style={{ position: 'absolute', top: '-30px', right: '-30px', width: '120px', height: '120px', borderRadius: '50%', background: 'rgba(255,255,255,0.06)', pointerEvents: 'none' }} />
+              <div style={{ position: 'absolute', bottom: '-20px', left: '-20px', width: '80px', height: '80px', borderRadius: '50%', background: 'rgba(255,255,255,0.04)', pointerEvents: 'none' }} />
+              {/* إطار زخرفي */}
+              <div style={{ position: 'absolute', top: '12px', left: '12px', right: '12px', bottom: '12px', border: '1px solid rgba(255,255,255,0.15)', borderRadius: '8px', pointerEvents: 'none' }} />
+              <div style={{ position: 'relative', zIndex: 1 }}>
+                <div style={{ fontSize: '0.65rem', opacity: 0.6, marginBottom: '0.3rem', letterSpacing: '0.15em', textTransform: 'uppercase' }}>المملكة العربية السعودية</div>
+                <div style={{ fontSize: '0.75rem', opacity: 0.7, marginBottom: '0.5rem' }}>وزارة التعليم</div>
+                {personalInfo.department && <p style={{ fontSize: '0.8rem', opacity: 0.85, marginBottom: '0.75rem', lineHeight: 1.6, whiteSpace: 'pre-line' }}>{personalInfo.department}</p>}
+                <div style={{ width: '60px', height: '2px', background: 'rgba(255,255,255,0.3)', margin: '0 auto 1rem' }} />
+                <h1 style={{ fontSize: '2rem', fontWeight: 900, marginBottom: '0.5rem', fontFamily: "'Tajawal', sans-serif", letterSpacing: '-0.01em' }}>شواهد الأداء الوظيفي</h1>
+                <p style={{ fontSize: '1.15rem', fontWeight: 700, opacity: 0.95 }}>{selectedJob?.title}</p>
+                <div style={{ width: '40px', height: '2px', background: 'rgba(255,255,255,0.25)', margin: '0.75rem auto' }} />
+                <p style={{ fontSize: '0.85rem', opacity: 0.8 }}>{personalInfo.year} - {personalInfo.semester}</p>
+                <div style={{ marginTop: '1.5rem', display: 'flex', justifyContent: 'center', gap: '2rem', fontSize: '0.8rem', opacity: 0.9 }}>
+                  <div style={{ textAlign: 'center' }}>
+                    <div style={{ fontSize: '0.6rem', opacity: 0.6, marginBottom: '0.2rem' }}>الاسم</div>
+                    <div style={{ fontWeight: 700 }}>{personalInfo.name || '—'}</div>
+                  </div>
+                  <div style={{ width: '1px', background: 'rgba(255,255,255,0.2)' }} />
+                  <div style={{ textAlign: 'center' }}>
+                    <div style={{ fontSize: '0.6rem', opacity: 0.6, marginBottom: '0.2rem' }}>المدرسة</div>
+                    <div style={{ fontWeight: 700 }}>{personalInfo.school || '—'}</div>
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -2501,9 +2687,12 @@ export default function PerformanceEvidence() {
               </div>
             </div>
 
-            {/* جدول التقييم */}
+            {/* جدول التقييم - محسّن */}
             <div className="p-6">
-              <h2 className="text-sm font-bold mb-3" style={{ color: theme.accent, fontFamily: "'Tajawal', sans-serif" }}>جدول التقييم</h2>
+              <h2 className="text-sm font-bold mb-3 flex items-center gap-2" style={{ color: theme.accent, fontFamily: "'Tajawal', sans-serif" }}>
+                <span style={{ width: '4px', height: '18px', borderRadius: '2px', backgroundColor: theme.accent, display: 'inline-block' }} />
+                جدول التقييم
+              </h2>
               <table className="w-full border-collapse text-sm" style={{ borderColor: theme.borderColor }}>
                 <thead>
                   <tr style={{ background: theme.accent, color: '#fff' }}>
@@ -2511,17 +2700,26 @@ export default function PerformanceEvidence() {
                     <th className="p-2.5 border text-right" style={{ borderColor: theme.borderColor }}>البند</th>
                     <th className="p-2.5 border text-center" style={{ borderColor: theme.borderColor, width: '80px' }}>الدرجة</th>
                     <th className="p-2.5 border text-center" style={{ borderColor: theme.borderColor, width: '80px' }}>الشواهد</th>
+                    <th className="p-2.5 border text-center" style={{ borderColor: theme.borderColor, width: '60px' }}>الحالة</th>
                   </tr>
                 </thead>
                 <tbody>
                   {allCriteria.map((c, i) => {
                     const d = criteriaData[c.id];
+                    const score = d?.score || 0;
+                    const evCount = d?.evidences.length || 0;
+                    const scoreColor = score >= 4 ? '#16A34A' : score >= 2 ? '#CA8A04' : score > 0 ? '#EA580C' : '#9CA3AF';
                     return (
-                      <tr key={c.id} className={i % 2 === 0 ? '' : 'bg-gray-50'}>
-                        <td className="p-2 border text-center" style={{ borderColor: theme.borderColor }}>{i + 1}</td>
+                      <tr key={c.id} style={{ backgroundColor: i % 2 === 0 ? '#fff' : '#f9fafb' }}>
+                        <td className="p-2 border text-center text-xs" style={{ borderColor: theme.borderColor }}>{i + 1}</td>
                         <td className="p-2 border" style={{ borderColor: theme.borderColor }}>{c.title}</td>
-                        <td className="p-2 border text-center font-bold" style={{ borderColor: theme.borderColor }}>{d?.score || 0}/{c.maxScore}</td>
-                        <td className="p-2 border text-center" style={{ borderColor: theme.borderColor }}>{d?.evidences.length || 0}</td>
+                        <td className="p-2 border text-center font-bold" style={{ borderColor: theme.borderColor, color: scoreColor }}>{score}/{c.maxScore}</td>
+                        <td className="p-2 border text-center" style={{ borderColor: theme.borderColor }}>{evCount}</td>
+                        <td className="p-2 border text-center" style={{ borderColor: theme.borderColor }}>
+                          <span style={{ fontSize: '0.65rem', padding: '2px 6px', borderRadius: '9999px', fontWeight: 600, backgroundColor: score >= 4 ? '#dcfce7' : score >= 2 ? '#fef9c3' : score > 0 ? '#ffedd5' : '#f3f4f6', color: scoreColor }}>
+                            {score >= 4 ? 'مكتمل' : score >= 2 ? 'جزئي' : score > 0 ? 'ضعيف' : '—'}
+                          </span>
+                        </td>
                       </tr>
                     );
                   })}
@@ -2529,6 +2727,7 @@ export default function PerformanceEvidence() {
                     <td colSpan={2} className="p-2.5 border text-center font-bold" style={{ borderColor: theme.borderColor }}>المجموع</td>
                     <td className="p-2.5 border text-center font-bold" style={{ borderColor: theme.borderColor }}>{totalScore}/{maxScore}</td>
                     <td className="p-2.5 border text-center font-bold" style={{ borderColor: theme.borderColor }}>{Object.values(criteriaData).reduce((s, d) => s + d.evidences.length, 0)}</td>
+                    <td className="p-2.5 border text-center font-bold" style={{ borderColor: theme.borderColor }}>{percentage}%</td>
                   </tr>
                 </tbody>
               </table>
@@ -2542,16 +2741,22 @@ export default function PerformanceEvidence() {
                 )}
               </div>
 
-              {/* الشواهد مع الأولوية والكلمات المفتاحية */}
+              {/* الشواهد مع الأولوية والكلمات المفتاحية - محسّن */}
               {allCriteria.map((c, i) => {
                 const d = criteriaData[c.id];
                 if (!d || d.evidences.length === 0) return null;
                 return (
-                  <div key={c.id} className="mt-8" style={{ pageBreakInside: 'avoid' }}>
-                    <div className="flex items-center gap-2 mb-3 pb-2 border-b-2" style={{ borderColor: theme.accent }}>
-                      <div className="w-7 h-7 rounded-lg flex items-center justify-center text-white text-xs font-bold" style={{ backgroundColor: theme.accent }}>{i + 1}</div>
-                      <h3 className="font-bold text-sm" style={{ color: theme.accent }}>{c.title}</h3>
-                      <span className="text-[10px] text-gray-400 mr-auto">الدرجة: {d.score}/{c.maxScore} | {d.evidences.length} شاهد</span>
+                  <div key={c.id} className="mt-10" style={{ pageBreakBefore: i > 0 ? 'auto' : undefined, pageBreakInside: 'avoid' }}>
+                    <div className="flex items-center gap-3 mb-4 pb-3" style={{ borderBottom: `3px solid ${theme.accent}` }}>
+                      <div className="w-8 h-8 rounded-lg flex items-center justify-center text-white text-xs font-bold shadow-sm" style={{ backgroundColor: theme.accent }}>{i + 1}</div>
+                      <div className="flex-1">
+                        <h3 className="font-bold text-sm" style={{ color: theme.accent, fontFamily: "'Tajawal', sans-serif" }}>{c.title}</h3>
+                        <div className="flex items-center gap-3 mt-0.5">
+                          <span className="text-[10px] text-gray-500">الدرجة: <strong style={{ color: d.score >= 4 ? '#16A34A' : d.score >= 2 ? '#CA8A04' : '#9CA3AF' }}>{d.score}/{c.maxScore}</strong></span>
+                          <span className="text-[10px] text-gray-400">•</span>
+                          <span className="text-[10px] text-gray-500">{d.evidences.length} شاهد</span>
+                        </div>
+                      </div>
                     </div>
                     <div className="space-y-3">
                       {d.evidences.map((ev, evIdx) => {
@@ -2573,7 +2778,7 @@ export default function PerformanceEvidence() {
                             {ev.type === 'text' && ev.text && <p className="text-sm leading-relaxed">{ev.text}</p>}
                             {ev.type === 'link' && ev.link && (
                               <div className="flex items-center gap-3">
-                                <img src={generateQRDataURL(ev.link)} alt="QR" className="w-20 h-20 rounded" />
+                                {ev.showBarcode !== false && <img src={generateQRDataURL(ev.link)} alt="QR" className="w-20 h-20 rounded" />}
                                 <div>
                                   <span className="text-xs text-gray-500 block">رابط إلكتروني</span>
                                   <span className="text-xs text-blue-600 break-all">{ev.link}</span>
@@ -2584,16 +2789,16 @@ export default function PerformanceEvidence() {
                               ev.displayAs === 'image'
                                 ? <img src={ev.fileData.startsWith('idb://') ? '' : ev.fileData} alt="" className="max-h-48 rounded-lg border border-gray-200" />
                                 : <div className="flex items-center gap-3">
-                                    <img src={generateQRDataURL((ev.fileData.startsWith('idb://') ? ev.fileName || '' : ev.fileData).substring(0, 200))} alt="QR" className="w-20 h-20 rounded" />
+                                    {ev.showBarcode !== false && <img src={generateQRDataURL((ev.fileData.startsWith('idb://') ? ev.fileName || '' : ev.fileData).substring(0, 200))} alt="QR" className="w-20 h-20 rounded" />}
                                     <div>
-                                      <span className="text-xs text-gray-500 block">صورة (باركود)</span>
+                                      <span className="text-xs text-gray-500 block">صورة {ev.showBarcode !== false ? '(باركود)' : ''}</span>
                                       <span className="text-xs text-gray-600">{ev.fileName}</span>
                                     </div>
                                   </div>
                             )}
                             {(ev.type === 'video' || ev.type === 'file') && ev.fileData && (
                               <div className="flex items-center gap-3">
-                                <img src={generateQRDataURL(ev.fileName || 'file')} alt="QR" className="w-20 h-20 rounded" />
+                                {ev.showBarcode !== false && <img src={generateQRDataURL(ev.fileName || 'file')} alt="QR" className="w-20 h-20 rounded" />}
                                 <div>
                                   <span className="text-xs text-gray-500 block">{ev.type === 'video' ? 'فيديو' : 'ملف مرفق'}</span>
                                   <span className="text-xs text-gray-600">{ev.fileName}</span>
@@ -2643,9 +2848,12 @@ export default function PerformanceEvidence() {
                 </div>
               </div>
 
-              {/* تذييل */}
-              <div className="mt-8 pt-4 border-t border-gray-200 text-center text-[9px] text-gray-400">
-                <p>تم إنشاء هذا الملف بواسطة نظام SERS - السجلات التعليمية الذكية</p>
+              {/* تذييل محسّن */}
+              <div className="mt-10 pt-4 border-t-2 text-center" style={{ borderColor: theme.borderColor }}>
+                <div className="flex items-center justify-between text-[9px] text-gray-400">
+                  <span>تم إنشاء هذا الملف بواسطة نظام SERS - السجلات التعليمية الذكية</span>
+                  <span>{personalInfo.name} • {selectedJob?.title} • {personalInfo.year}</span>
+                </div>
               </div>
             </div>
           </div>
@@ -2655,4 +2863,27 @@ export default function PerformanceEvidence() {
   }
 
   return null;
+}
+
+// ===== Lightbox Overlay Component =====
+function LightboxOverlay({ src, onClose }: { src: string; onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4" onClick={onClose}>
+      <motion.div
+        initial={{ opacity: 0, scale: 0.9 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.9 }}
+        className="relative max-w-4xl max-h-[90vh] w-full flex items-center justify-center"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <img src={src} alt="" className="max-w-full max-h-[85vh] rounded-2xl shadow-2xl object-contain" />
+        <button
+          onClick={onClose}
+          className="absolute -top-3 -left-3 w-10 h-10 rounded-full bg-white dark:bg-gray-800 shadow-lg flex items-center justify-center hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+        >
+          <X className="w-5 h-5 text-foreground" />
+        </button>
+      </motion.div>
+    </div>
+  );
 }
