@@ -19,7 +19,7 @@ import { STANDARDS, type Standard, type Indicator } from "@/lib/standards-data";
 import {
   PRINCIPAL_STANDARDS, VICE_PRINCIPAL_STANDARDS, COUNSELOR_STANDARDS,
   HEALTH_COUNSELOR_STANDARDS, ACTIVITY_LEADER_STANDARDS, LAB_TECHNICIAN_STANDARDS,
-  KINDERGARTEN_STANDARDS, SUPERVISOR_STANDARDS, getStandardsForJob,
+  KINDERGARTEN_STANDARDS, SUPERVISOR_STANDARDS, SPECIAL_ED_STANDARDS, getStandardsForJob,
 } from "@/lib/all-jobs-standards";
 import {
   ArrowLeft, ArrowRight, Sparkles, Upload, Plus, Trash2, Save,
@@ -139,14 +139,7 @@ const LIBRARIAN_CRITERIA = makeSimpleCriteria("l", [
   { id: "4", title: "البرامج والأنشطة", desc: "تنفيذ البرامج", subTitle: "خطة البرامج" },
 ]);
 
-const SPECIAL_ED_CRITERIA = makeSimpleCriteria("se", [
-  { id: "1", title: "إعداد الخطة التعليمية الفردية (IEP)", desc: "إعداد خطط فردية", subTitle: "الخطة التعليمية الفردية" },
-  { id: "2", title: "تنفيذ البرامج التعليمية", desc: "تنفيذ البرامج", subTitle: "سجل الجلسات" },
-  { id: "3", title: "التقييم والتشخيص", desc: "تقييم الاحتياجات", subTitle: "تقارير التقييم" },
-  { id: "4", title: "التواصل مع أولياء الأمور", desc: "التواصل المستمر", subTitle: "سجل التواصل" },
-  { id: "5", title: "التعديل السلوكي", desc: "تطبيق برامج التعديل", subTitle: "خطط التعديل السلوكي" },
-  { id: "6", title: "التكامل مع المعلمين", desc: "التعاون مع معلمي التعليم العام", subTitle: "خطط الدمج" },
-]);
+const SPECIAL_ED_CRITERIA = buildStandardsCriteria(SPECIAL_ED_STANDARDS);
 
 const ADMIN_ASSISTANT_CRITERIA = makeSimpleCriteria("a", [
   { id: "1", title: "الأعمال الإدارية", desc: "تنفيذ الأعمال الإدارية", subTitle: "سجل المهام" },
@@ -168,7 +161,7 @@ const JOB_TYPES = [
   { id: "supervisor", title: "مشرف/ة تربوي/ة (التشكيلات الإشرافية)", icon: SearchIcon, emoji: "🔍", criteria: SUPERVISOR_CRITERIA, hasStandards: true, color: "#CA8A04" },
   { id: "kindergarten", title: "معلمة رياض أطفال", icon: Baby, emoji: "🧒", criteria: KINDERGARTEN_CRITERIA, hasStandards: true, color: "#EC4899" },
   { id: "librarian", title: "أمين/ة مصادر تعلم", icon: BookOpen, emoji: "📚", criteria: LIBRARIAN_CRITERIA, hasStandards: false, color: "#9333EA" },
-  { id: "special_ed", title: "معلم/ة تربية خاصة", icon: Accessibility, emoji: "♿", criteria: SPECIAL_ED_CRITERIA, hasStandards: false, color: "#F97316" },
+  { id: "special_ed", title: "معلم/ة تربية خاصة", icon: Accessibility, emoji: "♿", criteria: SPECIAL_ED_CRITERIA, hasStandards: true, color: "#F97316" },
   { id: "admin_assistant", title: "مساعد/ة إداري/ة", icon: Briefcase, emoji: "🗂️", criteria: ADMIN_ASSISTANT_CRITERIA, hasStandards: false, color: "#6B7280" },
 ];
 
@@ -176,9 +169,13 @@ const JOB_TYPES = [
 const THEMES = [
   { id: "official", name: "الهوية الرسمية", headerBg: "#1B5E20", headerText: "#fff", accent: "#2E7D32", borderColor: "#1B5E20" },
   { id: "official-gradient", name: "تدرج رسمي", headerBg: "linear-gradient(135deg, #1B5E20, #2E7D32, #43A047)", headerText: "#fff", accent: "#2E7D32", borderColor: "#1B5E20" },
+  { id: "edu-visual", name: "الهوية البصرية للتعليم", headerBg: "linear-gradient(135deg, #004D40, #00695C, #00897B)", headerText: "#fff", accent: "#00796B", borderColor: "#004D40" },
   { id: "blue", name: "أزرق كلاسيكي", headerBg: "#0D47A1", headerText: "#fff", accent: "#1565C0", borderColor: "#0D47A1" },
+  { id: "blue-gradient", name: "أزرق متدرج", headerBg: "linear-gradient(135deg, #0D47A1, #1565C0, #1976D2)", headerText: "#fff", accent: "#1565C0", borderColor: "#0D47A1" },
   { id: "purple", name: "بنفسجي أنيق", headerBg: "#4A148C", headerText: "#fff", accent: "#6A1B9A", borderColor: "#4A148C" },
-  { id: "simple", name: "بسيط", headerBg: "#f8f9fa", headerText: "#1a1a1a", accent: "#059669", borderColor: "#e5e7eb" },
+  { id: "gold", name: "ذهبي فاخر", headerBg: "linear-gradient(135deg, #5D4037, #795548, #8D6E63)", headerText: "#fff", accent: "#795548", borderColor: "#5D4037" },
+  { id: "modern-dark", name: "عصري داكن", headerBg: "linear-gradient(135deg, #1a1a2e, #16213e, #0f3460)", headerText: "#fff", accent: "#0f3460", borderColor: "#1a1a2e" },
+  { id: "simple", name: "بسيط ونظيف", headerBg: "#f8f9fa", headerText: "#1a1a1a", accent: "#059669", borderColor: "#e5e7eb" },
 ];
 
 // ===== إعدادات الأولوية =====
@@ -329,7 +326,7 @@ export default function PerformanceEvidence() {
   const [personalInfo, setPersonalInfo] = useState({
     name: "", school: "",
     department: "المملكة العربية السعودية\nوزارة التعليم\nالإدارة العامة للتعليم بمنطقة",
-    year: "١٤٤٧هـ", semester: "الفصل الدراسي الثاني",
+    year: "", semester: "",
     evaluator: "", evaluatorRole: "مدير المدرسة", date: "",
   });
 
@@ -1374,7 +1371,7 @@ export default function PerformanceEvidence() {
                       <h3 className="text-base sm:text-xl font-black text-foreground" style={{ fontFamily: "var(--font-heading)" }}>معلم / معلمة</h3>
                       <Badge className="bg-emerald-600 text-white text-[9px] sm:text-[10px] hover:bg-emerald-700">الأكثر استخداماً</Badge>
                     </div>
-                    <p className="text-[11px] sm:text-sm text-muted-foreground mb-1.5 sm:mb-2 line-clamp-2">نظام شامل يغطي 11 معيار و 45 مؤشر أداء وفق وزارة التعليم 1447هـ</p>
+                    <p className="text-[11px] sm:text-sm text-muted-foreground mb-1.5 sm:mb-2 line-clamp-2">نظام شامل يغطي 11 معيار و 45 مؤشر أداء وفق المعايير الرسمية</p>
                     <div className="flex items-center gap-1.5 sm:gap-3 flex-wrap">
                       <Badge variant="outline" className="text-[9px] sm:text-[10px] gap-0.5 sm:gap-1 border-emerald-300 text-emerald-700">
                         <Sparkles className="w-2.5 h-2.5 sm:w-3 sm:h-3" />11 معيار
@@ -1400,22 +1397,42 @@ export default function PerformanceEvidence() {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-3">
             {JOB_TYPES.slice(1).map((job, i) => {
               const Icon = job.icon;
+              // حساب عدد المعايير والمؤشرات (البنود الفرعية)
+              const standards = job.id === "teacher" ? STANDARDS :
+                job.id === "special_ed" ? SPECIAL_ED_STANDARDS :
+                getStandardsForJob(job.id);
+              const standardsCount = standards.length;
+              const indicatorsCount = standards.reduce((sum, s) => sum + s.items.reduce((si, item) => si + (item.subItems?.length || 0) + 1, 0), 0);
               return (
                 <motion.div key={job.id} initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: (i + 1) * 0.04 }}>
                   <Card className="cursor-pointer hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 border-border/60 hover:border-opacity-100 h-full group"
                     style={{ ['--hover-border' as string]: job.color }}
                     onClick={() => handleSelectJob(job)}>
                     <CardContent className="p-3 sm:p-4">
-                      <div className="flex items-center gap-2.5 sm:gap-3">
+                      <div className="flex items-start gap-2.5 sm:gap-3">
                         <div className="w-9 h-9 sm:w-11 sm:h-11 rounded-lg sm:rounded-xl flex items-center justify-center shrink-0 transition-transform group-hover:scale-105"
                           style={{ backgroundColor: job.color + "12", border: `1.5px solid ${job.color}25` }}>
                           <Icon className="w-4 h-4 sm:w-5 sm:h-5" style={{ color: job.color }} />
                         </div>
                         <div className="flex-1 min-w-0">
-                          <h3 className="font-bold text-foreground text-xs sm:text-sm truncate" style={{ fontFamily: "var(--font-heading)" }}>{job.title}</h3>
-                          <p className="text-[10px] sm:text-[11px] text-muted-foreground">{job.criteria.length} بند تقييم</p>
+                          <h3 className="font-bold text-foreground text-xs sm:text-sm truncate mb-1" style={{ fontFamily: "var(--font-heading)" }}>{job.title}</h3>
+                          {job.hasStandards && standardsCount > 0 ? (
+                            <div className="flex items-center gap-1 sm:gap-1.5 flex-wrap">
+                              <Badge variant="outline" className="text-[8px] sm:text-[9px] gap-0.5 py-0 px-1.5" style={{ borderColor: job.color + '40', color: job.color }}>
+                                {standardsCount} معيار
+                              </Badge>
+                              <Badge variant="outline" className="text-[8px] sm:text-[9px] gap-0.5 py-0 px-1.5" style={{ borderColor: job.color + '40', color: job.color }}>
+                                {indicatorsCount} مؤشر
+                              </Badge>
+                              <Badge variant="outline" className="text-[8px] sm:text-[9px] gap-0.5 py-0 px-1.5" style={{ borderColor: job.color + '40', color: job.color }}>
+                                {job.criteria.length} بند
+                              </Badge>
+                            </div>
+                          ) : (
+                            <p className="text-[10px] sm:text-[11px] text-muted-foreground">{job.criteria.length} بند تقييم</p>
+                          )}
                         </div>
-                        <ArrowLeft className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-muted-foreground/50 group-hover:text-foreground transition-colors shrink-0" />
+                        <ArrowLeft className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-muted-foreground/50 group-hover:text-foreground transition-colors shrink-0 mt-1" />
                       </div>
                     </CardContent>
                   </Card>
@@ -1909,26 +1926,47 @@ export default function PerformanceEvidence() {
                   <CardTitle className="text-base flex items-center gap-2">
                     <FileText className="w-5 h-5 text-primary" />البيانات الأساسية
                   </CardTitle>
+                  <p className="text-xs text-muted-foreground mt-1">هذه البيانات ستظهر في جميع التقارير والملفات المصدّرة والعرض الإلكتروني</p>
                 </CardHeader>
                 <CardContent>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {[
-                      { key: "name", label: "الاسم الكامل", placeholder: "أدخل الاسم الرباعي" },
-                      { key: "school", label: "المدرسة", placeholder: "اسم المدرسة" },
-                      { key: "year", label: "العام الدراسي", placeholder: "١٤٤٧هـ" },
-                      { key: "semester", label: "الفصل الدراسي", placeholder: "الفصل الدراسي الثاني" },
+                      { key: "name", label: "الاسم الكامل", placeholder: "أدخل الاسم الرباعي", required: true },
+                      { key: "school", label: "المدرسة", placeholder: "اسم المدرسة", required: true },
+                      { key: "year", label: "العام الدراسي", placeholder: "مثال: ١٤٤٧هـ" },
+                      { key: "semester", label: "الفصل الدراسي", placeholder: "مثال: الفصل الدراسي الثاني" },
                       { key: "evaluator", label: "اسم المقيّم", placeholder: "اسم المقيّم" },
-                      { key: "evaluatorRole", label: "صفة المقيّم", placeholder: "مدير المدرسة" },
-                      { key: "date", label: "تاريخ التقييم", placeholder: "١٤٤٧/٠٦/١٥" },
+                      { key: "evaluatorRole", label: "صفة المقيّم", placeholder: "مثال: مدير المدرسة" },
+                      { key: "date", label: "تاريخ التقييم", placeholder: "مثال: ١٤٤٧/٠٦/١٥" },
                     ].map((field) => (
                       <div key={field.key}>
-                        <label className="block text-sm font-medium text-foreground mb-1.5">{field.label}</label>
+                        <label className="block text-sm font-medium text-foreground mb-1.5">
+                          {field.label}
+                          {(field as any).required && <span className="text-red-500 mr-1">*</span>}
+                        </label>
                         <input type="text" value={(personalInfo as any)[field.key]}
                           onChange={(e) => setPersonalInfo((prev) => ({ ...prev, [field.key]: e.target.value }))}
                           placeholder={field.placeholder}
                           className="w-full px-3 py-2.5 rounded-lg border border-border text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40" />
                       </div>
                     ))}
+                  </div>
+
+                  {/* حقل الجهة / الإدارة */}
+                  <div className="mt-4">
+                    <label className="block text-sm font-medium text-foreground mb-1.5">الجهة / الإدارة</label>
+                    <textarea value={personalInfo.department}
+                      onChange={(e) => setPersonalInfo((prev) => ({ ...prev, department: e.target.value }))}
+                      placeholder="المملكة العربية السعودية\nوزارة التعليم\nالإدارة العامة للتعليم بمنطقة..."
+                      rows={3}
+                      className="w-full px-3 py-2.5 rounded-lg border border-border text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40 resize-none" />
+                    <p className="text-[10px] text-muted-foreground mt-1">يظهر في رأس التقرير والغلاف (سطر لكل مستوى)</p>
+                  </div>
+
+                  {/* تنبيه */}
+                  <div className="mt-4 p-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-xs flex items-start gap-2">
+                    <Sparkles className="w-4 h-4 shrink-0 mt-0.5" />
+                    <span>جميع البيانات التي تدخلها هنا ستظهر تلقائياً في التقييم النهائي وتقرير التغطية وملف PDF المصدّر والعرض الإلكتروني التفاعلي.</span>
                   </div>
                 </CardContent>
               </Card>
@@ -2184,7 +2222,7 @@ export default function PerformanceEvidence() {
                             <div className="flex flex-wrap gap-1.5 sm:gap-2">
                               <Button variant="outline" size="sm" className="gap-1 sm:gap-1.5 border-dashed border-primary/40 text-primary text-[10px] sm:text-xs h-7 sm:h-8 px-2 sm:px-3"
                                 onClick={() => addEvidence(currentCriterion.id, sub.id, "text")}>
-                                <Plus className="w-3 h-3 sm:w-3.5 sm:h-3.5" />شاهد نصي
+                                <Plus className="w-3 h-3 sm:w-3.5 sm:h-3.5" />إضافة حقل بيانات
                               </Button>
                               <Button variant="outline" size="sm" className="gap-1 sm:gap-1.5 border-dashed border-purple-400 text-purple-600 text-[10px] sm:text-xs h-7 sm:h-8 px-2 sm:px-3"
                                 onClick={() => addEvidence(currentCriterion.id, sub.id, "link")}>
@@ -2701,15 +2739,26 @@ export default function PerformanceEvidence() {
 
             {/* البيانات الشخصية */}
             <div className="p-6 border-b" style={{ borderColor: theme.borderColor }}>
-              <h2 className="text-sm font-bold mb-3" style={{ color: theme.accent, fontFamily: "'Tajawal', sans-serif" }}>البيانات الشخصية</h2>
-              <div className="grid grid-cols-2 gap-4 text-sm">
-                <div className="bg-gray-50 rounded-lg p-3"><span className="text-gray-500 text-xs">الاسم الكامل</span><br /><strong>{personalInfo.name || '—'}</strong></div>
-                <div className="bg-gray-50 rounded-lg p-3"><span className="text-gray-500 text-xs">المدرسة</span><br /><strong>{personalInfo.school || '—'}</strong></div>
-                <div className="bg-gray-50 rounded-lg p-3"><span className="text-gray-500 text-xs">اسم المقيّم</span><br /><strong>{personalInfo.evaluator || '—'}</strong></div>
-                <div className="bg-gray-50 rounded-lg p-3"><span className="text-gray-500 text-xs">تاريخ التقييم</span><br /><strong>{personalInfo.date || '—'}</strong></div>
-                <div className="bg-gray-50 rounded-lg p-3"><span className="text-gray-500 text-xs">صفة المقيّم</span><br /><strong>{personalInfo.evaluatorRole || '—'}</strong></div>
-                <div className="bg-gray-50 rounded-lg p-3"><span className="text-gray-500 text-xs">الوظيفة</span><br /><strong>{selectedJob?.title || '—'}</strong></div>
+              <h2 className="text-sm font-bold mb-3 flex items-center gap-2" style={{ color: theme.accent, fontFamily: "'Tajawal', sans-serif" }}>
+                <span style={{ width: '4px', height: '18px', borderRadius: '2px', backgroundColor: theme.accent, display: 'inline-block' }} />
+                البيانات الشخصية
+              </h2>
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div className="bg-gray-50 rounded-lg p-3 border border-gray-100"><span className="text-gray-500 text-[10px] block mb-0.5">الاسم الكامل</span><strong className="text-gray-800">{personalInfo.name || '—'}</strong></div>
+                <div className="bg-gray-50 rounded-lg p-3 border border-gray-100"><span className="text-gray-500 text-[10px] block mb-0.5">المدرسة</span><strong className="text-gray-800">{personalInfo.school || '—'}</strong></div>
+                <div className="bg-gray-50 rounded-lg p-3 border border-gray-100"><span className="text-gray-500 text-[10px] block mb-0.5">الوظيفة</span><strong className="text-gray-800">{selectedJob?.title || '—'}</strong></div>
+                <div className="bg-gray-50 rounded-lg p-3 border border-gray-100"><span className="text-gray-500 text-[10px] block mb-0.5">العام الدراسي</span><strong className="text-gray-800">{personalInfo.year || '—'}</strong></div>
+                <div className="bg-gray-50 rounded-lg p-3 border border-gray-100"><span className="text-gray-500 text-[10px] block mb-0.5">الفصل الدراسي</span><strong className="text-gray-800">{personalInfo.semester || '—'}</strong></div>
+                <div className="bg-gray-50 rounded-lg p-3 border border-gray-100"><span className="text-gray-500 text-[10px] block mb-0.5">اسم المقيّم</span><strong className="text-gray-800">{personalInfo.evaluator || '—'}</strong></div>
+                <div className="bg-gray-50 rounded-lg p-3 border border-gray-100"><span className="text-gray-500 text-[10px] block mb-0.5">صفة المقيّم</span><strong className="text-gray-800">{personalInfo.evaluatorRole || '—'}</strong></div>
+                <div className="bg-gray-50 rounded-lg p-3 border border-gray-100"><span className="text-gray-500 text-[10px] block mb-0.5">تاريخ التقييم</span><strong className="text-gray-800">{personalInfo.date || '—'}</strong></div>
               </div>
+              {personalInfo.department && (
+                <div className="mt-3 bg-gray-50 rounded-lg p-3 border border-gray-100">
+                  <span className="text-gray-500 text-[10px] block mb-0.5">الجهة / الإدارة</span>
+                  <strong className="text-gray-800 text-sm whitespace-pre-line">{personalInfo.department}</strong>
+                </div>
+              )}
             </div>
 
             {/* جدول التقييم - محسّن */}
@@ -2831,10 +2880,18 @@ export default function PerformanceEvidence() {
                               </div>
                             )}
                             {ev.formData && Object.entries(ev.formData).some(([, v]) => v) && (
-                              <div className="text-sm space-y-1 mt-2 bg-gray-50 rounded-lg p-3">
-                                {Object.entries(ev.formData).filter(([, v]) => v).map(([key, val]) => (
-                                  <p key={key}><span className="text-gray-500 text-xs">{key}:</span> <span className="text-gray-800">{val}</span></p>
-                                ))}
+                              <div className="mt-2 bg-gray-50 rounded-lg p-3 border border-gray-100">
+                                <div className="grid grid-cols-1 gap-2">
+                                  {Object.entries(ev.formData).filter(([, v]) => v).map(([key, val]) => {
+                                    const fieldLabel = key === 'evidence_desc' ? 'وصف الشاهد' : key === 'date' ? 'التاريخ' : key === 'notes' ? 'ملاحظات' : key;
+                                    return (
+                                      <div key={key} className="flex items-start gap-2">
+                                        <span className="text-gray-500 text-[10px] font-medium shrink-0 mt-0.5 min-w-[60px]">{fieldLabel}:</span>
+                                        <span className="text-gray-800 text-xs leading-relaxed">{val}</span>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
                               </div>
                             )}
                             {/* التعليق */}

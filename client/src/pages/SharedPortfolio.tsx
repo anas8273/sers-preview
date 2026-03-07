@@ -1,22 +1,26 @@
 /**
  * صفحة عرض ملف الإنجاز المشارك - موقع مصغر احترافي
  * لا تتطلب تسجيل دخول - عرض إلكتروني تفاعلي
+ * بدون باركود - عرض الشواهد كما أضافها المستخدم
  */
 import { useState, useMemo, useRef, useEffect } from "react";
 import { useParams } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { STANDARDS } from "@/lib/standards-data";
+import { getStandardsForJob } from "@/lib/all-jobs-standards";
 import {
   Lock, Eye, FileText, Image, Video, LinkIcon, Download,
   CheckCircle, AlertTriangle, XCircle, Loader2, ShieldCheck,
   BarChart3, Calendar, Building2, User, Sparkles, ChevronDown,
   ChevronUp, Award, BookOpen, Printer, Share2, Star, ArrowUp,
-  GraduationCap, Briefcase, Hash, MessageSquare, Tag
+  GraduationCap, Briefcase, Hash, MessageSquare, Tag, Layers,
+  TrendingUp, Target, ClipboardCheck
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 const JOB_TITLES: Record<string, string> = {
   teacher: "معلم / معلمة",
@@ -35,6 +39,7 @@ const PRIORITY_CONFIG: Record<string, { label: string; color: string; icon: stri
   essential: { label: "أساسي", color: "#059669", icon: "★", bg: "#ECFDF5" },
   supporting: { label: "داعم", color: "#2563EB", icon: "◆", bg: "#EFF6FF" },
   supplementary: { label: "إضافي", color: "#9333EA", icon: "○", bg: "#FAF5FF" },
+  additional: { label: "إضافي", color: "#9333EA", icon: "○", bg: "#FAF5FF" },
 };
 
 function getGrade(pct: number) {
@@ -43,6 +48,17 @@ function getGrade(pct: number) {
   if (pct >= 70) return { label: "جيد", color: "#CA8A04", bg: "#FEF9C3", emoji: "👍" };
   if (pct >= 60) return { label: "مقبول", color: "#EA580C", bg: "#FED7AA", emoji: "📋" };
   return { label: "ضعيف", color: "#DC2626", bg: "#FEE2E2", emoji: "📌" };
+}
+
+function getStandardTitle(criterionId: string, jobId: string): string {
+  if (jobId === "teacher") {
+    const s = STANDARDS.find(s => s.id === criterionId);
+    if (s) return s.title;
+  }
+  const jobStandards = getStandardsForJob(jobId);
+  const s = jobStandards.find(s => s.id === criterionId);
+  if (s) return s.title;
+  return criterionId;
 }
 
 function EvidenceCard({ ev }: { ev: any }) {
@@ -57,7 +73,7 @@ function EvidenceCard({ ev }: { ev: any }) {
           {pc.icon} {pc.label}
         </span>
         <span className="text-[10px] px-2 py-1 rounded-full bg-gray-100 text-gray-600 font-medium">
-          {ev.type === "text" ? "📝 نص" : ev.type === "image" ? "🖼️ صورة" : ev.type === "link" ? "🔗 رابط" : ev.type === "file" ? "📄 ملف" : "🎬 فيديو"}
+          {ev.type === "text" ? "نص" : ev.type === "image" ? "صورة" : ev.type === "link" ? "رابط" : ev.type === "file" ? "ملف" : "فيديو"}
         </span>
       </div>
 
@@ -83,12 +99,20 @@ function EvidenceCard({ ev }: { ev: any }) {
         </div>
       )}
 
-      {/* بيانات النموذج */}
+      {/* بيانات النموذج - عرض احترافي */}
       {ev.formData && Object.entries(ev.formData).some(([, v]) => v) && (
-        <div className="mt-3 bg-blue-50/50 rounded-lg p-3 space-y-1.5">
-          {Object.entries(ev.formData).filter(([, v]) => v).map(([key, val]) => (
-            <p key={key} className="text-xs"><span className="text-gray-500 font-medium">{key}:</span> <span className="text-gray-800">{val as string}</span></p>
-          ))}
+        <div className="mt-3 bg-blue-50/50 rounded-lg p-3 border border-blue-100/50">
+          <div className="grid grid-cols-1 gap-2">
+            {Object.entries(ev.formData).filter(([, v]) => v).map(([key, val]) => {
+              const fieldLabel = key === 'evidence_desc' ? 'وصف الشاهد' : key === 'date' ? 'التاريخ' : key === 'notes' ? 'ملاحظات' : key;
+              return (
+                <div key={key} className="flex items-start gap-2">
+                  <span className="text-gray-500 text-[10px] font-medium shrink-0 mt-0.5 min-w-[60px]">{fieldLabel}:</span>
+                  <span className="text-gray-800 text-xs leading-relaxed">{val as string}</span>
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
 
@@ -113,13 +137,12 @@ function EvidenceCard({ ev }: { ev: any }) {
   );
 }
 
-function CriterionSection({ criterionId, data, index }: { criterionId: string; data: any; index: number }) {
+function CriterionSection({ criterionId, data, index, jobId }: { criterionId: string; data: any; index: number; jobId: string }) {
   const [expanded, setExpanded] = useState(false);
   const evCount = data?.evidences?.length || 0;
   const score = data?.score || 0;
   const status = score >= 4 && evCount > 0 ? "complete" : evCount > 0 || score > 0 ? "partial" : "missing";
-  const standard = STANDARDS.find(s => s.id === criterionId);
-  const title = standard?.title || criterionId;
+  const title = getStandardTitle(criterionId, jobId);
 
   const statusConfig = {
     complete: { bg: "bg-emerald-50", text: "text-emerald-700", border: "border-emerald-200", icon: <CheckCircle className="w-4 h-4 text-emerald-500" />, label: "مكتمل" },
@@ -187,6 +210,7 @@ export default function SharedPortfolio() {
   const [password, setPassword] = useState("");
   const [submitted, setSubmitted] = useState(false);
   const [showScrollTop, setShowScrollTop] = useState(false);
+  const [activeSection, setActiveSection] = useState("overview");
   const contentRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -275,7 +299,8 @@ export default function SharedPortfolio() {
   const files = data.files || [];
   const personalInfo = (portfolio.personalInfo || {}) as Record<string, string>;
   const criteriaData = (portfolio.criteriaData || {}) as Record<string, any>;
-  const jobTitle = JOB_TITLES[portfolio.jobId] || portfolio.jobTitle;
+  const jobId = portfolio.jobId || "teacher";
+  const jobTitle = JOB_TITLES[jobId] || portfolio.jobTitle;
 
   // حساب الإحصائيات
   const criteriaEntries = Object.entries(criteriaData);
@@ -285,6 +310,15 @@ export default function SharedPortfolio() {
   const grade = getGrade(percentage);
   const totalEvidences = criteriaEntries.reduce((sum, [, d]) => sum + ((d as any)?.evidences?.length || 0), 0);
   const completedCriteria = criteriaEntries.filter(([, d]) => ((d as any)?.score || 0) >= 4 && ((d as any)?.evidences?.length || 0) > 0).length;
+
+  // تصنيف البنود حسب الحالة
+  const completedItems = criteriaEntries.filter(([, d]) => ((d as any)?.score || 0) >= 4 && ((d as any)?.evidences?.length || 0) > 0);
+  const partialItems = criteriaEntries.filter(([, d]) => {
+    const s = (d as any)?.score || 0;
+    const e = (d as any)?.evidences?.length || 0;
+    return (e > 0 || s > 0) && !(s >= 4 && e > 0);
+  });
+  const missingItems = criteriaEntries.filter(([, d]) => ((d as any)?.score || 0) === 0 && ((d as any)?.evidences?.length || 0) === 0);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-emerald-50/20" dir="rtl" ref={contentRef}>
@@ -305,6 +339,13 @@ export default function SharedPortfolio() {
               <Printer className="w-3.5 h-3.5" />
               طباعة
             </Button>
+            <Button variant="outline" size="sm" className="gap-1.5 text-xs h-8" onClick={() => {
+              navigator.clipboard.writeText(window.location.href);
+              alert("تم نسخ الرابط");
+            }} data-no-print>
+              <Share2 className="w-3.5 h-3.5" />
+              مشاركة
+            </Button>
             <Badge variant="secondary" className="gap-1.5 h-8">
               <Eye className="w-3 h-3" />
               عرض فقط
@@ -319,17 +360,21 @@ export default function SharedPortfolio() {
           <div className="absolute top-0 left-0 w-96 h-96 bg-white rounded-full -translate-x-1/2 -translate-y-1/2" />
           <div className="absolute bottom-0 right-0 w-64 h-64 bg-white rounded-full translate-x-1/3 translate-y-1/3" />
         </div>
+        {/* إطار زخرفي */}
+        <div className="absolute inset-3 border border-white/10 rounded-xl pointer-events-none" />
         <div className="max-w-5xl mx-auto px-4 py-10 relative">
           <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
             <div className="flex-1">
-              <div className="flex items-center gap-2 mb-3">
-                <GraduationCap className="w-5 h-5 text-emerald-300" />
-                <p className="text-emerald-200 text-sm font-medium">{personalInfo.department || "وزارة التعليم"}</p>
-              </div>
+              {personalInfo.department && (
+                <div className="flex items-center gap-2 mb-3">
+                  <GraduationCap className="w-5 h-5 text-emerald-300" />
+                  <p className="text-emerald-200 text-sm font-medium whitespace-pre-line leading-relaxed">{personalInfo.department}</p>
+                </div>
+              )}
               <h2 className="text-3xl font-black text-white mb-2" style={{ fontFamily: "'Tajawal', sans-serif" }}>
                 شواهد الأداء الوظيفي
               </h2>
-              <div className="flex items-center gap-3 flex-wrap">
+              <div className="flex items-center gap-3 flex-wrap mt-3">
                 <div className="flex items-center gap-2 bg-white/10 backdrop-blur-sm rounded-lg px-3 py-1.5">
                   <User className="w-4 h-4 text-emerald-200" />
                   <span className="text-sm text-white font-medium">{personalInfo.name || "—"}</span>
@@ -338,18 +383,28 @@ export default function SharedPortfolio() {
                   <Briefcase className="w-4 h-4 text-emerald-200" />
                   <span className="text-sm text-emerald-100">{jobTitle}</span>
                 </div>
+                {personalInfo.school && (
+                  <div className="flex items-center gap-2 bg-white/10 backdrop-blur-sm rounded-lg px-3 py-1.5">
+                    <Building2 className="w-4 h-4 text-emerald-200" />
+                    <span className="text-sm text-emerald-100">{personalInfo.school}</span>
+                  </div>
+                )}
               </div>
+              {(personalInfo.year || personalInfo.semester) && (
+                <p className="text-emerald-200/80 text-xs mt-3">{personalInfo.year} {personalInfo.semester && `- ${personalInfo.semester}`}</p>
+              )}
             </div>
 
             {/* بطاقة التقييم */}
-            <div className="bg-white/10 backdrop-blur-md rounded-2xl p-6 text-center border border-white/20 min-w-[160px]">
+            <div className="bg-white/10 backdrop-blur-md rounded-2xl p-6 text-center border border-white/20 min-w-[180px]">
               <div className="text-4xl font-black text-white mb-1">{percentage}%</div>
               <div className="text-sm font-bold text-emerald-100 mb-2">{grade.label}</div>
-              <div className="flex justify-center gap-0.5">
+              <div className="flex justify-center gap-0.5 mb-3">
                 {[1, 2, 3, 4, 5].map(s => (
                   <Star key={s} className={`w-4 h-4 ${s <= Math.round(percentage / 20) ? "text-amber-400 fill-amber-400" : "text-white/30"}`} />
                 ))}
               </div>
+              <div className="text-[10px] text-emerald-200/70">{totalScore} من {maxScore}</div>
             </div>
           </div>
         </div>
@@ -378,88 +433,231 @@ export default function SharedPortfolio() {
           ))}
         </div>
 
-        {/* إحصائيات سريعة */}
-        <div className="grid grid-cols-4 gap-3 mb-8">
-          {[
-            { value: criteriaEntries.length, label: "بند تقييم", color: "emerald", icon: BookOpen },
-            { value: totalEvidences, label: "شاهد مرفق", color: "blue", icon: FileText },
-            { value: completedCriteria, label: "بند مكتمل", color: "purple", icon: CheckCircle },
-            { value: files.length, label: "ملف مرفوع", color: "orange", icon: Download },
-          ].map((stat, i) => (
-            <Card key={i} className="border-0 shadow-sm hover:shadow-md transition-shadow">
-              <CardContent className="p-4 text-center">
-                <stat.icon className={`w-5 h-5 mx-auto mb-2 text-${stat.color}-500 opacity-60`} />
-                <div className={`text-2xl font-black text-${stat.color}-600`}>{stat.value}</div>
-                <p className="text-[10px] text-gray-500 font-medium mt-0.5">{stat.label}</p>
+        {/* تبويبات التنقل */}
+        <Tabs value={activeSection} onValueChange={setActiveSection} className="mb-8">
+          <TabsList className="w-full justify-start bg-white border shadow-sm rounded-xl p-1 h-auto flex-wrap gap-1">
+            <TabsTrigger value="overview" className="gap-1.5 text-xs data-[state=active]:bg-emerald-50 data-[state=active]:text-emerald-700">
+              <BarChart3 className="w-3.5 h-3.5" />نظرة عامة
+            </TabsTrigger>
+            <TabsTrigger value="criteria" className="gap-1.5 text-xs data-[state=active]:bg-emerald-50 data-[state=active]:text-emerald-700">
+              <Layers className="w-3.5 h-3.5" />البنود والشواهد
+            </TabsTrigger>
+            <TabsTrigger value="info" className="gap-1.5 text-xs data-[state=active]:bg-emerald-50 data-[state=active]:text-emerald-700">
+              <User className="w-3.5 h-3.5" />البيانات الشخصية
+            </TabsTrigger>
+            {files.length > 0 && (
+              <TabsTrigger value="files" className="gap-1.5 text-xs data-[state=active]:bg-emerald-50 data-[state=active]:text-emerald-700">
+                <Download className="w-3.5 h-3.5" />الملفات ({files.length})
+              </TabsTrigger>
+            )}
+          </TabsList>
+
+          {/* ===== نظرة عامة ===== */}
+          <TabsContent value="overview" className="mt-6 space-y-6">
+            {/* إحصائيات سريعة */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              {[
+                { value: criteriaEntries.length, label: "بند تقييم", color: "#059669", icon: BookOpen },
+                { value: totalEvidences, label: "شاهد مرفق", color: "#2563EB", icon: FileText },
+                { value: completedCriteria, label: "بند مكتمل", color: "#7C3AED", icon: CheckCircle },
+                { value: files.length, label: "ملف مرفوع", color: "#EA580C", icon: Download },
+              ].map((stat, i) => (
+                <Card key={i} className="border-0 shadow-sm hover:shadow-md transition-shadow">
+                  <CardContent className="p-4 text-center">
+                    <stat.icon className="w-5 h-5 mx-auto mb-2 opacity-60" style={{ color: stat.color }} />
+                    <div className="text-2xl font-black" style={{ color: stat.color }}>{stat.value}</div>
+                    <p className="text-[10px] text-gray-500 font-medium mt-0.5">{stat.label}</p>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+
+            {/* شريط التقدم الإجمالي */}
+            <Card className="border-0 shadow-sm overflow-hidden">
+              <CardContent className="p-5">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-sm font-bold text-gray-900 flex items-center gap-2" style={{ fontFamily: "'Tajawal', sans-serif" }}>
+                    <TrendingUp className="w-4 h-4 text-emerald-600" />
+                    نسبة الإنجاز الكلية
+                  </h3>
+                  <span className="text-sm font-bold" style={{ color: grade.color }}>{percentage}%</span>
+                </div>
+                <div className="w-full bg-gray-100 rounded-full h-3 overflow-hidden">
+                  <div
+                    className="h-full rounded-full transition-all duration-1000 ease-out"
+                    style={{ width: `${percentage}%`, backgroundColor: grade.color }}
+                  />
+                </div>
+                <div className="flex items-center justify-between mt-2 text-[10px] text-gray-500">
+                  <span>{completedCriteria} بند مكتمل من {criteriaEntries.length}</span>
+                  <span>{totalEvidences} شاهد إجمالي</span>
+                </div>
               </CardContent>
             </Card>
-          ))}
-        </div>
 
-        {/* شريط التقدم الإجمالي */}
-        <Card className="mb-8 border-0 shadow-sm overflow-hidden">
-          <CardContent className="p-5">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-bold text-gray-900 flex items-center gap-2" style={{ fontFamily: "'Tajawal', sans-serif" }}>
-                <BarChart3 className="w-4 h-4 text-emerald-600" />
-                نسبة الإنجاز الكلية
-              </h3>
-              <span className="text-sm font-bold" style={{ color: grade.color }}>{percentage}%</span>
-            </div>
-            <div className="w-full bg-gray-100 rounded-full h-3 overflow-hidden">
-              <div
-                className="h-full rounded-full transition-all duration-1000 ease-out"
-                style={{ width: `${percentage}%`, backgroundColor: grade.color }}
-              />
-            </div>
-            <div className="flex items-center justify-between mt-2 text-[10px] text-gray-500">
-              <span>{completedCriteria} بند مكتمل من {criteriaEntries.length}</span>
-              <span>{totalEvidences} شاهد إجمالي</span>
-            </div>
-          </CardContent>
-        </Card>
+            {/* ملخص حالة البنود */}
+            <Card className="border-0 shadow-sm">
+              <CardHeader>
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <Target className="w-4 h-4 text-emerald-600" />
+                  ملخص حالة البنود
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="flex items-center gap-3 p-3 rounded-lg bg-emerald-50 border border-emerald-100">
+                  <CheckCircle className="w-5 h-5 text-emerald-600" />
+                  <div className="flex-1">
+                    <span className="text-sm font-bold text-emerald-800">مكتمل</span>
+                    <span className="text-xs text-emerald-600 mr-2">({completedItems.length} بند)</span>
+                  </div>
+                  <span className="text-lg font-black text-emerald-700">{criteriaEntries.length > 0 ? Math.round((completedItems.length / criteriaEntries.length) * 100) : 0}%</span>
+                </div>
+                <div className="flex items-center gap-3 p-3 rounded-lg bg-amber-50 border border-amber-100">
+                  <AlertTriangle className="w-5 h-5 text-amber-600" />
+                  <div className="flex-1">
+                    <span className="text-sm font-bold text-amber-800">جزئي</span>
+                    <span className="text-xs text-amber-600 mr-2">({partialItems.length} بند)</span>
+                  </div>
+                  <span className="text-lg font-black text-amber-700">{criteriaEntries.length > 0 ? Math.round((partialItems.length / criteriaEntries.length) * 100) : 0}%</span>
+                </div>
+                <div className="flex items-center gap-3 p-3 rounded-lg bg-red-50 border border-red-100">
+                  <XCircle className="w-5 h-5 text-red-500" />
+                  <div className="flex-1">
+                    <span className="text-sm font-bold text-red-800">ناقص</span>
+                    <span className="text-xs text-red-600 mr-2">({missingItems.length} بند)</span>
+                  </div>
+                  <span className="text-lg font-black text-red-700">{criteriaEntries.length > 0 ? Math.round((missingItems.length / criteriaEntries.length) * 100) : 0}%</span>
+                </div>
+              </CardContent>
+            </Card>
 
-        {/* قائمة البنود والشواهد */}
-        <div className="mb-8">
-          <h2 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2" style={{ fontFamily: "'Tajawal', sans-serif" }}>
-            <FileText className="w-5 h-5 text-emerald-600" />
-            تفاصيل البنود والشواهد
-          </h2>
-          <div className="space-y-3">
-            {criteriaEntries.map(([criterionId, d], i) => (
-              <CriterionSection key={criterionId} criterionId={criterionId} data={d} index={i} />
-            ))}
-          </div>
-        </div>
+            {/* معلومات المقيّم */}
+            {(personalInfo.evaluator || personalInfo.evaluatorRole || personalInfo.date) && (
+              <Card className="border-0 shadow-sm">
+                <CardHeader>
+                  <CardTitle className="text-sm flex items-center gap-2">
+                    <ClipboardCheck className="w-4 h-4 text-emerald-600" />
+                    معلومات التقييم
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    {personalInfo.evaluator && (
+                      <div className="bg-gray-50 rounded-lg p-3 border border-gray-100">
+                        <span className="text-gray-500 text-[10px] block mb-0.5">اسم المقيّم</span>
+                        <strong className="text-gray-800 text-sm">{personalInfo.evaluator}</strong>
+                      </div>
+                    )}
+                    {personalInfo.evaluatorRole && (
+                      <div className="bg-gray-50 rounded-lg p-3 border border-gray-100">
+                        <span className="text-gray-500 text-[10px] block mb-0.5">صفة المقيّم</span>
+                        <strong className="text-gray-800 text-sm">{personalInfo.evaluatorRole}</strong>
+                      </div>
+                    )}
+                    {personalInfo.date && (
+                      <div className="bg-gray-50 rounded-lg p-3 border border-gray-100">
+                        <span className="text-gray-500 text-[10px] block mb-0.5">تاريخ التقييم</span>
+                        <strong className="text-gray-800 text-sm">{personalInfo.date}</strong>
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+          </TabsContent>
 
-        {/* الملفات المرفوعة */}
-        {files.length > 0 && (
-          <Card className="mb-8 border-0 shadow-sm overflow-hidden">
-            <CardHeader className="bg-gradient-to-l from-blue-50 to-white border-b border-blue-100/50">
-              <CardTitle className="text-sm flex items-center gap-2">
-                <Download className="w-4 h-4 text-blue-600" />
-                الملفات المرفوعة ({files.length})
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="p-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {files.map((file: any) => (
-                  <a key={file.id} href={file.url} target="_blank" rel="noopener noreferrer"
-                    className="flex items-center gap-3 p-3 rounded-xl border border-gray-100 hover:bg-blue-50/50 hover:border-blue-200 transition-all group">
-                    <div className="w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center group-hover:bg-blue-100 transition-colors">
-                      {file.mimeType?.startsWith("image/") ? <Image className="w-5 h-5 text-blue-500" /> : <FileText className="w-5 h-5 text-orange-500" />}
+          {/* ===== البنود والشواهد ===== */}
+          <TabsContent value="criteria" className="mt-6">
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2" style={{ fontFamily: "'Tajawal', sans-serif" }}>
+                <Layers className="w-5 h-5 text-emerald-600" />
+                تفاصيل البنود والشواهد
+              </h2>
+              <Badge variant="outline" className="text-xs">{criteriaEntries.length} بند</Badge>
+            </div>
+            <div className="space-y-3">
+              {criteriaEntries.map(([criterionId, d], i) => (
+                <CriterionSection key={criterionId} criterionId={criterionId} data={d} index={i} jobId={jobId} />
+              ))}
+            </div>
+          </TabsContent>
+
+          {/* ===== البيانات الشخصية ===== */}
+          <TabsContent value="info" className="mt-6">
+            <Card className="border-0 shadow-sm">
+              <CardHeader>
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <User className="w-4 h-4 text-emerald-600" />
+                  البيانات الشخصية الكاملة
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {[
+                    { label: "الاسم الكامل", value: personalInfo.name, icon: User },
+                    { label: "المدرسة", value: personalInfo.school, icon: Building2 },
+                    { label: "الوظيفة", value: jobTitle, icon: Briefcase },
+                    { label: "العام الدراسي", value: personalInfo.year, icon: Calendar },
+                    { label: "الفصل الدراسي", value: personalInfo.semester, icon: Calendar },
+                    { label: "اسم المقيّم", value: personalInfo.evaluator, icon: ClipboardCheck },
+                    { label: "صفة المقيّم", value: personalInfo.evaluatorRole, icon: ClipboardCheck },
+                    { label: "تاريخ التقييم", value: personalInfo.date, icon: Calendar },
+                  ].map((field, i) => (
+                    <div key={i} className="bg-gray-50 rounded-lg p-4 border border-gray-100 flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-lg bg-emerald-50 flex items-center justify-center shrink-0">
+                        <field.icon className="w-4 h-4 text-emerald-600" />
+                      </div>
+                      <div>
+                        <span className="text-gray-500 text-[10px] block">{field.label}</span>
+                        <strong className="text-gray-800 text-sm">{field.value || "—"}</strong>
+                      </div>
                     </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium text-gray-900 truncate">{file.originalName}</p>
-                      <p className="text-xs text-gray-500">{file.mimeType}</p>
+                  ))}
+                </div>
+                {personalInfo.department && (
+                  <div className="mt-3 bg-gray-50 rounded-lg p-4 border border-gray-100">
+                    <div className="flex items-center gap-2 mb-2">
+                      <GraduationCap className="w-4 h-4 text-emerald-600" />
+                      <span className="text-gray-500 text-[10px]">الجهة / الإدارة</span>
                     </div>
-                    <Download className="w-4 h-4 text-gray-300 group-hover:text-blue-500 transition-colors" />
-                  </a>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        )}
+                    <strong className="text-gray-800 text-sm whitespace-pre-line">{personalInfo.department}</strong>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* ===== الملفات المرفوعة ===== */}
+          {files.length > 0 && (
+            <TabsContent value="files" className="mt-6">
+              <Card className="border-0 shadow-sm overflow-hidden">
+                <CardHeader className="bg-gradient-to-l from-blue-50 to-white border-b border-blue-100/50">
+                  <CardTitle className="text-sm flex items-center gap-2">
+                    <Download className="w-4 h-4 text-blue-600" />
+                    الملفات المرفوعة ({files.length})
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {files.map((file: any) => (
+                      <a key={file.id} href={file.url} target="_blank" rel="noopener noreferrer"
+                        className="flex items-center gap-3 p-3 rounded-xl border border-gray-100 hover:bg-blue-50/50 hover:border-blue-200 transition-all group">
+                        <div className="w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center group-hover:bg-blue-100 transition-colors">
+                          {file.mimeType?.startsWith("image/") ? <Image className="w-5 h-5 text-blue-500" /> : <FileText className="w-5 h-5 text-orange-500" />}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-medium text-gray-900 truncate">{file.originalName}</p>
+                          <p className="text-xs text-gray-500">{file.mimeType}</p>
+                        </div>
+                        <Download className="w-4 h-4 text-gray-300 group-hover:text-blue-500 transition-colors" />
+                      </a>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+          )}
+        </Tabs>
 
         {/* Footer */}
         <div className="text-center py-10 border-t border-gray-100">
@@ -467,7 +665,7 @@ export default function SharedPortfolio() {
             <Sparkles className="w-5 h-5 text-emerald-600" />
           </div>
           <p className="text-xs text-gray-500 font-medium">نظام SERS - السجلات التعليمية الذكية</p>
-          <p className="text-[10px] text-gray-400 mt-1">تم إنشاء هذا الملف إلكترونياً</p>
+          <p className="text-[10px] text-gray-400 mt-1">تم إنشاء هذا الملف إلكترونياً • {personalInfo.name} • {jobTitle}</p>
         </div>
       </div>
 
