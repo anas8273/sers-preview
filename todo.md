@@ -615,3 +615,6 @@
 - [ ] تنزيل PDF
 - [x] اختبارات Vitest (27 اختبار جديد - 267 إجمالي ناجح)
 - [ ] حفظ checkpoint نهائي
+
+## إصلاح خطأ CSS - تعارض border (مارس 2026)
+- [x] إصلاح تعارض بين خصائص border المختصرة وغير المختصرة (borderTop/borderRight/borderBottom) في PerformanceEvidence.tsx

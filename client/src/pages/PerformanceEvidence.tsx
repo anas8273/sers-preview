@@ -2737,7 +2737,7 @@ export default function PerformanceEvidence() {
                           return (
                             <div style={{ marginBottom: '14px' }}>
                               {rows.map((row, ri) => (
-                                <div key={ri} style={{ display: 'flex', marginBottom: '0', border: `1px solid ${theme.accent}30`, borderBottom: ri === rows.length - 1 ? `1px solid ${theme.accent}30` : 'none' }}>
+                                <div key={ri} style={{ display: 'flex', marginBottom: '0', borderTop: `1px solid ${theme.accent}30`, borderLeft: `1px solid ${theme.accent}30`, borderRight: `1px solid ${theme.accent}30`, borderBottom: ri === rows.length - 1 ? `1px solid ${theme.accent}30` : 'none' }}>
                                   {row.map((field, fi) => (
                                     <div key={field.id} style={{ display: 'flex', flex: 1, borderLeft: fi > 0 ? `1px solid ${theme.accent}30` : 'none' }}>
                                       <div style={{ background: theme.fieldLabelBg || theme.accent, color: 'white', padding: '8px 12px', fontSize: '10px', fontWeight: 'bold', minWidth: '90px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -2762,7 +2762,7 @@ export default function PerformanceEvidence() {
                             pairs.push(longFields.slice(i, i + 2));
                           }
                           return pairs.map((pair, pi) => (
-                            <div key={pi} style={{ display: 'grid', gridTemplateColumns: pair.length === 2 ? '1fr 1fr' : '1fr', gap: '0', marginBottom: '0', border: `1px solid ${theme.accent}30`, borderTop: pi === 0 && shortFields.length > 0 ? 'none' : `1px solid ${theme.accent}30` }}>
+                            <div key={pi} style={{ display: 'grid', gridTemplateColumns: pair.length === 2 ? '1fr 1fr' : '1fr', gap: '0', marginBottom: '0', borderLeft: `1px solid ${theme.accent}30`, borderRight: `1px solid ${theme.accent}30`, borderBottom: `1px solid ${theme.accent}30`, borderTop: pi === 0 && shortFields.length > 0 ? 'none' : `1px solid ${theme.accent}30` }}>
                               {pair.map((field, fi) => (
                                 <div key={field.id} style={{ borderLeft: fi > 0 ? `1px solid ${theme.accent}30` : 'none' }}>
                                   <div style={{ background: theme.fieldLabelBg || theme.accent, color: 'white', padding: '8px 14px', textAlign: 'center', fontWeight: 'bold', fontSize: '11px' }}>
@@ -2779,7 +2779,7 @@ export default function PerformanceEvidence() {
 
                         {/* === قسم الشواهد === */}
                         {allMediaEvidences.length > 0 && (
-                          <div style={{ border: `1px solid ${theme.accent}30`, borderTop: (shortFields.length > 0 || longFields.length > 0) ? 'none' : `1px solid ${theme.accent}30`, marginBottom: '0' }}>
+                          <div style={{ borderLeft: `1px solid ${theme.accent}30`, borderRight: `1px solid ${theme.accent}30`, borderBottom: `1px solid ${theme.accent}30`, borderTop: (shortFields.length > 0 || longFields.length > 0) ? 'none' : `1px solid ${theme.accent}30`, marginBottom: '0' }}>
                             <div style={{ background: theme.fieldLabelBg || theme.accent, color: 'white', padding: '8px 14px', textAlign: 'center', fontWeight: 'bold', fontSize: '11px' }}>
                               الشواهد
                             </div>
@@ -3288,7 +3288,7 @@ export default function PerformanceEvidence() {
                         const linkedSub = allSubs.find(s => s.id === ev.subEvidenceId);
                         const formFields = linkedSub?.formFields;
                         return (
-                          <div key={ev.id} style={{ padding: '0.75rem', borderRadius: '8px', border: `1px solid ${theme.borderColor}`, borderRight: `3px solid ${evPriorityConfig.color}`, pageBreakInside: 'avoid' }}>
+                          <div key={ev.id} style={{ padding: '0.75rem', borderRadius: '8px', borderTop: `1px solid ${theme.borderColor}`, borderBottom: `1px solid ${theme.borderColor}`, borderLeft: `1px solid ${theme.borderColor}`, borderRight: `3px solid ${evPriorityConfig.color}`, pageBreakInside: 'avoid' }}>
                             {/* رأس الشاهد */}
                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
                               <span style={{ fontSize: '0.65rem', fontWeight: 700, color: '#9CA3AF' }}>شاهد {evIdx + 1}</span>
@@ -3330,8 +3330,8 @@ export default function PerformanceEvidence() {
                             )}
                             {/* عرض بيانات النموذج باستخدام أسماء الحقول الفعلية */}
                             {ev.formData && Object.entries(ev.formData).some(([, v]) => v) && (
-                              <div style={{ marginTop: '0.5rem', border: `1px solid ${theme.accent}20`, borderRadius: '8px', overflow: 'hidden' }}>
-                                <div style={{ background: `${theme.accent}10`, borderBottom: `1px solid ${theme.accent}15`, padding: '6px 12px' }}>
+                              <div style={{ marginTop: '0.5rem', borderTop: `1px solid ${theme.accent}20`, borderBottom: `1px solid ${theme.accent}20`, borderLeft: `1px solid ${theme.accent}20`, borderRight: `1px solid ${theme.accent}20`, borderRadius: '8px', overflow: 'hidden' }}>
+                                <div style={{ background: `${theme.accent}10`, borderBottomWidth: '1px', borderBottomStyle: 'solid', borderBottomColor: `${theme.accent}15`, padding: '6px 12px' }}>
                                   <span style={{ fontSize: '0.7rem', fontWeight: 700, color: theme.accent }}>بيانات النموذج</span>
                                 </div>
                                 <div style={{ padding: '8px 12px' }}>
