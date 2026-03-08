@@ -333,6 +333,7 @@ export default function PerformanceEvidence() {
     department: "المملكة العربية السعودية\nوزارة التعليم\nالإدارة العامة للتعليم بمنطقة",
     year: "", semester: "",
     evaluator: "", evaluatorRole: "مدير المدرسة", date: "",
+    extraLogo: "",
   });
 
   const [criteriaData, setCriteriaData] = useState<Record<string, CriterionData>>({});
@@ -2072,10 +2073,45 @@ export default function PerformanceEvidence() {
                     <p className="text-[10px] text-muted-foreground mt-1">يظهر في رأس التقرير والغلاف (سطر لكل مستوى)</p>
                   </div>
 
+                  {/* حقل شعار إضافي */}
+                  <div className="mt-4">
+                    <label className="block text-sm font-medium text-foreground mb-1.5">شعار إضافي (اختياري)</label>
+                    <p className="text-[10px] text-muted-foreground mb-2">شعار إضافي يظهر بجانب شعار وزارة التعليم في التقارير (مثل شعار المدرسة أو الإدارة)</p>
+                    <div className="flex items-center gap-3">
+                      <input type="text" value={personalInfo.extraLogo}
+                        onChange={(e) => setPersonalInfo((prev) => ({ ...prev, extraLogo: e.target.value }))}
+                        placeholder="رابط الشعار (URL)"
+                        className="flex-1 px-3 py-2.5 rounded-lg border border-border text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40" />
+                      <label className="cursor-pointer px-3 py-2 rounded-lg border border-dashed border-primary/40 text-xs text-primary hover:bg-primary/5 transition-colors flex items-center gap-1.5">
+                        <Upload className="w-3.5 h-3.5" />رفع صورة
+                        <input type="file" accept="image/*" className="hidden" onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+                          const reader = new FileReader();
+                          reader.onload = (ev) => {
+                            const dataUrl = ev.target?.result as string;
+                            setPersonalInfo((prev) => ({ ...prev, extraLogo: dataUrl }));
+                          };
+                          reader.readAsDataURL(file);
+                          e.target.value = '';
+                        }} />
+                      </label>
+                      {personalInfo.extraLogo && (
+                        <div className="relative">
+                          <img src={personalInfo.extraLogo} alt="شعار إضافي" className="w-12 h-12 object-contain rounded-lg border border-border" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                          <button type="button" onClick={() => setPersonalInfo((prev) => ({ ...prev, extraLogo: '' }))}
+                            className="absolute -top-1.5 -left-1.5 w-4 h-4 bg-destructive text-white rounded-full flex items-center justify-center text-[10px] hover:bg-destructive/80">
+                            <X className="w-2.5 h-2.5" />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
                   {/* تنبيه */}
                   <div className="mt-4 p-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-xs flex items-start gap-2">
                     <Sparkles className="w-4 h-4 shrink-0 mt-0.5" />
-                    <span>جميع البيانات التي تدخلها هنا ستظهر تلقائياً في التقييم النهائي وتقرير التغطية وملف PDF المصدّر والعرض الإلكتروني التفاعلي.</span>
+                    <span>جميع البيانات التي تدخلها هنا ستظهر تلقائياً في التقييم النهائي وتقرير التغطية وملف PDF المصدّر والعرض الإلكتروني التفاعلي. شعار وزارة التعليم مرفق تلقائياً في جميع التقارير.</span>
                   </div>
                 </CardContent>
               </Card>
@@ -2286,6 +2322,7 @@ export default function PerformanceEvidence() {
                                     </div>
                                   ))}
                                   {/* الصفوف الديناميكية المضافة */}
+                                  {/* الصفوف الديناميكية المضافة من الإدارة - عرض فقط بدون حذف */}
                                   {formEv.formData && Object.keys(formEv.formData).filter(k => k.startsWith('dynamic_') && !k.startsWith('__label_')).map(fieldId => {
                                     const label = formEv.formData?.[`__label_${fieldId}`] || 'حقل إضافي';
                                     return (
@@ -2294,10 +2331,6 @@ export default function PerformanceEvidence() {
                                           <label className="block text-xs font-medium text-foreground flex items-center gap-1">
                                             <span className="text-primary">◇</span> {label}
                                           </label>
-                                          <button type="button" onClick={() => removeDynamicRow(currentCriterion.id, formEv.id, fieldId)}
-                                            className="text-[10px] text-destructive hover:text-destructive/80 flex items-center gap-0.5">
-                                            <Trash2 className="w-3 h-3" />حذف
-                                          </button>
                                         </div>
                                         <textarea value={formEv.formData?.[fieldId] || ''} onChange={(e) => updateFormField(currentCriterion.id, formEv.id, fieldId, e.target.value)}
                                           placeholder={`أدخل ${label}...`} rows={2}
@@ -2306,13 +2339,7 @@ export default function PerformanceEvidence() {
                                     );
                                   })}
                                 </div>
-                                {/* زر إضافة صف جديد */}
-                                <div className="mt-3 flex justify-start">
-                                  <Button variant="outline" size="sm" className="gap-1.5 text-xs border-dashed border-primary/40 text-primary"
-                                    onClick={() => addDynamicRow(currentCriterion.id, sub.id, formEv.id)}>
-                                    <Plus className="w-3.5 h-3.5" />إضافة صف جديد
-                                  </Button>
-                                </div>
+
                               </div>
                             );
                           })()}
@@ -2326,8 +2353,8 @@ export default function PerformanceEvidence() {
                             </motion.div>
                           )}
 
-                          {/* Evidences List */}
-                          {subEvidences.map((ev) => renderEvidenceItem(ev, currentCriterion.id))}
+                          {/* Evidences List - تخطي الشواهد التي تحتوي على formData لأنها تُعرض في نموذج التقرير */}
+                          {subEvidences.filter(ev => !(ev.formData !== undefined && sub.formFields)).map((ev) => renderEvidenceItem(ev, currentCriterion.id))}
 
                           {/* Add Evidence Buttons + Drag & Drop Zone */}
                           <div className="space-y-2">
@@ -2362,44 +2389,9 @@ export default function PerformanceEvidence() {
                             </div>
                             {/* Quick Action Buttons */}
                             <div className="flex flex-wrap gap-1.5 sm:gap-2">
-                              <Button variant="outline" size="sm" className="gap-1 sm:gap-1.5 border-dashed border-primary/40 text-primary text-[10px] sm:text-xs h-7 sm:h-8 px-2 sm:px-3"
-                                onClick={() => addEvidence(currentCriterion.id, sub.id, "text")}>
-                                <Plus className="w-3 h-3 sm:w-3.5 sm:h-3.5" />إضافة حقل بيانات
-                              </Button>
                               <Button variant="outline" size="sm" className="gap-1 sm:gap-1.5 border-dashed border-purple-400 text-purple-600 text-[10px] sm:text-xs h-7 sm:h-8 px-2 sm:px-3"
                                 onClick={() => addEvidence(currentCriterion.id, sub.id, "link")}>
                                 <LinkIcon className="w-3 h-3 sm:w-3.5 sm:h-3.5" />رابط
-                              </Button>
-                            </div>
-                          </div>
-
-                          {/* AI Assistant */}
-                          <div className="bg-violet-50/50 rounded-lg sm:rounded-xl p-3 sm:p-4 border border-violet-200/50">
-                            <h4 className="text-[10px] sm:text-xs font-bold text-violet-700 flex items-center gap-1 sm:gap-1.5 mb-2 sm:mb-3">
-                              <Sparkles className="w-3 h-3 sm:w-3.5 sm:h-3.5" />مساعد الذكاء الاصطناعي
-                            </h4>
-                            {aiMessages.length > 0 && (
-                              <div className="space-y-2 mb-2 sm:mb-3 max-h-32 sm:max-h-40 overflow-y-auto">
-                                {aiMessages.map((msg, i) => (
-                                  <div key={i} className="bg-white rounded-lg p-2.5 sm:p-3 text-[10px] sm:text-xs text-foreground leading-relaxed border border-violet-100">
-                                    {msg}
-                                    <button type="button" onClick={() => { const ev = createEmptyEvidence(sub.id); ev.text = msg; setCriteriaData(prev => ({ ...prev, [currentCriterion.id]: { ...prev[currentCriterion.id], evidences: [...prev[currentCriterion.id].evidences, ev] } })); toast.success("تم إضافة النص كشاهد"); }}
-                                      className="mt-1.5 text-[9px] sm:text-[10px] text-violet-600 hover:text-violet-700 flex items-center gap-1">
-                                      <Plus className="w-2.5 h-2.5 sm:w-3 sm:h-3" />استخدام كشاهد
-                                    </button>
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                            <div className="flex gap-1.5 sm:gap-2">
-                              <input type="text" value={aiPrompt} onChange={(e) => setAiPrompt(e.target.value)}
-                                onKeyDown={(e) => { if (e.key === 'Enter') callAI(currentCriterion.id, sub.id, aiPrompt); }}
-                                placeholder="اسأل الذكاء الاصطناعي..."
-                                className="flex-1 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-lg border border-violet-200 text-xs sm:text-sm bg-white focus:outline-none focus:ring-2 focus:ring-violet-500/20" />
-                              <Button size="sm" className="bg-violet-600 hover:bg-violet-700 gap-1.5 h-8 sm:h-9 px-2.5 sm:px-3"
-                                onClick={() => callAI(currentCriterion.id, sub.id, aiPrompt)}
-                                disabled={aiLoading === `${currentCriterion.id}_${sub.id}`}>
-                                {aiLoading === `${currentCriterion.id}_${sub.id}` ? <Loader2 className="w-3 h-3 sm:w-3.5 sm:h-3.5 animate-spin" /> : <Sparkles className="w-3 h-3 sm:w-3.5 sm:h-3.5" />}
                               </Button>
                             </div>
                           </div>
@@ -2640,69 +2632,97 @@ export default function PerformanceEvidence() {
             const formEv = prevEvidences.find(e => e.formData !== undefined);
             const imageEvidences = prevEvidences.filter(e => e.type === 'image' && e.fileData);
             const theme = selectedTheme;
-            // جمع الحقول الثابتة والديناميكية
+            const themeColors = {
+              headerBg: theme.headerBg.includes('gradient') ? theme.headerBg : theme.headerBg,
+              accent: theme.accent,
+              lightBg: theme.accent + '10',
+              borderClr: theme.accent + '40',
+            };
             const staticFields = (prevSub.formFields || []).map(f => ({ id: f.id, label: f.label, value: formEv?.formData?.[f.id] || '' }));
             const dynamicFields = formEv?.formData ? Object.keys(formEv.formData).filter(k => k.startsWith('dynamic_') && !k.startsWith('__label_')).map(k => ({ id: k, label: formEv.formData?.[`__label_${k}`] || 'حقل إضافي', value: formEv.formData?.[k] || '' })) : [];
             const allFields = [...staticFields, ...dynamicFields];
-            // فصل الحقول القصيرة والطويلة
             const shortFields = allFields.filter(f => (f.value?.length || 0) < 80);
             const longFields = allFields.filter(f => (f.value?.length || 0) >= 80);
+            const MOE_LOGO = 'https://d2xsxph8kpxj0f.cloudfront.net/310519663047121386/h34s4aPNVyHXdtjgZ7eNNf/moe-logo-large_dd06d2c4.png';
             return (
               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 bg-black/60 z-50 flex items-start justify-center p-4 overflow-y-auto">
                 <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
                   className="bg-white rounded-2xl shadow-2xl max-w-3xl w-full my-8 overflow-hidden">
                   {/* شريط الأدوات */}
-                  <div className="flex items-center justify-between p-3 bg-gray-50 border-b">
-                    <div className="flex items-center gap-2">
+                  <div className="flex items-center justify-between p-3 bg-gray-50 border-b flex-wrap gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <Button size="sm" variant="outline" className="gap-1 text-xs h-7" onClick={() => exportSingleEvidence(previewCriterionId, previewSubId)}>
                         <Download className="w-3 h-3" />تصدير PDF
                       </Button>
                       <Button size="sm" variant="outline" className="gap-1 text-xs h-7" onClick={() => { const el = document.getElementById(`single-preview-${previewSubId}`); if (el) printElement(`single-preview-${previewSubId}`); }}>
                         <Printer className="w-3 h-3" />طباعة
                       </Button>
+                      {/* اختيار الثيم */}
+                      <select value={selectedTheme.id} onChange={(e) => { const t = allThemes.find(th => th.id === e.target.value); if (t) setSelectedTheme(t); }}
+                        className="text-xs h-7 px-2 rounded border border-gray-300 bg-white">
+                        {allThemes.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                      </select>
                     </div>
                     <button onClick={() => { setPreviewSubId(null); setPreviewCriterionId(null); }} className="p-1.5 rounded-lg hover:bg-gray-200">
                       <X className="w-5 h-5" />
                     </button>
                   </div>
-                  {/* محتوى المعاينة */}
+                  {/* محتوى المعاينة - تصميم هوية وزارة التعليم */}
                   <div id={`single-preview-${previewSubId}`} style={{ fontFamily: "'Cairo', 'Tajawal', sans-serif", direction: 'rtl' }}>
                     <div style={{ background: 'white', padding: '0', maxWidth: '210mm', margin: '0 auto' }}>
-                      {/* === ترويسة وزارة التعليم === */}
-                      <div style={{ background: 'linear-gradient(135deg, #0C7B93, #27AE60, #2ECC71)', padding: '24px 30px', color: 'white', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <div style={{ textAlign: 'right', fontSize: '11px', lineHeight: '1.8' }}>
-                          <div style={{ fontWeight: 'bold', fontSize: '12px' }}>المملكة العربية السعودية</div>
-                          <div>وزارة التعليم</div>
-                          <div>الإدارة العامة للتعليم بالمنطقة</div>
-                          <div>{personalInfo.school || 'مدرسة'}</div>
-                        </div>
-                        <div style={{ textAlign: 'center' }}>
-                          <div style={{ fontSize: '14px', fontWeight: 'bold', letterSpacing: '1px' }}>وزارة التعـــليم</div>
-                          <div style={{ fontSize: '10px', opacity: 0.9 }}>Ministry of Education</div>
-                        </div>
-                        <div style={{ textAlign: 'left', fontSize: '11px', lineHeight: '1.8' }}>
-                          <div>العام الدراسي {personalInfo.year || '1447هـ'}</div>
-                          <div>الفصل الدراسي {personalInfo.semester || 'الثاني'}</div>
+                      {/* === ترويسة وزارة التعليم - مطابقة للصورة المرفقة === */}
+                      <div style={{ background: theme.headerBg.includes('gradient') ? theme.headerBg : theme.headerBg, padding: '24px 30px 28px', color: theme.headerText, position: 'relative', backgroundColor: theme.headerBg.includes('gradient') ? undefined : theme.headerBg }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                          {/* الجانب الأيمن - بيانات الإدارة */}
+                          <div style={{ textAlign: 'right', fontSize: '11px', lineHeight: '1.9' }}>
+                            <div style={{ fontSize: '10px', opacity: 0.75, marginBottom: '2px' }}>المملكة العربية السعودية</div>
+                            {(personalInfo.department || 'الإدارة العامة للتعليم\nبمنطقة\nمكتب التعليم').split('\n').map((line: string, i: number) => (
+                              <div key={i} style={{ fontWeight: i === 0 ? 'bold' : 'normal' }}>{line}</div>
+                            ))}
+                            {personalInfo.school && <div style={{ fontWeight: 'bold', marginTop: '2px' }}>{personalInfo.school}</div>}
+                          </div>
+                          {/* الوسط - الشعار */}
+                          <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                              <img src={MOE_LOGO} alt="شعار وزارة التعليم" style={{ height: '55px', objectFit: 'contain', filter: 'brightness(0) invert(1)' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                              {personalInfo.extraLogo && (
+                                <img src={personalInfo.extraLogo} alt="شعار إضافي" style={{ height: '48px', objectFit: 'contain' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                              )}
+                            </div>
+                            <div>
+                              <div style={{ fontSize: '15px', fontWeight: 'bold', letterSpacing: '2px' }}>وزارة التعـــليم</div>
+                              <div style={{ fontSize: '10px', opacity: 0.85, letterSpacing: '1px' }}>Ministry of Education</div>
+                            </div>
+                          </div>
+                          {/* الجانب الأيسر - العام الدراسي */}
+                          <div style={{ textAlign: 'left', fontSize: '11px', lineHeight: '1.9' }}>
+                            <div>العام الدراسي {personalInfo.year || '1447هـ'}</div>
+                            <div>الفصل الدراسي {personalInfo.semester || 'الثاني'}</div>
+                          </div>
                         </div>
                       </div>
-                      {/* خط فاصل */}
-                      <div style={{ height: '4px', background: 'linear-gradient(to right, #27AE60, #0C7B93, #2980B9)' }} />
+                      {/* خط فاصل متدرج */}
+                      <div style={{ height: '5px', background: `linear-gradient(to left, ${theme.accent}, ${theme.borderColor}, ${theme.accent})` }} />
 
                       {/* === عنوان التقرير === */}
-                      <div style={{ padding: '20px 30px 10px' }}>
-                        <div style={{ background: 'linear-gradient(135deg, #27AE60, #2ECC71)', color: 'white', padding: '12px 24px', borderRadius: '8px', textAlign: 'center', fontWeight: 'bold', fontSize: '16px', marginBottom: '20px' }}>
+                      <div style={{ padding: '20px 30px 14px' }}>
+                        <div style={{ background: theme.accent, color: theme.headerText, padding: '12px 28px', borderRadius: '10px', textAlign: 'center', fontWeight: 'bold', fontSize: '16px', marginBottom: '20px', boxShadow: `0 2px 8px ${theme.accent}30` }}>
                           {prevSub.title}
                         </div>
 
-                        {/* === حقول البيانات القصيرة === */}
+                        {/* === حقول البيانات القصيرة - نمط العنوان على خط أفقي === */}
                         {shortFields.length > 0 && (
-                          <div style={{ display: 'grid', gridTemplateColumns: shortFields.length === 1 ? '1fr' : 'repeat(2, 1fr)', gap: '10px', marginBottom: '16px' }}>
+                          <div style={{ display: 'grid', gridTemplateColumns: shortFields.length >= 3 ? 'repeat(3, 1fr)' : shortFields.length === 2 ? 'repeat(2, 1fr)' : '1fr', gap: '14px', marginBottom: '20px' }}>
                             {shortFields.map(field => (
-                              <div key={field.id} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                <div style={{ background: 'linear-gradient(135deg, #27AE60, #0C7B93)', color: 'white', padding: '6px 14px', borderRadius: '6px', fontSize: '11px', fontWeight: 'bold', whiteSpace: 'nowrap', minWidth: '90px', textAlign: 'center' }}>
+                              <div key={field.id} style={{ position: 'relative' }}>
+                                {/* خط أفقي */}
+                                <div style={{ position: 'absolute', top: '8px', left: 0, right: 0, height: '1px', background: '#E0E0E0' }} />
+                                {/* العنوان فوق الخط */}
+                                <div style={{ position: 'relative', display: 'inline-block', background: 'white', paddingLeft: '8px', fontSize: '10px', fontWeight: 'bold', color: theme.accent, marginBottom: '6px' }}>
                                   {field.label}
                                 </div>
-                                <div style={{ flex: 1, border: '1.5px solid #A8E6CF', borderRadius: '6px', padding: '6px 12px', fontSize: '12px', textAlign: 'center', minHeight: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#F0FFF4' }}>
+                                {/* القيمة */}
+                                <div style={{ border: `1.5px solid ${theme.accent}35`, borderRadius: '8px', padding: '8px 12px', fontSize: '12px', textAlign: 'center', minHeight: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: `${theme.accent}06` }}>
                                   {field.value || '...'}
                                 </div>
                               </div>
@@ -2710,13 +2730,17 @@ export default function PerformanceEvidence() {
                           </div>
                         )}
 
-                        {/* === حقول البيانات الطويلة (كل واحد في قسم منفصل) === */}
+                        {/* === حقول البيانات الطويلة - نمط العنوان على خط أفقي === */}
                         {longFields.map(field => (
-                          <div key={field.id} style={{ marginBottom: '16px' }}>
-                            <div style={{ background: 'linear-gradient(135deg, #27AE60, #0C7B93)', color: 'white', padding: '8px 20px', borderRadius: '8px 8px 0 0', fontSize: '12px', fontWeight: 'bold', textAlign: 'center' }}>
+                          <div key={field.id} style={{ marginBottom: '18px', position: 'relative' }}>
+                            {/* خط أفقي */}
+                            <div style={{ position: 'absolute', top: '8px', left: 0, right: 0, height: '1px', background: '#E0E0E0' }} />
+                            {/* العنوان فوق الخط */}
+                            <div style={{ position: 'relative', display: 'inline-block', background: 'white', paddingLeft: '8px', fontSize: '11px', fontWeight: 'bold', color: theme.accent, marginBottom: '8px' }}>
                               {field.label}
                             </div>
-                            <div style={{ border: '1.5px solid #A8E6CF', borderTop: 'none', borderRadius: '0 0 8px 8px', padding: '14px 18px', fontSize: '12px', lineHeight: '2', background: '#FAFFFE', whiteSpace: 'pre-wrap' }}>
+                            {/* المحتوى */}
+                            <div style={{ border: `1.5px solid ${theme.accent}35`, borderRadius: '10px', padding: '16px 18px', fontSize: '12px', lineHeight: '2.2', background: `${theme.accent}04`, whiteSpace: 'pre-wrap' }}>
                               {field.value || '...'}
                             </div>
                           </div>
@@ -2724,37 +2748,41 @@ export default function PerformanceEvidence() {
 
                         {/* === قسم الشواهد (صور) === */}
                         {imageEvidences.length > 0 && (
-                          <div style={{ marginBottom: '16px' }}>
-                            <div style={{ background: 'linear-gradient(135deg, #27AE60, #0C7B93)', color: 'white', padding: '8px 20px', borderRadius: '8px 8px 0 0', fontSize: '12px', fontWeight: 'bold', textAlign: 'center' }}>
+                          <div style={{ marginBottom: '18px', position: 'relative' }}>
+                            <div style={{ position: 'absolute', top: '8px', left: 0, right: 0, height: '1px', background: '#E0E0E0' }} />
+                            <div style={{ position: 'relative', display: 'inline-block', background: 'white', paddingLeft: '8px', fontSize: '11px', fontWeight: 'bold', color: theme.accent, marginBottom: '8px' }}>
                               الشواهد
                             </div>
-                            <div style={{ border: '1.5px solid #A8E6CF', borderTop: 'none', borderRadius: '0 0 8px 8px', padding: '14px', display: 'grid', gridTemplateColumns: imageEvidences.length === 1 ? '1fr' : 'repeat(2, 1fr)', gap: '10px', background: '#FAFFFE' }}>
+                            <div style={{ border: `1.5px solid ${theme.accent}35`, borderRadius: '10px', padding: '14px', display: 'grid', gridTemplateColumns: imageEvidences.length === 1 ? '1fr' : 'repeat(2, 1fr)', gap: '12px', background: `${theme.accent}04` }}>
                               {imageEvidences.map(ev => (
-                                <div key={ev.id} style={{ border: '1px solid #E0E0E0', borderRadius: '6px', overflow: 'hidden' }}>
-                                  <img src={ev.fileData?.startsWith('idb://') ? '' : (ev.fileData || '')} alt={ev.fileName} style={{ width: '100%', height: 'auto', maxHeight: '200px', objectFit: 'contain' }} />
+                                <div key={ev.id} style={{ border: '1px solid #E8E8E8', borderRadius: '8px', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
+                                  <img src={ev.fileData?.startsWith('idb://') ? '' : (ev.fileData || '')} alt={ev.fileName} style={{ width: '100%', height: 'auto', maxHeight: '220px', objectFit: 'contain' }} />
                                 </div>
                               ))}
                             </div>
                           </div>
                         )}
 
-                        {/* === تذييل === */}
-                        <div style={{ display: 'flex', justifyContent: 'space-between', padding: '20px 30px', marginTop: '20px', borderTop: '2px solid #E8F5E9' }}>
-                          <div style={{ textAlign: 'center' }}>
-                            <div style={{ fontSize: '11px', fontWeight: 'bold', color: '#27AE60', marginBottom: '4px' }}>{selectedJob?.title || 'المعلم'}</div>
-                            <div style={{ fontSize: '12px', fontWeight: 'bold' }}>{personalInfo.name || 'اسم المعلم'}</div>
+                        {/* === توقيعات === */}
+                        <div style={{ display: 'flex', justifyContent: 'space-around', padding: '20px 0', marginTop: '24px', borderTop: `2px solid ${theme.accent}15` }}>
+                          <div style={{ textAlign: 'center', minWidth: '150px' }}>
+                            <div style={{ fontSize: '11px', fontWeight: 'bold', color: theme.accent, marginBottom: '6px' }}>{selectedJob?.title || 'المعلم'}</div>
+                            <div style={{ fontSize: '13px', fontWeight: 'bold', color: '#1a1a1a' }}>{personalInfo.name || 'اسم المعلم'}</div>
+                            <div style={{ width: '100px', borderBottom: '1.5px dotted #999', margin: '12px auto 0' }} />
                           </div>
-                          <div style={{ textAlign: 'center' }}>
-                            <div style={{ fontSize: '11px', fontWeight: 'bold', color: '#27AE60', marginBottom: '4px' }}>مدير المدرسة</div>
-                            <div style={{ fontSize: '12px', fontWeight: 'bold' }}>{personalInfo.evaluator || 'اسم المدير'}</div>
+                          <div style={{ textAlign: 'center', minWidth: '150px' }}>
+                            <div style={{ fontSize: '11px', fontWeight: 'bold', color: theme.accent, marginBottom: '6px' }}>مدير المدرسة</div>
+                            <div style={{ fontSize: '13px', fontWeight: 'bold', color: '#1a1a1a' }}>{personalInfo.evaluator || 'اسم المدير'}</div>
+                            <div style={{ width: '100px', borderBottom: '1.5px dotted #999', margin: '12px auto 0' }} />
                           </div>
                         </div>
                       </div>
 
                       {/* === شريط سفلي === */}
-                      <div style={{ height: '4px', background: 'linear-gradient(to right, #27AE60, #0C7B93, #2980B9)' }} />
-                      <div style={{ background: 'linear-gradient(135deg, #0C7B93, #27AE60)', padding: '8px', textAlign: 'center', color: 'white', fontSize: '10px' }}>
-                        SERS - نظام السجلات التعليمية الذكي
+                      <div style={{ height: '5px', background: `linear-gradient(to left, ${theme.accent}, ${theme.borderColor}, ${theme.accent})` }} />
+                      <div style={{ background: theme.headerBg.includes('gradient') ? theme.headerBg : theme.accent, padding: '10px 20px', textAlign: 'center', color: theme.headerText, fontSize: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: theme.headerBg.includes('gradient') ? undefined : theme.accent }}>
+                        <span>SERS - نظام السجلات التعليمية الذكي</span>
+                        <span style={{ opacity: 0.7 }}>صفحة 1</span>
                       </div>
                     </div>
                   </div>
@@ -2762,44 +2790,6 @@ export default function PerformanceEvidence() {
               </motion.div>
             );
           })()}
-
-          {/* Dialog إضافة صف ديناميكي */}
-          <AnimatePresence>
-            {addRowDialog && (
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                className="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center p-4"
-                onClick={() => setAddRowDialog(null)}
-              >
-                <motion.div
-                  initial={{ scale: 0.9, opacity: 0 }}
-                  animate={{ scale: 1, opacity: 1 }}
-                  exit={{ scale: 0.9, opacity: 0 }}
-                  className="bg-background rounded-xl shadow-2xl p-6 w-full max-w-md"
-                  dir="rtl"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <h3 className="text-lg font-bold mb-4" style={{ fontFamily: "'Tajawal', sans-serif" }}>إضافة صف جديد</h3>
-                  <p className="text-sm text-muted-foreground mb-3">أدخل عنوان الحقل الجديد الذي تريد إضافته للنموذج:</p>
-                  <input
-                    type="text"
-                    value={newRowLabel}
-                    onChange={(e) => setNewRowLabel(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === 'Enter') confirmAddDynamicRow(); }}
-                    placeholder="مثال: المنفذ، مكان التنفيذ، المستهدفون..."
-                    className="w-full px-4 py-3 rounded-lg border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 bg-background mb-4"
-                    autoFocus
-                  />
-                  <div className="flex gap-2 justify-end">
-                    <Button variant="outline" size="sm" onClick={() => setAddRowDialog(null)}>إلغاء</Button>
-                    <Button size="sm" onClick={confirmAddDynamicRow} disabled={!newRowLabel.trim()}>إضافة</Button>
-                  </div>
-                </motion.div>
-              </motion.div>
-            )}
-          </AnimatePresence>
 
           {/* Navigation */}
           <div className="flex items-center justify-between mt-4 sm:mt-6 gap-2">
