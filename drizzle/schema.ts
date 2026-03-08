@@ -70,7 +70,7 @@ export const shareLinks = mysqlTable("share_links", {
 export type ShareLink = typeof shareLinks.$inferSelect;
 export type InsertShareLink = typeof shareLinks.$inferInsert;
 
-// ─── PDF Templates (Themes) ────────────────────────────
+// ─── PDF Templates (Visual Themes) ────────────────────────────
 export const pdfTemplates = mysqlTable("pdf_templates", {
   id: int("id").autoincrement().primaryKey(),
   name: varchar("name", { length: 255 }).notNull(),
@@ -93,3 +93,90 @@ export const pdfTemplates = mysqlTable("pdf_templates", {
 
 export type PdfTemplate = typeof pdfTemplates.$inferSelect;
 export type InsertPdfTemplate = typeof pdfTemplates.$inferInsert;
+
+// ─── Report Templates (Dynamic Form + Layout Definition) ────────────
+// Each report template defines: fields (form inputs), layout (how they appear in preview/PDF),
+// and metadata. Admin can CRUD these. Users pick a template, fill the form, preview & export.
+export const reportTemplates = mysqlTable("report_templates", {
+  id: int("id").autoincrement().primaryKey(),
+  name: varchar("name", { length: 255 }).notNull(),
+  description: text("description"),
+  category: varchar("category", { length: 128 }).default("general"),
+  // JSON array of field definitions: [{id, label, type, placeholder, required, gridCol, gridRow, section, options}]
+  fields: json("fields").$type<ReportField[]>().notNull(),
+  // JSON layout config: {columns, headerStyle, sections, backgroundUrl, ...}
+  layout: json("layout").$type<ReportLayout>().notNull(),
+  // Which visual theme (pdfTemplates) to use by default
+  defaultThemeId: int("defaultThemeId"),
+  thumbnailUrl: text("thumbnailUrl"),
+  isActive: boolean("isActive").default(true),
+  isDefault: boolean("isDefault").default(false),
+  sortOrder: int("sortOrder").default(0),
+  createdBy: int("createdBy"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type ReportTemplate = typeof reportTemplates.$inferSelect;
+export type InsertReportTemplate = typeof reportTemplates.$inferInsert;
+
+// ─── TypeScript types for report template JSON fields ────────────
+
+export interface ReportField {
+  id: string;
+  label: string;
+  type: "text" | "textarea" | "date" | "number" | "select" | "image" | "images" | "list" | "signature";
+  placeholder?: string;
+  required?: boolean;
+  section?: string; // group fields under a section heading
+  gridCol?: number; // 1-based column in grid layout (1, 2, or 3)
+  gridRow?: number; // row ordering
+  options?: string[]; // for select type
+  defaultValue?: string;
+  maxItems?: number; // for list/images type
+  helpText?: string;
+}
+
+export interface ReportLayoutSection {
+  id: string;
+  title: string;
+  type: "header" | "fields" | "content" | "images" | "signatures" | "footer";
+  columns?: number; // 1, 2, or 3
+  fieldIds?: string[]; // which fields go in this section
+  style?: Record<string, string>;
+}
+
+export interface ReportLayout {
+  pageSize?: "A4" | "letter";
+  direction?: "rtl" | "ltr";
+  columns?: number;
+  backgroundUrl?: string;
+  headerStyle?: "ministry" | "simple" | "custom";
+  showSchoolName?: boolean;
+  showMinistryLogo?: boolean;
+  showSignatures?: boolean;
+  showFooter?: boolean;
+  sections: ReportLayoutSection[];
+}
+
+// ─── User Reports (filled data from a report template) ────────────
+export const userReports = mysqlTable("user_reports", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  portfolioId: int("portfolioId"),
+  reportTemplateId: int("reportTemplateId").notNull(),
+  themeId: int("themeId"),
+  title: varchar("title", { length: 512 }).notNull(),
+  // JSON object: { fieldId: value, ... }
+  data: json("data").$type<Record<string, any>>().notNull(),
+  // Which criterion/sub-evidence this report belongs to
+  criterionId: varchar("criterionId", { length: 128 }),
+  subEvidenceId: varchar("subEvidenceId", { length: 128 }),
+  evidenceId: varchar("evidenceId", { length: 128 }),
+  status: mysqlEnum("status", ["draft", "completed"]).default("draft").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type UserReport = typeof userReports.$inferSelect;
+export type InsertUserReport = typeof userReports.$inferInsert;

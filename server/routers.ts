@@ -12,6 +12,8 @@ import {
   createUploadedFile, getFilesByPortfolio, deleteUploadedFile,
   createShareLink, getShareLinkByToken, incrementShareLinkViews, getShareLinksByPortfolio, deactivateShareLink,
   createPdfTemplate, updatePdfTemplate, deletePdfTemplate, getActivePdfTemplates, getAllPdfTemplates, seedDefaultTemplates,
+  createReportTemplate, updateReportTemplate, deleteReportTemplate, getActiveReportTemplates, getAllReportTemplates, getReportTemplateById, seedDefaultReportTemplates,
+  createUserReport, updateUserReport, getUserReports, getUserReportById, deleteUserReport,
 } from "./db";
 
 export const appRouter = router({
@@ -290,6 +292,132 @@ export const appRouter = router({
       await seedDefaultTemplates();
       return { success: true };
     }),
+  }),
+
+  // ─── Report Templates (Dynamic Forms) ──────────────────────────
+  reportTemplates: router({
+    list: publicProcedure.query(async () => {
+      return getActiveReportTemplates();
+    }),
+
+    listAll: adminProcedure.query(async () => {
+      return getAllReportTemplates();
+    }),
+
+    get: publicProcedure
+      .input(z.object({ id: z.number() }))
+      .query(async ({ input }) => {
+        return getReportTemplateById(input.id);
+      }),
+
+    create: adminProcedure
+      .input(z.object({
+        name: z.string(),
+        description: z.string().optional(),
+        category: z.string().optional(),
+        fields: z.array(z.any()),
+        layout: z.any(),
+        defaultThemeId: z.number().optional(),
+        thumbnailUrl: z.string().optional(),
+        isDefault: z.boolean().optional(),
+        sortOrder: z.number().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        return createReportTemplate({ ...input, createdBy: ctx.user.id, isActive: true });
+      }),
+
+    update: adminProcedure
+      .input(z.object({
+        id: z.number(),
+        name: z.string().optional(),
+        description: z.string().optional(),
+        category: z.string().optional(),
+        fields: z.array(z.any()).optional(),
+        layout: z.any().optional(),
+        defaultThemeId: z.number().optional(),
+        thumbnailUrl: z.string().optional(),
+        isActive: z.boolean().optional(),
+        isDefault: z.boolean().optional(),
+        sortOrder: z.number().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const { id, ...data } = input;
+        return updateReportTemplate(id, data);
+      }),
+
+    delete: adminProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input }) => {
+        return deleteReportTemplate(input.id);
+      }),
+
+    seed: adminProcedure.mutation(async () => {
+      await seedDefaultReportTemplates();
+      return { success: true };
+    }),
+  }),
+
+  // ─── User Reports (Filled Forms) ──────────────────────────
+  userReport: router({
+    list: protectedProcedure
+      .input(z.object({ portfolioId: z.number().optional() }).optional())
+      .query(async ({ ctx, input }) => {
+        return getUserReports(ctx.user.id, input?.portfolioId);
+      }),
+
+    get: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .query(async ({ ctx, input }) => {
+        const report = await getUserReportById(input.id);
+        if (!report || report.userId !== ctx.user.id) return null;
+        return report;
+      }),
+
+    create: protectedProcedure
+      .input(z.object({
+        reportTemplateId: z.number(),
+        portfolioId: z.number().optional(),
+        themeId: z.number().optional(),
+        title: z.string(),
+        data: z.record(z.string(), z.any()),
+        criterionId: z.string().optional(),
+        subEvidenceId: z.string().optional(),
+        evidenceId: z.string().optional(),
+        status: z.enum(["draft", "completed"]).optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        return createUserReport({
+          userId: ctx.user.id,
+          reportTemplateId: input.reportTemplateId,
+          portfolioId: input.portfolioId ?? null,
+          themeId: input.themeId ?? null,
+          title: input.title,
+          data: input.data,
+          criterionId: input.criterionId ?? null,
+          subEvidenceId: input.subEvidenceId ?? null,
+          evidenceId: input.evidenceId ?? null,
+          status: input.status ?? "draft",
+        });
+      }),
+
+    update: protectedProcedure
+      .input(z.object({
+        id: z.number(),
+        title: z.string().optional(),
+        data: z.record(z.string(), z.any()).optional(),
+        themeId: z.number().optional(),
+        status: z.enum(["draft", "completed"]).optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const { id, ...data } = input;
+        return updateUserReport(id, ctx.user.id, data);
+      }),
+
+    delete: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        return deleteUserReport(input.id, ctx.user.id);
+      }),
   }),
 
   // ─── AI Services ──────────────────────────────────────────────

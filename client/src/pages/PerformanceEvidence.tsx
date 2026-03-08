@@ -54,6 +54,8 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import UnifiedEvidenceForm from "@/components/UnifiedEvidenceForm";
+import type { EvidenceRow } from "@/components/UnifiedEvidenceForm";
 
 // ===== أنواع البيانات =====
 type EvidenceType = "text" | "image" | "link" | "file" | "video";
@@ -311,6 +313,9 @@ export default function PerformanceEvidence() {
   const fillFormMutation = trpc.ai.fillFormFields.useMutation();
   const improveMutation = trpc.ai.improveText.useMutation();
   const classifyMutation = trpc.ai.classifyEvidence.useMutation();
+
+  // View Mode for UnifiedEvidenceForm
+  const [evidenceViewMode, setEvidenceViewMode] = useState<"form" | "table" | "interactive">("form");
 
   // Search & Filter
   const [searchQuery, setSearchQuery] = useState("");
@@ -2147,205 +2152,64 @@ export default function PerformanceEvidence() {
             </CardContent>
           </Card>
 
-          {/* Sub-Evidences */}
-          <div className="space-y-3">
-            {allSubEvidences.map((sub) => {
-              const subEvidences = data.evidences.filter(e => e.subEvidenceId === sub.id);
-              const isExpanded = expandedSubEvidence === sub.id;
-              const aiKey = `${currentCriterion.id}_${sub.id}`;
-              const aiMessages = aiChat[aiKey] || [];
-              const hasFormEvidence = subEvidences.some(e => e.formData && Object.keys(e.formData).length > 0);
+          {/* Sub-Evidences - نموذج إدخال موحد */}
+          <UnifiedEvidenceForm
+            criterionId={currentCriterion.id}
+            criterionTitle={currentCriterion.title}
+            subEvidences={allSubEvidences as any}
+            evidences={data.evidences as any}
+            formFields={allSubEvidences[0]?.formFields || [
+              { id: "title", label: "العنوان", type: "text" as const, placeholder: "أدخل العنوان..." },
+              { id: "date", label: "التاريخ", type: "date" as const },
+              { id: "details", label: "التفاصيل", type: "textarea" as const, placeholder: "أدخل التفاصيل..." },
+              { id: "notes", label: "ملاحظات", type: "textarea" as const, placeholder: "ملاحظات إضافية..." },
+            ]}
+            onAddRow={(subEvidenceId, type) => addEvidence(currentCriterion.id, subEvidenceId, type)}
+            onRemoveRow={(evidenceId) => removeEvidence(currentCriterion.id, evidenceId)}
+            onUpdateRow={(evidenceId, updates) => updateEvidence(currentCriterion.id, evidenceId, updates)}
+            onUpdateFormField={(evidenceId, fieldId, value) => updateFormField(currentCriterion.id, evidenceId, fieldId, value)}
+            onFileUpload={(subEvidenceId) => triggerFileUpload(currentCriterion.id, subEvidenceId)}
+            onDragUpload={(files, subEvidenceId) => {
+              activeUploadRef.current = { criterionId: currentCriterion.id, subEvidenceId };
+              const dt = new DataTransfer();
+              Array.from(files).forEach(f => dt.items.add(f));
+              const input = fileInputRef.current;
+              if (input) { input.files = dt.files; input.dispatchEvent(new Event('change', { bubbles: true })); }
+            }}
+            onAISuggest={async (prompt) => {
+              const key = `${currentCriterion.id}_${allSubEvidences[0]?.id || ''}`;
+              setAiLoading(key);
+              try {
+                const result = await suggestMutation.mutateAsync({
+                  prompt: prompt || `اقترح شاهد أداء وظيفي لبند "${currentCriterion.title}"`,
+                  context: `الوظيفة: ${selectedJob?.title}, البند: ${currentCriterion.title}`,
+                });
+                setAiLoading(null);
+                return result.content || null;
+              } catch {
+                setAiLoading(null);
+                return "حدث خطأ في الاتصال بالذكاء الاصطناعي. يرجى المحاولة مرة أخرى.";
+              }
+            }}
+            onAIFillForm={async (evidenceId, fields) => {
+              const ev = data.evidences.find(e => e.id === evidenceId);
+              const sub = allSubEvidences.find(s => s.id === ev?.subEvidenceId);
+              await fillFormWithAI(currentCriterion.id, sub?.id || '', evidenceId, fields);
+            }}
+            onAIImproveText={async (evidenceId, fieldId, text) => {
+              await improveFieldText(currentCriterion.id, evidenceId, fieldId, text);
+            }}
+            aiLoading={aiLoading}
+            onPreviewReport={() => {
+              setStep('preview');
+            }}
+            onExportReport={() => {
+              handleExportPDF();
+            }}
+            viewMode={evidenceViewMode}
+            onViewModeChange={setEvidenceViewMode}
+          />
 
-              const isDropTarget = dragOverTarget?.criterionId === currentCriterion.id && dragOverTarget?.subId === sub.id;
-              return (
-                <Card key={sub.id}
-                  onDragOver={(e) => handleDragOver(e, currentCriterion.id, sub.id)}
-                  onDragLeave={handleDragLeave}
-                  onDrop={(e) => handleDrop(e, currentCriterion.id, sub.id)}
-                  className={`overflow-hidden transition-all ${sub.isSubItem ? 'mr-6 sm:mr-8 border-r-2 border-r-primary/20' : ''} ${isExpanded ? 'border-primary/30 shadow-sm' : 'border-border/50'} ${isDropTarget ? 'border-2 border-dashed border-primary bg-primary/5 shadow-lg scale-[1.01]' : ''} ${draggedEvidence ? 'hover:border-primary/50' : ''}`}>
-                  <div role="button" tabIndex={0} onClick={() => {
-                    setExpandedSubEvidence(isExpanded ? null : sub.id);
-                    if (!isExpanded && (sub.type === 'report' || sub.type === 'both') && sub.formFields && !hasFormEvidence) {
-                      addEvidence(currentCriterion.id, sub.id, "text");
-                    }
-                  }}
-                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setExpandedSubEvidence(isExpanded ? null : sub.id); }}
-                    className={`w-full flex items-center justify-between p-3 sm:p-4 hover:bg-muted/30 transition-colors text-right cursor-pointer ${sub.isSubItem ? 'bg-muted/20' : ''}`}>
-                    <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-                      <div className={`w-7 h-7 sm:w-8 sm:h-8 rounded-lg flex items-center justify-center text-sm shrink-0 ${
-                        subEvidences.length > 0 ? 'bg-emerald-100 text-emerald-600' : sub.isSubItem ? 'bg-primary/10 text-primary/60' : 'bg-muted text-muted-foreground'
-                      }`}>
-                        {subEvidences.length > 0 ? <CheckCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> : sub.isSubItem ? <span className="text-[10px]">◇</span> : <Layers className="w-3.5 h-3.5 sm:w-4 sm:h-4" />}
-                      </div>
-                      <div className="min-w-0">
-                        <h3 className={`text-foreground text-xs sm:text-sm truncate ${sub.isSubItem ? 'font-medium' : 'font-bold'}`}>
-                          {sub.title}
-                          {sub.isCustom && <Badge variant="outline" className="mr-1 text-[8px] sm:text-[9px]">مخصص</Badge>}
-                        </h3>
-                        <p className="text-[10px] sm:text-xs text-muted-foreground truncate">
-                          {sub.isSubItem && sub.parentTitle ? <span className="text-primary/60">← {sub.parentTitle} · </span> : ''}
-                          {subEvidences.length} شاهد مرفق
-                        </p>
-                      </div>
-                    </div>
-                    {isExpanded ? <ChevronUp className="w-4 h-4 sm:w-5 sm:h-5 text-muted-foreground shrink-0" /> : <ChevronDown className="w-4 h-4 sm:w-5 sm:h-5 text-muted-foreground shrink-0" />}
-                  </div>
-
-                  <AnimatePresence>
-                    {isExpanded && (
-                      <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }}
-                        className="border-t border-border overflow-hidden">
-                        <div className="p-4 space-y-4">
-                          {/* Form Fields */}
-                          {(sub.type === 'report' || sub.type === 'both') && sub.formFields && (() => {
-                            const formEv = subEvidences.find(e => e.formData !== undefined);
-                            if (!formEv) return null;
-                            return (
-                              <div className="bg-primary/5 rounded-xl p-4 border border-primary/10">
-                                <div className="flex items-center justify-between mb-3">
-                                  <h4 className="text-sm font-bold text-foreground flex items-center gap-2">
-                                    <FileText className="w-4 h-4 text-primary" />نموذج التقرير
-                                  </h4>
-                                  <Button variant="secondary" size="sm" className="gap-1.5 text-xs"
-                                    onClick={() => fillFormWithAI(currentCriterion.id, sub.id, formEv.id, sub.formFields!)}
-                                    disabled={aiLoading === `fill_${formEv.id}`}>
-                                    {aiLoading === `fill_${formEv.id}` ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5 text-violet-500" />}
-                                    تعبئة بالذكاء الاصطناعي
-                                  </Button>
-                                </div>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                  {sub.formFields.map((field: FormField) => (
-                                    <div key={field.id} className={field.type === 'textarea' ? 'md:col-span-2' : ''}>
-                                      <div className="flex items-center justify-between mb-1">
-                                        <label className="block text-xs font-medium text-foreground">
-                                          {field.label} {field.required && <span className="text-destructive">*</span>}
-                                        </label>
-                                        {field.type === 'textarea' && formEv.formData?.[field.id] && (
-                                          <button type="button" onClick={() => improveFieldText(currentCriterion.id, formEv.id, field.id, formEv.formData?.[field.id] || '')}
-                                            disabled={aiLoading === `improve_${formEv.id}_${field.id}`}
-                                            className="text-[10px] text-violet-600 hover:text-violet-700 flex items-center gap-1">
-                                            {aiLoading === `improve_${formEv.id}_${field.id}` ? <Loader2 className="w-3 h-3 animate-spin" /> : <Wand2 className="w-3 h-3" />}
-                                            تحسين
-                                          </button>
-                                        )}
-                                      </div>
-                                      {field.type === 'textarea' ? (
-                                        <textarea value={formEv.formData?.[field.id] || ''} onChange={(e) => updateFormField(currentCriterion.id, formEv.id, field.id, e.target.value)}
-                                          placeholder={field.placeholder} rows={3}
-                                          className="w-full px-3 py-2 rounded-lg border border-border text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/20 bg-background" />
-                                      ) : field.type === 'select' ? (
-                                        <select value={formEv.formData?.[field.id] || ''} onChange={(e) => updateFormField(currentCriterion.id, formEv.id, field.id, e.target.value)}
-                                          className="w-full px-3 py-2.5 rounded-lg border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 bg-background">
-                                          <option value="">اختر...</option>
-                                          {field.options?.map(opt => <option key={opt} value={opt}>{opt}</option>)}
-                                        </select>
-                                      ) : (
-                                        <input type={field.type === 'date' ? 'date' : field.type === 'number' ? 'number' : 'text'}
-                                          value={formEv.formData?.[field.id] || ''} onChange={(e) => updateFormField(currentCriterion.id, formEv.id, field.id, e.target.value)}
-                                          placeholder={field.placeholder}
-                                          className="w-full px-3 py-2.5 rounded-lg border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 bg-background" />
-                                      )}
-                                    </div>
-                                  ))}
-                                </div>
-                              </div>
-                            );
-                          })()}
-
-                          {/* Drop Indicator */}
-                          {isDropTarget && draggedEvidence && (
-                            <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }}
-                              className="bg-primary/10 border-2 border-dashed border-primary rounded-xl p-4 text-center">
-                              <Move className="w-5 h-5 text-primary mx-auto mb-1" />
-                              <p className="text-xs font-medium text-primary">أفلت هنا لنقل الشاهد</p>
-                            </motion.div>
-                          )}
-
-                          {/* Evidences List */}
-                          {subEvidences.map((ev) => renderEvidenceItem(ev, currentCriterion.id))}
-
-                          {/* Add Evidence Buttons + Drag & Drop Zone */}
-                          <div className="space-y-2">
-                            {/* Drag & Drop Zone - محسّن */}
-                            <div
-                              className="relative border-2 border-dashed rounded-2xl p-5 sm:p-7 text-center transition-all duration-300 cursor-pointer hover:border-primary/60 hover:bg-gradient-to-br hover:from-primary/5 hover:to-primary/10 group/drop"
-                              style={{ borderColor: 'var(--border)' }}
-                              onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); e.currentTarget.classList.add('border-primary', 'bg-primary/5', 'scale-[1.02]', 'shadow-lg', 'shadow-primary/10'); e.currentTarget.classList.remove('border-border'); }}
-                              onDragLeave={(e) => { e.preventDefault(); e.currentTarget.classList.remove('border-primary', 'bg-primary/5', 'scale-[1.02]', 'shadow-lg', 'shadow-primary/10'); }}
-                              onDrop={(e) => { e.preventDefault(); e.stopPropagation(); e.currentTarget.classList.remove('border-primary', 'bg-primary/5', 'scale-[1.02]', 'shadow-lg', 'shadow-primary/10'); const files = e.dataTransfer.files; if (files.length > 0) { activeUploadRef.current = { criterionId: currentCriterion.id, subEvidenceId: sub.id }; const dt = new DataTransfer(); Array.from(files).forEach(f => dt.items.add(f)); const input = fileInputRef.current; if (input) { input.files = dt.files; input.dispatchEvent(new Event('change', { bubbles: true })); } } }}
-                              onClick={(e) => { e.preventDefault(); e.stopPropagation(); triggerFileUpload(currentCriterion.id, sub.id); }}
-                            >
-                              <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-3 group-hover/drop:bg-primary/20 group-hover/drop:scale-110 transition-all duration-300">
-                                <Upload className="w-5 h-5 sm:w-6 sm:h-6 text-primary/50 group-hover/drop:text-primary/80 transition-colors" />
-                              </div>
-                              <p className="text-xs sm:text-sm font-bold text-muted-foreground group-hover/drop:text-primary transition-colors">اسحب الملفات هنا أو اضغط للرفع</p>
-                              <p className="text-[10px] text-muted-foreground/50 mt-1">يدعم رفع ملفات متعددة دفعة واحدة</p>
-                              <div className="flex items-center justify-center gap-2 sm:gap-3 mt-3">
-                                <span className="flex items-center gap-1 text-[9px] sm:text-[10px] text-muted-foreground/60 bg-muted/50 px-2 py-0.5 rounded-full">
-                                  <Image className="w-3 h-3" />صور
-                                </span>
-                                <span className="flex items-center gap-1 text-[9px] sm:text-[10px] text-muted-foreground/60 bg-muted/50 px-2 py-0.5 rounded-full">
-                                  <FileText className="w-3 h-3" />PDF
-                                </span>
-                                <span className="flex items-center gap-1 text-[9px] sm:text-[10px] text-muted-foreground/60 bg-muted/50 px-2 py-0.5 rounded-full">
-                                  <Video className="w-3 h-3" />فيديو
-                                </span>
-                                <span className="flex items-center gap-1 text-[9px] sm:text-[10px] text-muted-foreground/60 bg-muted/50 px-2 py-0.5 rounded-full">
-                                  <FileText className="w-3 h-3" />Word
-                                </span>
-                              </div>
-                            </div>
-                            {/* Quick Action Buttons */}
-                            <div className="flex flex-wrap gap-1.5 sm:gap-2">
-                              <Button variant="outline" size="sm" className="gap-1 sm:gap-1.5 border-dashed border-primary/40 text-primary text-[10px] sm:text-xs h-7 sm:h-8 px-2 sm:px-3"
-                                onClick={() => addEvidence(currentCriterion.id, sub.id, "text")}>
-                                <Plus className="w-3 h-3 sm:w-3.5 sm:h-3.5" />إضافة حقل بيانات
-                              </Button>
-                              <Button variant="outline" size="sm" className="gap-1 sm:gap-1.5 border-dashed border-purple-400 text-purple-600 text-[10px] sm:text-xs h-7 sm:h-8 px-2 sm:px-3"
-                                onClick={() => addEvidence(currentCriterion.id, sub.id, "link")}>
-                                <LinkIcon className="w-3 h-3 sm:w-3.5 sm:h-3.5" />رابط
-                              </Button>
-                            </div>
-                          </div>
-
-                          {/* AI Assistant */}
-                          <div className="bg-violet-50/50 rounded-lg sm:rounded-xl p-3 sm:p-4 border border-violet-200/50">
-                            <h4 className="text-[10px] sm:text-xs font-bold text-violet-700 flex items-center gap-1 sm:gap-1.5 mb-2 sm:mb-3">
-                              <Sparkles className="w-3 h-3 sm:w-3.5 sm:h-3.5" />مساعد الذكاء الاصطناعي
-                            </h4>
-                            {aiMessages.length > 0 && (
-                              <div className="space-y-2 mb-2 sm:mb-3 max-h-32 sm:max-h-40 overflow-y-auto">
-                                {aiMessages.map((msg, i) => (
-                                  <div key={i} className="bg-white rounded-lg p-2.5 sm:p-3 text-[10px] sm:text-xs text-foreground leading-relaxed border border-violet-100">
-                                    {msg}
-                                    <button type="button" onClick={() => { const ev = createEmptyEvidence(sub.id); ev.text = msg; setCriteriaData(prev => ({ ...prev, [currentCriterion.id]: { ...prev[currentCriterion.id], evidences: [...prev[currentCriterion.id].evidences, ev] } })); toast.success("تم إضافة النص كشاهد"); }}
-                                      className="mt-1.5 text-[9px] sm:text-[10px] text-violet-600 hover:text-violet-700 flex items-center gap-1">
-                                      <Plus className="w-2.5 h-2.5 sm:w-3 sm:h-3" />استخدام كشاهد
-                                    </button>
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                            <div className="flex gap-1.5 sm:gap-2">
-                              <input type="text" value={aiPrompt} onChange={(e) => setAiPrompt(e.target.value)}
-                                onKeyDown={(e) => { if (e.key === 'Enter') callAI(currentCriterion.id, sub.id, aiPrompt); }}
-                                placeholder="اسأل الذكاء الاصطناعي..."
-                                className="flex-1 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-lg border border-violet-200 text-xs sm:text-sm bg-white focus:outline-none focus:ring-2 focus:ring-violet-500/20" />
-                              <Button size="sm" className="bg-violet-600 hover:bg-violet-700 gap-1.5 h-8 sm:h-9 px-2.5 sm:px-3"
-                                onClick={() => callAI(currentCriterion.id, sub.id, aiPrompt)}
-                                disabled={aiLoading === `${currentCriterion.id}_${sub.id}`}>
-                                {aiLoading === `${currentCriterion.id}_${sub.id}` ? <Loader2 className="w-3 h-3 sm:w-3.5 sm:h-3.5 animate-spin" /> : <Sparkles className="w-3 h-3 sm:w-3.5 sm:h-3.5" />}
-                              </Button>
-                            </div>
-                          </div>
-                        </div>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-                </Card>
-              );
-            })}
-          </div>
 
           {/* إضافة قسم فرعي مخصص */}
           {showAddSub === currentCriterion.id ? (
