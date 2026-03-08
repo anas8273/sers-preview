@@ -167,15 +167,16 @@ const JOB_TYPES = [
 
 // ===== الثيمات =====
 const THEMES = [
+  { id: "edu-forms", name: "الهوية البصرية الأصلية", headerBg: "linear-gradient(135deg, #1B5E6B, #1A6B7A, #2E8B7A)", headerText: "#fff", accent: "#1A6B7A", borderColor: "#1B5E6B" },
+  { id: "edu-forms-gradient", name: "الهوية البصرية تدرج", headerBg: "linear-gradient(135deg, #0D4F5F, #1A6B7A, #2E9E8B)", headerText: "#fff", accent: "#1A6B7A", borderColor: "#0D4F5F" },
+  { id: "simple", name: "بسيط (توفير حبر)", headerBg: "#f8f9fa", headerText: "#1a1a1a", accent: "#1A6B7A", borderColor: "#e5e7eb" },
   { id: "official", name: "الهوية الرسمية", headerBg: "#1B5E20", headerText: "#fff", accent: "#2E7D32", borderColor: "#1B5E20" },
   { id: "official-gradient", name: "تدرج رسمي", headerBg: "linear-gradient(135deg, #1B5E20, #2E7D32, #43A047)", headerText: "#fff", accent: "#2E7D32", borderColor: "#1B5E20" },
-  { id: "edu-visual", name: "الهوية البصرية للتعليم", headerBg: "linear-gradient(135deg, #004D40, #00695C, #00897B)", headerText: "#fff", accent: "#00796B", borderColor: "#004D40" },
   { id: "blue", name: "أزرق كلاسيكي", headerBg: "#0D47A1", headerText: "#fff", accent: "#1565C0", borderColor: "#0D47A1" },
   { id: "blue-gradient", name: "أزرق متدرج", headerBg: "linear-gradient(135deg, #0D47A1, #1565C0, #1976D2)", headerText: "#fff", accent: "#1565C0", borderColor: "#0D47A1" },
   { id: "purple", name: "بنفسجي أنيق", headerBg: "#4A148C", headerText: "#fff", accent: "#6A1B9A", borderColor: "#4A148C" },
   { id: "gold", name: "ذهبي فاخر", headerBg: "linear-gradient(135deg, #5D4037, #795548, #8D6E63)", headerText: "#fff", accent: "#795548", borderColor: "#5D4037" },
   { id: "modern-dark", name: "عصري داكن", headerBg: "linear-gradient(135deg, #1a1a2e, #16213e, #0f3460)", headerText: "#fff", accent: "#0f3460", borderColor: "#1a1a2e" },
-  { id: "simple", name: "بسيط ونظيف", headerBg: "#f8f9fa", headerText: "#1a1a1a", accent: "#059669", borderColor: "#e5e7eb" },
 ];
 
 // ===== إعدادات الأولوية =====
@@ -2354,7 +2355,12 @@ export default function PerformanceEvidence() {
                           )}
 
                           {/* Evidences List - تخطي الشواهد التي تحتوي على formData لأنها تُعرض في نموذج التقرير */}
-                          {subEvidences.filter(ev => !(ev.formData !== undefined && sub.formFields)).map((ev) => renderEvidenceItem(ev, currentCriterion.id))}
+                          {subEvidences.filter(ev => {
+                            // لا نفلتر الشواهد من نوع link أو image أو video أو file - فقط text مع formFields
+                            if (ev.type !== 'text') return true;
+                            // فلترة شواهد النص التي لها formData و formFields
+                            return !(ev.formData !== undefined && sub.formFields);
+                          }).map((ev) => renderEvidenceItem(ev, currentCriterion.id))}
 
                           {/* Add Evidence Buttons + Drag & Drop Zone */}
                           <div className="space-y-2">
@@ -2393,9 +2399,9 @@ export default function PerformanceEvidence() {
                                 onClick={(e) => { e.preventDefault(); e.stopPropagation(); addEvidence(currentCriterion.id, sub.id, "link"); }}>
                                 <LinkIcon className="w-3 h-3 sm:w-3.5 sm:h-3.5" />رابط
                               </Button>
-                              <Button variant="outline" size="sm" className="gap-1 sm:gap-1.5 border-dashed border-blue-400 text-blue-600 text-[10px] sm:text-xs h-7 sm:h-8 px-2 sm:px-3"
-                                onClick={(e) => { e.preventDefault(); e.stopPropagation(); addEvidence(currentCriterion.id, sub.id, "text"); }}>
-                                <Type className="w-3 h-3 sm:w-3.5 sm:h-3.5" />نص
+                              <Button variant="outline" size="sm" className="gap-1 sm:gap-1.5 border-dashed border-red-400 text-red-600 text-[10px] sm:text-xs h-7 sm:h-8 px-2 sm:px-3"
+                                onClick={(e) => { e.preventDefault(); e.stopPropagation(); addEvidence(currentCriterion.id, sub.id, "video"); }}>
+                                <Video className="w-3 h-3 sm:w-3.5 sm:h-3.5" />فيديو
                               </Button>
                             </div>
                           </div>
@@ -2674,155 +2680,164 @@ export default function PerformanceEvidence() {
                       <X className="w-5 h-5" />
                     </button>
                   </div>
-                  {/* محتوى المعاينة - تصميم هوية وزارة التعليم */}
+                  {/* محتوى المعاينة - تصميم edu-forms.com (نمط fieldset/legend) */}
                   <div id={`single-preview-${previewSubId}`} style={{ fontFamily: "'Cairo', 'Tajawal', sans-serif", direction: 'rtl' }}>
                     <div style={{ background: 'white', padding: '0', maxWidth: '210mm', margin: '0 auto' }}>
-                      {/* === ترويسة وزارة التعليم - مطابقة للصورة المرفقة === */}
-                      <div style={{ background: theme.headerBg, padding: '24px 30px 28px', color: theme.headerText, position: 'relative' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                      {/* === ترويسة وزارة التعليم - نمط edu-forms === */}
+                      <div style={{ background: theme.headerBg, padding: '20px 28px 18px', color: theme.headerText, position: 'relative' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                           {/* الجانب الأيمن - بيانات الإدارة */}
-                          <div style={{ textAlign: 'right', fontSize: '11px', lineHeight: '1.9' }}>
-                            <div style={{ fontSize: '10px', opacity: 0.75, marginBottom: '2px' }}>المملكة العربية السعودية</div>
-                            {(personalInfo.department || 'الإدارة العامة للتعليم\nبمنطقة\nمكتب التعليم').split('\n').map((line: string, i: number) => (
-                              <div key={i} style={{ fontWeight: i === 0 ? 'bold' : 'normal' }}>{line}</div>
+                          <div style={{ textAlign: 'right', fontSize: '11px', lineHeight: '1.8' }}>
+                            <div style={{ fontSize: '10px', opacity: 0.8, marginBottom: '1px' }}>المملكة العربية السعودية</div>
+                            <div style={{ fontWeight: 'bold' }}>وزارة التعليم</div>
+                            {(personalInfo.department || 'الإدارة العامة للتعليم\nبالمنطقة\nمدرسة').split('\n').map((line: string, i: number) => (
+                              <div key={i}>{line}</div>
                             ))}
-                            {personalInfo.school && <div style={{ fontWeight: 'bold', marginTop: '2px' }}>{personalInfo.school}</div>}
+                            {personalInfo.school && <div style={{ fontWeight: 'bold' }}>{personalInfo.school}</div>}
                           </div>
                           {/* الوسط - الشعار */}
-                          <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px' }}>
+                          <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                              <img src={MOE_LOGO} alt="شعار وزارة التعليم" style={{ height: '55px', objectFit: 'contain', filter: 'brightness(0) invert(1)' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                              <img src={MOE_LOGO} alt="شعار وزارة التعليم" style={{ height: '50px', objectFit: 'contain', filter: 'brightness(0) invert(1)' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
                               {personalInfo.extraLogo && (
-                                <img src={personalInfo.extraLogo} alt="شعار إضافي" style={{ height: '48px', objectFit: 'contain' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                                <img src={personalInfo.extraLogo} alt="شعار إضافي" style={{ height: '45px', objectFit: 'contain' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
                               )}
                             </div>
                             <div>
-                              <div style={{ fontSize: '15px', fontWeight: 'bold', letterSpacing: '2px' }}>وزارة التعـــليم</div>
-                              <div style={{ fontSize: '10px', opacity: 0.85, letterSpacing: '1px' }}>Ministry of Education</div>
+                              <div style={{ fontSize: '14px', fontWeight: 'bold', letterSpacing: '2px' }}>وزارة التعـــليم</div>
+                              <div style={{ fontSize: '9px', opacity: 0.85, letterSpacing: '1px' }}>Ministry of Education</div>
                             </div>
                           </div>
                           {/* الجانب الأيسر - العام الدراسي */}
-                          <div style={{ textAlign: 'left', fontSize: '11px', lineHeight: '1.9' }}>
+                          <div style={{ textAlign: 'left', fontSize: '11px', lineHeight: '1.8' }}>
                             <div>العام الدراسي {personalInfo.year || '1447هـ'}</div>
                             <div>الفصل الدراسي {personalInfo.semester || 'الثاني'}</div>
                           </div>
                         </div>
                       </div>
-                      {/* خط فاصل متدرج */}
-                      <div style={{ height: '5px', background: `linear-gradient(to left, ${theme.accent}, ${theme.borderColor}, ${theme.accent})` }} />
 
-                        {/* === عنوان التقرير === */}
-                        <div style={{ padding: '20px 30px 14px' }}>
-                        <div style={{ background: theme.accent, color: theme.headerText, padding: '12px 28px', borderRadius: '10px', textAlign: 'center', fontWeight: 'bold', fontSize: '16px', marginBottom: '20px', boxShadow: `0 2px 8px ${theme.accent}30` }}>
+                      {/* === محتوى التقرير === */}
+                      <div style={{ padding: '16px 28px 20px' }}>
+                        {/* عنوان التقرير - شريط ملون */}
+                        <div style={{ background: theme.accent, color: '#fff', padding: '10px 24px', borderRadius: '8px', textAlign: 'center', fontWeight: 'bold', fontSize: '14px', marginBottom: '18px', boxShadow: `0 2px 6px ${theme.accent}25` }}>
                           {prevSub.title}
                         </div>
 
-                        {/* === تخطيط عمودين - يمين: بيانات التقرير / يسار: الشواهد === */}
-                        <div style={{ display: 'grid', gridTemplateColumns: allMediaEvidences.length > 0 ? '1fr 1fr' : '1fr', gap: '20px', marginBottom: '20px' }}>
-                          {/* العمود الأيمن - بيانات التقرير */}
-                          <div>
-                            {/* حقول قصيرة */}
-                            {shortFields.map(field => (
-                              <div key={field.id} style={{ display: 'flex', alignItems: 'center', marginBottom: '10px', gap: '8px' }}>
-                                <div style={{ background: theme.accent, color: 'white', padding: '6px 14px', borderRadius: '8px', fontSize: '10px', fontWeight: 'bold', whiteSpace: 'nowrap', minWidth: '80px', textAlign: 'center' }}>
-                                  {field.label}
+                        {/* === الحقول القصيرة - نمط fieldset/legend === */}
+                        {shortFields.length > 0 && (() => {
+                          const rows: typeof shortFields[] = [];
+                          for (let i = 0; i < shortFields.length; i += 3) {
+                            rows.push(shortFields.slice(i, i + 3));
+                          }
+                          return (
+                            <div style={{ marginBottom: '16px' }}>
+                              {rows.map((row, ri) => (
+                                <div key={ri} style={{ display: 'grid', gridTemplateColumns: row.length === 1 ? '1fr' : row.length === 2 ? '1fr 1fr' : '1fr 1fr 1fr', gap: '12px', marginBottom: '12px' }}>
+                                  {row.map(field => (
+                                    <fieldset key={field.id} style={{ border: `1.5px solid #c8d6d0`, borderRadius: '8px', padding: '10px 12px 8px', margin: 0, position: 'relative' }}>
+                                      <legend style={{ fontSize: '10px', fontWeight: 'bold', color: theme.accent, padding: '0 6px', marginRight: '4px' }}>
+                                        {field.label}:
+                                      </legend>
+                                      <div style={{ fontSize: '12px', color: '#1a1a1a', textAlign: 'center', minHeight: '18px', lineHeight: '1.6' }}>
+                                        {field.value || '...'}
+                                      </div>
+                                    </fieldset>
+                                  ))}
                                 </div>
-                                <div style={{ flex: 1, border: `1.5px solid ${theme.accent}35`, borderRadius: '8px', padding: '6px 12px', fontSize: '12px', textAlign: 'center', background: `${theme.accent}06`, minHeight: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                  {field.value || '...'}
-                                </div>
-                              </div>
-                            ))}
-                          </div>
+                              ))}
+                            </div>
+                          );
+                        })()}
 
-                          {/* العمود الأيسر - الشواهد */}
-                          {allMediaEvidences.length > 0 && (
-                            <div>
-                              <div style={{ background: theme.accent, color: 'white', padding: '8px 16px', borderRadius: '8px', textAlign: 'center', fontWeight: 'bold', fontSize: '12px', marginBottom: '10px' }}>
-                                شواهد البرنامج
-                              </div>
-                              <div style={{ border: `1.5px solid ${theme.accent}35`, borderRadius: '10px', padding: '10px', display: 'grid', gridTemplateColumns: allMediaEvidences.length === 1 ? '1fr' : '1fr', gap: '8px', background: `${theme.accent}04` }}>
-                                {allMediaEvidences.map(ev => {
-                                  if (ev.type === 'link') {
-                                    return (
-                                      <div key={ev.id} style={{ border: '1px solid #E8E8E8', borderRadius: '6px', padding: '10px', textAlign: 'center', background: '#FAFAFA' }}>
-                                        <img src={generateQRDataURL(ev.link, 4)} alt="QR" style={{ width: '80px', height: '80px', margin: '0 auto 6px' }} />
-                                        <div style={{ fontSize: '8px', color: '#666', wordBreak: 'break-all', maxHeight: '24px', overflow: 'hidden' }}>{ev.link}</div>
+                        {/* === الأقسام الطويلة - عمودين بنمط fieldset/legend === */}
+                        {longFields.length > 0 && (() => {
+                          const pairs: (typeof longFields[0] | null)[][] = [];
+                          for (let i = 0; i < longFields.length; i += 2) {
+                            pairs.push([longFields[i], longFields[i + 1] || null]);
+                          }
+                          return (
+                            <div style={{ marginBottom: '16px' }}>
+                              {pairs.map((pair, pi) => (
+                                <div key={pi} style={{ display: 'grid', gridTemplateColumns: pair[1] ? '1fr 1fr' : '1fr', gap: '12px', marginBottom: '12px' }}>
+                                  {pair.filter(Boolean).map(field => (
+                                    <fieldset key={field!.id} style={{ border: `1.5px solid #c8d6d0`, borderRadius: '8px', padding: '12px 14px 10px', margin: 0, position: 'relative' }}>
+                                      <legend style={{ fontSize: '10px', fontWeight: 'bold', color: theme.accent, padding: '0 6px', marginRight: '4px' }}>
+                                        {field!.label}
+                                      </legend>
+                                      <div style={{ fontSize: '11px', color: '#1a1a1a', lineHeight: '2', whiteSpace: 'pre-wrap', minHeight: '50px' }}>
+                                        {field!.value || '...'}
                                       </div>
-                                    );
-                                  }
-                                  if (ev.type === 'file' || ev.type === 'video') {
-                                    const qrData = ev.fileData?.startsWith('idb://') ? ev.fileName : (ev.fileData || ev.fileName);
-                                    return (
-                                      <div key={ev.id} style={{ border: '1px solid #E8E8E8', borderRadius: '6px', padding: '10px', textAlign: 'center', background: '#FAFAFA' }}>
-                                        <img src={generateQRDataURL(qrData.substring(0, 200), 4)} alt="QR" style={{ width: '80px', height: '80px', margin: '0 auto 6px' }} />
-                                        <div style={{ fontSize: '8px', color: '#666', fontWeight: 'bold' }}>{ev.fileName}</div>
-                                      </div>
-                                    );
-                                  }
-                                  if (ev.displayAs === 'qr') {
-                                    const qrData = ev.fileData?.startsWith('idb://') ? ev.fileName : (ev.fileData || ev.fileName);
-                                    return (
-                                      <div key={ev.id} style={{ border: '1px solid #E8E8E8', borderRadius: '6px', padding: '10px', textAlign: 'center', background: '#FAFAFA' }}>
-                                        <img src={generateQRDataURL(qrData.substring(0, 200), 4)} alt="QR" style={{ width: '80px', height: '80px', margin: '0 auto 6px' }} />
-                                        <div style={{ fontSize: '8px', color: '#666' }}>{ev.fileName}</div>
-                                      </div>
-                                    );
-                                  }
+                                    </fieldset>
+                                  ))}
+                                </div>
+                              ))}
+                            </div>
+                          );
+                        })()}
+
+                        {/* === قسم الشواهد - صور/باركود === */}
+                        {allMediaEvidences.length > 0 && (
+                          <fieldset style={{ border: `1.5px solid #c8d6d0`, borderRadius: '8px', padding: '14px', margin: '0 0 16px 0', position: 'relative' }}>
+                            <legend style={{ fontSize: '10px', fontWeight: 'bold', color: theme.accent, padding: '0 6px', marginRight: '4px' }}>
+                              الشواهد
+                            </legend>
+                            <div style={{ display: 'grid', gridTemplateColumns: allMediaEvidences.length === 1 ? '1fr' : 'repeat(2, 1fr)', gap: '10px' }}>
+                              {allMediaEvidences.map(ev => {
+                                if (ev.type === 'link') {
                                   return (
-                                    <div key={ev.id} style={{ border: '1px solid #E8E8E8', borderRadius: '6px', overflow: 'hidden' }}>
-                                      <img src={ev.fileData?.startsWith('idb://') ? '' : (ev.fileData || '')} alt={ev.fileName} style={{ width: '100%', height: 'auto', maxHeight: '180px', objectFit: 'contain' }} />
+                                    <div key={ev.id} style={{ border: '1px solid #E0E0E0', borderRadius: '6px', padding: '10px', textAlign: 'center', background: '#FAFAFA' }}>
+                                      <img src={generateQRDataURL(ev.link, 4)} alt="QR" style={{ width: '90px', height: '90px', margin: '0 auto 6px' }} />
+                                      <div style={{ fontSize: '8px', color: '#666', wordBreak: 'break-all' as const, maxHeight: '24px', overflow: 'hidden' }}>{ev.link}</div>
                                     </div>
                                   );
-                                })}
-                              </div>
+                                }
+                                if (ev.type === 'file' || ev.type === 'video') {
+                                  const qrData = ev.fileData?.startsWith('idb://') ? ev.fileName : (ev.fileData || ev.fileName);
+                                  return (
+                                    <div key={ev.id} style={{ border: '1px solid #E0E0E0', borderRadius: '6px', padding: '10px', textAlign: 'center', background: '#FAFAFA' }}>
+                                      <img src={generateQRDataURL(qrData.substring(0, 200), 4)} alt="QR" style={{ width: '90px', height: '90px', margin: '0 auto 6px' }} />
+                                      <div style={{ fontSize: '8px', color: '#666', fontWeight: 'bold' }}>{ev.fileName}</div>
+                                    </div>
+                                  );
+                                }
+                                if (ev.displayAs === 'qr') {
+                                  const qrData = ev.fileData?.startsWith('idb://') ? ev.fileName : (ev.fileData || ev.fileName);
+                                  return (
+                                    <div key={ev.id} style={{ border: '1px solid #E0E0E0', borderRadius: '6px', padding: '10px', textAlign: 'center', background: '#FAFAFA' }}>
+                                      <img src={generateQRDataURL(qrData.substring(0, 200), 4)} alt="QR" style={{ width: '90px', height: '90px', margin: '0 auto 6px' }} />
+                                      <div style={{ fontSize: '8px', color: '#666' }}>{ev.fileName}</div>
+                                    </div>
+                                  );
+                                }
+                                return (
+                                  <div key={ev.id} style={{ border: '1px solid #E0E0E0', borderRadius: '6px', overflow: 'hidden' }}>
+                                    <img src={ev.fileData?.startsWith('idb://') ? '' : (ev.fileData || '')} alt={ev.fileName} style={{ width: '100%', height: 'auto', maxHeight: '200px', objectFit: 'contain' }} />
+                                  </div>
+                                );
+                              })}
                             </div>
-                          )}
-                        </div>
-
-                        {/* === أقسام البيانات الطويلة (أهداف، آلية التنفيذ، إلخ) === */}
-                        {longFields.length > 0 && (
-                          <div style={{ display: 'grid', gridTemplateColumns: longFields.length >= 2 ? 'repeat(2, 1fr)' : '1fr', gap: '16px', marginBottom: '20px' }}>
-                            {longFields.map(field => (
-                              <div key={field.id}>
-                                <div style={{ background: `linear-gradient(135deg, ${theme.accent}, ${theme.accent}CC)`, color: 'white', padding: '8px 16px', borderRadius: '8px', textAlign: 'center', fontWeight: 'bold', fontSize: '12px', marginBottom: '8px' }}>
-                                  {field.label}
-                                </div>
-                                <div style={{ border: `1.5px solid ${theme.accent}35`, borderRadius: '10px', padding: '14px 16px', fontSize: '12px', lineHeight: '2.2', background: `${theme.accent}04`, whiteSpace: 'pre-wrap', minHeight: '80px' }}>
-                                  {field.value || '...'}
-                                </div>
-                              </div>
-                            ))}
-                          </div>
+                          </fieldset>
                         )}
 
-                        {/* === قسم اسم المعلم === */}
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '20px' }}>
-                          <div>
-                            <div style={{ background: theme.accent, color: 'white', padding: '8px 16px', borderRadius: '8px', textAlign: 'center', fontWeight: 'bold', fontSize: '12px', marginBottom: '8px' }}>
-                              اسم المعلم/ة
-                            </div>
-                            <div style={{ border: `1.5px solid ${theme.accent}35`, borderRadius: '10px', padding: '14px', textAlign: 'center', background: `${theme.accent}04` }}>
-                              <div style={{ fontSize: '13px', fontWeight: 'bold', color: '#1a1a1a', marginBottom: '4px' }}>{personalInfo.name || 'اسم المعلم'}</div>
-                              <div style={{ fontSize: '10px', color: '#666' }}>{selectedJob?.title || 'الوظيفة'}</div>
+                        {/* === التوقيعات === */}
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '40px', marginTop: '24px', marginBottom: '16px', paddingTop: '16px' }}>
+                          <div style={{ textAlign: 'center' }}>
+                            <div style={{ fontSize: '12px', fontWeight: 'bold', color: '#333', marginBottom: '30px' }}>{selectedJob?.title === 'معلم/معلمة' ? 'المعلم' : selectedJob?.title || 'المعلم'} / {personalInfo.name || 'الاسم'}</div>
+                            <div style={{ borderTop: '1.5px solid #999', width: '140px', margin: '0 auto', paddingTop: '4px' }}>
+                              <div style={{ fontSize: '9px', color: '#999' }}>التوقيع</div>
                             </div>
                           </div>
-                          <div>
-                            <div style={{ background: theme.accent, color: 'white', padding: '8px 16px', borderRadius: '8px', textAlign: 'center', fontWeight: 'bold', fontSize: '12px', marginBottom: '8px' }}>
-                              مدير المدرسة
-                            </div>
-                            <div style={{ border: `1.5px solid ${theme.accent}35`, borderRadius: '10px', padding: '14px', textAlign: 'center', background: `${theme.accent}04` }}>
-                              <div style={{ fontSize: '13px', fontWeight: 'bold', color: '#1a1a1a', marginBottom: '4px' }}>{personalInfo.evaluator || 'اسم المدير'}</div>
-                              <div style={{ width: '80px', borderBottom: '1.5px dotted #999', margin: '8px auto 0' }} />
+                          <div style={{ textAlign: 'center' }}>
+                            <div style={{ fontSize: '12px', fontWeight: 'bold', color: '#333', marginBottom: '30px' }}>مدير المدرسة / {personalInfo.evaluator || 'الاسم'}</div>
+                            <div style={{ borderTop: '1.5px solid #999', width: '140px', margin: '0 auto', paddingTop: '4px' }}>
+                              <div style={{ fontSize: '9px', color: '#999' }}>التوقيع</div>
                             </div>
                           </div>
                         </div>
-
-
                       </div>
 
                       {/* === شريط سفلي === */}
-                      <div style={{ height: '5px', background: `linear-gradient(to left, ${theme.accent}, ${theme.borderColor}, ${theme.accent})` }} />
-                      <div style={{ background: theme.headerBg.includes('gradient') ? theme.headerBg : theme.accent, padding: '10px 20px', textAlign: 'center', color: theme.headerText, fontSize: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div style={{ background: theme.headerBg.includes('gradient') ? theme.headerBg : theme.accent, padding: '8px 20px', textAlign: 'center', color: theme.headerText, fontSize: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <span>SERS - نظام السجلات التعليمية الذكي</span>
                         <span style={{ opacity: 0.7 }}>صفحة 1</span>
                       </div>
@@ -3148,17 +3163,17 @@ export default function PerformanceEvidence() {
                   { label: 'صفة المقيّم', value: personalInfo.evaluatorRole },
                   { label: 'تاريخ التقييم', value: personalInfo.date },
                 ].map((item, idx) => (
-                  <div key={idx} style={{ backgroundColor: '#F9FAFB', borderRadius: '8px', padding: '0.75rem', border: '1px solid #F3F4F6' }}>
-                    <span style={{ fontSize: '0.65rem', color: '#9CA3AF', display: 'block', marginBottom: '0.2rem' }}>{item.label}</span>
+                  <fieldset key={idx} style={{ border: '1.5px solid #c8d6d0', borderRadius: '8px', padding: '8px 12px 6px', margin: 0 }}>
+                    <legend style={{ fontSize: '0.65rem', fontWeight: 'bold', color: theme.accent, padding: '0 5px' }}>{item.label}:</legend>
                     <strong style={{ fontSize: '0.85rem', color: '#1F2937' }}>{item.value || '—'}</strong>
-                  </div>
+                  </fieldset>
                 ))}
               </div>
               {personalInfo.department && (
-                <div style={{ marginTop: '0.75rem', backgroundColor: '#F9FAFB', borderRadius: '8px', padding: '0.75rem', border: '1px solid #F3F4F6' }}>
-                  <span style={{ fontSize: '0.65rem', color: '#9CA3AF', display: 'block', marginBottom: '0.2rem' }}>الجهة / الإدارة</span>
+                <fieldset style={{ marginTop: '0.75rem', border: '1.5px solid #c8d6d0', borderRadius: '8px', padding: '8px 12px 6px' }}>
+                  <legend style={{ fontSize: '0.65rem', fontWeight: 'bold', color: theme.accent, padding: '0 5px' }}>الجهة / الإدارة:</legend>
                   <strong style={{ fontSize: '0.85rem', color: '#1F2937', whiteSpace: 'pre-line' as const }}>{personalInfo.department}</strong>
-                </div>
+                </fieldset>
               )}
 
               {/* تذييل الصفحة */}
@@ -3313,30 +3328,50 @@ export default function PerformanceEvidence() {
                               </div>
                             )}
                             {/* عرض بيانات النموذج باستخدام أسماء الحقول الفعلية */}
-                            {ev.formData && Object.entries(ev.formData).some(([, v]) => v) && (
-                              <div style={{ marginTop: '0.5rem', border: `1px solid ${theme.accent}20`, borderRadius: '8px', overflow: 'hidden' }}>
-                                <div style={{ background: `${theme.accent}10`, borderBottom: `1px solid ${theme.accent}15`, padding: '6px 12px' }}>
-                                  <span style={{ fontSize: '0.7rem', fontWeight: 700, color: theme.accent }}>بيانات النموذج</span>
+                            {ev.formData && Object.entries(ev.formData).some(([, v]) => v) && (() => {
+                              const formEntries = Object.entries(ev.formData!).filter(([k, v]) => v && !k.startsWith('__label_'));
+                              const shortEntries = formEntries.filter(([, v]) => (v?.length || 0) < 80);
+                              const longEntries = formEntries.filter(([, v]) => (v?.length || 0) >= 80);
+                              const getLabel = (key: string) => {
+                                if (key.startsWith('dynamic_')) return ev.formData?.[`__label_${key}`] || 'حقل إضافي';
+                                const matchedField = formFields?.find(f => f.id === key);
+                                return matchedField?.label || (key === 'evidence_desc' ? 'وصف الشاهد' : key === 'date' ? 'التاريخ' : key === 'notes' ? 'ملاحظات' : key === 'title' ? 'العنوان' : key === 'details' ? 'التفاصيل' : key === 'content' ? 'المحتوى' : key);
+                              };
+                              return (
+                                <div style={{ marginTop: '0.5rem' }}>
+                                  {/* حقول قصيرة بنمط fieldset/legend */}
+                                  {shortEntries.length > 0 && (() => {
+                                    const rows: typeof shortEntries[] = [];
+                                    for (let si = 0; si < shortEntries.length; si += 3) rows.push(shortEntries.slice(si, si + 3));
+                                    return rows.map((row, ri) => (
+                                      <div key={ri} style={{ display: 'grid', gridTemplateColumns: row.length === 1 ? '1fr' : row.length === 2 ? '1fr 1fr' : '1fr 1fr 1fr', gap: '8px', marginBottom: '8px' }}>
+                                        {row.map(([key, val]) => (
+                                          <fieldset key={key} style={{ border: `1.5px solid #c8d6d0`, borderRadius: '6px', padding: '6px 10px 5px', margin: 0 }}>
+                                            <legend style={{ fontSize: '0.6rem', fontWeight: 'bold', color: theme.accent, padding: '0 4px' }}>{getLabel(key)}:</legend>
+                                            <div style={{ fontSize: '0.75rem', color: '#1a1a1a', textAlign: 'center' }}>{val}</div>
+                                          </fieldset>
+                                        ))}
+                                      </div>
+                                    ));
+                                  })()}
+                                  {/* حقول طويلة بنمط fieldset/legend */}
+                                  {longEntries.length > 0 && (() => {
+                                    const pairs: typeof longEntries[] = [];
+                                    for (let li = 0; li < longEntries.length; li += 2) pairs.push(longEntries.slice(li, li + 2));
+                                    return pairs.map((pair, pi) => (
+                                      <div key={pi} style={{ display: 'grid', gridTemplateColumns: pair.length === 2 ? '1fr 1fr' : '1fr', gap: '8px', marginBottom: '8px' }}>
+                                        {pair.map(([key, val]) => (
+                                          <fieldset key={key} style={{ border: `1.5px solid #c8d6d0`, borderRadius: '6px', padding: '8px 10px 6px', margin: 0 }}>
+                                            <legend style={{ fontSize: '0.6rem', fontWeight: 'bold', color: theme.accent, padding: '0 4px' }}>{getLabel(key)}</legend>
+                                            <div style={{ fontSize: '0.72rem', color: '#1a1a1a', lineHeight: '1.9', whiteSpace: 'pre-wrap' as const }}>{val}</div>
+                                          </fieldset>
+                                        ))}
+                                      </div>
+                                    ));
+                                  })()}
                                 </div>
-                                <div style={{ padding: '8px 12px' }}>
-                                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                                    <tbody>
-                                      {Object.entries(ev.formData).filter(([, v]) => v).map(([key, val], fi, arr) => {
-                                        // البحث عن اسم الحقل الفعلي من formFields
-                                        const matchedField = formFields?.find(f => f.id === key);
-                                        const fieldLabel = matchedField?.label || (key === 'evidence_desc' ? 'وصف الشاهد' : key === 'date' ? 'التاريخ' : key === 'notes' ? 'ملاحظات' : key === 'title' ? 'العنوان' : key === 'details' ? 'التفاصيل' : key === 'content' ? 'المحتوى' : key);
-                                        return (
-                                          <tr key={key} style={{ borderBottom: fi < arr.length - 1 ? '1px solid #f0f0f0' : 'none' }}>
-                                            <td style={{ padding: '6px 8px', fontSize: '0.7rem', fontWeight: 600, color: theme.accent, width: '110px', verticalAlign: 'top' }}>{fieldLabel}</td>
-                                            <td style={{ padding: '6px 8px', fontSize: '0.78rem', color: '#374151', lineHeight: 1.7, whiteSpace: 'pre-wrap' as const }}>{val}</td>
-                                          </tr>
-                                        );
-                                      })}
-                                    </tbody>
-                                  </table>
-                                </div>
-                              </div>
-                            )}
+                              );
+                            })()}
                             {/* التعليق */}
                             {ev.comment && ev.comment.trim() && (
                               <div style={{ marginTop: '0.5rem', backgroundColor: '#FFFBEB', borderRadius: '6px', padding: '0.5rem', fontSize: '0.75rem', color: '#92400E', border: '1px solid #FDE68A' }}>
