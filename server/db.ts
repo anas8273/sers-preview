@@ -236,12 +236,67 @@ export async function seedDefaultTemplates() {
   const existing = await db.select().from(pdfTemplates).limit(1);
   if (existing.length > 0) return;
   
+  const reportLayout: any = {
+    version: 1,
+    pageSize: 'A4',
+    direction: 'rtl',
+    headerStyle: 'full-width',
+    showMoeLogo: true,
+    showSchoolLogo: true,
+    showEvidenceSection: true,
+    evidenceDisplay: 'mixed',
+    sections: [
+      {
+        id: 'info',
+        title: 'تقرير عن برنامج',
+        columns: 2,
+        fields: [
+          { id: 'programName', label: 'اسم البرنامج', type: 'text', required: true },
+          { id: 'executionDate', label: 'تاريخ التنفيذ', type: 'date' },
+          { id: 'beneficiaries', label: 'المستفيدون', type: 'text' },
+          { id: 'field', label: 'المجال', type: 'text' },
+          { id: 'executor', label: 'المنفذ/ون', type: 'text' },
+          { id: 'participants', label: 'المشارك/ون', type: 'text' },
+          { id: 'location', label: 'مكان التنفيذ', type: 'text' },
+          { id: 'duration', label: 'مدة التنفيذ', type: 'text' },
+        ],
+      },
+      {
+        id: 'goals',
+        title: 'الأهداف',
+        columns: 1,
+        fields: [
+          { id: 'goals', label: 'الأهداف', type: 'list' },
+        ],
+      },
+      {
+        id: 'steps',
+        title: 'خطوات التنفيذ / الوصف',
+        columns: 1,
+        fields: [
+          { id: 'steps', label: 'خطوات التنفيذ', type: 'list' },
+        ],
+      },
+      {
+        id: 'impact',
+        title: 'أثر البرنامج',
+        columns: 2,
+        fields: [
+          { id: 'impact', label: 'أثر البرنامج', type: 'list' },
+          { id: 'recommendations', label: 'التوصيات', type: 'list' },
+        ],
+      },
+    ],
+    signatureLabels: { right: 'المعلم / اسم المعلم', left: 'مدير المدرسة / اسم المدير' },
+    footerText: 'SERS - نظام السجلات التعليمية الذكي',
+  };
+
   const defaults: InsertPdfTemplate[] = [
-    { name: "كلاسيكي", description: "تصميم كلاسيكي احترافي", headerBg: "linear-gradient(135deg, #059669, #047857)", headerText: "#ffffff", accent: "#059669", borderColor: "#e5e7eb", bodyBg: "#ffffff", isDefault: true, sortOrder: 1 },
-    { name: "أزرق رسمي", description: "تصميم أزرق رسمي للتقارير", headerBg: "linear-gradient(135deg, #1e40af, #1e3a8a)", headerText: "#ffffff", accent: "#2563EB", borderColor: "#dbeafe", bodyBg: "#ffffff", isDefault: false, sortOrder: 2 },
-    { name: "بنفسجي عصري", description: "تصميم بنفسجي عصري", headerBg: "linear-gradient(135deg, #7c3aed, #6d28d9)", headerText: "#ffffff", accent: "#7C3AED", borderColor: "#ede9fe", bodyBg: "#ffffff", isDefault: false, sortOrder: 3 },
-    { name: "ذهبي فاخر", description: "تصميم ذهبي فاخر", headerBg: "linear-gradient(135deg, #92400e, #78350f)", headerText: "#fef3c7", accent: "#b45309", borderColor: "#fde68a", bodyBg: "#fffbeb", isDefault: false, sortOrder: 4 },
-    { name: "أحمر وطني", description: "تصميم بألوان العلم السعودي", headerBg: "linear-gradient(135deg, #166534, #15803d)", headerText: "#ffffff", accent: "#166534", borderColor: "#bbf7d0", bodyBg: "#f0fdf4", isDefault: false, sortOrder: 5 },
+    { name: "كلاسيكي", description: "تصميم كلاسيكي احترافي", headerBg: "linear-gradient(135deg, #059669, #047857)", headerText: "#ffffff", accent: "#059669", borderColor: "#e5e7eb", bodyBg: "#ffffff", templateLayout: reportLayout, isDefault: true, sortOrder: 1 },
+    { name: "أزرق رسمي", description: "تصميم أزرق رسمي للتقارير", headerBg: "linear-gradient(135deg, #1e40af, #1e3a8a)", headerText: "#ffffff", accent: "#2563EB", borderColor: "#dbeafe", bodyBg: "#ffffff", templateLayout: reportLayout, isDefault: false, sortOrder: 2 },
+    { name: "بنفسجي عصري", description: "تصميم بنفسجي عصري", headerBg: "linear-gradient(135deg, #7c3aed, #6d28d9)", headerText: "#ffffff", accent: "#7C3AED", borderColor: "#ede9fe", bodyBg: "#ffffff", templateLayout: reportLayout, isDefault: false, sortOrder: 3 },
+    { name: "ذهبي فاخر", description: "تصميم ذهبي فاخر", headerBg: "linear-gradient(135deg, #92400e, #78350f)", headerText: "#fef3c7", accent: "#b45309", borderColor: "#fde68a", bodyBg: "#fffbeb", templateLayout: reportLayout, isDefault: false, sortOrder: 4 },
+    { name: "أحمر وطني", description: "تصميم بألوان العلم السعودي", headerBg: "linear-gradient(135deg, #166534, #15803d)", headerText: "#ffffff", accent: "#166534", borderColor: "#bbf7d0", bodyBg: "#f0fdf4", templateLayout: reportLayout, isDefault: false, sortOrder: 5 },
   ];
   
   for (const t of defaults) {

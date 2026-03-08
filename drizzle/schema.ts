@@ -70,7 +70,43 @@ export const shareLinks = mysqlTable("share_links", {
 export type ShareLink = typeof shareLinks.$inferSelect;
 export type InsertShareLink = typeof shareLinks.$inferInsert;
 
-// ─── PDF Templates (Themes) ────────────────────────────
+// ─── Template Engine Types ────────────────────────────
+export type TemplateFieldType = 'text' | 'textarea' | 'date' | 'select' | 'number' | 'image' | 'list' | 'signatures';
+
+export interface TemplateField {
+  id: string;
+  label: string;
+  type: TemplateFieldType;
+  placeholder?: string;
+  required?: boolean;
+  options?: string[]; // for select type
+  defaultValue?: string;
+  gridColumn?: string; // e.g. '1 / 3' for spanning
+}
+
+export interface TemplateSection {
+  id: string;
+  title: string;
+  titleBg?: string; // gradient or color for section title
+  columns?: number; // 1 or 2 column layout
+  fields: TemplateField[];
+}
+
+export interface TemplateLayout {
+  version: number;
+  pageSize?: 'A4' | 'letter';
+  direction?: 'rtl' | 'ltr';
+  headerStyle?: 'full-width' | 'centered' | 'minimal';
+  showMoeLogo?: boolean;
+  showSchoolLogo?: boolean;
+  showEvidenceSection?: boolean;
+  evidenceDisplay?: 'images' | 'qr' | 'mixed';
+  sections: TemplateSection[];
+  footerText?: string;
+  signatureLabels?: { right: string; left: string };
+}
+
+// ─── PDF Templates (Themes) ────────────────────────────────
 export const pdfTemplates = mysqlTable("pdf_templates", {
   id: int("id").autoincrement().primaryKey(),
   name: varchar("name", { length: 255 }).notNull(),
@@ -83,6 +119,8 @@ export const pdfTemplates = mysqlTable("pdf_templates", {
   fontFamily: varchar("fontFamily", { length: 128 }).default("'Cairo', 'Tajawal', sans-serif"),
   coverImageUrl: text("coverImageUrl"),
   logoUrl: text("logoUrl"),
+  // Template Engine: JSON structure defining the layout and dynamic fields
+  templateLayout: json("templateLayout").$type<TemplateLayout>(),
   isDefault: boolean("isDefault").default(false),
   isActive: boolean("isActive").default(true),
   sortOrder: int("sortOrder").default(0),

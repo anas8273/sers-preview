@@ -251,6 +251,7 @@ export const appRouter = router({
         fontFamily: z.string().optional(),
         coverImageUrl: z.string().optional(),
         logoUrl: z.string().optional(),
+        templateLayout: z.any().optional(),
         isDefault: z.boolean().optional(),
         sortOrder: z.number().optional(),
       }))
@@ -271,6 +272,7 @@ export const appRouter = router({
         fontFamily: z.string().optional(),
         coverImageUrl: z.string().optional(),
         logoUrl: z.string().optional(),
+        templateLayout: z.any().optional(),
         isDefault: z.boolean().optional(),
         isActive: z.boolean().optional(),
         sortOrder: z.number().optional(),

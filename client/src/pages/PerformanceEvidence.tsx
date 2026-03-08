@@ -2387,11 +2387,15 @@ export default function PerformanceEvidence() {
                                 </span>
                               </div>
                             </div>
-                            {/* Quick Action Buttons */}
-                            <div className="flex flex-wrap gap-1.5 sm:gap-2">
+                            {/* Quick Action Buttons - خارج منطقة الرفع */}
+                            <div className="flex flex-wrap gap-1.5 sm:gap-2" onClick={(e) => e.stopPropagation()}>
                               <Button variant="outline" size="sm" className="gap-1 sm:gap-1.5 border-dashed border-purple-400 text-purple-600 text-[10px] sm:text-xs h-7 sm:h-8 px-2 sm:px-3"
-                                onClick={() => addEvidence(currentCriterion.id, sub.id, "link")}>
+                                onClick={(e) => { e.preventDefault(); e.stopPropagation(); addEvidence(currentCriterion.id, sub.id, "link"); }}>
                                 <LinkIcon className="w-3 h-3 sm:w-3.5 sm:h-3.5" />رابط
+                              </Button>
+                              <Button variant="outline" size="sm" className="gap-1 sm:gap-1.5 border-dashed border-blue-400 text-blue-600 text-[10px] sm:text-xs h-7 sm:h-8 px-2 sm:px-3"
+                                onClick={(e) => { e.preventDefault(); e.stopPropagation(); addEvidence(currentCriterion.id, sub.id, "text"); }}>
+                                <Type className="w-3 h-3 sm:w-3.5 sm:h-3.5" />نص
                               </Button>
                             </div>
                           </div>
@@ -2631,6 +2635,9 @@ export default function PerformanceEvidence() {
             const prevEvidences = (prevCritData?.evidences || []).filter(e => e.subEvidenceId === previewSubId);
             const formEv = prevEvidences.find(e => e.formData !== undefined);
             const imageEvidences = prevEvidences.filter(e => e.type === 'image' && e.fileData);
+            const linkEvidences = prevEvidences.filter(e => e.type === 'link' && e.link);
+            const fileEvidences = prevEvidences.filter(e => (e.type === 'file' || e.type === 'video') && e.fileData);
+            const allMediaEvidences = [...imageEvidences, ...linkEvidences, ...fileEvidences];
             const theme = selectedTheme;
             const themeColors = {
               headerBg: theme.headerBg.includes('gradient') ? theme.headerBg : theme.headerBg,
@@ -2704,25 +2711,83 @@ export default function PerformanceEvidence() {
                       {/* خط فاصل متدرج */}
                       <div style={{ height: '5px', background: `linear-gradient(to left, ${theme.accent}, ${theme.borderColor}, ${theme.accent})` }} />
 
-                      {/* === عنوان التقرير === */}
-                      <div style={{ padding: '20px 30px 14px' }}>
+                        {/* === عنوان التقرير === */}
+                        <div style={{ padding: '20px 30px 14px' }}>
                         <div style={{ background: theme.accent, color: theme.headerText, padding: '12px 28px', borderRadius: '10px', textAlign: 'center', fontWeight: 'bold', fontSize: '16px', marginBottom: '20px', boxShadow: `0 2px 8px ${theme.accent}30` }}>
                           {prevSub.title}
                         </div>
 
-                        {/* === حقول البيانات القصيرة - نمط العنوان على خط أفقي === */}
-                        {shortFields.length > 0 && (
-                          <div style={{ display: 'grid', gridTemplateColumns: shortFields.length >= 3 ? 'repeat(3, 1fr)' : shortFields.length === 2 ? 'repeat(2, 1fr)' : '1fr', gap: '14px', marginBottom: '20px' }}>
+                        {/* === تخطيط عمودين - يمين: بيانات التقرير / يسار: الشواهد === */}
+                        <div style={{ display: 'grid', gridTemplateColumns: allMediaEvidences.length > 0 ? '1fr 1fr' : '1fr', gap: '20px', marginBottom: '20px' }}>
+                          {/* العمود الأيمن - بيانات التقرير */}
+                          <div>
+                            {/* حقول قصيرة */}
                             {shortFields.map(field => (
-                              <div key={field.id} style={{ position: 'relative' }}>
-                                {/* خط أفقي */}
-                                <div style={{ position: 'absolute', top: '8px', left: 0, right: 0, height: '1px', background: '#E0E0E0' }} />
-                                {/* العنوان فوق الخط */}
-                                <div style={{ position: 'relative', display: 'inline-block', background: 'white', paddingLeft: '8px', fontSize: '10px', fontWeight: 'bold', color: theme.accent, marginBottom: '6px' }}>
+                              <div key={field.id} style={{ display: 'flex', alignItems: 'center', marginBottom: '10px', gap: '8px' }}>
+                                <div style={{ background: theme.accent, color: 'white', padding: '6px 14px', borderRadius: '8px', fontSize: '10px', fontWeight: 'bold', whiteSpace: 'nowrap', minWidth: '80px', textAlign: 'center' }}>
                                   {field.label}
                                 </div>
-                                {/* القيمة */}
-                                <div style={{ border: `1.5px solid ${theme.accent}35`, borderRadius: '8px', padding: '8px 12px', fontSize: '12px', textAlign: 'center', minHeight: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: `${theme.accent}06` }}>
+                                <div style={{ flex: 1, border: `1.5px solid ${theme.accent}35`, borderRadius: '8px', padding: '6px 12px', fontSize: '12px', textAlign: 'center', background: `${theme.accent}06`, minHeight: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                  {field.value || '...'}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+
+                          {/* العمود الأيسر - الشواهد */}
+                          {allMediaEvidences.length > 0 && (
+                            <div>
+                              <div style={{ background: theme.accent, color: 'white', padding: '8px 16px', borderRadius: '8px', textAlign: 'center', fontWeight: 'bold', fontSize: '12px', marginBottom: '10px' }}>
+                                شواهد البرنامج
+                              </div>
+                              <div style={{ border: `1.5px solid ${theme.accent}35`, borderRadius: '10px', padding: '10px', display: 'grid', gridTemplateColumns: allMediaEvidences.length === 1 ? '1fr' : '1fr', gap: '8px', background: `${theme.accent}04` }}>
+                                {allMediaEvidences.map(ev => {
+                                  if (ev.type === 'link') {
+                                    return (
+                                      <div key={ev.id} style={{ border: '1px solid #E8E8E8', borderRadius: '6px', padding: '10px', textAlign: 'center', background: '#FAFAFA' }}>
+                                        <img src={generateQRDataURL(ev.link, 4)} alt="QR" style={{ width: '80px', height: '80px', margin: '0 auto 6px' }} />
+                                        <div style={{ fontSize: '8px', color: '#666', wordBreak: 'break-all', maxHeight: '24px', overflow: 'hidden' }}>{ev.link}</div>
+                                      </div>
+                                    );
+                                  }
+                                  if (ev.type === 'file' || ev.type === 'video') {
+                                    const qrData = ev.fileData?.startsWith('idb://') ? ev.fileName : (ev.fileData || ev.fileName);
+                                    return (
+                                      <div key={ev.id} style={{ border: '1px solid #E8E8E8', borderRadius: '6px', padding: '10px', textAlign: 'center', background: '#FAFAFA' }}>
+                                        <img src={generateQRDataURL(qrData.substring(0, 200), 4)} alt="QR" style={{ width: '80px', height: '80px', margin: '0 auto 6px' }} />
+                                        <div style={{ fontSize: '8px', color: '#666', fontWeight: 'bold' }}>{ev.fileName}</div>
+                                      </div>
+                                    );
+                                  }
+                                  if (ev.displayAs === 'qr') {
+                                    const qrData = ev.fileData?.startsWith('idb://') ? ev.fileName : (ev.fileData || ev.fileName);
+                                    return (
+                                      <div key={ev.id} style={{ border: '1px solid #E8E8E8', borderRadius: '6px', padding: '10px', textAlign: 'center', background: '#FAFAFA' }}>
+                                        <img src={generateQRDataURL(qrData.substring(0, 200), 4)} alt="QR" style={{ width: '80px', height: '80px', margin: '0 auto 6px' }} />
+                                        <div style={{ fontSize: '8px', color: '#666' }}>{ev.fileName}</div>
+                                      </div>
+                                    );
+                                  }
+                                  return (
+                                    <div key={ev.id} style={{ border: '1px solid #E8E8E8', borderRadius: '6px', overflow: 'hidden' }}>
+                                      <img src={ev.fileData?.startsWith('idb://') ? '' : (ev.fileData || '')} alt={ev.fileName} style={{ width: '100%', height: 'auto', maxHeight: '180px', objectFit: 'contain' }} />
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* === أقسام البيانات الطويلة (أهداف، آلية التنفيذ، إلخ) === */}
+                        {longFields.length > 0 && (
+                          <div style={{ display: 'grid', gridTemplateColumns: longFields.length >= 2 ? 'repeat(2, 1fr)' : '1fr', gap: '16px', marginBottom: '20px' }}>
+                            {longFields.map(field => (
+                              <div key={field.id}>
+                                <div style={{ background: `linear-gradient(135deg, ${theme.accent}, ${theme.accent}CC)`, color: 'white', padding: '8px 16px', borderRadius: '8px', textAlign: 'center', fontWeight: 'bold', fontSize: '12px', marginBottom: '8px' }}>
+                                  {field.label}
+                                </div>
+                                <div style={{ border: `1.5px solid ${theme.accent}35`, borderRadius: '10px', padding: '14px 16px', fontSize: '12px', lineHeight: '2.2', background: `${theme.accent}04`, whiteSpace: 'pre-wrap', minHeight: '80px' }}>
                                   {field.value || '...'}
                                 </div>
                               </div>
@@ -2730,52 +2795,29 @@ export default function PerformanceEvidence() {
                           </div>
                         )}
 
-                        {/* === حقول البيانات الطويلة - نمط العنوان على خط أفقي === */}
-                        {longFields.map(field => (
-                          <div key={field.id} style={{ marginBottom: '18px', position: 'relative' }}>
-                            {/* خط أفقي */}
-                            <div style={{ position: 'absolute', top: '8px', left: 0, right: 0, height: '1px', background: '#E0E0E0' }} />
-                            {/* العنوان فوق الخط */}
-                            <div style={{ position: 'relative', display: 'inline-block', background: 'white', paddingLeft: '8px', fontSize: '11px', fontWeight: 'bold', color: theme.accent, marginBottom: '8px' }}>
-                              {field.label}
+                        {/* === قسم اسم المعلم === */}
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '20px' }}>
+                          <div>
+                            <div style={{ background: theme.accent, color: 'white', padding: '8px 16px', borderRadius: '8px', textAlign: 'center', fontWeight: 'bold', fontSize: '12px', marginBottom: '8px' }}>
+                              اسم المعلم/ة
                             </div>
-                            {/* المحتوى */}
-                            <div style={{ border: `1.5px solid ${theme.accent}35`, borderRadius: '10px', padding: '16px 18px', fontSize: '12px', lineHeight: '2.2', background: `${theme.accent}04`, whiteSpace: 'pre-wrap' }}>
-                              {field.value || '...'}
+                            <div style={{ border: `1.5px solid ${theme.accent}35`, borderRadius: '10px', padding: '14px', textAlign: 'center', background: `${theme.accent}04` }}>
+                              <div style={{ fontSize: '13px', fontWeight: 'bold', color: '#1a1a1a', marginBottom: '4px' }}>{personalInfo.name || 'اسم المعلم'}</div>
+                              <div style={{ fontSize: '10px', color: '#666' }}>{selectedJob?.title || 'الوظيفة'}</div>
                             </div>
                           </div>
-                        ))}
-
-                        {/* === قسم الشواهد (صور) === */}
-                        {imageEvidences.length > 0 && (
-                          <div style={{ marginBottom: '18px', position: 'relative' }}>
-                            <div style={{ position: 'absolute', top: '8px', left: 0, right: 0, height: '1px', background: '#E0E0E0' }} />
-                            <div style={{ position: 'relative', display: 'inline-block', background: 'white', paddingLeft: '8px', fontSize: '11px', fontWeight: 'bold', color: theme.accent, marginBottom: '8px' }}>
-                              الشواهد
+                          <div>
+                            <div style={{ background: theme.accent, color: 'white', padding: '8px 16px', borderRadius: '8px', textAlign: 'center', fontWeight: 'bold', fontSize: '12px', marginBottom: '8px' }}>
+                              مدير المدرسة
                             </div>
-                            <div style={{ border: `1.5px solid ${theme.accent}35`, borderRadius: '10px', padding: '14px', display: 'grid', gridTemplateColumns: imageEvidences.length === 1 ? '1fr' : 'repeat(2, 1fr)', gap: '12px', background: `${theme.accent}04` }}>
-                              {imageEvidences.map(ev => (
-                                <div key={ev.id} style={{ border: '1px solid #E8E8E8', borderRadius: '8px', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
-                                  <img src={ev.fileData?.startsWith('idb://') ? '' : (ev.fileData || '')} alt={ev.fileName} style={{ width: '100%', height: 'auto', maxHeight: '220px', objectFit: 'contain' }} />
-                                </div>
-                              ))}
+                            <div style={{ border: `1.5px solid ${theme.accent}35`, borderRadius: '10px', padding: '14px', textAlign: 'center', background: `${theme.accent}04` }}>
+                              <div style={{ fontSize: '13px', fontWeight: 'bold', color: '#1a1a1a', marginBottom: '4px' }}>{personalInfo.evaluator || 'اسم المدير'}</div>
+                              <div style={{ width: '80px', borderBottom: '1.5px dotted #999', margin: '8px auto 0' }} />
                             </div>
-                          </div>
-                        )}
-
-                        {/* === توقيعات === */}
-                        <div style={{ display: 'flex', justifyContent: 'space-around', padding: '20px 0', marginTop: '24px', borderTop: `2px solid ${theme.accent}15` }}>
-                          <div style={{ textAlign: 'center', minWidth: '150px' }}>
-                            <div style={{ fontSize: '11px', fontWeight: 'bold', color: theme.accent, marginBottom: '6px' }}>{selectedJob?.title || 'المعلم'}</div>
-                            <div style={{ fontSize: '13px', fontWeight: 'bold', color: '#1a1a1a' }}>{personalInfo.name || 'اسم المعلم'}</div>
-                            <div style={{ width: '100px', borderBottom: '1.5px dotted #999', margin: '12px auto 0' }} />
-                          </div>
-                          <div style={{ textAlign: 'center', minWidth: '150px' }}>
-                            <div style={{ fontSize: '11px', fontWeight: 'bold', color: theme.accent, marginBottom: '6px' }}>مدير المدرسة</div>
-                            <div style={{ fontSize: '13px', fontWeight: 'bold', color: '#1a1a1a' }}>{personalInfo.evaluator || 'اسم المدير'}</div>
-                            <div style={{ width: '100px', borderBottom: '1.5px dotted #999', margin: '12px auto 0' }} />
                           </div>
                         </div>
+
+
                       </div>
 
                       {/* === شريط سفلي === */}
