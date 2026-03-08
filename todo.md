@@ -543,3 +543,8 @@
 ### اختبارات
 - [x] اختبار شامل لكل التعديلات (204 اختبار ناجح عبر 8 ملفات)
 - [x] حفظ checkpoint
+
+## 68. إصلاح خطأ تعارض خصائص CSS (background vs backgroundColor)
+- [x] البحث عن جميع الأماكن التي تستخدم background و backgroundColor معاً في نفس العنصر (موقعين: الترويسة + الشريط السفلي)
+- [x] إزالة backgroundColor والاكتفاء بـ background فقط لإزالة التعارض
+- [x] حفظ checkpoint

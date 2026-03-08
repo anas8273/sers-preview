@@ -2671,7 +2671,7 @@ export default function PerformanceEvidence() {
                   <div id={`single-preview-${previewSubId}`} style={{ fontFamily: "'Cairo', 'Tajawal', sans-serif", direction: 'rtl' }}>
                     <div style={{ background: 'white', padding: '0', maxWidth: '210mm', margin: '0 auto' }}>
                       {/* === ترويسة وزارة التعليم - مطابقة للصورة المرفقة === */}
-                      <div style={{ background: theme.headerBg.includes('gradient') ? theme.headerBg : theme.headerBg, padding: '24px 30px 28px', color: theme.headerText, position: 'relative', backgroundColor: theme.headerBg.includes('gradient') ? undefined : theme.headerBg }}>
+                      <div style={{ background: theme.headerBg, padding: '24px 30px 28px', color: theme.headerText, position: 'relative' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                           {/* الجانب الأيمن - بيانات الإدارة */}
                           <div style={{ textAlign: 'right', fontSize: '11px', lineHeight: '1.9' }}>
@@ -2780,7 +2780,7 @@ export default function PerformanceEvidence() {
 
                       {/* === شريط سفلي === */}
                       <div style={{ height: '5px', background: `linear-gradient(to left, ${theme.accent}, ${theme.borderColor}, ${theme.accent})` }} />
-                      <div style={{ background: theme.headerBg.includes('gradient') ? theme.headerBg : theme.accent, padding: '10px 20px', textAlign: 'center', color: theme.headerText, fontSize: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: theme.headerBg.includes('gradient') ? undefined : theme.accent }}>
+                      <div style={{ background: theme.headerBg.includes('gradient') ? theme.headerBg : theme.accent, padding: '10px 20px', textAlign: 'center', color: theme.headerText, fontSize: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <span>SERS - نظام السجلات التعليمية الذكي</span>
                         <span style={{ opacity: 0.7 }}>صفحة 1</span>
                       </div>
