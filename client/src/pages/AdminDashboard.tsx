@@ -60,6 +60,11 @@ function TemplatesPanel() {
     headerText: "#ffffff", accent: "#059669", borderColor: "#e5e7eb",
     bodyBg: "#ffffff", fontFamily: "'Cairo', 'Tajawal', sans-serif",
     coverImageUrl: "", logoUrl: "", isDefault: false, sortOrder: 0,
+    layoutType: "dark-header-table" as string,
+    fieldStyle: "table" as string,
+    titleStyle: "rounded" as string,
+    signatureStyle: "dotted" as string,
+    footerStyle: "gradient" as string,
   });
 
   const resetForm = () => {
@@ -68,29 +73,54 @@ function TemplatesPanel() {
       headerText: "#ffffff", accent: "#059669", borderColor: "#e5e7eb",
       bodyBg: "#ffffff", fontFamily: "'Cairo', 'Tajawal', sans-serif",
       coverImageUrl: "", logoUrl: "", isDefault: false, sortOrder: 0,
+      layoutType: "dark-header-table", fieldStyle: "table", titleStyle: "rounded",
+      signatureStyle: "dotted", footerStyle: "gradient",
     });
   };
 
   const handleCreate = () => {
     if (!formData.name.trim()) { toast.error("يرجى إدخال اسم القالب"); return; }
-    createMutation.mutate(formData);
+    const { layoutType, fieldStyle, titleStyle, signatureStyle, footerStyle, ...rest } = formData;
+    createMutation.mutate({
+      ...rest,
+      templateLayout: {
+        version: 1, pageSize: 'A4' as const, direction: 'rtl' as const,
+        layoutType, fieldStyle, titleStyle, signatureStyle, footerStyle,
+        showMoeLogo: true, showSchoolLogo: true, showEvidenceSection: true,
+        evidenceDisplay: 'mixed', sections: [], footerText: 'SERS - نظام السجلات التعليمية الذكي',
+        signatureLabels: { right: 'المعلم / اسم المعلم', left: 'مدير المدرسة / اسم المدير' },
+      },
+    });
     setShowCreateDialog(false);
     resetForm();
   };
 
   const handleUpdate = () => {
     if (!editingTemplate) return;
-    updateMutation.mutate({ id: editingTemplate.id, ...formData });
+    const { layoutType, fieldStyle, titleStyle, signatureStyle, footerStyle, ...rest } = formData;
+    updateMutation.mutate({
+      id: editingTemplate.id, ...rest,
+      templateLayout: {
+        ...(editingTemplate.templateLayout || {}),
+        version: 1, layoutType, fieldStyle, titleStyle, signatureStyle, footerStyle,
+      },
+    });
     setEditingTemplate(null);
     resetForm();
   };
 
   const startEdit = (t: any) => {
+    const layout = t.templateLayout || {};
     setFormData({
       name: t.name, description: t.description || "", headerBg: t.headerBg,
       headerText: t.headerText, accent: t.accent, borderColor: t.borderColor,
       bodyBg: t.bodyBg, fontFamily: t.fontFamily || "", coverImageUrl: t.coverImageUrl || "",
       logoUrl: t.logoUrl || "", isDefault: t.isDefault || false, sortOrder: t.sortOrder || 0,
+      layoutType: layout.layoutType || 'dark-header-table',
+      fieldStyle: layout.fieldStyle || 'table',
+      titleStyle: layout.titleStyle || 'rounded',
+      signatureStyle: layout.signatureStyle || 'dotted',
+      footerStyle: layout.footerStyle || 'gradient',
     });
     setEditingTemplate(t);
   };
@@ -169,6 +199,72 @@ function TemplatesPanel() {
           <label className="block text-sm font-medium text-gray-700 mb-1">رابط الشعار</label>
           <input value={formData.logoUrl} onChange={(e) => setFormData(p => ({ ...p, logoUrl: e.target.value }))}
             placeholder="https://..." className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm" />
+        </div>
+      </div>
+
+      {/* === التنسيقات الديناميكية === */}
+      <div className="border border-emerald-200 rounded-xl p-4 bg-emerald-50/30">
+        <h4 className="text-sm font-bold text-emerald-800 mb-3 flex items-center gap-2">
+          <Palette className="w-4 h-4" />تنسيق التقرير (الشكل والتخطيط)
+        </h4>
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">نمط التخطيط</label>
+            <select value={formData.layoutType} onChange={(e) => setFormData(p => ({ ...p, layoutType: e.target.value }))}
+              className="w-full px-2 py-1.5 rounded-lg border border-gray-200 text-xs bg-white">
+              <option value="dark-header-table">ترويسة داكنة + جدول</option>
+              <option value="dark-header-simple">ترويسة داكنة + بسيط</option>
+              <option value="white-header-classic">أبيض كلاسيكي</option>
+              <option value="white-header-sidebar">أبيض + شريط جانبي</option>
+              <option value="white-header-light">أبيض + خلفية فاتحة</option>
+              <option value="white-header-multi">أبيض + أعمدة متعددة</option>
+              <option value="minimal-clean">بسيط ونظيف</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">نمط الحقول</label>
+            <select value={formData.fieldStyle} onChange={(e) => setFormData(p => ({ ...p, fieldStyle: e.target.value }))}
+              className="w-full px-2 py-1.5 rounded-lg border border-gray-200 text-xs bg-white">
+              <option value="table">جدول</option>
+              <option value="fieldset">حقول مؤطرة</option>
+              <option value="underlined">خط سفلي</option>
+              <option value="cards">بطاقات</option>
+              <option value="minimal">بسيط</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">نمط العنوان</label>
+            <select value={formData.titleStyle} onChange={(e) => setFormData(p => ({ ...p, titleStyle: e.target.value }))}
+              className="w-full px-2 py-1.5 rounded-lg border border-gray-200 text-xs bg-white">
+              <option value="rounded">مستدير</option>
+              <option value="full-width">عرض كامل</option>
+              <option value="bordered">مؤطر</option>
+              <option value="underlined">خط سفلي</option>
+              <option value="badge">شارة</option>
+              <option value="simple">بسيط</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">نمط التوقيع</label>
+            <select value={formData.signatureStyle} onChange={(e) => setFormData(p => ({ ...p, signatureStyle: e.target.value }))}
+              className="w-full px-2 py-1.5 rounded-lg border border-gray-200 text-xs bg-white">
+              <option value="dotted">منقط</option>
+              <option value="solid">خط متصل</option>
+              <option value="boxed">مربع</option>
+              <option value="lined">خط رفيع</option>
+              <option value="stamped">ختم مزدوج</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">نمط التذييل</label>
+            <select value={formData.footerStyle} onChange={(e) => setFormData(p => ({ ...p, footerStyle: e.target.value }))}
+              className="w-full px-2 py-1.5 rounded-lg border border-gray-200 text-xs bg-white">
+              <option value="gradient">تدرج</option>
+              <option value="solid">لون موحد</option>
+              <option value="line">خط فقط</option>
+              <option value="none">بدون تذييل</option>
+            </select>
+          </div>
         </div>
       </div>
 
@@ -282,7 +378,16 @@ function TemplatesPanel() {
                     <div className="w-4 h-4 rounded-full border" style={{ backgroundColor: t.borderColor }} />
                   </div>
                 </div>
-                {t.description && <p className="text-xs text-gray-500 mb-3 line-clamp-2">{t.description}</p>}
+                {t.description && <p className="text-xs text-gray-500 mb-2 line-clamp-2">{t.description}</p>}
+                {/* عرض التنسيقات */}
+                {t.templateLayout && (
+                  <div className="flex flex-wrap gap-1 mb-3">
+                    {t.templateLayout.layoutType && <span className="px-1.5 py-0.5 rounded text-[9px] bg-blue-50 text-blue-600 border border-blue-100">{t.templateLayout.layoutType}</span>}
+                    {t.templateLayout.fieldStyle && <span className="px-1.5 py-0.5 rounded text-[9px] bg-purple-50 text-purple-600 border border-purple-100">{t.templateLayout.fieldStyle}</span>}
+                    {t.templateLayout.titleStyle && <span className="px-1.5 py-0.5 rounded text-[9px] bg-amber-50 text-amber-600 border border-amber-100">{t.templateLayout.titleStyle}</span>}
+                    {t.templateLayout.signatureStyle && <span className="px-1.5 py-0.5 rounded text-[9px] bg-rose-50 text-rose-600 border border-rose-100">{t.templateLayout.signatureStyle}</span>}
+                  </div>
+                )}
                 <div className="flex items-center gap-2">
                   <Button variant="outline" size="sm" className="flex-1 text-xs h-8" onClick={() => startEdit(t)}>
                     <Edit3 className="w-3 h-3 ml-1" />تعديل

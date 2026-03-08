@@ -92,10 +92,31 @@ export interface TemplateSection {
   fields: TemplateField[];
 }
 
+export type LayoutType = 
+  | 'dark-header-table'
+  | 'dark-header-simple'
+  | 'white-header-classic'
+  | 'white-header-sidebar'
+  | 'white-header-light'
+  | 'white-header-multi'
+  | 'minimal-clean';
+
+export type FieldStyle = 'table' | 'fieldset' | 'underlined' | 'cards' | 'minimal';
+export type TitleStyle = 'full-width' | 'bordered' | 'underlined' | 'rounded' | 'badge' | 'simple';
+export type SignatureStyle = 'boxed' | 'lined' | 'simple' | 'stamped';
+export type FooterStyle = 'gradient' | 'solid' | 'line' | 'none';
+
 export interface TemplateLayout {
   version: number;
   pageSize?: 'A4' | 'letter';
   direction?: 'rtl' | 'ltr';
+  // New layout system
+  layoutType?: LayoutType;
+  fieldStyle?: FieldStyle;
+  titleStyle?: TitleStyle;
+  signatureStyle?: SignatureStyle;
+  footerStyle?: FooterStyle;
+  // Legacy fields
   headerStyle?: 'full-width' | 'centered' | 'minimal';
   showMoeLogo?: boolean;
   showSchoolLogo?: boolean;

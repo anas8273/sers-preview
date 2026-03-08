@@ -236,67 +236,182 @@ export async function seedDefaultTemplates() {
   const existing = await db.select().from(pdfTemplates).limit(1);
   if (existing.length > 0) return;
   
-  const reportLayout: any = {
+  const baseFields = [
+    { id: 'programName', label: 'اسم البرنامج', type: 'text', required: true },
+    { id: 'executionDate', label: 'تاريخ التنفيذ', type: 'date' },
+    { id: 'beneficiaries', label: 'المستفيدون', type: 'text' },
+    { id: 'field', label: 'المجال', type: 'text' },
+    { id: 'executor', label: 'المنفذ/ون', type: 'text' },
+    { id: 'participants', label: 'المشارك/ون', type: 'text' },
+    { id: 'location', label: 'مكان التنفيذ', type: 'text' },
+    { id: 'duration', label: 'مدة التنفيذ', type: 'text' },
+  ];
+
+  const baseSections = [
+    { id: 'info', title: 'تقرير عن برنامج', columns: 2, fields: baseFields },
+    { id: 'goals', title: 'الأهداف', columns: 1, fields: [{ id: 'goals', label: 'الأهداف', type: 'list' }] },
+    { id: 'steps', title: 'خطوات التنفيذ / الوصف', columns: 1, fields: [{ id: 'steps', label: 'خطوات التنفيذ', type: 'list' }] },
+    { id: 'impact', title: 'أثر البرنامج', columns: 2, fields: [{ id: 'impact', label: 'أثر البرنامج', type: 'list' }, { id: 'recommendations', label: 'التوصيات', type: 'list' }] },
+  ];
+
+  const makeLayout = (overrides: Record<string, any>): any => ({
     version: 1,
-    pageSize: 'A4',
-    direction: 'rtl',
-    headerStyle: 'full-width',
+    pageSize: 'A4' as const,
+    direction: 'rtl' as const,
     showMoeLogo: true,
     showSchoolLogo: true,
     showEvidenceSection: true,
     evidenceDisplay: 'mixed',
-    sections: [
-      {
-        id: 'info',
-        title: 'تقرير عن برنامج',
-        columns: 2,
-        fields: [
-          { id: 'programName', label: 'اسم البرنامج', type: 'text', required: true },
-          { id: 'executionDate', label: 'تاريخ التنفيذ', type: 'date' },
-          { id: 'beneficiaries', label: 'المستفيدون', type: 'text' },
-          { id: 'field', label: 'المجال', type: 'text' },
-          { id: 'executor', label: 'المنفذ/ون', type: 'text' },
-          { id: 'participants', label: 'المشارك/ون', type: 'text' },
-          { id: 'location', label: 'مكان التنفيذ', type: 'text' },
-          { id: 'duration', label: 'مدة التنفيذ', type: 'text' },
-        ],
-      },
-      {
-        id: 'goals',
-        title: 'الأهداف',
-        columns: 1,
-        fields: [
-          { id: 'goals', label: 'الأهداف', type: 'list' },
-        ],
-      },
-      {
-        id: 'steps',
-        title: 'خطوات التنفيذ / الوصف',
-        columns: 1,
-        fields: [
-          { id: 'steps', label: 'خطوات التنفيذ', type: 'list' },
-        ],
-      },
-      {
-        id: 'impact',
-        title: 'أثر البرنامج',
-        columns: 2,
-        fields: [
-          { id: 'impact', label: 'أثر البرنامج', type: 'list' },
-          { id: 'recommendations', label: 'التوصيات', type: 'list' },
-        ],
-      },
-    ],
+    sections: baseSections,
     signatureLabels: { right: 'المعلم / اسم المعلم', left: 'مدير المدرسة / اسم المدير' },
     footerText: 'SERS - نظام السجلات التعليمية الذكي',
-  };
+    ...overrides,
+  });
 
   const defaults: InsertPdfTemplate[] = [
-    { name: "كلاسيكي", description: "تصميم كلاسيكي احترافي", headerBg: "linear-gradient(135deg, #059669, #047857)", headerText: "#ffffff", accent: "#059669", borderColor: "#e5e7eb", bodyBg: "#ffffff", templateLayout: reportLayout, isDefault: true, sortOrder: 1 },
-    { name: "أزرق رسمي", description: "تصميم أزرق رسمي للتقارير", headerBg: "linear-gradient(135deg, #1e40af, #1e3a8a)", headerText: "#ffffff", accent: "#2563EB", borderColor: "#dbeafe", bodyBg: "#ffffff", templateLayout: reportLayout, isDefault: false, sortOrder: 2 },
-    { name: "بنفسجي عصري", description: "تصميم بنفسجي عصري", headerBg: "linear-gradient(135deg, #7c3aed, #6d28d9)", headerText: "#ffffff", accent: "#7C3AED", borderColor: "#ede9fe", bodyBg: "#ffffff", templateLayout: reportLayout, isDefault: false, sortOrder: 3 },
-    { name: "ذهبي فاخر", description: "تصميم ذهبي فاخر", headerBg: "linear-gradient(135deg, #92400e, #78350f)", headerText: "#fef3c7", accent: "#b45309", borderColor: "#fde68a", bodyBg: "#fffbeb", templateLayout: reportLayout, isDefault: false, sortOrder: 4 },
-    { name: "أحمر وطني", description: "تصميم بألوان العلم السعودي", headerBg: "linear-gradient(135deg, #166534, #15803d)", headerText: "#ffffff", accent: "#166534", borderColor: "#bbf7d0", bodyBg: "#f0fdf4", templateLayout: reportLayout, isDefault: false, sortOrder: 5 },
+    // 1. ترويسة داكنة + جدول (PDF صفحة 4-5)
+    {
+      name: "الهوية البصرية - ترويسة داكنة",
+      description: "ترويسة تدرج أزرق-أخضر داكنة مع حقول جدول",
+      headerBg: "linear-gradient(135deg, #0c4a6e, #065f46)",
+      headerText: "#ffffff",
+      accent: "#0d9488",
+      borderColor: "#0d9488",
+      bodyBg: "#ffffff",
+      templateLayout: makeLayout({ layoutType: 'dark-header-table', fieldStyle: 'table', titleStyle: 'full-width', signatureStyle: 'boxed', footerStyle: 'gradient' }),
+      isDefault: true,
+      sortOrder: 1,
+    },
+    // 2. أبيض كلاسيكي + عنوان مستدير (PDF صفحة 2-3)
+    {
+      name: "الهوية البصرية - أبيض كلاسيكي",
+      description: "ترويسة بيضاء مع عنوان مستدير وحقول تحتية",
+      headerBg: "#ffffff",
+      headerText: "#0c4a6e",
+      accent: "#0d9488",
+      borderColor: "#0d9488",
+      bodyBg: "#ffffff",
+      templateLayout: makeLayout({ layoutType: 'white-header-classic', fieldStyle: 'underlined', titleStyle: 'rounded', signatureStyle: 'lined', footerStyle: 'solid' }),
+      isDefault: false,
+      sortOrder: 2,
+    },
+    // 3. شريط جانبي ملون (PDF صفحة 9-10)
+    {
+      name: "الهوية البصرية - شريط جانبي",
+      description: "شريط جانبي ملون مع حقول بطاقات",
+      headerBg: "#ffffff",
+      headerText: "#0c4a6e",
+      accent: "#0d9488",
+      borderColor: "#0d9488",
+      bodyBg: "#f8fafc",
+      templateLayout: makeLayout({ layoutType: 'white-header-sidebar', fieldStyle: 'cards', titleStyle: 'badge', signatureStyle: 'stamped', footerStyle: 'gradient' }),
+      isDefault: false,
+      sortOrder: 3,
+    },
+    // 4. تدرج أزرق-أخضر (PDF صفحة 7-8)
+    {
+      name: "الهوية البصرية - تدرج",
+      description: "ترويسة تدرج مع حقول fieldset",
+      headerBg: "linear-gradient(135deg, #0c4a6e, #065f46)",
+      headerText: "#ffffff",
+      accent: "#0d9488",
+      borderColor: "#0d9488",
+      bodyBg: "#ffffff",
+      templateLayout: makeLayout({ layoutType: 'dark-header-simple', fieldStyle: 'fieldset', titleStyle: 'full-width', signatureStyle: 'lined', footerStyle: 'gradient' }),
+      isDefault: false,
+      sortOrder: 4,
+    },
+    // 5. أبيض خفيف (PDF صفحة 1)
+    {
+      name: "الهوية البصرية - خفيف",
+      description: "ترويسة بيضاء خفيفة مع شريط سفلي تدرج",
+      headerBg: "#ffffff",
+      headerText: "#0c4a6e",
+      accent: "#0d9488",
+      borderColor: "#d1d5db",
+      bodyBg: "#ffffff",
+      templateLayout: makeLayout({ layoutType: 'white-header-light', fieldStyle: 'fieldset', titleStyle: 'underlined', signatureStyle: 'simple', footerStyle: 'gradient' }),
+      isDefault: false,
+      sortOrder: 5,
+    },
+    // 6. أعمدة متعددة (PDF صفحة 6)
+    {
+      name: "الهوية البصرية - أعمدة",
+      description: "ترويسة داكنة مع حقول أعمدة متعددة",
+      headerBg: "linear-gradient(135deg, #0c4a6e, #065f46)",
+      headerText: "#ffffff",
+      accent: "#0d9488",
+      borderColor: "#0d9488",
+      bodyBg: "#f0fdfa",
+      templateLayout: makeLayout({ layoutType: 'white-header-multi', fieldStyle: 'table', titleStyle: 'bordered', signatureStyle: 'boxed', footerStyle: 'solid' }),
+      isDefault: false,
+      sortOrder: 6,
+    },
+    // 7. بسيط نظيف
+    {
+      name: "بسيط نظيف",
+      description: "تصميم بسيط بدون زخرفة",
+      headerBg: "#ffffff",
+      headerText: "#374151",
+      accent: "#6b7280",
+      borderColor: "#e5e7eb",
+      bodyBg: "#ffffff",
+      templateLayout: makeLayout({ layoutType: 'minimal-clean', fieldStyle: 'minimal', titleStyle: 'simple', signatureStyle: 'simple', footerStyle: 'line' }),
+      isDefault: false,
+      sortOrder: 7,
+    },
+    // 8. أزرق رسمي
+    {
+      name: "أزرق رسمي",
+      description: "تصميم أزرق رسمي للتقارير",
+      headerBg: "linear-gradient(135deg, #1e40af, #1e3a8a)",
+      headerText: "#ffffff",
+      accent: "#2563EB",
+      borderColor: "#dbeafe",
+      bodyBg: "#ffffff",
+      templateLayout: makeLayout({ layoutType: 'dark-header-table', fieldStyle: 'table', titleStyle: 'full-width', signatureStyle: 'boxed', footerStyle: 'gradient' }),
+      isDefault: false,
+      sortOrder: 8,
+    },
+    // 9. بنفسجي عصري
+    {
+      name: "بنفسجي عصري",
+      description: "تصميم بنفسجي عصري",
+      headerBg: "linear-gradient(135deg, #7c3aed, #6d28d9)",
+      headerText: "#ffffff",
+      accent: "#7C3AED",
+      borderColor: "#ede9fe",
+      bodyBg: "#ffffff",
+      templateLayout: makeLayout({ layoutType: 'white-header-classic', fieldStyle: 'cards', titleStyle: 'rounded', signatureStyle: 'stamped', footerStyle: 'solid' }),
+      isDefault: false,
+      sortOrder: 9,
+    },
+    // 10. ذهبي فاخر
+    {
+      name: "ذهبي فاخر",
+      description: "تصميم ذهبي فاخر",
+      headerBg: "linear-gradient(135deg, #92400e, #78350f)",
+      headerText: "#fef3c7",
+      accent: "#b45309",
+      borderColor: "#fde68a",
+      bodyBg: "#fffbeb",
+      templateLayout: makeLayout({ layoutType: 'dark-header-simple', fieldStyle: 'fieldset', titleStyle: 'bordered', signatureStyle: 'lined', footerStyle: 'gradient' }),
+      isDefault: false,
+      sortOrder: 10,
+    },
+    // 11. أحمر وطني
+    {
+      name: "أحمر وطني",
+      description: "تصميم بألوان العلم السعودي",
+      headerBg: "linear-gradient(135deg, #166534, #15803d)",
+      headerText: "#ffffff",
+      accent: "#166534",
+      borderColor: "#bbf7d0",
+      bodyBg: "#f0fdf4",
+      templateLayout: makeLayout({ layoutType: 'white-header-sidebar', fieldStyle: 'underlined', titleStyle: 'badge', signatureStyle: 'boxed', footerStyle: 'solid' }),
+      isDefault: false,
+      sortOrder: 11,
+    },
   ];
   
   for (const t of defaults) {

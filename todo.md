@@ -618,3 +618,32 @@
 
 ## إصلاح خطأ CSS - تعارض border (مارس 2026)
 - [x] إصلاح تعارض بين خصائص border المختصرة وغير المختصرة (borderTop/borderRight/borderBottom) في PerformanceEvidence.tsx
+
+## إعادة بناء شامل - تصاميم متعددة + ديناميكية (مارس 2026)
+
+### إصلاح تكرار الترويسة
+- [x] إزالة البيانات المكررة في الترويسة (فلتر بالمطابقة التامة + إزالة اسم المدرسة إذا موجود في حقل school)
+
+### تصاميم مختلفة فعلياً (ليس فقط ألوان) من ملف PDF
+- [x] تصميم 1: ترويسة تدرج أزرق-أخضر مع حقول جدول (identity-dark-table)
+- [x] تصميم 2: ترويسة بيضاء مع إطار ملون (identity-white-classic)
+- [x] تصميم 3: ترويسة داكنة مع حقول fieldset (identity-dark-fieldset)
+- [x] تصميم 4: بطاقات حديثة (teal-cards + rose-cards)
+- [x] تصميم 5: جدول كامل (green-table + gold-luxury)
+- [x] تصميم 6: بسيط نظيف (simple-clean + slate-minimal + amber-minimal)
+- [x] تصميم 7: شريط جانبي (identity-white-sidebar + emerald-sidebar)
+- [x] تصميم 8: توقيعات رسمية (navy-stamped)
+- [x] كل تصميم له layout مختلف فعلياً (layoutType + fieldStyle + titleStyle + signatureStyle)
+
+### قوالب وحقول ديناميكية من إدارة النظام
+- [x] جدول DB للثيمات/التصاميم (admin يضيف/يعدل)
+- [x] جدول DB للقوالب مع حقولها الديناميكية
+- [x] API لإدارة الثيمات (CRUD)
+- [x] API لإدارة القوالب والحقول (CRUD)
+- [x] واجهة إدارة الثيمات (admin panel) - مع حقول layoutType/fieldStyle/titleStyle/signatureStyle/footerStyle
+- [x] واجهة إدارة القوالب والحقول (admin panel)
+- [x] المعاينة تقرأ الثيمات والقوالب من DB ديناميكياً
+
+### اختبارات وحفظ
+- [x] اختبارات Vitest - 298 اختبار ناجح (11 ملف)
+- [x] حفظ checkpoint نهائي

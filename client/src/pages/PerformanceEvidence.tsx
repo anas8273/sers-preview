@@ -1,3 +1,4 @@
+import React from 'react';
 /**
  * شواهد الأداء الوظيفي - SERS
  * المعلم/المعلمة → نظام المعايير الـ 11 (نمط معياري) مع 45 مؤشر
@@ -165,30 +166,209 @@ const JOB_TYPES = [
   { id: "admin_assistant", title: "مساعد/ة إداري/ة", icon: Briefcase, emoji: "🗂️", criteria: ADMIN_ASSISTANT_CRITERIA, hasStandards: false, color: "#6B7280", desc: "معايير الدعم الإداري والتنظيم المكتبي والمتابعة اليومية" },
 ];
 
-// ===== الثيمات =====
-const THEMES = [
+// ===== أنماط التنسيق المختلفة =====
+// layoutType يحدد شكل التقرير بالكامل (ليس فقط الألوان)
+type LayoutType = 
+  | 'dark-header-table'    // ترويسة داكنة + حقول جدول (PDF صفحة 6)
+  | 'dark-header-simple'   // ترويسة داكنة + حقول fieldset (PDF صفحة 4-5)
+  | 'white-header-classic' // ترويسة بيضاء + حقول fieldset كلاسيكي (PDF صفحة 7)
+  | 'white-header-sidebar' // ترويسة بيضاء + شريط جانبي (PDF صفحة 3)
+  | 'white-header-light'   // ترويسة بيضاء + خلفية فاتحة + شريط عنوان كامل (PDF صفحة 9)
+  | 'white-header-multi'   // ترويسة بيضاء + أعمدة متعددة (PDF صفحة 10)
+  | 'minimal-clean';       // تصميم بسيط ونظيف
+
+interface ThemeConfig {
+  id: string;
+  name: string;
+  layoutType: LayoutType;
+  headerBg: string;
+  headerText: string;
+  accent: string;
+  borderColor: string;
+  titleBg: string;
+  fieldLabelBg: string;
+  footerBg: string;
+  tableStyle: boolean;
+  // خصائص إضافية للتنسيقات المختلفة
+  sidebarBg?: string;       // للتصميم مع شريط جانبي
+  titleStyle?: 'rounded' | 'full-width' | 'bordered' | 'underlined' | 'badge' | 'simple'; // شكل عنوان التقرير
+  headerSeparator?: boolean; // خطوط فاصلة في الترويسة
+  showTopLine?: boolean;     // خط علوي رفيع
+  showBottomBar?: boolean;   // شريط سفلي
+  fieldStyle?: 'table' | 'fieldset' | 'underlined' | 'cards' | 'minimal'; // نمط الحقول
+  signatureStyle?: 'dotted' | 'solid' | 'boxed' | 'lined' | 'stamped';    // نمط التوقيعات
+  bodyBg?: string;           // خلفية الجسم
+}
+
+// ===== الثيمات - كل ثيم له تنسيق مختلف فعلياً =====
+const THEMES: ThemeConfig[] = [
   // === تصاميم الهوية البصرية لوزارة التعليم (من ملف PDF) ===
-  { id: "identity-dark", name: "الهوية البصرية - ترويسة داكنة", headerBg: "linear-gradient(135deg, #1B3A5C, #1A4A6B, #1E5A7A)", headerText: "#fff", accent: "#1A6B7A", borderColor: "#1B3A5C",
-    titleBg: "#1A6B7A", fieldLabelBg: "#1A6B7A", footerBg: "linear-gradient(to left, #1B3A5C, #1A6B7A, #2E9E8B)", tableStyle: false },
-  { id: "identity-white", name: "الهوية البصرية - أبيض كلاسيكي", headerBg: "#ffffff", headerText: "#1B3A5C", accent: "#1A6B7A", borderColor: "#1A6B7A",
-    titleBg: "#1A6B7A", fieldLabelBg: "#1A6B7A", footerBg: "linear-gradient(to left, #1B3A5C, #1A6B7A, #2E9E8B)", tableStyle: false },
-  { id: "identity-gradient", name: "الهوية البصرية - تدرج", headerBg: "linear-gradient(135deg, #1B3A5C, #2E6B8A)", headerText: "#fff", accent: "#2E7D6B", borderColor: "#1B3A5C",
-    titleBg: "linear-gradient(135deg, #2E7D6B, #1A6B7A)", fieldLabelBg: "#2E7D6B", footerBg: "linear-gradient(to left, #1B3A5C, #2E7D6B, #2E9E8B)", tableStyle: false },
-  { id: "identity-table", name: "الهوية البصرية - نمط جدول", headerBg: "linear-gradient(135deg, #1B3A5C, #1A4A6B)", headerText: "#fff", accent: "#1A6B7A", borderColor: "#1B3A5C",
-    titleBg: "#1A6B7A", fieldLabelBg: "#1A6B7A", footerBg: "linear-gradient(to left, #1B3A5C, #1A6B7A, #2E9E8B)", tableStyle: true },
-  // === تصاميم إضافية ===
-  { id: "edu-forms-light", name: "نماذج تعليمية - فاتح", headerBg: "#ffffff", headerText: "#1a1a1a", accent: "#2196F3", borderColor: "#2196F3",
-    titleBg: "#E3F2FD", fieldLabelBg: "#2196F3", footerBg: "linear-gradient(to left, #1565C0, #2196F3)", tableStyle: false },
-  { id: "official-green", name: "أخضر رسمي", headerBg: "#1B5E20", headerText: "#fff", accent: "#2E7D32", borderColor: "#1B5E20",
-    titleBg: "#2E7D32", fieldLabelBg: "#2E7D32", footerBg: "linear-gradient(to left, #1B5E20, #2E7D32, #43A047)", tableStyle: false },
-  { id: "blue-classic", name: "أزرق كلاسيكي", headerBg: "#0D47A1", headerText: "#fff", accent: "#1565C0", borderColor: "#0D47A1",
-    titleBg: "#1565C0", fieldLabelBg: "#1565C0", footerBg: "linear-gradient(to left, #0D47A1, #1565C0, #1976D2)", tableStyle: false },
-  { id: "purple-elegant", name: "بنفسجي أنيق", headerBg: "#4A148C", headerText: "#fff", accent: "#6A1B9A", borderColor: "#4A148C",
-    titleBg: "#6A1B9A", fieldLabelBg: "#6A1B9A", footerBg: "linear-gradient(to left, #4A148C, #6A1B9A)", tableStyle: false },
-  { id: "gold-luxury", name: "ذهبي فاخر", headerBg: "linear-gradient(135deg, #5D4037, #795548, #8D6E63)", headerText: "#fff", accent: "#795548", borderColor: "#5D4037",
-    titleBg: "#795548", fieldLabelBg: "#795548", footerBg: "linear-gradient(to left, #5D4037, #795548)", tableStyle: false },
-  { id: "simple-clean", name: "بسيط ونظيف", headerBg: "#f8f9fa", headerText: "#1a1a1a", accent: "#059669", borderColor: "#e5e7eb",
-    titleBg: "#059669", fieldLabelBg: "#059669", footerBg: "#059669", tableStyle: false },
+  
+  // التصميم 6 (PDF): ترويسة داكنة + جدول حقول كامل
+  { id: "identity-dark-table", name: "الهوية البصرية - جدول داكن",
+    layoutType: 'dark-header-table',
+    headerBg: "linear-gradient(135deg, #1B3A5C, #1A4A6B, #1E5A7A)", headerText: "#fff",
+    accent: "#1A6B7A", borderColor: "#1B3A5C",
+    titleBg: "#1A6B7A", fieldLabelBg: "#1A6B7A",
+    footerBg: "linear-gradient(to left, #1B3A5C, #1A6B7A, #2E9E8B)",
+    tableStyle: true, titleStyle: 'rounded', showTopLine: true, showBottomBar: true,
+    fieldStyle: 'table', signatureStyle: 'dotted' },
+
+  // التصميم 4-5 (PDF): ترويسة داكنة + حقول fieldset
+  { id: "identity-dark-fieldset", name: "الهوية البصرية - ترويسة داكنة",
+    layoutType: 'dark-header-simple',
+    headerBg: "linear-gradient(135deg, #1B3A5C, #1A4A6B, #1E5A7A)", headerText: "#fff",
+    accent: "#1A6B7A", borderColor: "#1B3A5C",
+    titleBg: "#1A6B7A", fieldLabelBg: "#1A6B7A",
+    footerBg: "linear-gradient(to left, #1B3A5C, #1A6B7A, #2E9E8B)",
+    tableStyle: false, titleStyle: 'rounded', showTopLine: true, showBottomBar: true,
+    fieldStyle: 'fieldset', signatureStyle: 'dotted' },
+
+  // التصميم 7 (PDF): نمط edu-forms.com الكلاسيكي
+  { id: "identity-white-classic", name: "الهوية البصرية - أبيض كلاسيكي",
+    layoutType: 'white-header-classic',
+    headerBg: "#ffffff", headerText: "#1B3A5C",
+    accent: "#1A6B7A", borderColor: "#1A6B7A",
+    titleBg: "#1A6B7A", fieldLabelBg: "#1A6B7A",
+    footerBg: "linear-gradient(to left, #1B3A5C, #1A6B7A, #2E9E8B)",
+    tableStyle: false, titleStyle: 'bordered', showTopLine: false, showBottomBar: false,
+    fieldStyle: 'underlined', signatureStyle: 'dotted', headerSeparator: false },
+
+  // التصميم 3 (PDF): ترويسة بيضاء + شريط جانبي
+  { id: "identity-white-sidebar", name: "الهوية البصرية - شريط جانبي",
+    layoutType: 'white-header-sidebar',
+    headerBg: "#ffffff", headerText: "#1B3A5C",
+    accent: "#1A6B7A", borderColor: "#1A6B7A",
+    titleBg: "#1A6B7A", fieldLabelBg: "#1A6B7A",
+    footerBg: "linear-gradient(to left, #1B3A5C, #1A6B7A, #2E9E8B)",
+    tableStyle: false, titleStyle: 'rounded', showTopLine: false, showBottomBar: true,
+    sidebarBg: "linear-gradient(to bottom, #1B3A5C, #1A6B7A, #2E9E8B)",
+    fieldStyle: 'fieldset', signatureStyle: 'dotted', headerSeparator: true },
+
+  // التصميم 9 (PDF): ترويسة بيضاء + خلفية فاتحة + شريط عنوان كامل
+  { id: "identity-white-light", name: "الهوية البصرية - خلفية فاتحة",
+    layoutType: 'white-header-light',
+    headerBg: "#ffffff", headerText: "#1B3A5C",
+    accent: "#1B3A5C", borderColor: "#1A6B7A",
+    titleBg: "#1B3A5C", fieldLabelBg: "#1A6B7A",
+    footerBg: "linear-gradient(to left, #1B3A5C, #1A6B7A, #2E9E8B)",
+    tableStyle: false, titleStyle: 'full-width', showTopLine: false, showBottomBar: true,
+    fieldStyle: 'underlined', signatureStyle: 'dotted', bodyBg: '#F0FAF5' },
+
+  // التصميم 10 (PDF): ترويسة بيضاء + أعمدة متعددة
+  { id: "identity-white-multi", name: "الهوية البصرية - أعمدة متعددة",
+    layoutType: 'white-header-multi',
+    headerBg: "#ffffff", headerText: "#1B3A5C",
+    accent: "#1A6B7A", borderColor: "#1A6B7A",
+    titleBg: "#E8F4F8", fieldLabelBg: "#1A6B7A",
+    footerBg: "linear-gradient(to left, #1B3A5C, #1A6B7A, #2E9E8B)",
+    tableStyle: false, titleStyle: 'bordered', showTopLine: false, showBottomBar: true,
+    fieldStyle: 'fieldset', signatureStyle: 'solid' },
+
+  // === تصاميم إضافية بتنسيقات مختلفة ===
+  { id: "green-table", name: "أخضر رسمي - جدول",
+    layoutType: 'dark-header-table',
+    headerBg: "#1B5E20", headerText: "#fff",
+    accent: "#2E7D32", borderColor: "#1B5E20",
+    titleBg: "#2E7D32", fieldLabelBg: "#2E7D32",
+    footerBg: "linear-gradient(to left, #1B5E20, #2E7D32, #43A047)",
+    tableStyle: true, titleStyle: 'rounded', showTopLine: true, showBottomBar: true,
+    fieldStyle: 'table', signatureStyle: 'dotted' },
+
+  { id: "blue-classic", name: "أزرق كلاسيكي",
+    layoutType: 'dark-header-simple',
+    headerBg: "#0D47A1", headerText: "#fff",
+    accent: "#1565C0", borderColor: "#0D47A1",
+    titleBg: "#1565C0", fieldLabelBg: "#1565C0",
+    footerBg: "linear-gradient(to left, #0D47A1, #1565C0, #1976D2)",
+    tableStyle: false, titleStyle: 'rounded', showTopLine: true, showBottomBar: true,
+    fieldStyle: 'fieldset', signatureStyle: 'dotted' },
+
+  { id: "purple-elegant", name: "بنفسجي أنيق",
+    layoutType: 'white-header-light',
+    headerBg: "#4A148C", headerText: "#fff",
+    accent: "#6A1B9A", borderColor: "#4A148C",
+    titleBg: "#6A1B9A", fieldLabelBg: "#6A1B9A",
+    footerBg: "linear-gradient(to left, #4A148C, #6A1B9A)",
+    tableStyle: false, titleStyle: 'full-width', showTopLine: true, showBottomBar: true,
+    fieldStyle: 'underlined', signatureStyle: 'solid', bodyBg: '#F5F0FF' },
+
+  { id: "gold-luxury", name: "ذهبي فاخر",
+    layoutType: 'dark-header-table',
+    headerBg: "linear-gradient(135deg, #5D4037, #795548, #8D6E63)", headerText: "#fff",
+    accent: "#795548", borderColor: "#5D4037",
+    titleBg: "#795548", fieldLabelBg: "#795548",
+    footerBg: "linear-gradient(to left, #5D4037, #795548)",
+    tableStyle: true, titleStyle: 'rounded', showTopLine: true, showBottomBar: true,
+    fieldStyle: 'table', signatureStyle: 'boxed' },
+
+  { id: "simple-clean", name: "بسيط ونظيف",
+    layoutType: 'minimal-clean',
+    headerBg: "#f8f9fa", headerText: "#1a1a1a",
+    accent: "#059669", borderColor: "#e5e7eb",
+    titleBg: "#059669", fieldLabelBg: "#059669",
+    footerBg: "#059669",
+    tableStyle: false, titleStyle: 'underlined', showTopLine: false, showBottomBar: false,
+    fieldStyle: 'underlined', signatureStyle: 'solid' },
+
+  // === تصاميم بنمط بطاقات (cards) ===
+  { id: "teal-cards", name: "تيل - بطاقات حديثة",
+    layoutType: 'white-header-classic',
+    headerBg: "#ffffff", headerText: "#0D7377",
+    accent: "#0D7377", borderColor: "#0D7377",
+    titleBg: "#0D7377", fieldLabelBg: "#0D7377",
+    footerBg: "linear-gradient(to left, #0D7377, #14919B)",
+    tableStyle: false, titleStyle: 'badge', showTopLine: false, showBottomBar: true,
+    fieldStyle: 'cards', signatureStyle: 'lined' },
+
+  { id: "rose-cards", name: "وردي - بطاقات أنيقة",
+    layoutType: 'white-header-light',
+    headerBg: "#ffffff", headerText: "#9F1239",
+    accent: "#BE123C", borderColor: "#9F1239",
+    titleBg: "#BE123C", fieldLabelBg: "#BE123C",
+    footerBg: "linear-gradient(to left, #9F1239, #BE123C, #E11D48)",
+    tableStyle: false, titleStyle: 'badge', showTopLine: false, showBottomBar: true,
+    fieldStyle: 'cards', signatureStyle: 'stamped', bodyBg: '#FFF1F2' },
+
+  // === تصاميم بنمط بسيط (minimal) ===
+  { id: "slate-minimal", name: "رمادي - بسيط أنيق",
+    layoutType: 'minimal-clean',
+    headerBg: "#f8fafc", headerText: "#334155",
+    accent: "#475569", borderColor: "#CBD5E1",
+    titleBg: "#475569", fieldLabelBg: "#475569",
+    footerBg: "#475569",
+    tableStyle: false, titleStyle: 'simple', showTopLine: false, showBottomBar: false,
+    fieldStyle: 'minimal', signatureStyle: 'lined' },
+
+  { id: "amber-minimal", name: "كهرماني - بسيط دافئ",
+    layoutType: 'white-header-multi',
+    headerBg: "#ffffff", headerText: "#92400E",
+    accent: "#B45309", borderColor: "#92400E",
+    titleBg: "#B45309", fieldLabelBg: "#B45309",
+    footerBg: "linear-gradient(to left, #92400E, #B45309, #D97706)",
+    tableStyle: false, titleStyle: 'simple', showTopLine: false, showBottomBar: true,
+    fieldStyle: 'minimal', signatureStyle: 'solid' },
+
+  // === تصاميم بنمط الأختام (stamped signatures) ===
+  { id: "navy-stamped", name: "كحلي - توقيعات رسمية",
+    layoutType: 'dark-header-simple',
+    headerBg: "linear-gradient(135deg, #1E3A5F, #2C5282)", headerText: "#fff",
+    accent: "#2B6CB0", borderColor: "#1E3A5F",
+    titleBg: "#2B6CB0", fieldLabelBg: "#2B6CB0",
+    footerBg: "linear-gradient(to left, #1E3A5F, #2B6CB0, #3182CE)",
+    tableStyle: false, titleStyle: 'full-width', showTopLine: true, showBottomBar: true,
+    fieldStyle: 'fieldset', signatureStyle: 'stamped' },
+
+  // === تصميم شريط جانبي بألوان مختلفة ===
+  { id: "emerald-sidebar", name: "زمردي - شريط جانبي",
+    layoutType: 'white-header-sidebar',
+    headerBg: "#ffffff", headerText: "#065F46",
+    accent: "#059669", borderColor: "#065F46",
+    titleBg: "#059669", fieldLabelBg: "#059669",
+    footerBg: "linear-gradient(to left, #065F46, #059669, #10B981)",
+    tableStyle: false, titleStyle: 'rounded', showTopLine: false, showBottomBar: true,
+    sidebarBg: "linear-gradient(to bottom, #065F46, #059669, #10B981)",
+    fieldStyle: 'cards', signatureStyle: 'boxed', headerSeparator: true },
 ];
 
 // ===== إعدادات الأولوية =====
@@ -283,18 +463,32 @@ export default function PerformanceEvidence() {
   const allThemes = useMemo(() => {
     const local = [...THEMES];
     if (dbTemplates && dbTemplates.length > 0) {
-      const dbMapped = dbTemplates.map((t: any) => ({
-        id: `db-${t.id}`,
-        name: t.name,
-        headerBg: t.headerBg || '#1B3A5C',
-        headerText: t.headerText || '#fff',
-        accent: t.accent || '#1A6B7A',
-        borderColor: t.borderColor || '#1B3A5C',
-        titleBg: t.accent || '#1A6B7A',
-        fieldLabelBg: t.accent || '#1A6B7A',
-        footerBg: `linear-gradient(to left, ${t.borderColor || '#1B3A5C'}, ${t.accent || '#1A6B7A'})`,
-        tableStyle: false as boolean,
-      }));
+      const dbMapped: ThemeConfig[] = dbTemplates.map((t: any) => {
+        const layout = t.templateLayout || {};
+        const lt = layout.layoutType || (layout.headerStyle === 'full-width' ? 'dark-header-table' : 'white-header-classic');
+        const isDark = lt.startsWith('dark-');
+        return {
+          id: `db-${t.id}`,
+          name: t.name,
+          layoutType: lt as LayoutType,
+          headerBg: t.headerBg || (isDark ? 'linear-gradient(135deg, #1B3A5C, #1A4A6B, #1E5A7A)' : '#ffffff'),
+          headerText: t.headerText || (isDark ? '#fff' : '#1B3A5C'),
+          accent: t.accent || '#1A6B7A',
+          borderColor: t.borderColor || '#1B3A5C',
+          titleBg: t.accent || '#1A6B7A',
+          fieldLabelBg: t.accent || '#1A6B7A',
+          footerBg: `linear-gradient(to left, ${t.borderColor || '#1B3A5C'}, ${t.accent || '#1A6B7A'})`,
+          tableStyle: (layout.fieldStyle === 'table'),
+          titleStyle: (layout.titleStyle || 'rounded') as ThemeConfig['titleStyle'],
+          showTopLine: isDark,
+          showBottomBar: layout.footerStyle !== 'none',
+          fieldStyle: (layout.fieldStyle || 'fieldset') as ThemeConfig['fieldStyle'],
+          signatureStyle: (['dotted', 'solid', 'boxed', 'lined', 'stamped'].includes(layout.signatureStyle) ? layout.signatureStyle : 'dotted') as ThemeConfig['signatureStyle'],
+          bodyBg: t.bodyBg || (lt === 'white-header-light' ? '#F0FAF5' : lt === 'white-header-sidebar' ? '#f8fafc' : undefined),
+          sidebarBg: lt === 'white-header-sidebar' ? `linear-gradient(to bottom, ${t.borderColor || '#1B3A5C'}, ${t.accent || '#1A6B7A'})` : undefined,
+          headerSeparator: lt === 'white-header-sidebar',
+        };
+      });
       return [...local, ...dbMapped];
     }
     return local;
@@ -2683,107 +2877,402 @@ export default function PerformanceEvidence() {
                       <X className="w-5 h-5" />
                     </button>
                   </div>
-                  {/* محتوى المعاينة - تصميم هوية وزارة التعليم */}
+                  {/* محتوى المعاينة - تصميم ديناميكي حسب layoutType */}
                   <div id={`single-preview-${previewSubId}`} style={{ fontFamily: "'Cairo', 'Tajawal', sans-serif", direction: 'rtl' }}>
-                    <div style={{ background: 'white', padding: '0', maxWidth: '210mm', margin: '0 auto', border: '1px solid #e5e7eb' }}>
-                      {/* === خط علوي رفيع === */}
-                      <div style={{ height: '4px', background: `linear-gradient(to left, #1B3A5C, #1A6B7A, #2E9E8B)` }} />
+                    <div style={{ background: theme.bodyBg || 'white', padding: '0', maxWidth: '210mm', margin: '0 auto', border: '1px solid #e5e7eb', overflow: 'hidden' }}>
                       
-                      {/* === ترويسة وزارة التعليم - مطابقة لتصاميم الهوية البصرية === */}
-                      <div style={{ background: theme.headerBg, padding: '20px 28px', color: theme.headerText, position: 'relative' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          {/* الجانب الأيمن - بيانات الإدارة */}
-                          <div style={{ textAlign: 'right', fontSize: '10px', lineHeight: '1.8', flex: '1' }}>
-                            <div style={{ fontSize: '9px', opacity: 0.8, marginBottom: '1px' }}>المملكة العربية السعودية</div>
-                            <div style={{ fontWeight: 'bold' }}>وزارة التعليم</div>
-                            {(personalInfo.department || 'الإدارة العامة للتعليم بـ .........').split('\n').map((line: string, i: number) => (
-                              <div key={i}>{line}</div>
-                            ))}
-                            {personalInfo.school && <div style={{ fontWeight: 'bold' }}>{personalInfo.school}</div>}
-                          </div>
-                          {/* الوسط - الشعار */}
-                          <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', padding: '0 20px' }}>
-                            <img src={MOE_LOGO} alt="شعار وزارة التعليم" style={{ height: '65px', objectFit: 'contain', filter: theme.headerBg === '#ffffff' ? 'none' : 'brightness(0) invert(1)' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
-                            {personalInfo.extraLogo && (
-                              <img src={personalInfo.extraLogo} alt="شعار إضافي" style={{ height: '40px', objectFit: 'contain', marginTop: '4px' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
-                            )}
-                          </div>
-                          {/* الجانب الأيسر - العام الدراسي */}
-                          <div style={{ textAlign: 'left', fontSize: '10px', lineHeight: '1.8', flex: '1' }}>
-                            <div>العام الدراسي: {personalInfo.year || '................'}</div>
-                            <div>الفصل الدراسي: {personalInfo.semester || '............'}</div>
-                          </div>
-                        </div>
-                      </div>
-                      
-                      {/* خط فاصل تدرج */}
-                      <div style={{ height: '4px', background: `linear-gradient(to left, #1B3A5C, #1A6B7A, #2E9E8B)` }} />
+                      {/* === خط علوي رفيع (حسب الثيم) === */}
+                      {theme.showTopLine !== false && (
+                        <div style={{ height: '4px', background: theme.footerBg || `linear-gradient(to left, ${theme.borderColor}, ${theme.accent})` }} />
+                      )}
 
-                      {/* === عنوان التقرير === */}
-                      <div style={{ padding: '16px 28px 0' }}>
-                        <div style={{ background: theme.titleBg || theme.accent, color: 'white', padding: '10px 24px', borderRadius: '8px', textAlign: 'center', fontWeight: 'bold', fontSize: '15px', marginBottom: '16px' }}>
-                          {prevSub.title}
-                        </div>
-                      </div>
+                      {/* === الترويسة - تتغير حسب layoutType === */}
+                      {(() => {
+                        // استخراج بيانات الإدارة بدون تكرار
+                        const deptLines = (personalInfo.department || '').split('\n').filter((l: string) => l.trim());
+                        // إزالة الأسطر المكررة: المملكة، وزارة التعليم (بالضبط)، واسم المدرسة إذا موجود في حقل school
+                        const filteredDeptLines = deptLines.filter((l: string) => {
+                          const trimmed = l.trim();
+                          // إزالة المطابقة التامة فقط
+                          if (trimmed === 'المملكة العربية السعودية') return false;
+                          if (trimmed === 'وزارة التعليم') return false;
+                          // إزالة اسم المدرسة إذا كان موجوداً في حقل school لتجنب التكرار
+                          if (personalInfo.school && trimmed === personalInfo.school.trim()) return false;
+                          return true;
+                        });
+                        const isDark = theme.headerBg !== '#ffffff' && theme.headerBg !== '#f8f9fa';
+                        const logoFilter = isDark ? 'brightness(0) invert(1)' : 'none';
 
-                      {/* === محتوى التقرير === */}
-                      <div style={{ padding: '0 28px 16px' }}>
-                        {/* حقول قصيرة بنمط جدول - صفوف */}
-                        {shortFields.length > 0 && (() => {
-                          const rows: typeof shortFields[] = [];
-                          for (let i = 0; i < shortFields.length; i += 2) {
-                            rows.push(shortFields.slice(i, i + 2));
-                          }
+                        // --- نمط الشريط الجانبي (white-header-sidebar) ---
+                        if (theme.layoutType === 'white-header-sidebar') {
                           return (
-                            <div style={{ marginBottom: '14px' }}>
-                              {rows.map((row, ri) => (
-                                <div key={ri} style={{ display: 'flex', marginBottom: '0', borderTop: `1px solid ${theme.accent}30`, borderLeft: `1px solid ${theme.accent}30`, borderRight: `1px solid ${theme.accent}30`, borderBottom: ri === rows.length - 1 ? `1px solid ${theme.accent}30` : 'none' }}>
-                                  {row.map((field, fi) => (
-                                    <div key={field.id} style={{ display: 'flex', flex: 1, borderLeft: fi > 0 ? `1px solid ${theme.accent}30` : 'none' }}>
-                                      <div style={{ background: theme.fieldLabelBg || theme.accent, color: 'white', padding: '8px 12px', fontSize: '10px', fontWeight: 'bold', minWidth: '90px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <div style={{ display: 'flex' }}>
+                              {/* شريط جانبي ملون */}
+                              <div style={{ width: '12px', background: theme.sidebarBg || theme.footerBg, flexShrink: 0 }} />
+                              <div style={{ flex: 1 }}>
+                                <div style={{ background: theme.headerBg, padding: '18px 24px', color: theme.headerText }}>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <div style={{ textAlign: 'right', fontSize: '10px', lineHeight: '1.8', flex: '1' }}>
+                                      <div style={{ fontWeight: 'bold', fontSize: '11px' }}>المملكة العربية السعودية</div>
+                                      <div style={{ fontWeight: 'bold' }}>وزارة التعليم</div>
+                                      {filteredDeptLines.map((line: string, i: number) => <div key={i}>{line}</div>)}
+                                      {personalInfo.school && <div style={{ fontWeight: 'bold' }}>{personalInfo.school}</div>}
+                                    </div>
+                                    <div style={{ textAlign: 'center', padding: '0 16px' }}>
+                                      <img src={MOE_LOGO} alt="شعار وزارة التعليم" style={{ height: '60px', objectFit: 'contain', filter: logoFilter }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                                    </div>
+                                    <div style={{ textAlign: 'left', fontSize: '10px', lineHeight: '1.8', flex: '1' }}>
+                                      <div>العام: {personalInfo.year || '......'}</div>
+                                      <div>الفصل: {personalInfo.semester || '......'}</div>
+                                    </div>
+                                  </div>
+                                </div>
+                                {theme.headerSeparator && <div style={{ height: '3px', background: theme.footerBg || theme.accent }} />}
+                              </div>
+                            </div>
+                          );
+                        }
+
+                        // --- نمط الخلفية الفاتحة (white-header-light) ---
+                        if (theme.layoutType === 'white-header-light') {
+                          return (
+                            <>
+                              <div style={{ background: theme.headerBg, padding: '16px 28px', color: theme.headerText }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                  <div style={{ textAlign: 'right', fontSize: '10px', lineHeight: '1.8', flex: '1' }}>
+                                    <div style={{ fontWeight: 'bold', fontSize: '11px' }}>المملكة العربية السعودية</div>
+                                    <div style={{ fontWeight: 'bold' }}>وزارة التعليم</div>
+                                    {filteredDeptLines.map((line: string, i: number) => <div key={i}>{line}</div>)}
+                                    {personalInfo.school && <div style={{ fontWeight: 'bold' }}>{personalInfo.school}</div>}
+                                  </div>
+                                  <div style={{ textAlign: 'center', padding: '0 16px' }}>
+                                    <img src={MOE_LOGO} alt="شعار وزارة التعليم" style={{ height: '60px', objectFit: 'contain', filter: logoFilter }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                                  </div>
+                                  <div style={{ textAlign: 'left', fontSize: '10px', lineHeight: '1.8', flex: '1' }}>
+                                    <div>العام: {personalInfo.year || '......'}</div>
+                                    <div>الفصل: {personalInfo.semester || '......'}</div>
+                                  </div>
+                                </div>
+                              </div>
+                              <div style={{ height: '3px', background: theme.footerBg || theme.accent }} />
+                            </>
+                          );
+                        }
+
+                        // --- نمط الأبيض الكلاسيكي (white-header-classic) ---
+                        if (theme.layoutType === 'white-header-classic') {
+                          return (
+                            <div style={{ background: '#fff', padding: '20px 28px', borderBottom: `2px solid ${theme.accent}` }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <div style={{ textAlign: 'right', fontSize: '10px', lineHeight: '1.8', flex: '1', color: theme.headerText }}>
+                                  <div style={{ fontWeight: 'bold', fontSize: '11px' }}>المملكة العربية السعودية</div>
+                                  <div style={{ fontWeight: 'bold' }}>وزارة التعليم</div>
+                                  {filteredDeptLines.map((line: string, i: number) => <div key={i}>{line}</div>)}
+                                  {personalInfo.school && <div style={{ fontWeight: 'bold' }}>{personalInfo.school}</div>}
+                                </div>
+                                <div style={{ textAlign: 'center', padding: '0 16px' }}>
+                                  <img src={MOE_LOGO} alt="شعار وزارة التعليم" style={{ height: '65px', objectFit: 'contain' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                                </div>
+                                <div style={{ textAlign: 'left', fontSize: '10px', lineHeight: '1.8', flex: '1', color: theme.headerText }}>
+                                  <div>العام: {personalInfo.year || '......'}</div>
+                                  <div>الفصل: {personalInfo.semester || '......'}</div>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        }
+
+                        // --- نمط الأعمدة المتعددة (white-header-multi) ---
+                        if (theme.layoutType === 'white-header-multi') {
+                          return (
+                            <>
+                              <div style={{ background: '#fff', padding: '16px 28px', borderBottom: `1px solid ${theme.accent}30` }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                  <div style={{ textAlign: 'right', fontSize: '10px', lineHeight: '1.8', flex: '1', color: theme.headerText }}>
+                                    <div style={{ fontWeight: 'bold', fontSize: '11px' }}>المملكة العربية السعودية</div>
+                                    <div style={{ fontWeight: 'bold' }}>وزارة التعليم</div>
+                                    {filteredDeptLines.map((line: string, i: number) => <div key={i}>{line}</div>)}
+                                  </div>
+                                  <div style={{ textAlign: 'center', padding: '0 16px' }}>
+                                    <img src={MOE_LOGO} alt="شعار وزارة التعليم" style={{ height: '55px', objectFit: 'contain' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                                  </div>
+                                  <div style={{ textAlign: 'left', fontSize: '10px', lineHeight: '1.8', flex: '1', color: theme.headerText }}>
+                                    <div>العام: {personalInfo.year || '......'}</div>
+                                    <div>الفصل: {personalInfo.semester || '......'}</div>
+                                    {personalInfo.school && <div>{personalInfo.school}</div>}
+                                  </div>
+                                </div>
+                              </div>
+                            </>
+                          );
+                        }
+
+                        // --- نمط بسيط ونظيف (minimal-clean) ---
+                        if (theme.layoutType === 'minimal-clean') {
+                          return (
+                            <div style={{ padding: '20px 28px', borderBottom: `2px solid ${theme.accent}` }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <div style={{ textAlign: 'right', flex: '1' }}>
+                                  <div style={{ fontSize: '13px', fontWeight: 'bold', color: '#333' }}>وزارة التعليم</div>
+                                  {filteredDeptLines.length > 0 && <div style={{ fontSize: '10px', color: '#666', marginTop: '2px' }}>{filteredDeptLines.join(' - ')}</div>}
+                                </div>
+                                <img src={MOE_LOGO} alt="شعار" style={{ height: '45px', objectFit: 'contain' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                                <div style={{ textAlign: 'left', flex: '1', fontSize: '10px', color: '#666' }}>
+                                  <div>{personalInfo.year} - {personalInfo.semester}</div>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        }
+
+                        // --- الافتراضي: ترويسة داكنة (dark-header-table / dark-header-simple) ---
+                        return (
+                          <>
+                            <div style={{ background: theme.headerBg, padding: '20px 28px', color: theme.headerText }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <div style={{ textAlign: 'right', fontSize: '10px', lineHeight: '1.8', flex: '1' }}>
+                                  <div style={{ fontWeight: 'bold', fontSize: '11px' }}>المملكة العربية السعودية</div>
+                                  <div style={{ fontWeight: 'bold' }}>وزارة التعليم</div>
+                                  {filteredDeptLines.map((line: string, i: number) => <div key={i}>{line}</div>)}
+                                  {personalInfo.school && <div style={{ fontWeight: 'bold' }}>{personalInfo.school}</div>}
+                                </div>
+                                <div style={{ textAlign: 'center', padding: '0 20px' }}>
+                                  <img src={MOE_LOGO} alt="شعار وزارة التعليم" style={{ height: '65px', objectFit: 'contain', filter: logoFilter }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                                  {personalInfo.extraLogo && (
+                                    <img src={personalInfo.extraLogo} alt="شعار إضافي" style={{ height: '35px', objectFit: 'contain', marginTop: '4px' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                                  )}
+                                </div>
+                                <div style={{ textAlign: 'left', fontSize: '10px', lineHeight: '1.8', flex: '1' }}>
+                                  <div>العام الدراسي: {personalInfo.year || '......'}</div>
+                                  <div>الفصل الدراسي: {personalInfo.semester || '......'}</div>
+                                </div>
+                              </div>
+                            </div>
+                            <div style={{ height: '3px', background: theme.footerBg || `linear-gradient(to left, ${theme.borderColor}, ${theme.accent})` }} />
+                          </>
+                        );
+                      })()}
+
+                      {/* === عنوان التقرير - يتغير حسب titleStyle === */}
+                      {(() => {
+                        const titleText = prevSub.title;
+                        const pad = theme.layoutType === 'white-header-sidebar' ? '0 24px' : '0 28px';
+                        if (theme.titleStyle === 'full-width') {
+                          return (
+                            <div style={{ background: theme.titleBg || theme.accent, color: 'white', padding: '12px 28px', textAlign: 'center', fontWeight: 'bold', fontSize: '15px', margin: '0' }}>
+                              {titleText}
+                            </div>
+                          );
+                        }
+                        if (theme.titleStyle === 'bordered') {
+                          return (
+                            <div style={{ padding: `16px 28px 0`, margin: pad }}>
+                              <div style={{ border: `2px solid ${theme.accent}`, color: theme.accent, padding: '10px 24px', borderRadius: '0', textAlign: 'center', fontWeight: 'bold', fontSize: '15px', marginBottom: '16px' }}>
+                                {titleText}
+                              </div>
+                            </div>
+                          );
+                        }
+                        if (theme.titleStyle === 'underlined') {
+                          return (
+                            <div style={{ padding: '16px 28px 0' }}>
+                              <div style={{ color: theme.accent, padding: '10px 0', borderBottom: `3px solid ${theme.accent}`, textAlign: 'center', fontWeight: 'bold', fontSize: '15px', marginBottom: '16px' }}>
+                                {titleText}
+                              </div>
+                            </div>
+                          );
+                        }
+                        if (theme.titleStyle === 'badge') {
+                          return (
+                            <div style={{ padding: '16px 28px 0' }}>
+                              <div style={{ display: 'inline-block', background: theme.titleBg || theme.accent, color: 'white', padding: '8px 28px', borderRadius: '20px', fontWeight: 'bold', fontSize: '14px', marginBottom: '16px' }}>
+                                {titleText}
+                              </div>
+                            </div>
+                          );
+                        }
+                        if (theme.titleStyle === 'simple') {
+                          return (
+                            <div style={{ padding: '16px 28px 0' }}>
+                              <div style={{ color: theme.accent, fontWeight: 'bold', fontSize: '16px', marginBottom: '16px' }}>
+                                {titleText}
+                              </div>
+                            </div>
+                          );
+                        }
+                        // rounded (default)
+                        return (
+                          <div style={{ padding: '16px 28px 0' }}>
+                            <div style={{ background: theme.titleBg || theme.accent, color: 'white', padding: '10px 24px', borderRadius: '8px', textAlign: 'center', fontWeight: 'bold', fontSize: '15px', marginBottom: '16px' }}>
+                              {titleText}
+                            </div>
+                          </div>
+                        );
+                      })()}
+
+                      {/* === محتوى التقرير - يتغير حسب fieldStyle === */}
+                      <div style={{ padding: theme.layoutType === 'white-header-sidebar' ? '0 24px 16px' : '0 28px 16px' }}>
+                        {/* --- نمط الجدول (table) --- */}
+                        {theme.fieldStyle === 'table' && (
+                          <>
+                            {allFields.length > 0 && (
+                              <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '14px', border: `1px solid ${theme.accent}40` }}>
+                                <tbody>
+                                  {(() => {
+                                    const rows: typeof allFields[] = [];
+                                    for (let i = 0; i < allFields.length; i += 2) rows.push(allFields.slice(i, i + 2));
+                                    return rows.map((row, ri) => (
+                                      <tr key={ri}>
+                                        {row.map((field) => (
+                                          <React.Fragment key={field.id}>
+                                            <td style={{ background: theme.fieldLabelBg, color: 'white', padding: '8px 12px', fontSize: '10px', fontWeight: 'bold', textAlign: 'center', border: `1px solid ${theme.accent}40`, width: '15%' }}>
+                                              {field.label}
+                                            </td>
+                                            <td style={{ padding: '8px 12px', fontSize: '11px', border: `1px solid ${theme.accent}40`, background: 'white', color: '#333', whiteSpace: 'pre-wrap' as const }}>
+                                              {field.value || '................'}
+                                            </td>
+                                          </React.Fragment>
+                                        ))}
+                                        {row.length === 1 && <><td style={{ border: `1px solid ${theme.accent}40`, background: theme.fieldLabelBg }} /><td style={{ border: `1px solid ${theme.accent}40` }} /></>}
+                                      </tr>
+                                    ));
+                                  })()}
+                                </tbody>
+                              </table>
+                            )}
+                          </>
+                        )}
+
+                        {/* --- نمط fieldset --- */}
+                        {theme.fieldStyle === 'fieldset' && (
+                          <>
+                            {shortFields.length > 0 && (() => {
+                              const rows: typeof shortFields[] = [];
+                              for (let i = 0; i < shortFields.length; i += 2) rows.push(shortFields.slice(i, i + 2));
+                              return (
+                                <div style={{ marginBottom: '14px' }}>
+                                  {rows.map((row, ri) => (
+                                    <div key={ri} style={{ display: 'flex', borderTop: `1px solid ${theme.accent}30`, borderLeft: `1px solid ${theme.accent}30`, borderRight: `1px solid ${theme.accent}30`, borderBottom: ri === rows.length - 1 ? `1px solid ${theme.accent}30` : 'none' }}>
+                                      {row.map((field, fi) => (
+                                        <div key={field.id} style={{ display: 'flex', flex: 1, borderLeft: fi > 0 ? `1px solid ${theme.accent}30` : 'none' }}>
+                                          <div style={{ background: theme.fieldLabelBg, color: 'white', padding: '8px 12px', fontSize: '10px', fontWeight: 'bold', minWidth: '90px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                            {field.label}
+                                          </div>
+                                          <div style={{ flex: 1, padding: '8px 12px', fontSize: '11px', display: 'flex', alignItems: 'center', background: 'white', color: '#333' }}>
+                                            {field.value || '................'}
+                                          </div>
+                                        </div>
+                                      ))}
+                                      {row.length === 1 && <div style={{ flex: 1 }} />}
+                                    </div>
+                                  ))}
+                                </div>
+                              );
+                            })()}
+                            {longFields.length > 0 && (() => {
+                              const pairs: typeof longFields[] = [];
+                              for (let i = 0; i < longFields.length; i += 2) pairs.push(longFields.slice(i, i + 2));
+                              return pairs.map((pair, pi) => (
+                                <div key={pi} style={{ display: 'grid', gridTemplateColumns: pair.length === 2 ? '1fr 1fr' : '1fr', gap: '0', borderLeft: `1px solid ${theme.accent}30`, borderRight: `1px solid ${theme.accent}30`, borderBottom: `1px solid ${theme.accent}30`, borderTop: pi === 0 && shortFields.length > 0 ? 'none' : `1px solid ${theme.accent}30` }}>
+                                  {pair.map((field, fi) => (
+                                    <div key={field.id} style={{ borderLeft: fi > 0 ? `1px solid ${theme.accent}30` : 'none' }}>
+                                      <div style={{ background: theme.fieldLabelBg, color: 'white', padding: '8px 14px', textAlign: 'center', fontWeight: 'bold', fontSize: '11px' }}>
                                         {field.label}
                                       </div>
-                                      <div style={{ flex: 1, padding: '8px 12px', fontSize: '11px', display: 'flex', alignItems: 'center', background: 'white', color: '#333' }}>
+                                      <div style={{ padding: '12px 14px', fontSize: '11px', lineHeight: '2', background: 'white', whiteSpace: 'pre-wrap', minHeight: '60px', color: '#333' }}>
                                         {field.value || '................'}
                                       </div>
                                     </div>
                                   ))}
-                                  {row.length === 1 && <div style={{ flex: 1 }} />}
                                 </div>
-                              ))}
-                            </div>
-                          );
-                        })()}
+                              ));
+                            })()}
+                          </>
+                        )}
 
-                        {/* أقسام البيانات الطويلة (أهداف، آلية التنفيذ، إلخ) */}
-                        {longFields.length > 0 && (() => {
-                          const pairs: typeof longFields[] = [];
-                          for (let i = 0; i < longFields.length; i += 2) {
-                            pairs.push(longFields.slice(i, i + 2));
-                          }
-                          return pairs.map((pair, pi) => (
-                            <div key={pi} style={{ display: 'grid', gridTemplateColumns: pair.length === 2 ? '1fr 1fr' : '1fr', gap: '0', marginBottom: '0', borderLeft: `1px solid ${theme.accent}30`, borderRight: `1px solid ${theme.accent}30`, borderBottom: `1px solid ${theme.accent}30`, borderTop: pi === 0 && shortFields.length > 0 ? 'none' : `1px solid ${theme.accent}30` }}>
-                              {pair.map((field, fi) => (
-                                <div key={field.id} style={{ borderLeft: fi > 0 ? `1px solid ${theme.accent}30` : 'none' }}>
-                                  <div style={{ background: theme.fieldLabelBg || theme.accent, color: 'white', padding: '8px 14px', textAlign: 'center', fontWeight: 'bold', fontSize: '11px' }}>
-                                    {field.label}
+                        {/* --- نمط underlined --- */}
+                        {theme.fieldStyle === 'underlined' && (
+                          <>
+                            {shortFields.length > 0 && (
+                              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px 20px', marginBottom: '16px' }}>
+                                {shortFields.map(field => (
+                                  <div key={field.id}>
+                                    <div style={{ fontSize: '10px', fontWeight: 'bold', color: theme.accent, marginBottom: '4px' }}>{field.label}</div>
+                                    <div style={{ fontSize: '11px', color: '#333', paddingBottom: '6px', borderBottom: `1.5px solid ${theme.accent}30` }}>
+                                      {field.value || '................'}
+                                    </div>
                                   </div>
-                                  <div style={{ padding: '12px 14px', fontSize: '11px', lineHeight: '2', background: 'white', whiteSpace: 'pre-wrap', minHeight: '60px', color: '#333' }}>
-                                    {field.value || '................'}
-                                  </div>
+                                ))}
+                              </div>
+                            )}
+                            {longFields.map(field => (
+                              <div key={field.id} style={{ marginBottom: '14px' }}>
+                                <div style={{ fontSize: '11px', fontWeight: 'bold', color: theme.accent, marginBottom: '6px', paddingBottom: '4px', borderBottom: `2px solid ${theme.accent}` }}>{field.label}</div>
+                                <div style={{ fontSize: '11px', lineHeight: '2', color: '#333', whiteSpace: 'pre-wrap', padding: '8px 0', minHeight: '40px' }}>
+                                  {field.value || '................'}
                                 </div>
-                              ))}
-                            </div>
-                          ));
-                        })()}
+                              </div>
+                            ))}
+                          </>
+                        )}
 
-                        {/* === قسم الشواهد === */}
+                        {/* --- نمط البطاقات (cards) --- */}
+                        {theme.fieldStyle === 'cards' && (
+                          <>
+                            {shortFields.length > 0 && (
+                              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '16px' }}>
+                                {shortFields.map(field => (
+                                  <div key={field.id} style={{ background: '#f8fafc', borderRadius: '8px', padding: '12px', border: `1px solid ${theme.accent}20` }}>
+                                    <div style={{ fontSize: '9px', fontWeight: 'bold', color: theme.accent, marginBottom: '4px', textTransform: 'uppercase' as const }}>{field.label}</div>
+                                    <div style={{ fontSize: '12px', color: '#1a1a1a', fontWeight: '500' }}>
+                                      {field.value || '................'}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                            {longFields.map(field => (
+                              <div key={field.id} style={{ background: '#f8fafc', borderRadius: '8px', padding: '14px', marginBottom: '10px', border: `1px solid ${theme.accent}20` }}>
+                                <div style={{ fontSize: '10px', fontWeight: 'bold', color: theme.accent, marginBottom: '8px' }}>{field.label}</div>
+                                <div style={{ fontSize: '11px', lineHeight: '2', color: '#333', whiteSpace: 'pre-wrap' as const, minHeight: '40px' }}>
+                                  {field.value || '................'}
+                                </div>
+                              </div>
+                            ))}
+                          </>
+                        )}
+
+                        {/* --- نمط بسيط (minimal) --- */}
+                        {theme.fieldStyle === 'minimal' && (
+                          <>
+                            {shortFields.length > 0 && (
+                              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 24px', marginBottom: '16px' }}>
+                                {shortFields.map(field => (
+                                  <div key={field.id} style={{ display: 'flex', gap: '8px', alignItems: 'baseline', paddingBottom: '6px', borderBottom: '1px solid #eee' }}>
+                                    <span style={{ fontSize: '10px', color: '#888', minWidth: '70px' }}>{field.label}:</span>
+                                    <span style={{ fontSize: '11px', color: '#333' }}>{field.value || '...'}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                            {longFields.map(field => (
+                              <div key={field.id} style={{ marginBottom: '12px' }}>
+                                <div style={{ fontSize: '11px', color: '#888', marginBottom: '4px' }}>{field.label}:</div>
+                                <div style={{ fontSize: '11px', lineHeight: '1.8', color: '#333', whiteSpace: 'pre-wrap' as const, paddingRight: '8px' }}>
+                                  {field.value || '................'}
+                                </div>
+                              </div>
+                            ))}
+                          </>
+                        )}
+
+                        {/* === قسم الشواهد (مشترك لجميع التنسيقات) === */}
                         {allMediaEvidences.length > 0 && (
-                          <div style={{ borderLeft: `1px solid ${theme.accent}30`, borderRight: `1px solid ${theme.accent}30`, borderBottom: `1px solid ${theme.accent}30`, borderTop: (shortFields.length > 0 || longFields.length > 0) ? 'none' : `1px solid ${theme.accent}30`, marginBottom: '0' }}>
+                          <div style={{ marginTop: '10px', borderTop: `1px solid ${theme.accent}30`, borderLeft: `1px solid ${theme.accent}30`, borderRight: `1px solid ${theme.accent}30`, borderBottom: `1px solid ${theme.accent}30` }}>
                             <div style={{ background: theme.fieldLabelBg || theme.accent, color: 'white', padding: '8px 14px', textAlign: 'center', fontWeight: 'bold', fontSize: '11px' }}>
                               الشواهد
                             </div>
-                            <div style={{ padding: '12px', display: 'grid', gridTemplateColumns: allMediaEvidences.length >= 2 ? '1fr 1fr' : '1fr', gap: '10px', background: 'white' }}>
+                            <div style={{ padding: '12px', display: 'grid', gridTemplateColumns: allMediaEvidences.length >= 2 ? '1fr 1fr' : '1fr', gap: '10px', background: theme.bodyBg || 'white' }}>
                               {allMediaEvidences.map(ev => {
                                 if (ev.type === 'link') {
                                   return (
@@ -2821,27 +3310,45 @@ export default function PerformanceEvidence() {
                           </div>
                         )}
 
-                        {/* === التوقيعات === */}
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '20px', paddingTop: '12px' }}>
-                          <div style={{ textAlign: 'center', flex: 1 }}>
-                            <div style={{ fontSize: '11px', fontWeight: 'bold', color: theme.accent, marginBottom: '6px' }}>التنفيذ: أ/</div>
-                            <div style={{ fontSize: '12px', fontWeight: 'bold', color: '#1a1a1a' }}>{personalInfo.name || '................'}</div>
-                            <div style={{ width: '120px', borderBottom: '1.5px dotted #999', margin: '10px auto 0' }} />
-                          </div>
-                          <div style={{ textAlign: 'center', flex: 1 }}>
-                            <div style={{ fontSize: '11px', fontWeight: 'bold', color: theme.accent, marginBottom: '6px' }}>مدير/ة المدرسة: أ/</div>
-                            <div style={{ fontSize: '12px', fontWeight: 'bold', color: '#1a1a1a' }}>{personalInfo.evaluator || '................'}</div>
-                            <div style={{ width: '120px', borderBottom: '1.5px dotted #999', margin: '10px auto 0' }} />
-                          </div>
-                        </div>
+                        {/* === التوقيعات - تتغير حسب signatureStyle === */}
+                        {(() => {
+                          const sigBorder = (style?: string) => {
+                            switch (style) {
+                              case 'solid': return '2px solid #333';
+                              case 'boxed': return `2px solid ${theme.accent}`;
+                              case 'lined': return `1px solid ${theme.accent}60`;
+                              case 'stamped': return `2px double ${theme.accent}`;
+                              default: return '1.5px dotted #999';
+                            }
+                          };
+                          const isStamped = theme.signatureStyle === 'stamped';
+                          return (
+                            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '20px', paddingTop: '12px' }}>
+                              <div style={{ textAlign: 'center', flex: 1, ...(isStamped ? { border: `2px double ${theme.accent}`, borderRadius: '8px', padding: '12px', margin: '0 8px' } : {}) }}>
+                                <div style={{ fontSize: '11px', fontWeight: 'bold', color: theme.accent, marginBottom: '6px' }}>التنفيذ: أ/</div>
+                                <div style={{ fontSize: '12px', fontWeight: 'bold', color: '#1a1a1a' }}>{personalInfo.name || '................'}</div>
+                                {!isStamped && <div style={{ width: '120px', borderBottom: sigBorder(theme.signatureStyle), margin: '10px auto 0' }} />}
+                              </div>
+                              <div style={{ textAlign: 'center', flex: 1, ...(isStamped ? { border: `2px double ${theme.accent}`, borderRadius: '8px', padding: '12px', margin: '0 8px' } : {}) }}>
+                                <div style={{ fontSize: '11px', fontWeight: 'bold', color: theme.accent, marginBottom: '6px' }}>مدير/ة المدرسة: أ/</div>
+                                <div style={{ fontSize: '12px', fontWeight: 'bold', color: '#1a1a1a' }}>{personalInfo.evaluator || '................'}</div>
+                                {!isStamped && <div style={{ width: '120px', borderBottom: sigBorder(theme.signatureStyle), margin: '10px auto 0' }} />}
+                              </div>
+                            </div>
+                          );
+                        })()}
                       </div>
 
-                      {/* === شريط سفلي تدرج === */}
-                      <div style={{ height: '4px', background: `linear-gradient(to left, #1B3A5C, #1A6B7A, #2E9E8B)` }} />
-                      <div style={{ background: theme.footerBg || theme.accent, padding: '8px 20px', textAlign: 'center', color: '#fff', fontSize: '9px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderRadius: '0 0 0 0' }}>
-                        <span>SERS - نظام السجلات التعليمية الذكي</span>
-                        <span style={{ opacity: 0.7 }}>صفحة 1</span>
-                      </div>
+                      {/* === شريط سفلي (حسب الثيم) === */}
+                      {theme.showBottomBar !== false && (
+                        <>
+                          <div style={{ height: '3px', background: theme.footerBg || theme.accent }} />
+                          <div style={{ background: theme.footerBg || theme.accent, padding: '8px 20px', textAlign: 'center', color: '#fff', fontSize: '9px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span>SERS - نظام السجلات التعليمية الذكي</span>
+                            <span style={{ opacity: 0.7 }}>صفحة 1</span>
+                          </div>
+                        </>
+                      )}
                     </div>
                   </div>
                 </motion.div>
