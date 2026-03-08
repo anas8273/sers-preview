@@ -60,7 +60,7 @@ export default function CoverBuilder() {
       <div className="flex flex-col lg:flex-row min-h-screen">
         {/* الإعدادات */}
         <aside className="lg:w-96 bg-white border-l border-gray-200 p-5 overflow-y-auto">
-          <button type="button" onClick={() => navigate("/")} className="flex items-center gap-2 text-gray-500 hover:text-gray-700 mb-5">
+          <button onClick={() => navigate("/")} className="flex items-center gap-2 text-gray-500 hover:text-gray-700 mb-5">
             <ArrowLeft className="w-4 h-4" />
             <span className="text-sm">العودة</span>
           </button>
@@ -152,11 +152,11 @@ export default function CoverBuilder() {
           </div>
 
           <div className="mt-5 flex gap-3">
-            <button type="button" onClick={handleExportPDF} disabled={isExporting} className="flex-1 flex items-center justify-center gap-2 bg-emerald-600 text-white px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-emerald-700 disabled:opacity-50">
+            <button onClick={handleExportPDF} disabled={isExporting} className="flex-1 flex items-center justify-center gap-2 bg-emerald-600 text-white px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-emerald-700 disabled:opacity-50">
               <Download className="w-4 h-4" />
               {isExporting ? "جاري..." : "تحميل PDF"}
             </button>
-            <button type="button" onClick={() => printElement("cover-preview")} className="flex items-center justify-center gap-2 bg-gray-100 text-gray-700 px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-gray-200">
+            <button onClick={() => printElement("cover-preview")} className="flex items-center justify-center gap-2 bg-gray-100 text-gray-700 px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-gray-200">
               <Printer className="w-4 h-4" />
               طباعة
             </button>

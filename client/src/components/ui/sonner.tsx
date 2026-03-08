@@ -8,17 +8,6 @@ const Toaster = ({ ...props }: ToasterProps) => {
     <Sonner
       theme={theme as ToasterProps["theme"]}
       className="toaster group"
-      position="top-center"
-      dir="rtl"
-      richColors
-      closeButton
-      visibleToasts={5}
-      expand={true}
-      gap={8}
-      toastOptions={{
-        className: "!font-[Tajawal,Cairo,sans-serif] !text-sm !max-w-[90vw] sm:!max-w-md",
-        duration: 4000,
-      }}
       style={
         {
           "--normal-bg": "var(--popover)",

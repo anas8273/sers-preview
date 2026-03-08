@@ -14,9 +14,6 @@ const GradeAnalysis = lazy(() => import("./pages/GradeAnalysis"));
 const CoverBuilder = lazy(() => import("./pages/CoverBuilder"));
 const TreatmentPlan = lazy(() => import("./pages/TreatmentPlan"));
 const SectionPage = lazy(() => import("./pages/SectionPage"));
-const SharedPortfolio = lazy(() => import("./pages/SharedPortfolio"));
-const AdminDashboard = lazy(() => import("./pages/AdminDashboard"));
-const TemplateManager = lazy(() => import("./pages/TemplateManager"));
 
 function LoadingFallback() {
   return (
@@ -40,9 +37,6 @@ function Router() {
         <Route path={"/covers"} component={CoverBuilder} />
         <Route path={"/treatment-plans"} component={TreatmentPlan} />
         <Route path={"/section/:sectionId"} component={SectionPage} />
-        <Route path={"/share/:token"} component={SharedPortfolio} />
-        <Route path={"/admin"} component={AdminDashboard} />
-        <Route path={"/admin/templates"} component={TemplateManager} />
         <Route path={"/404"} component={NotFound} />
         <Route component={NotFound} />
       </Switch>
