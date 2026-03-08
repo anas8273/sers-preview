@@ -31,7 +31,7 @@ import {
   BookOpen, Baby, Accessibility, Briefcase, ClipboardList,
   ClipboardCheck, Handshake, UserCheck, Target,
   NotebookPen, Monitor, School, Award, PieChart, ListChecks,
-  GripVertical, Move, FlaskConical, Activity, Megaphone, Share2, Globe, Copy, Link2
+  GripVertical, Move, FlaskConical, Activity, Megaphone, Share2, Globe, Copy, Link2, Settings
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -265,110 +265,6 @@ const THEMES: ThemeConfig[] = [
     tableStyle: false, titleStyle: 'bordered', showTopLine: false, showBottomBar: true,
     fieldStyle: 'fieldset', signatureStyle: 'solid' },
 
-  // === تصاميم إضافية بتنسيقات مختلفة ===
-  { id: "green-table", name: "أخضر رسمي - جدول",
-    layoutType: 'dark-header-table',
-    headerBg: "#1B5E20", headerText: "#fff",
-    accent: "#2E7D32", borderColor: "#1B5E20",
-    titleBg: "#2E7D32", fieldLabelBg: "#2E7D32",
-    footerBg: "linear-gradient(to left, #1B5E20, #2E7D32, #43A047)",
-    tableStyle: true, titleStyle: 'rounded', showTopLine: true, showBottomBar: true,
-    fieldStyle: 'table', signatureStyle: 'dotted' },
-
-  { id: "blue-classic", name: "أزرق كلاسيكي",
-    layoutType: 'dark-header-simple',
-    headerBg: "#0D47A1", headerText: "#fff",
-    accent: "#1565C0", borderColor: "#0D47A1",
-    titleBg: "#1565C0", fieldLabelBg: "#1565C0",
-    footerBg: "linear-gradient(to left, #0D47A1, #1565C0, #1976D2)",
-    tableStyle: false, titleStyle: 'rounded', showTopLine: true, showBottomBar: true,
-    fieldStyle: 'fieldset', signatureStyle: 'dotted' },
-
-  { id: "purple-elegant", name: "بنفسجي أنيق",
-    layoutType: 'white-header-light',
-    headerBg: "#4A148C", headerText: "#fff",
-    accent: "#6A1B9A", borderColor: "#4A148C",
-    titleBg: "#6A1B9A", fieldLabelBg: "#6A1B9A",
-    footerBg: "linear-gradient(to left, #4A148C, #6A1B9A)",
-    tableStyle: false, titleStyle: 'full-width', showTopLine: true, showBottomBar: true,
-    fieldStyle: 'underlined', signatureStyle: 'solid', bodyBg: '#F5F0FF' },
-
-  { id: "gold-luxury", name: "ذهبي فاخر",
-    layoutType: 'dark-header-table',
-    headerBg: "linear-gradient(135deg, #5D4037, #795548, #8D6E63)", headerText: "#fff",
-    accent: "#795548", borderColor: "#5D4037",
-    titleBg: "#795548", fieldLabelBg: "#795548",
-    footerBg: "linear-gradient(to left, #5D4037, #795548)",
-    tableStyle: true, titleStyle: 'rounded', showTopLine: true, showBottomBar: true,
-    fieldStyle: 'table', signatureStyle: 'boxed' },
-
-  { id: "simple-clean", name: "بسيط ونظيف",
-    layoutType: 'minimal-clean',
-    headerBg: "#f8f9fa", headerText: "#1a1a1a",
-    accent: "#059669", borderColor: "#e5e7eb",
-    titleBg: "#059669", fieldLabelBg: "#059669",
-    footerBg: "#059669",
-    tableStyle: false, titleStyle: 'underlined', showTopLine: false, showBottomBar: false,
-    fieldStyle: 'underlined', signatureStyle: 'solid' },
-
-  // === تصاميم بنمط بطاقات (cards) ===
-  { id: "teal-cards", name: "تيل - بطاقات حديثة",
-    layoutType: 'white-header-classic',
-    headerBg: "#ffffff", headerText: "#0D7377",
-    accent: "#0D7377", borderColor: "#0D7377",
-    titleBg: "#0D7377", fieldLabelBg: "#0D7377",
-    footerBg: "linear-gradient(to left, #0D7377, #14919B)",
-    tableStyle: false, titleStyle: 'badge', showTopLine: false, showBottomBar: true,
-    fieldStyle: 'cards', signatureStyle: 'lined' },
-
-  { id: "rose-cards", name: "وردي - بطاقات أنيقة",
-    layoutType: 'white-header-light',
-    headerBg: "#ffffff", headerText: "#9F1239",
-    accent: "#BE123C", borderColor: "#9F1239",
-    titleBg: "#BE123C", fieldLabelBg: "#BE123C",
-    footerBg: "linear-gradient(to left, #9F1239, #BE123C, #E11D48)",
-    tableStyle: false, titleStyle: 'badge', showTopLine: false, showBottomBar: true,
-    fieldStyle: 'cards', signatureStyle: 'stamped', bodyBg: '#FFF1F2' },
-
-  // === تصاميم بنمط بسيط (minimal) ===
-  { id: "slate-minimal", name: "رمادي - بسيط أنيق",
-    layoutType: 'minimal-clean',
-    headerBg: "#f8fafc", headerText: "#334155",
-    accent: "#475569", borderColor: "#CBD5E1",
-    titleBg: "#475569", fieldLabelBg: "#475569",
-    footerBg: "#475569",
-    tableStyle: false, titleStyle: 'simple', showTopLine: false, showBottomBar: false,
-    fieldStyle: 'minimal', signatureStyle: 'lined' },
-
-  { id: "amber-minimal", name: "كهرماني - بسيط دافئ",
-    layoutType: 'white-header-multi',
-    headerBg: "#ffffff", headerText: "#92400E",
-    accent: "#B45309", borderColor: "#92400E",
-    titleBg: "#B45309", fieldLabelBg: "#B45309",
-    footerBg: "linear-gradient(to left, #92400E, #B45309, #D97706)",
-    tableStyle: false, titleStyle: 'simple', showTopLine: false, showBottomBar: true,
-    fieldStyle: 'minimal', signatureStyle: 'solid' },
-
-  // === تصاميم بنمط الأختام (stamped signatures) ===
-  { id: "navy-stamped", name: "كحلي - توقيعات رسمية",
-    layoutType: 'dark-header-simple',
-    headerBg: "linear-gradient(135deg, #1E3A5F, #2C5282)", headerText: "#fff",
-    accent: "#2B6CB0", borderColor: "#1E3A5F",
-    titleBg: "#2B6CB0", fieldLabelBg: "#2B6CB0",
-    footerBg: "linear-gradient(to left, #1E3A5F, #2B6CB0, #3182CE)",
-    tableStyle: false, titleStyle: 'full-width', showTopLine: true, showBottomBar: true,
-    fieldStyle: 'fieldset', signatureStyle: 'stamped' },
-
-  // === تصميم شريط جانبي بألوان مختلفة ===
-  { id: "emerald-sidebar", name: "زمردي - شريط جانبي",
-    layoutType: 'white-header-sidebar',
-    headerBg: "#ffffff", headerText: "#065F46",
-    accent: "#059669", borderColor: "#065F46",
-    titleBg: "#059669", fieldLabelBg: "#059669",
-    footerBg: "linear-gradient(to left, #065F46, #059669, #10B981)",
-    tableStyle: false, titleStyle: 'rounded', showTopLine: false, showBottomBar: true,
-    sidebarBg: "linear-gradient(to bottom, #065F46, #059669, #10B981)",
-    fieldStyle: 'cards', signatureStyle: 'boxed', headerSeparator: true },
 ];
 
 // ===== إعدادات الأولوية =====
@@ -500,6 +396,8 @@ export default function PerformanceEvidence() {
   const [activeTab, setActiveTab] = useState("criteria");
   const [stateRestored, setStateRestored] = useState(false);
   const [isSharing, setIsSharing] = useState(false);
+  const [shareExpiryDays, setShareExpiryDays] = useState(30);
+  const [showShareSettings, setShowShareSettings] = useState(false);
   const [shareUrl, setShareUrl] = useState<string | null>(null);
 
   // Lightbox state
@@ -541,6 +439,7 @@ export default function PerformanceEvidence() {
     year: "", semester: "",
     evaluator: "", evaluatorRole: "مدير المدرسة", date: "",
     extraLogo: "",
+    reportTitle: "شواهد الأداء الوظيفي",
   });
 
   const [criteriaData, setCriteriaData] = useState<Record<string, CriterionData>>({});
@@ -1374,10 +1273,23 @@ export default function PerformanceEvidence() {
     return { label: "ضعيف", color: "#DC2626" };
   };
 
+  const [pdfProgress, setPdfProgress] = useState({ current: 0, total: 0 });
   const handleExportPDF = async () => {
     setIsExporting(true);
-    await exportToPDF("preview-content", `شواهد_الأداء_${personalInfo.name || "مستند"}.pdf`);
-    setIsExporting(false);
+    setPdfProgress({ current: 0, total: 0 });
+    try {
+      await exportToPDF(
+        "preview-content",
+        `${personalInfo.reportTitle || 'شواهد_الأداء'}_${personalInfo.name || 'مستند'}.pdf`,
+        (current, total) => setPdfProgress({ current, total })
+      );
+      toast.success('تم تصدير PDF بنجاح');
+    } catch (err) {
+      toast.error('فشل تصدير PDF - حاول مرة أخرى');
+    } finally {
+      setIsExporting(false);
+      setPdfProgress({ current: 0, total: 0 });
+    }
   };
 
   const handleShareLink = async () => {
@@ -1408,7 +1320,7 @@ export default function PerformanceEvidence() {
     try {
       const result = await shareMutation.mutateAsync({
         portfolioId: currentPortfolioId,
-        expiresInDays: 30,
+        expiresInDays: shareExpiryDays,
         maxViews: 0,
       });
       const url = `${window.location.origin}/shared/${result.token}`;
@@ -2269,6 +2181,16 @@ export default function PerformanceEvidence() {
                           className="w-full px-3 py-2.5 rounded-lg border border-border text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40" />
                       </div>
                     ))}
+                  </div>
+
+                  {/* حقل عنوان التقرير */}
+                  <div className="mt-4">
+                    <label className="block text-sm font-medium text-foreground mb-1.5">عنوان التقرير</label>
+                    <input type="text" value={personalInfo.reportTitle}
+                      onChange={(e) => setPersonalInfo((prev) => ({ ...prev, reportTitle: e.target.value }))}
+                      placeholder="شواهد الأداء الوظيفي"
+                      className="w-full px-3 py-2.5 rounded-lg border border-border text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40" />
+                    <p className="text-[10px] text-muted-foreground mt-1">يظهر في الغلاف ورأس الصفحات (افتراضي: شواهد الأداء الوظيفي)</p>
                   </div>
 
                   {/* حقل الجهة / الإدارة */}
@@ -3405,10 +3327,32 @@ export default function PerformanceEvidence() {
               <Button size="sm" onClick={() => setStep('preview')} className="gap-1.5">
                 <Eye className="w-4 h-4" />معاينة وتصدير
               </Button>
-              <Button size="sm" variant="outline" onClick={handleShareLink} disabled={isSharing} className="gap-1.5 text-blue-600 border-blue-200 hover:bg-blue-50">
-                {isSharing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Share2 className="w-4 h-4" />}
-                {isSharing ? 'جاري...' : 'مشاركة كرابط'}
-              </Button>
+              <div className="relative">
+                <div className="flex items-center gap-1">
+                  <Button size="sm" variant="outline" onClick={handleShareLink} disabled={isSharing} className="gap-1.5 text-blue-600 border-blue-200 hover:bg-blue-50">
+                    {isSharing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Share2 className="w-4 h-4" />}
+                    {isSharing ? 'جاري...' : 'مشاركة كرابط'}
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => setShowShareSettings(!showShareSettings)} className="h-8 w-8 p-0">
+                    <Settings className="w-3.5 h-3.5" />
+                  </Button>
+                </div>
+                {showShareSettings && (
+                  <div className="absolute top-full mt-1 left-0 bg-background border border-border rounded-lg shadow-lg p-3 z-20 min-w-[200px]">
+                    <label className="block text-xs font-medium text-muted-foreground mb-1">مدة الصلاحية (بالأيام)</label>
+                    <select value={shareExpiryDays} onChange={(e) => setShareExpiryDays(Number(e.target.value))} className="w-full px-2 py-1.5 rounded-md border border-input text-sm bg-background">
+                      <option value={1}>1 يوم</option>
+                      <option value={3}>3 أيام</option>
+                      <option value={7}>7 أيام</option>
+                      <option value={14}>14 يوم</option>
+                      <option value={30}>30 يوم</option>
+                      <option value={90}>90 يوم</option>
+                      <option value={365}>سنة</option>
+                    </select>
+                    <p className="text-[10px] text-muted-foreground mt-1">ينتهي الرابط بعد {shareExpiryDays} يوم من إنشائه</p>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 
@@ -3548,7 +3492,7 @@ export default function PerformanceEvidence() {
             <div className="flex gap-2 flex-wrap">
               <Button size="sm" onClick={handleExportPDF} disabled={isExporting} className="gap-1.5">
                 {isExporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-                {isExporting ? 'جاري التصدير...' : 'تحميل PDF'}
+                {isExporting ? (pdfProgress.total > 0 ? `تصدير ${pdfProgress.current}/${pdfProgress.total}` : 'جاري التصدير...') : 'تحميل PDF'}
               </Button>
               <Button size="sm" variant="outline" onClick={() => printElement('preview-content')} className="gap-1.5">
                 <Printer className="w-4 h-4" />طباعة
@@ -3600,7 +3544,7 @@ export default function PerformanceEvidence() {
                   <div style={{ fontSize: '0.95rem', opacity: 0.8, marginBottom: '0.5rem', fontWeight: 600 }}>وزارة التعليم</div>
                   {personalInfo.department && <p style={{ fontSize: '0.9rem', opacity: 0.85, marginBottom: '1rem', lineHeight: 1.7, whiteSpace: 'pre-line' }}>{personalInfo.department}</p>}
                   <div style={{ width: '80px', height: '2px', background: 'rgba(255,255,255,0.3)', margin: '0 auto 1.5rem' }} />
-                  <h1 style={{ fontSize: '2.5rem', fontWeight: 900, marginBottom: '0.75rem', fontFamily: "'Tajawal', sans-serif", letterSpacing: '-0.01em' }}>شواهد الأداء الوظيفي</h1>
+                  <h1 style={{ fontSize: '2.5rem', fontWeight: 900, marginBottom: '0.75rem', fontFamily: "'Tajawal', sans-serif", letterSpacing: '-0.01em' }}>{personalInfo.reportTitle || 'شواهد الأداء الوظيفي'}</h1>
                   <p style={{ fontSize: '1.4rem', fontWeight: 700, opacity: 0.95, marginBottom: '0.5rem' }}>{selectedJob?.title}</p>
                   <div style={{ width: '50px', height: '2px', background: 'rgba(255,255,255,0.25)', margin: '1rem auto' }} />
                   <p style={{ fontSize: '1rem', opacity: 0.85 }}>{personalInfo.year} - {personalInfo.semester}</p>
@@ -3627,7 +3571,7 @@ export default function PerformanceEvidence() {
             <div className="bg-white shadow-lg mx-auto mb-6" style={{ width: '210mm', minHeight: '297mm', maxWidth: '100%', padding: '2rem 2.5rem', position: 'relative', pageBreakAfter: 'always' }}>
               {/* ترويسة الصفحة */}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: `2px solid ${theme.accent}`, paddingBottom: '0.75rem', marginBottom: '1.5rem' }}>
-                <div style={{ fontSize: '0.7rem', color: '#9CA3AF' }}>شواهد الأداء الوظيفي - {personalInfo.name}</div>
+                <div style={{ fontSize: '0.7rem', color: '#9CA3AF' }}>{personalInfo.reportTitle || 'شواهد الأداء الوظيفي'} - {personalInfo.name}</div>
                 <div style={{ fontSize: '0.7rem', color: theme.accent, fontWeight: 700 }}>{selectedJob?.title}</div>
               </div>
 
@@ -3647,11 +3591,16 @@ export default function PerformanceEvidence() {
                 </div>
                 {allCriteria.map((c, i) => {
                   const d = criteriaData[c.id];
-                  if (!d || d.evidences.length === 0) return null;
+                  const evCount = d?.evidences.length || 0;
                   return (
-                    <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8rem', color: '#4B5563', padding: '0.5rem 0', borderBottom: '1px dashed #E5E7EB' }}>
-                      <span style={{ fontWeight: 700, color: theme.accent, minWidth: '20px' }}>{i + 3}</span>
-                      <span>{c.title} ({d.evidences.length} شاهد)</span>
+                    <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8rem', color: evCount > 0 ? '#4B5563' : '#9CA3AF', padding: '0.5rem 0', borderBottom: '1px dashed #E5E7EB' }}>
+                      <span style={{ fontWeight: 700, color: evCount > 0 ? theme.accent : '#D1D5DB', minWidth: '20px' }}>{i + 3}</span>
+                      <span style={{ flex: 1 }}>{c.title}</span>
+                      {evCount > 0 ? (
+                        <span style={{ fontSize: '0.7rem', padding: '1px 8px', borderRadius: '9999px', backgroundColor: `${theme.accent}15`, color: theme.accent, fontWeight: 600 }}>{evCount} شاهد</span>
+                      ) : (
+                        <span style={{ fontSize: '0.65rem', color: '#D1D5DB' }}>—</span>
+                      )}
                     </div>
                   );
                 })}
@@ -3697,7 +3646,7 @@ export default function PerformanceEvidence() {
             <div className="bg-white shadow-lg mx-auto mb-6" style={{ width: '210mm', minHeight: '297mm', maxWidth: '100%', padding: '2rem 2.5rem', position: 'relative', pageBreakAfter: 'always' }}>
               {/* ترويسة */}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: `2px solid ${theme.accent}`, paddingBottom: '0.75rem', marginBottom: '1.5rem' }}>
-                <div style={{ fontSize: '0.7rem', color: '#9CA3AF' }}>شواهد الأداء الوظيفي - {personalInfo.name}</div>
+                <div style={{ fontSize: '0.7rem', color: '#9CA3AF' }}>{personalInfo.reportTitle || 'شواهد الأداء الوظيفي'} - {personalInfo.name}</div>
                 <div style={{ fontSize: '0.7rem', color: theme.accent, fontWeight: 700 }}>جدول التقييم</div>
               </div>
 
@@ -3763,16 +3712,57 @@ export default function PerformanceEvidence() {
             {/* === صفحات الشواهد - كل بند في صفحة منفصلة === */}
             {(() => {
               let pageCounter = 4;
-              return allCriteria.map((c, i) => {
+              // فقط البنود التي أضيف لها شواهد
+              const criteriaWithEvidence = allCriteria.filter(c => {
                 const d = criteriaData[c.id];
-                if (!d || d.evidences.length === 0) return null;
-                const currentPage = pageCounter++;
+                return d && d.evidences.length > 0;
+              });
+              return criteriaWithEvidence.map((c, filteredIdx) => {
+                const i = allCriteria.indexOf(c);
+                const d = criteriaData[c.id];
+                if (!d) return null;
+                const coverPage = pageCounter++;
+                const contentPage = pageCounter++;
                 const allSubs = [...(c.subEvidences || []), ...(d.customSubEvidences || [])];
                 return (
-                  <div key={c.id} className="bg-white shadow-lg mx-auto mb-6" style={{ width: '210mm', minHeight: '297mm', maxWidth: '100%', padding: '2rem 2.5rem', position: 'relative', pageBreakAfter: 'always', pageBreakInside: 'avoid' }}>
+                  <React.Fragment key={c.id}>
+                    {/* === غلاف القسم === */}
+                    <div className="bg-white shadow-lg mx-auto mb-6" style={{ width: '210mm', minHeight: '297mm', maxWidth: '100%', position: 'relative', overflow: 'hidden', pageBreakAfter: 'always' }}>
+                      <div style={{ background: theme.headerBg, color: theme.headerText, minHeight: '297mm', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', textAlign: 'center', padding: '4rem 3rem', position: 'relative' }}>
+                        {/* زخارف الخلفية */}
+                        <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, background: 'linear-gradient(135deg, rgba(255,255,255,0.08) 0%, transparent 40%, rgba(0,0,0,0.08) 100%)', pointerEvents: 'none' }} />
+                        <div style={{ position: 'absolute', top: '16px', left: '16px', right: '16px', bottom: '16px', border: '1.5px solid rgba(255,255,255,0.12)', borderRadius: '12px', pointerEvents: 'none' }} />
+                        <div style={{ position: 'relative', zIndex: 1 }}>
+                          <div style={{ width: '80px', height: '80px', borderRadius: '50%', background: 'rgba(255,255,255,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 2rem', fontSize: '2rem', fontWeight: 900 }}>
+                            {i + 1}
+                          </div>
+                          <div style={{ fontSize: '0.8rem', opacity: 0.6, marginBottom: '0.5rem', letterSpacing: '0.15em' }}>البند {i + 1} من {allCriteria.length}</div>
+                          <h2 style={{ fontSize: '2rem', fontWeight: 900, fontFamily: "'Tajawal', sans-serif", marginBottom: '1rem', lineHeight: 1.4 }}>{c.title}</h2>
+                          <div style={{ width: '60px', height: '2px', background: 'rgba(255,255,255,0.3)', margin: '1.5rem auto' }} />
+                          <div style={{ display: 'flex', justifyContent: 'center', gap: '3rem', fontSize: '0.9rem', opacity: 0.85 }}>
+                            <div style={{ textAlign: 'center' }}>
+                              <div style={{ fontSize: '2rem', fontWeight: 900 }}>{d.evidences.length}</div>
+                              <div style={{ fontSize: '0.75rem', opacity: 0.7 }}>شاهد</div>
+                            </div>
+                            <div style={{ width: '1px', background: 'rgba(255,255,255,0.2)' }} />
+                            <div style={{ textAlign: 'center' }}>
+                              <div style={{ fontSize: '2rem', fontWeight: 900 }}>{d.score}/{c.maxScore}</div>
+                              <div style={{ fontSize: '0.75rem', opacity: 0.7 }}>الدرجة</div>
+                            </div>
+                          </div>
+                        </div>
+                        {/* تذييل الغلاف */}
+                        <div style={{ position: 'absolute', bottom: '2rem', fontSize: '0.7rem', opacity: 0.4 }}>
+                          {personalInfo.reportTitle || 'شواهد الأداء الوظيفي'} • {personalInfo.name} • صفحة {coverPage}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* === صفحة الشواهد === */}
+                  <div className="bg-white shadow-lg mx-auto mb-6" style={{ width: '210mm', minHeight: '297mm', maxWidth: '100%', padding: '2rem 2.5rem', position: 'relative', pageBreakAfter: 'always', pageBreakInside: 'avoid' }}>
                     {/* ترويسة */}
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: `2px solid ${theme.accent}`, paddingBottom: '0.75rem', marginBottom: '1.5rem' }}>
-                      <div style={{ fontSize: '0.7rem', color: '#9CA3AF' }}>شواهد الأداء الوظيفي - {personalInfo.name}</div>
+                      <div style={{ fontSize: '0.7rem', color: '#9CA3AF' }}>{personalInfo.reportTitle || 'شواهد الأداء الوظيفي'} - {personalInfo.name}</div>
                       <div style={{ fontSize: '0.7rem', color: theme.accent, fontWeight: 700 }}>بند {i + 1}</div>
                     </div>
 
@@ -3884,9 +3874,10 @@ export default function PerformanceEvidence() {
                     {/* تذييل */}
                     <div style={{ position: 'absolute', bottom: '1.5rem', left: '2.5rem', right: '2.5rem', borderTop: `1px solid ${theme.borderColor}`, paddingTop: '0.5rem', display: 'flex', justifyContent: 'space-between', fontSize: '0.6rem', color: '#9CA3AF' }}>
                       <span>نظام SERS - السجلات التعليمية الذكية</span>
-                      <span>صفحة {currentPage}</span>
+                      <span>صفحة {contentPage}</span>
                     </div>
                   </div>
+                  </React.Fragment>
                 );
               });
             })()}
@@ -3895,7 +3886,7 @@ export default function PerformanceEvidence() {
             <div className="bg-white shadow-lg mx-auto mb-6" style={{ width: '210mm', minHeight: '297mm', maxWidth: '100%', padding: '2rem 2.5rem', position: 'relative', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
               {/* ترويسة */}
               <div style={{ position: 'absolute', top: '2rem', left: '2.5rem', right: '2.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: `2px solid ${theme.accent}`, paddingBottom: '0.75rem' }}>
-                <div style={{ fontSize: '0.7rem', color: '#9CA3AF' }}>شواهد الأداء الوظيفي - {personalInfo.name}</div>
+                <div style={{ fontSize: '0.7rem', color: '#9CA3AF' }}>{personalInfo.reportTitle || 'شواهد الأداء الوظيفي'} - {personalInfo.name}</div>
                 <div style={{ fontSize: '0.7rem', color: theme.accent, fontWeight: 700 }}>التوقيعات</div>
               </div>
 

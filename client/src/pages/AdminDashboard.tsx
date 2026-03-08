@@ -52,6 +52,7 @@ function TemplatesPanel() {
   const updateMutation = trpc.templates.update.useMutation({ onSuccess: () => { refetch(); toast.success("تم تحديث القالب"); } });
   const deleteMutation = trpc.templates.delete.useMutation({ onSuccess: () => { refetch(); toast.success("تم حذف القالب"); } });
   const seedMutation = trpc.templates.seed.useMutation({ onSuccess: () => { refetch(); toast.success("تم إضافة القوالب الافتراضية"); } });
+  const uploadImageMutation = trpc.templates.uploadImage.useMutation();
 
   const [editingTemplate, setEditingTemplate] = useState<any | null>(null);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
@@ -190,15 +191,73 @@ function TemplatesPanel() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* رفع صورة الغلاف */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">رابط صورة الغلاف</label>
-          <input value={formData.coverImageUrl} onChange={(e) => setFormData(p => ({ ...p, coverImageUrl: e.target.value }))}
-            placeholder="https://..." className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm" />
+          <label className="block text-sm font-medium text-gray-700 mb-1">صورة الغلاف</label>
+          <div className="flex gap-2 items-center">
+            <input value={formData.coverImageUrl} onChange={(e) => setFormData(p => ({ ...p, coverImageUrl: e.target.value }))}
+              placeholder="رابط الصورة أو ارفع ملف" className="flex-1 px-3 py-2 rounded-lg border border-gray-200 text-sm" />
+            <label className="cursor-pointer bg-emerald-50 hover:bg-emerald-100 text-emerald-700 px-3 py-2 rounded-lg border border-emerald-200 text-sm font-medium flex items-center gap-1 transition-colors">
+              <Upload className="w-4 h-4" />رفع
+              <input type="file" accept="image/*" className="hidden" onChange={async (e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                if (file.size > 5 * 1024 * 1024) { toast.error("حجم الملف يجب أن يكون أقل من 5MB"); return; }
+                const reader = new FileReader();
+                reader.onload = async () => {
+                  const base64 = (reader.result as string).split(',')[1];
+                  try {
+                    const result = await uploadImageMutation.mutateAsync({
+                      fileName: file.name, mimeType: file.type, base64Data: base64, imageType: 'cover',
+                    });
+                    setFormData(p => ({ ...p, coverImageUrl: result.url }));
+                    toast.success("تم رفع صورة الغلاف");
+                  } catch { toast.error("فشل رفع الصورة"); }
+                };
+                reader.readAsDataURL(file);
+              }} />
+            </label>
+          </div>
+          {formData.coverImageUrl && (
+            <div className="mt-2 relative">
+              <img src={formData.coverImageUrl} alt="غلاف" className="w-full h-20 object-cover rounded-lg border" />
+              <button onClick={() => setFormData(p => ({ ...p, coverImageUrl: '' }))} className="absolute top-1 left-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs hover:bg-red-600">×</button>
+            </div>
+          )}
         </div>
+        {/* رفع الشعار */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">رابط الشعار</label>
-          <input value={formData.logoUrl} onChange={(e) => setFormData(p => ({ ...p, logoUrl: e.target.value }))}
-            placeholder="https://..." className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm" />
+          <label className="block text-sm font-medium text-gray-700 mb-1">الشعار</label>
+          <div className="flex gap-2 items-center">
+            <input value={formData.logoUrl} onChange={(e) => setFormData(p => ({ ...p, logoUrl: e.target.value }))}
+              placeholder="رابط الشعار أو ارفع ملف" className="flex-1 px-3 py-2 rounded-lg border border-gray-200 text-sm" />
+            <label className="cursor-pointer bg-emerald-50 hover:bg-emerald-100 text-emerald-700 px-3 py-2 rounded-lg border border-emerald-200 text-sm font-medium flex items-center gap-1 transition-colors">
+              <Upload className="w-4 h-4" />رفع
+              <input type="file" accept="image/*" className="hidden" onChange={async (e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                if (file.size > 2 * 1024 * 1024) { toast.error("حجم الشعار يجب أن يكون أقل من 2MB"); return; }
+                const reader = new FileReader();
+                reader.onload = async () => {
+                  const base64 = (reader.result as string).split(',')[1];
+                  try {
+                    const result = await uploadImageMutation.mutateAsync({
+                      fileName: file.name, mimeType: file.type, base64Data: base64, imageType: 'logo',
+                    });
+                    setFormData(p => ({ ...p, logoUrl: result.url }));
+                    toast.success("تم رفع الشعار");
+                  } catch { toast.error("فشل رفع الشعار"); }
+                };
+                reader.readAsDataURL(file);
+              }} />
+            </label>
+          </div>
+          {formData.logoUrl && (
+            <div className="mt-2 flex items-center gap-2">
+              <img src={formData.logoUrl} alt="شعار" className="w-12 h-12 object-contain rounded-lg border p-1" />
+              <button onClick={() => setFormData(p => ({ ...p, logoUrl: '' }))} className="text-red-500 hover:text-red-700 text-xs">إزالة</button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -268,16 +327,126 @@ function TemplatesPanel() {
         </div>
       </div>
 
-      {/* معاينة الألوان */}
+      {/* معاينة مباشرة للقالب */}
       <div className="border rounded-xl overflow-hidden">
-        <div className="p-4 text-center" style={{ background: formData.headerBg, color: formData.headerText }}>
-          <p className="font-bold text-sm">معاينة الرأس</p>
-        </div>
-        <div className="p-4" style={{ backgroundColor: formData.bodyBg }}>
-          <p className="text-sm" style={{ color: formData.accent }}>نص باللون الرئيسي</p>
-          <div className="mt-2 p-2 rounded border" style={{ borderColor: formData.borderColor }}>
-            <p className="text-xs text-gray-500">محتوى مع حدود</p>
+        <p className="text-xs font-bold text-gray-500 px-3 py-2 bg-gray-50 border-b flex items-center gap-1.5">
+          <Eye className="w-3.5 h-3.5" />معاينة مباشرة — تتغير فوراً عند تعديل الخيارات
+        </p>
+        {/* ترويسة */}
+        <div style={{ background: formData.headerBg, color: formData.headerText, padding: '1.25rem 1.5rem', direction: 'rtl', position: 'relative' }}>
+          {formData.layoutType.includes('sidebar') && (
+            <div style={{ position: 'absolute', top: 0, right: 0, bottom: 0, width: '6px', background: formData.accent }} />
+          )}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ textAlign: 'right' }}>
+              <div style={{ fontSize: '0.6rem', opacity: 0.6, marginBottom: '2px' }}>المملكة العربية السعودية</div>
+              <div style={{ fontSize: '0.7rem', fontWeight: 700 }}>وزارة التعليم</div>
+              <div style={{ fontSize: '0.55rem', opacity: 0.7 }}>الإدارة العامة للتعليم</div>
+            </div>
+            <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: 'rgba(255,255,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.6rem', fontWeight: 700 }}>شعار</div>
           </div>
+        </div>
+        {/* عنوان */}
+        <div style={{ padding: '0.75rem 1.5rem', backgroundColor: formData.bodyBg, direction: 'rtl' }}>
+          {formData.titleStyle === 'rounded' && (
+            <div style={{ background: formData.accent, color: '#fff', padding: '4px 14px', borderRadius: '9999px', display: 'inline-block', fontSize: '0.65rem', fontWeight: 700 }}>بيانات الموظف</div>
+          )}
+          {formData.titleStyle === 'full-width' && (
+            <div style={{ background: formData.accent, color: '#fff', padding: '4px 14px', fontSize: '0.65rem', fontWeight: 700, borderRadius: '4px' }}>بيانات الموظف</div>
+          )}
+          {formData.titleStyle === 'bordered' && (
+            <div style={{ border: `2px solid ${formData.accent}`, color: formData.accent, padding: '4px 14px', fontSize: '0.65rem', fontWeight: 700, borderRadius: '6px', display: 'inline-block' }}>بيانات الموظف</div>
+          )}
+          {formData.titleStyle === 'underlined' && (
+            <div style={{ color: formData.accent, padding: '4px 0', fontSize: '0.65rem', fontWeight: 700, borderBottom: `2px solid ${formData.accent}`, display: 'inline-block' }}>بيانات الموظف</div>
+          )}
+          {formData.titleStyle === 'badge' && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <div style={{ width: '4px', height: '16px', background: formData.accent, borderRadius: '2px' }} />
+              <span style={{ color: formData.accent, fontSize: '0.65rem', fontWeight: 700 }}>بيانات الموظف</span>
+            </div>
+          )}
+          {formData.titleStyle === 'simple' && (
+            <div style={{ color: formData.accent, fontSize: '0.65rem', fontWeight: 700 }}>بيانات الموظف</div>
+          )}
+        </div>
+        {/* حقول */}
+        <div style={{ padding: '0 1.5rem 0.75rem', backgroundColor: formData.bodyBg, direction: 'rtl' }}>
+          {formData.fieldStyle === 'table' && (
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.6rem' }}>
+              <tbody>
+                <tr><td style={{ border: `1px solid ${formData.accent}40`, background: `${formData.accent}10`, padding: '3px 8px', fontWeight: 600, color: formData.accent, width: '30%' }}>الاسم</td><td style={{ border: `1px solid ${formData.accent}40`, padding: '3px 8px' }}>محمد أحمد</td></tr>
+                <tr><td style={{ border: `1px solid ${formData.accent}40`, background: `${formData.accent}10`, padding: '3px 8px', fontWeight: 600, color: formData.accent }}>المدرسة</td><td style={{ border: `1px solid ${formData.accent}40`, padding: '3px 8px' }}>مدرسة النموذجية</td></tr>
+              </tbody>
+            </table>
+          )}
+          {formData.fieldStyle === 'fieldset' && (
+            <div style={{ border: `1px solid ${formData.accent}40`, borderRadius: '6px', padding: '8px' }}>
+              <div style={{ display: 'flex', gap: '12px', fontSize: '0.6rem' }}>
+                <div><span style={{ fontWeight: 600, color: formData.accent }}>الاسم: </span>محمد أحمد</div>
+                <div><span style={{ fontWeight: 600, color: formData.accent }}>المدرسة: </span>مدرسة النموذجية</div>
+              </div>
+            </div>
+          )}
+          {formData.fieldStyle === 'underlined' && (
+            <div style={{ display: 'flex', gap: '16px', fontSize: '0.6rem' }}>
+              <div><span style={{ fontWeight: 600, color: formData.accent }}>الاسم: </span><span style={{ borderBottom: `1px solid ${formData.accent}`, paddingBottom: '1px' }}>محمد أحمد</span></div>
+              <div><span style={{ fontWeight: 600, color: formData.accent }}>المدرسة: </span><span style={{ borderBottom: `1px solid ${formData.accent}`, paddingBottom: '1px' }}>مدرسة النموذجية</span></div>
+            </div>
+          )}
+          {formData.fieldStyle === 'cards' && (
+            <div style={{ display: 'flex', gap: '8px', fontSize: '0.6rem' }}>
+              <div style={{ flex: 1, background: `${formData.accent}08`, border: `1px solid ${formData.accent}20`, borderRadius: '6px', padding: '6px 8px' }}>
+                <div style={{ fontWeight: 600, color: formData.accent, fontSize: '0.5rem', marginBottom: '2px' }}>الاسم</div>
+                <div>محمد أحمد</div>
+              </div>
+              <div style={{ flex: 1, background: `${formData.accent}08`, border: `1px solid ${formData.accent}20`, borderRadius: '6px', padding: '6px 8px' }}>
+                <div style={{ fontWeight: 600, color: formData.accent, fontSize: '0.5rem', marginBottom: '2px' }}>المدرسة</div>
+                <div>مدرسة النموذجية</div>
+              </div>
+            </div>
+          )}
+          {formData.fieldStyle === 'minimal' && (
+            <div style={{ display: 'flex', gap: '16px', fontSize: '0.6rem', color: '#6B7280' }}>
+              <div>الاسم: محمد أحمد</div>
+              <div>المدرسة: مدرسة النموذجية</div>
+            </div>
+          )}
+        </div>
+        {/* توقيعات */}
+        <div style={{ padding: '0.5rem 1.5rem 0.75rem', backgroundColor: formData.bodyBg, direction: 'rtl', display: 'flex', justifyContent: 'space-around', gap: '1rem' }}>
+          {['dotted', 'solid', 'boxed', 'lined', 'stamped'].includes(formData.signatureStyle) && (
+            <>
+              <div style={{ textAlign: 'center', flex: 1, fontSize: '0.55rem' }}>
+                <div style={{ color: '#6B7280', marginBottom: '12px' }}>توقيع المقيّم</div>
+                {formData.signatureStyle === 'dotted' && <div style={{ borderTop: '2px dotted #D1D5DB', paddingTop: '4px' }}>الاسم</div>}
+                {formData.signatureStyle === 'solid' && <div style={{ borderTop: '2px solid #D1D5DB', paddingTop: '4px' }}>الاسم</div>}
+                {formData.signatureStyle === 'boxed' && <div style={{ border: `1px solid ${formData.accent}40`, borderRadius: '6px', padding: '8px 4px' }}>الاسم</div>}
+                {formData.signatureStyle === 'lined' && <div style={{ borderBottom: `1px solid ${formData.accent}`, paddingBottom: '4px' }}>الاسم</div>}
+                {formData.signatureStyle === 'stamped' && <div style={{ border: `2px solid ${formData.accent}`, borderRadius: '50%', width: '40px', height: '40px', margin: '0 auto', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.5rem', color: formData.accent }}>ختم</div>}
+              </div>
+              <div style={{ textAlign: 'center', flex: 1, fontSize: '0.55rem' }}>
+                <div style={{ color: '#6B7280', marginBottom: '12px' }}>توقيع الموظف</div>
+                {formData.signatureStyle === 'dotted' && <div style={{ borderTop: '2px dotted #D1D5DB', paddingTop: '4px' }}>الاسم</div>}
+                {formData.signatureStyle === 'solid' && <div style={{ borderTop: '2px solid #D1D5DB', paddingTop: '4px' }}>الاسم</div>}
+                {formData.signatureStyle === 'boxed' && <div style={{ border: `1px solid ${formData.accent}40`, borderRadius: '6px', padding: '8px 4px' }}>الاسم</div>}
+                {formData.signatureStyle === 'lined' && <div style={{ borderBottom: `1px solid ${formData.accent}`, paddingBottom: '4px' }}>الاسم</div>}
+                {formData.signatureStyle === 'stamped' && <div style={{ border: `2px solid ${formData.accent}`, borderRadius: '50%', width: '40px', height: '40px', margin: '0 auto', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.5rem', color: formData.accent }}>ختم</div>}
+              </div>
+            </>
+          )}
+        </div>
+        {/* تذييل */}
+        <div style={{
+          padding: '4px 1.5rem',
+          fontSize: '0.5rem',
+          color: '#9CA3AF',
+          ...(formData.footerStyle === 'gradient' ? { background: `linear-gradient(to left, ${formData.accent}15, transparent)` } : {}),
+          ...(formData.footerStyle === 'solid' ? { background: `${formData.accent}10` } : {}),
+          ...(formData.footerStyle === 'line' ? { borderTop: `1px solid ${formData.borderColor}` } : {}),
+          ...(formData.footerStyle === 'none' ? { display: 'none' } : {}),
+        }}>
+          SERS - نظام السجلات التعليمية الذكي
         </div>
       </div>
 

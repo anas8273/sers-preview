@@ -4,6 +4,7 @@ import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, protectedProcedure, adminProcedure, router } from "./_core/trpc";
 import { invokeLLM } from "./_core/llm";
 import { storagePut } from "./storage";
+import { notifyOwner } from "./_core/notification";
 import { z } from "zod";
 import { nanoid } from "nanoid";
 import {
@@ -180,6 +181,16 @@ export const appRouter = router({
         const portfolio = await getPortfolioById(link.portfolioId);
         if (!portfolio) return { error: "الملف غير موجود", portfolio: null };
 
+        // إشعار المالك عند مشاهدة رابط المشاركة
+        const newViewCount = (link.viewCount ?? 0) + 1;
+        // إشعار عند أول مشاهدة وكل 5 مشاهدات
+        if (newViewCount === 1 || newViewCount % 5 === 0) {
+          notifyOwner({
+            title: `مشاهدة رابط مشاركة - ${portfolio.jobTitle || 'ملف أداء'}`,
+            content: `تمت مشاهدة رابط المشاركة لملف "${portfolio.jobTitle}" (المشاهدة رقم ${newViewCount}). الرابط: ${input.token.substring(0, 8)}...`,
+          }).catch(() => {}); // لا نوقف العملية إذا فشل الإشعار
+        }
+
         const files = await getFilesByPortfolio(portfolio.id);
         return { error: null, portfolio, files };
       }),
@@ -292,6 +303,22 @@ export const appRouter = router({
       await seedDefaultTemplates();
       return { success: true };
     }),
+
+    uploadImage: adminProcedure
+      .input(z.object({
+        fileName: z.string(),
+        mimeType: z.string(),
+        base64Data: z.string(),
+        imageType: z.enum(['cover', 'logo', 'background']),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const suffix = nanoid(8);
+        const ext = input.fileName.split('.').pop() || 'png';
+        const fileKey = `templates/${input.imageType}/${suffix}.${ext}`;
+        const buffer = Buffer.from(input.base64Data, 'base64');
+        const { url } = await storagePut(fileKey, buffer, input.mimeType);
+        return { url, fileKey };
+      }),
   }),
 
   // ─── AI Services ──────────────────────────────────────────────

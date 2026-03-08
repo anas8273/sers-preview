@@ -132,12 +132,17 @@ function oklchToRgbString(oklchValue: string): string | null {
 }
 
 /**
- * تصدير PDF بنظام صفحات A4 منفصلة
+ * تصدير PDF بنظام صفحات A4 منفصلة - جودة عالية
  * يلتقط كل صفحة (div مباشر داخل preview-content) كصورة منفصلة ويضيفها كصفحة PDF
+ * يدعم onProgress callback لإظهار مؤشر التحميل
  */
-export async function exportToPDF(elementId: string, filename: string = "document.pdf") {
+export async function exportToPDF(
+  elementId: string,
+  filename: string = "document.pdf",
+  onProgress?: (current: number, total: number) => void
+) {
   const element = document.getElementById(elementId);
-  if (!element) return;
+  if (!element) throw new Error("Element not found");
 
   try {
     // إخفاء الأزرار والعناصر التفاعلية أثناء التصدير
@@ -147,7 +152,7 @@ export async function exportToPDF(elementId: string, filename: string = "documen
     // تحويل ألوان oklch إلى RGB قبل html2canvas
     const restoreColors = convertOklchToRgb(element);
 
-    await new Promise(resolve => setTimeout(resolve, 100));
+    await new Promise(resolve => setTimeout(resolve, 200));
 
     const pdf = new jsPDF({
       orientation: "portrait",
@@ -160,6 +165,7 @@ export async function exportToPDF(elementId: string, filename: string = "documen
 
     // البحث عن الصفحات المنفصلة (divs المباشرة داخل preview-content)
     const pages = element.querySelectorAll(':scope > div');
+    const totalPages = pages.length || 1;
     
     if (pages.length > 0) {
       // نظام الصفحات المنفصلة - كل div هو صفحة A4
@@ -167,18 +173,29 @@ export async function exportToPDF(elementId: string, filename: string = "documen
         const page = pages[i] as HTMLElement;
         
         if (i > 0) pdf.addPage();
+        
+        // إبلاغ بالتقدم
+        onProgress?.(i + 1, totalPages);
 
         const canvas = await html2canvas(page, {
-          scale: 2,
+          scale: 2.5, // جودة أعلى
           useCORS: true,
           allowTaint: true,
           backgroundColor: "#ffffff",
           logging: false,
           windowWidth: page.scrollWidth,
           windowHeight: page.scrollHeight,
+          imageTimeout: 15000,
+          onclone: (clonedDoc) => {
+            // التأكد من أن الخطوط العربية محملة في النسخة المستنسخة
+            const clonedEl = clonedDoc.getElementById(page.id) || clonedDoc.querySelector(`[data-page-index="${i}"]`);
+            if (clonedEl) {
+              (clonedEl as HTMLElement).style.fontFamily = "'Cairo', 'Tajawal', sans-serif";
+            }
+          },
         });
 
-        const imgData = canvas.toDataURL("image/jpeg", 0.95);
+        const imgData = canvas.toDataURL("image/jpeg", 0.97);
         const imgWidth = canvas.width;
         const imgHeight = canvas.height;
         const ratio = pdfWidth / imgWidth;
@@ -205,7 +222,7 @@ export async function exportToPDF(elementId: string, filename: string = "documen
             const ctx = pageCanvas.getContext('2d');
             if (ctx) {
               ctx.drawImage(canvas, 0, sourceY, imgWidth, sliceHeight, 0, 0, imgWidth, sliceHeight);
-              const pageImgData = pageCanvas.toDataURL("image/jpeg", 0.95);
+              const pageImgData = pageCanvas.toDataURL("image/jpeg", 0.97);
               pdf.addImage(pageImgData, "JPEG", 0, 0, pdfWidth, sliceHeight * ratio);
             }
 
@@ -214,11 +231,15 @@ export async function exportToPDF(elementId: string, filename: string = "documen
             subPage++;
           }
         }
+
+        // إعطاء المتصفح فرصة للتنفس بين الصفحات
+        await new Promise(resolve => setTimeout(resolve, 50));
       }
     } else {
       // Fallback: التقاط العنصر بالكامل كصورة واحدة
+      onProgress?.(1, 1);
       const canvas = await html2canvas(element, {
-        scale: 2,
+        scale: 2.5,
         useCORS: true,
         allowTaint: true,
         backgroundColor: "#ffffff",
@@ -227,7 +248,7 @@ export async function exportToPDF(elementId: string, filename: string = "documen
         windowHeight: element.scrollHeight,
       });
 
-      const imgData = canvas.toDataURL("image/jpeg", 0.95);
+      const imgData = canvas.toDataURL("image/jpeg", 0.97);
       const margin = 5;
       const usableWidth = pdfWidth - margin * 2;
       const usableHeight = pdfHeight - margin * 2;
@@ -255,7 +276,7 @@ export async function exportToPDF(elementId: string, filename: string = "documen
           const ctx = pageCanvas.getContext('2d');
           if (ctx) {
             ctx.drawImage(canvas, 0, sourceY, imgWidth, sliceHeight, 0, 0, imgWidth, sliceHeight);
-            const pageImgData = pageCanvas.toDataURL("image/jpeg", 0.95);
+            const pageImgData = pageCanvas.toDataURL("image/jpeg", 0.97);
             pdf.addImage(pageImgData, "JPEG", margin, margin, usableWidth, sliceHeight * ratio);
           }
 
@@ -273,6 +294,7 @@ export async function exportToPDF(elementId: string, filename: string = "documen
     buttons.forEach(btn => (btn as HTMLElement).style.display = '');
 
     pdf.save(filename);
+    return true;
   } catch (err) {
     console.error("PDF export error:", err);
     throw err;
