@@ -647,3 +647,6 @@
 ### اختبارات وحفظ
 - [x] اختبارات Vitest - 298 اختبار ناجح (11 ملف)
 - [x] حفظ checkpoint نهائي
+
+## إصلاح خطأ portfolioId null (مارس 2026)
+- [x] إصلاح خطأ "Invalid input: expected number, received null" عند حفظ الشاهد في /performance-evidence (السبب: savePortfolio كان يرجع true بدل الـ id، والـ state update غير متزامن)

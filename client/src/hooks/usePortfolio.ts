@@ -70,7 +70,7 @@ export function usePortfolio(isAuthenticated: boolean = false) {
   // File upload
   const uploadFileMutation = trpc.file.upload.useMutation();
 
-  // Save portfolio
+  // Save portfolio - returns the portfolio id on success, or null on failure
   const savePortfolio = useCallback(async (data: {
     jobId: string;
     jobTitle: string;
@@ -79,7 +79,7 @@ export function usePortfolio(isAuthenticated: boolean = false) {
     customCriteria?: any[];
     themeId?: string;
     completionPercentage?: number;
-  }) => {
+  }): Promise<number | null> => {
     setState(prev => ({ ...prev, saving: true }));
     try {
       if (state.id) {
@@ -91,8 +91,9 @@ export function usePortfolio(isAuthenticated: boolean = false) {
           themeId: data.themeId,
           completionPercentage: data.completionPercentage,
         });
+        return state.id;
       } else {
-        await createMutation.mutateAsync({
+        const result = await createMutation.mutateAsync({
           jobId: data.jobId,
           jobTitle: data.jobTitle,
           personalInfo: data.personalInfo,
@@ -101,11 +102,12 @@ export function usePortfolio(isAuthenticated: boolean = false) {
           themeId: data.themeId,
           completionPercentage: data.completionPercentage,
         });
+        // Return the newly created id directly (state update is async)
+        return result.id;
       }
-      return true;
     } catch {
       toast.error("فشل حفظ البيانات");
-      return false;
+      return null;
     }
   }, [state.id, createMutation, updateMutation]);
 

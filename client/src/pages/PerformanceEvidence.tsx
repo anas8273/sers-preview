@@ -1345,7 +1345,7 @@ export default function PerformanceEvidence() {
     }
     setIsSaving(true);
     try {
-      const success = await portfolio.savePortfolio({
+      const savedId = await portfolio.savePortfolio({
         jobId: selectedJob.id,
         jobTitle: selectedJob.title,
         personalInfo,
@@ -1354,7 +1354,7 @@ export default function PerformanceEvidence() {
         themeId: selectedTheme.id,
         completionPercentage: percentage,
       });
-      if (success) {
+      if (savedId) {
         toast.success("تم حفظ البيانات في السحابة بنجاح!");
       }
     } catch {
@@ -1386,9 +1386,10 @@ export default function PerformanceEvidence() {
       return;
     }
     // حفظ أولاً إذا لم يكن محفوظاً
-    if (!portfolio.id) {
+    let currentPortfolioId = portfolio.id;
+    if (!currentPortfolioId) {
       toast.info("جاري حفظ الملف أولاً...");
-      const saved = await portfolio.savePortfolio({
+      const savedId = await portfolio.savePortfolio({
         jobId: selectedJob!.id,
         jobTitle: selectedJob!.title,
         personalInfo,
@@ -1397,15 +1398,16 @@ export default function PerformanceEvidence() {
         themeId: selectedTheme.id,
         completionPercentage: percentage,
       });
-      if (!saved) {
+      if (!savedId) {
         toast.error("فشل حفظ الملف");
         return;
       }
+      currentPortfolioId = savedId;
     }
     setIsSharing(true);
     try {
       const result = await shareMutation.mutateAsync({
-        portfolioId: portfolio.id!,
+        portfolioId: currentPortfolioId,
         expiresInDays: 30,
         maxViews: 0,
       });
