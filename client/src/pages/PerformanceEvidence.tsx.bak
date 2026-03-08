@@ -489,10 +489,6 @@ export default function PerformanceEvidence() {
   const [aiChat, setAiChat] = useState<Record<string, string[]>>({});
   const [aiPrompt, setAiPrompt] = useState("");
 
-  // Per-evidence preview state
-  const [previewSubId, setPreviewSubId] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<Record<string, 'form' | 'table' | 'interactive'>>({});
-
   // Add custom sub-evidence
   const [showAddSub, setShowAddSub] = useState<string | null>(null);
   const [newSubTitle, setNewSubTitle] = useState("");
@@ -682,55 +678,6 @@ export default function PerformanceEvidence() {
     setAiLoading(null);
   };
 
-  // إضافة صف ديناميكي جديد داخل نموذج (label + textarea فقط بدون نموذج كامل)
-  const addDynamicField = (criterionId: string, evidenceId: string) => {
-    const ts = Date.now();
-    setCriteriaData((prev) => {
-      const criterion = prev[criterionId];
-      if (!criterion) return prev;
-      return {
-        ...prev,
-        [criterionId]: {
-          ...criterion,
-          evidences: criterion.evidences.map(ev =>
-            ev.id === evidenceId
-              ? { ...ev, formData: { ...ev.formData, [`dynamic_${ts}`]: '', [`label_${ts}`]: 'حقل جديد' } }
-              : ev
-          )
-        }
-      };
-    });
-  };
-
-  // حذف صف ديناميكي
-  const removeDynamicField = (criterionId: string, evidenceId: string, dynKey: string) => {
-    const labelKey = dynKey.replace('dynamic_', 'label_');
-    setCriteriaData((prev) => {
-      const criterion = prev[criterionId];
-      if (!criterion) return prev;
-      return {
-        ...prev,
-        [criterionId]: {
-          ...criterion,
-          evidences: criterion.evidences.map(ev => {
-            if (ev.id !== evidenceId) return ev;
-            const newFormData = { ...ev.formData };
-            delete newFormData[dynKey];
-            delete newFormData[labelKey];
-            return { ...ev, formData: newFormData };
-          })
-        }
-      };
-    });
-  };
-
-  // تصدير شاهد فردي كـ PDF
-  const handleExportSingleEvidence = async (subId: string) => {
-    setIsExporting(true);
-    await exportToPDF(`preview-sub-${subId}`, `شاهد_${subId}.pdf`);
-    setIsExporting(false);
-  };
-
   const saveReport = () => {
     const data = { personalInfo, criteriaData, jobId: selectedJob?.id, themeId: selectedTheme.id };
     localStorage.setItem(`sers_perf_${personalInfo.name || "draft"}`, JSON.stringify(data));
@@ -755,147 +702,6 @@ export default function PerformanceEvidence() {
   };
 
   const currentCriterion = selectedJob?.criteria[currentCriterionIndex];
-
-  // ===== معاينة شاهد فردي (popup) =====
-  const renderSingleEvidencePreview = () => {
-    if (!previewSubId || !currentCriterion) return null;
-    const allSubs = [...(currentCriterion.subEvidences || []), ...(criteriaData[currentCriterion.id]?.customSubEvidences || [])];
-    const sub = allSubs.find(s => s.id === previewSubId);
-    if (!sub) return null;
-    const subEvs = criteriaData[currentCriterion.id]?.evidences.filter(e => e.subEvidenceId === previewSubId) || [];
-    const MOE_LOGO_P = 'https://d2xsxph8kpxj0f.cloudfront.net/310519663047121386/h34s4aPNVyHXdtjgZ7eNNf/moe-logo_fa6b1baa.png';
-    const MOE_GREEN_P = '#1B7A3D';
-    const MOE_LIGHT_P = '#E8F5E9';
-    const MOE_BORDER_P = '#A5D6A7';
-    return (
-      <AnimatePresence>
-        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-          className="fixed inset-0 bg-black/60 z-50 flex items-start justify-center p-4 overflow-y-auto" onClick={() => setPreviewSubId(null)}>
-          <motion.div initial={{ scale: 0.95, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95, y: 20 }}
-            className="bg-white rounded-2xl shadow-2xl max-w-3xl w-full my-8" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between p-4 border-b border-gray-200 sticky top-0 bg-white rounded-t-2xl z-10">
-              <h3 className="font-bold text-gray-800 text-sm" style={{ fontFamily: "'Tajawal', sans-serif" }}>معاينة: {sub.title}</h3>
-              <div className="flex gap-2">
-                <button onClick={() => handleExportSingleEvidence(previewSubId)} disabled={isExporting}
-                  className="flex items-center gap-1.5 bg-emerald-600 text-white px-3 py-1.5 rounded-lg text-xs hover:bg-emerald-700 disabled:opacity-50">
-                  {isExporting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}تصدير PDF
-                </button>
-                <button onClick={() => printElement(`preview-sub-${previewSubId}`)}
-                  className="flex items-center gap-1.5 bg-blue-600 text-white px-3 py-1.5 rounded-lg text-xs hover:bg-blue-700">
-                  <Printer className="w-3.5 h-3.5" />طباعة
-                </button>
-                <button onClick={() => setPreviewSubId(null)} className="p-1.5 rounded-lg hover:bg-gray-100">
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
-            <div id={`preview-sub-${previewSubId}`} className="p-0" dir="rtl" style={{ fontFamily: "'Cairo', 'Tajawal', sans-serif" }}>
-              <div className="p-6 pb-4">
-                <div className="flex items-center justify-between">
-                  <div className="text-right text-xs leading-relaxed text-gray-600">
-                    {personalInfo.department.split('\n').map((line, i) => <div key={i}>{line}</div>)}
-                    <div className="font-bold text-gray-800">{personalInfo.school || 'المدرسة'}</div>
-                  </div>
-                  <img src={MOE_LOGO_P} alt="وزارة التعليم" className="w-20 h-20 object-contain" />
-                  <div className="text-left text-xs text-gray-600">
-                    <div>العام الدراسي {personalInfo.year}</div>
-                    <div>{personalInfo.semester}</div>
-                  </div>
-                </div>
-              </div>
-              <div className="mx-6 mb-4 text-center py-2 rounded-lg border-2" style={{ borderColor: MOE_GREEN_P, backgroundColor: MOE_LIGHT_P }}>
-                <h2 className="text-sm font-black" style={{ color: MOE_GREEN_P, fontFamily: "'Tajawal', sans-serif" }}>{sub.title}</h2>
-              </div>
-              <div className="mx-6 mb-4">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                  <div>
-                    <div className="text-[10px] font-medium mb-1" style={{ color: MOE_GREEN_P }}>المعلم/ة</div>
-                    <div className="px-3 py-2 rounded-lg border text-xs bg-white" style={{ borderColor: MOE_BORDER_P }}>{personalInfo.name || '—'}</div>
-                  </div>
-                  <div>
-                    <div className="text-[10px] font-medium mb-1" style={{ color: MOE_GREEN_P }}>المدرسة</div>
-                    <div className="px-3 py-2 rounded-lg border text-xs bg-white" style={{ borderColor: MOE_BORDER_P }}>{personalInfo.school || '—'}</div>
-                  </div>
-                  <div>
-                    <div className="text-[10px] font-medium mb-1" style={{ color: MOE_GREEN_P }}>التاريخ</div>
-                    <div className="px-3 py-2 rounded-lg border text-xs bg-white" style={{ borderColor: MOE_BORDER_P }}>{personalInfo.date || '—'}</div>
-                  </div>
-                </div>
-              </div>
-              <div className="mx-6 mb-4 space-y-3">
-                {subEvs.map((ev) => {
-                  if (ev.formData && Object.entries(ev.formData).some(([k, v]) => v && !k.startsWith('label_'))) {
-                    return (
-                      <div key={ev.id}>
-                        {Object.entries(ev.formData).filter(([k, v]) => v && !k.startsWith('label_') && !k.startsWith('dynamic_')).map(([key, val]) => (
-                          <div key={key} className="mb-3">
-                            <div className="text-[10px] font-medium mb-1 px-2 py-1 rounded" style={{ color: MOE_GREEN_P, backgroundColor: MOE_LIGHT_P }}>{key}</div>
-                            <div className="px-3 py-2 rounded-lg border text-xs leading-relaxed bg-white" style={{ borderColor: MOE_BORDER_P }}>{val}</div>
-                          </div>
-                        ))}
-                        {Object.entries(ev.formData).filter(([k]) => k.startsWith('dynamic_')).map(([dynKey, val]) => {
-                          if (!val) return null;
-                          const labelKey = dynKey.replace('dynamic_', 'label_');
-                          const label = ev.formData?.[labelKey] || 'حقل إضافي';
-                          return (
-                            <div key={dynKey} className="mb-3">
-                              <div className="text-[10px] font-medium mb-1 px-2 py-1 rounded" style={{ color: MOE_GREEN_P, backgroundColor: MOE_LIGHT_P }}>{label}</div>
-                              <div className="px-3 py-2 rounded-lg border text-xs leading-relaxed bg-white" style={{ borderColor: MOE_BORDER_P }}>{val}</div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    );
-                  }
-                  if (ev.type === 'text' && ev.text) {
-                    return <div key={ev.id} className="px-3 py-2 rounded-lg border text-xs leading-relaxed" style={{ borderColor: MOE_BORDER_P }}>{ev.text}</div>;
-                  }
-                  if (ev.type === 'link' && ev.link) {
-                    return (
-                      <div key={ev.id} className="flex items-center gap-3 px-3 py-2 rounded-lg border" style={{ borderColor: MOE_BORDER_P }}>
-                        <img src={generateQRDataURL(ev.link)} alt="QR" className="w-14 h-14" />
-                        <span className="text-xs text-gray-500 break-all">{ev.link}</span>
-                      </div>
-                    );
-                  }
-                  if (ev.type === 'image' && ev.fileData) {
-                    return (
-                      <div key={ev.id} className="rounded-lg border overflow-hidden" style={{ borderColor: MOE_BORDER_P }}>
-                        {ev.displayAs === 'image'
-                          ? <img src={ev.fileData} alt="" className="max-h-48 mx-auto" />
-                          : <div className="flex items-center gap-3 p-3"><img src={generateQRDataURL(ev.fileData.substring(0, 200))} alt="QR" className="w-14 h-14" /><span className="text-xs text-gray-500">{ev.fileName}</span></div>
-                        }
-                      </div>
-                    );
-                  }
-                  if ((ev.type === 'video' || ev.type === 'file') && ev.fileData) {
-                    return (
-                      <div key={ev.id} className="flex items-center gap-3 px-3 py-2 rounded-lg border" style={{ borderColor: MOE_BORDER_P }}>
-                        <img src={generateQRDataURL(ev.fileName || 'file')} alt="QR" className="w-14 h-14" />
-                        <span className="text-xs text-gray-500">{ev.fileName}</span>
-                      </div>
-                    );
-                  }
-                  return null;
-                })}
-              </div>
-              <div className="mx-6 mb-4 grid grid-cols-2 gap-8 text-center text-xs">
-                <div>
-                  <p className="text-gray-500 mb-6">المعلم/ة</p>
-                  <div className="border-t pt-2" style={{ borderColor: MOE_BORDER_P }}>{personalInfo.name || '____________'}</div>
-                </div>
-                <div>
-                  <p className="text-gray-500 mb-6">مدير المدرسة</p>
-                  <div className="border-t pt-2" style={{ borderColor: MOE_BORDER_P }}>{personalInfo.evaluator || '____________'}</div>
-                </div>
-              </div>
-              <div className="h-2 w-full" style={{ backgroundColor: MOE_GREEN_P }} />
-            </div>
-          </motion.div>
-        </motion.div>
-      </AnimatePresence>
-    );
-  };
 
   // ===== AI Settings Modal =====
   const AISettingsModal = () => (
@@ -1205,17 +1011,6 @@ export default function PerformanceEvidence() {
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
-                      {/* أزرار معاينة وتصدير لكل شاهد */}
-                      {subEvidences.length > 0 && (
-                        <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
-                          <button onClick={() => { setPreviewSubId(sub.id); }} className="p-1.5 rounded-lg bg-emerald-50 text-emerald-600 hover:bg-emerald-100 text-xs" title="معاينة">
-                            <Eye className="w-3.5 h-3.5" />
-                          </button>
-                          <button onClick={() => handleExportSingleEvidence(sub.id)} disabled={isExporting} className="p-1.5 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 text-xs" title="تصدير PDF">
-                            <Download className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      )}
                       {isExpanded ? <ChevronUp className="w-5 h-5 text-gray-400" /> : <ChevronDown className="w-5 h-5 text-gray-400" />}
                     </div>
                   </div>
@@ -1226,34 +1021,22 @@ export default function PerformanceEvidence() {
                       <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }}
                         className="border-t border-gray-100 overflow-hidden">
                         <div className="p-4 space-y-4">
-                          {/* Form Fields - نموذج واحد مع إمكانية إضافة صفوف */}
+                          {/* Form Fields */}
                           {(sub.type === 'report' || sub.type === 'both') && sub.formFields && (() => {
                             const formEv = subEvidences.find(e => e.formData !== undefined);
                             if (!formEv) return null;
-                            // جمع الحقول الأصلية + الحقول المضافة ديناميكياً
-                            const dynamicFields = Object.keys(formEv.formData || {}).filter(k => k.startsWith('dynamic_')).map(k => ({
-                              id: k, label: formEv.formData![k.replace('dynamic_', 'label_')] || k.replace('dynamic_', '').replace(/_/g, ' '),
-                              type: 'text' as const, placeholder: '', required: false
-                            }));
-                            const dynamicLabels = Object.keys(formEv.formData || {}).filter(k => k.startsWith('label_'));
                             return (
                               <div className="bg-blue-50/50 rounded-xl p-4 border border-blue-100">
                                 <div className="flex items-center justify-between mb-3">
                                   <h4 className="text-sm font-bold text-gray-700 flex items-center gap-2"><FileText className="w-4 h-4 text-blue-500" />نموذج التقرير</h4>
-                                  <div className="flex gap-2">
-                                    {aiApiKey && (
-                                      <button onClick={() => fillFormWithAI(currentCriterion.id, sub.id, formEv.id, sub.formFields!)}
-                                        disabled={aiLoading === `fill_${formEv.id}`}
-                                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-violet-100 text-violet-700 text-xs font-medium hover:bg-violet-200 disabled:opacity-50">
-                                        {aiLoading === `fill_${formEv.id}` ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
-                                        تعبئة بالذكاء الاصطناعي
-                                      </button>
-                                    )}
-                                    <button onClick={() => addDynamicField(currentCriterion.id, formEv.id)}
-                                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-100 text-emerald-700 text-xs font-medium hover:bg-emerald-200">
-                                      <Plus className="w-3.5 h-3.5" />إضافة صف
+                                  {aiApiKey && (
+                                    <button onClick={() => fillFormWithAI(currentCriterion.id, sub.id, formEv.id, sub.formFields!)}
+                                      disabled={aiLoading === `fill_${formEv.id}`}
+                                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-violet-100 text-violet-700 text-xs font-medium hover:bg-violet-200 disabled:opacity-50">
+                                      {aiLoading === `fill_${formEv.id}` ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+                                      تعبئة بالذكاء الاصطناعي
                                     </button>
-                                  </div>
+                                  )}
                                 </div>
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                   {sub.formFields.map((field: FormField) => (
@@ -1279,30 +1062,6 @@ export default function PerformanceEvidence() {
                                       )}
                                     </div>
                                   ))}
-                                  {/* الحقول الديناميكية المضافة */}
-                                  {Object.keys(formEv.formData || {}).filter(k => k.startsWith('dynamic_')).map((dynKey) => {
-                                    const labelKey = dynKey.replace('dynamic_', 'label_');
-                                    const fieldLabel = formEv.formData?.[labelKey] || '';
-                                    return (
-                                      <div key={dynKey} className="md:col-span-2">
-                                        <div className="flex items-center gap-2 mb-1">
-                                          <input type="text" value={fieldLabel}
-                                            onChange={(e) => updateFormField(currentCriterion.id, formEv.id, labelKey, e.target.value)}
-                                            placeholder="عنوان الحقل..."
-                                            className="text-xs font-medium text-gray-600 bg-transparent border-b border-dashed border-gray-300 focus:border-blue-400 focus:outline-none px-1 py-0.5 flex-1" />
-                                          <button onClick={() => removeDynamicField(currentCriterion.id, formEv.id, dynKey)}
-                                            className="p-1 rounded text-red-400 hover:text-red-600 hover:bg-red-50">
-                                            <X className="w-3.5 h-3.5" />
-                                          </button>
-                                        </div>
-                                        <textarea value={formEv.formData?.[dynKey] || ''}
-                                          onChange={(e) => updateFormField(currentCriterion.id, formEv.id, dynKey, e.target.value)}
-                                          placeholder="أدخل البيانات هنا..."
-                                          rows={2}
-                                          className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-500/20 bg-white" />
-                                      </div>
-                                    );
-                                  })}
                                 </div>
                               </div>
                             );
@@ -1336,26 +1095,37 @@ export default function PerformanceEvidence() {
                             </button>
                           </div>
 
-                          {/* مساعد AI مركزي مصغر - زر واحد فقط */}
-                          <div className="flex items-center gap-2 pt-2 border-t border-gray-100">
-                            {aiApiKey && (
-                              <button onClick={() => callAI(currentCriterion.id, sub.id, `اقترح شاهد أداء وظيفي لبند "${currentCriterion.title}" - ${sub.title}`)}
-                                disabled={aiLoading === aiKey}
-                                className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-violet-50 text-violet-700 text-xs font-medium hover:bg-violet-100 disabled:opacity-50 border border-violet-200">
-                                {aiLoading === aiKey ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
-                                اقتراح بالذكاء الاصطناعي
-                              </button>
-                            )}
+                          {/* AI Chat Section */}
+                          <div className="bg-violet-50/50 rounded-xl p-4 border border-violet-100">
+                            <div className="flex items-center gap-2 mb-3">
+                              <Bot className="w-4 h-4 text-violet-600" />
+                              <span className="text-sm font-bold text-violet-700">مساعد الذكاء الاصطناعي</span>
+                              {!aiApiKey && <span className="text-xs text-gray-400">(أدخل مفتاح API أولاً)</span>}
+                            </div>
                             {aiMessages.length > 0 && (
-                              <div className="flex-1 flex gap-2 overflow-x-auto">
-                                {aiMessages.slice(-2).map((msg, idx) => (
-                                  <button key={idx} onClick={() => applyAIText(currentCriterion.id, sub.id, msg)}
-                                    className="text-xs bg-white border border-violet-200 text-violet-700 px-2.5 py-1.5 rounded-lg hover:bg-violet-50 truncate max-w-[200px]" title={msg}>
-                                    + {msg.substring(0, 30)}...
-                                  </button>
+                              <div className="space-y-2 mb-3 max-h-48 overflow-y-auto">
+                                {aiMessages.map((msg, idx) => (
+                                  <div key={idx} className="bg-white rounded-lg p-3 border border-violet-200">
+                                    <p className="text-sm text-gray-700 leading-relaxed">{msg}</p>
+                                    <button onClick={() => applyAIText(currentCriterion.id, sub.id, msg)}
+                                      className="mt-2 text-xs bg-violet-600 text-white px-3 py-1.5 rounded-md hover:bg-violet-700">
+                                      استخدام كشاهد
+                                    </button>
+                                  </div>
                                 ))}
                               </div>
                             )}
+                            <div className="flex gap-2">
+                              <input type="text" value={aiPrompt} onChange={(e) => setAiPrompt(e.target.value)}
+                                placeholder={`اطلب اقتراح لـ "${sub.title}"...`}
+                                onKeyDown={(e) => { if (e.key === 'Enter') callAI(currentCriterion.id, sub.id, aiPrompt || `اقترح شاهد أداء وظيفي لبند "${currentCriterion.title}" - ${sub.title}`); }}
+                                className="flex-1 px-3 py-2.5 rounded-lg border border-violet-200 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/20 bg-white" />
+                              <button onClick={() => callAI(currentCriterion.id, sub.id, aiPrompt || `اقترح شاهد أداء وظيفي لبند "${currentCriterion.title}" - ${sub.title}`)}
+                                disabled={aiLoading === aiKey || !aiApiKey}
+                                className="px-4 py-2.5 rounded-lg bg-violet-600 text-white text-sm font-medium hover:bg-violet-700 disabled:opacity-50 flex items-center gap-1.5">
+                                {aiLoading === aiKey ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                              </button>
+                            </div>
                           </div>
                         </div>
                       </motion.div>
@@ -1408,7 +1178,6 @@ export default function PerformanceEvidence() {
             )}
           </div>
         </div>
-        {renderSingleEvidencePreview()}
       </div>
     );
   }
@@ -1494,11 +1263,6 @@ export default function PerformanceEvidence() {
   if (step === 'preview') {
     const grade = getGrade(percentage);
     const theme = selectedTheme;
-    const MOE_LOGO = 'https://d2xsxph8kpxj0f.cloudfront.net/310519663047121386/h34s4aPNVyHXdtjgZ7eNNf/moe-logo_fa6b1baa.png';
-    const MOE_GREEN = '#1B7A3D';
-    const MOE_LIGHT = '#E8F5E9';
-    const MOE_BORDER = '#A5D6A7';
-    const isOfficialTheme = theme.id === 'official' || theme.id === 'official-gradient';
     return (
       <div className="min-h-screen bg-gray-100 p-4" dir="rtl">
         <div className="max-w-4xl mx-auto">
@@ -1521,82 +1285,45 @@ export default function PerformanceEvidence() {
 
           {/* Preview Content */}
           <div id="preview-content" className="bg-white rounded-xl shadow-lg overflow-hidden" style={{ fontFamily: "'Cairo', 'Tajawal', sans-serif" }}>
-            {/* ترويسة هوية وزارة التعليم */}
-            {isOfficialTheme ? (
-              <div className="p-6 pb-4">
-                <div className="flex items-center justify-between">
-                  <div className="text-right text-xs leading-relaxed text-gray-600">
-                    {personalInfo.department.split('\n').map((line, i) => <div key={i}>{line}</div>)}
-                    <div className="font-bold text-gray-800">{personalInfo.school || 'المدرسة'}</div>
-                  </div>
-                  <img src={MOE_LOGO} alt="وزارة التعليم" className="w-24 h-24 object-contain" />
-                  <div className="text-left text-xs text-gray-600">
-                    <div>العام الدراسي {personalInfo.year}</div>
-                    <div>{personalInfo.semester}</div>
-                  </div>
-                </div>
-                <div className="mt-4 text-center py-2.5 rounded-lg border-2" style={{ borderColor: MOE_GREEN, backgroundColor: MOE_LIGHT }}>
-                  <h1 className="text-lg font-black" style={{ color: MOE_GREEN, fontFamily: "'Tajawal', sans-serif" }}>شواهد الأداء الوظيفي - {selectedJob?.title}</h1>
-                </div>
-              </div>
-            ) : (
-              <div style={{ background: theme.headerBg, color: theme.headerText, padding: '2rem', textAlign: 'center' }}>
-                <p className="text-sm opacity-80 mb-1">{personalInfo.department}</p>
-                <h1 className="text-2xl font-black mb-1">شواهد الأداء الوظيفي</h1>
-                <p className="text-lg font-bold">{selectedJob?.title}</p>
-                <p className="text-sm opacity-80 mt-1">{personalInfo.year} - {personalInfo.semester}</p>
-              </div>
-            )}
+            {/* Header */}
+            <div style={{ background: theme.headerBg, color: theme.headerText, padding: '2rem', textAlign: 'center' }}>
+              <p className="text-sm opacity-80 mb-1">{personalInfo.department}</p>
+              <h1 className="text-2xl font-black mb-1">شواهد الأداء الوظيفي</h1>
+              <p className="text-lg font-bold">{selectedJob?.title}</p>
+              <p className="text-sm opacity-80 mt-1">{personalInfo.year} - {personalInfo.semester}</p>
+            </div>
 
             {/* Personal Info */}
-            {isOfficialTheme ? (
-              <div className="px-6 pb-4">
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                  {[
-                    { label: 'الاسم', value: personalInfo.name },
-                    { label: 'المدرسة', value: personalInfo.school },
-                    { label: 'المقيّم', value: personalInfo.evaluator },
-                    { label: 'التاريخ', value: personalInfo.date },
-                  ].map((item, i) => (
-                    <div key={i}>
-                      <div className="text-[10px] font-medium mb-1" style={{ color: MOE_GREEN }}>{item.label}</div>
-                      <div className="px-3 py-2 rounded-lg border text-xs bg-white" style={{ borderColor: MOE_BORDER }}>{item.value || '—'}</div>
-                    </div>
-                  ))}
-                </div>
+            <div className="p-6 border-b" style={{ borderColor: theme.borderColor }}>
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div><span className="text-gray-500">الاسم:</span> <strong>{personalInfo.name || '—'}</strong></div>
+                <div><span className="text-gray-500">المدرسة:</span> <strong>{personalInfo.school || '—'}</strong></div>
+                <div><span className="text-gray-500">المقيّم:</span> <strong>{personalInfo.evaluator || '—'}</strong></div>
+                <div><span className="text-gray-500">التاريخ:</span> <strong>{personalInfo.date || '—'}</strong></div>
               </div>
-            ) : (
-              <div className="p-6 border-b" style={{ borderColor: theme.borderColor }}>
-                <div className="grid grid-cols-2 gap-4 text-sm">
-                  <div><span className="text-gray-500">الاسم:</span> <strong>{personalInfo.name || '—'}</strong></div>
-                  <div><span className="text-gray-500">المدرسة:</span> <strong>{personalInfo.school || '—'}</strong></div>
-                  <div><span className="text-gray-500">المقيّم:</span> <strong>{personalInfo.evaluator || '—'}</strong></div>
-                  <div><span className="text-gray-500">التاريخ:</span> <strong>{personalInfo.date || '—'}</strong></div>
-                </div>
-              </div>
-            )}
+            </div>
 
             {/* Criteria Table */}
             <div className="p-6">
-              <table className="w-full border-collapse text-sm" style={{ borderColor: isOfficialTheme ? MOE_BORDER : theme.borderColor }}>
+              <table className="w-full border-collapse text-sm" style={{ borderColor: theme.borderColor }}>
                 <thead>
-                  <tr style={{ background: isOfficialTheme ? MOE_GREEN : theme.accent, color: '#fff' }}>
-                    <th className="p-2 border text-center" style={{ borderColor: isOfficialTheme ? MOE_BORDER : theme.borderColor }}>م</th>
-                    <th className="p-2 border text-right" style={{ borderColor: isOfficialTheme ? MOE_BORDER : theme.borderColor }}>البند</th>
-                    <th className="p-2 border text-center" style={{ borderColor: isOfficialTheme ? MOE_BORDER : theme.borderColor }}>الدرجة</th>
+                  <tr style={{ background: theme.accent, color: '#fff' }}>
+                    <th className="p-2 border text-center" style={{ borderColor: theme.borderColor }}>م</th>
+                    <th className="p-2 border text-right" style={{ borderColor: theme.borderColor }}>البند</th>
+                    <th className="p-2 border text-center" style={{ borderColor: theme.borderColor }}>الدرجة</th>
                   </tr>
                 </thead>
                 <tbody>
                   {selectedJob?.criteria.map((c: any, i: number) => (
                     <tr key={c.id} className={i % 2 === 0 ? '' : 'bg-gray-50'}>
-                      <td className="p-2 border text-center" style={{ borderColor: isOfficialTheme ? MOE_BORDER : theme.borderColor }}>{i + 1}</td>
-                      <td className="p-2 border" style={{ borderColor: isOfficialTheme ? MOE_BORDER : theme.borderColor }}>{c.title}</td>
-                      <td className="p-2 border text-center font-bold" style={{ borderColor: isOfficialTheme ? MOE_BORDER : theme.borderColor }}>{criteriaData[c.id]?.score || 0}/{c.maxScore}</td>
+                      <td className="p-2 border text-center" style={{ borderColor: theme.borderColor }}>{i + 1}</td>
+                      <td className="p-2 border" style={{ borderColor: theme.borderColor }}>{c.title}</td>
+                      <td className="p-2 border text-center font-bold" style={{ borderColor: theme.borderColor }}>{criteriaData[c.id]?.score || 0}/{c.maxScore}</td>
                     </tr>
                   ))}
-                  <tr style={{ background: isOfficialTheme ? MOE_GREEN : theme.accent, color: '#fff' }}>
-                    <td colSpan={2} className="p-2 border text-center font-bold" style={{ borderColor: isOfficialTheme ? MOE_BORDER : theme.borderColor }}>المجموع</td>
-                    <td className="p-2 border text-center font-bold" style={{ borderColor: isOfficialTheme ? MOE_BORDER : theme.borderColor }}>{totalScore}/{maxScore}</td>
+                  <tr style={{ background: theme.accent, color: '#fff' }}>
+                    <td colSpan={2} className="p-2 border text-center font-bold" style={{ borderColor: theme.borderColor }}>المجموع</td>
+                    <td className="p-2 border text-center font-bold" style={{ borderColor: theme.borderColor }}>{totalScore}/{maxScore}</td>
                   </tr>
                 </tbody>
               </table>
@@ -1613,16 +1340,14 @@ export default function PerformanceEvidence() {
                 if (!d || d.evidences.length === 0) return null;
                 return (
                   <div key={c.id} className="mt-6 page-break-inside-avoid">
-                    <div className="text-sm font-bold mb-2 px-2 py-1 rounded" style={{ color: isOfficialTheme ? MOE_GREEN : theme.accent, backgroundColor: isOfficialTheme ? MOE_LIGHT : 'transparent' }}>
-                      {i + 1}. {c.title}
-                    </div>
+                    <h3 className="font-bold text-sm mb-2" style={{ color: theme.accent }}>{i + 1}. {c.title}</h3>
                     <div className="space-y-2">
                       {d.evidences.map((ev) => (
-                        <div key={ev.id} className="p-3 rounded-lg border" style={{ borderColor: isOfficialTheme ? MOE_BORDER : theme.borderColor }}>
+                        <div key={ev.id} className="p-3 rounded-lg border" style={{ borderColor: theme.borderColor }}>
                           {ev.type === 'text' && ev.text && <p className="text-sm">{ev.text}</p>}
                           {ev.type === 'link' && ev.link && (
                             <div className="flex items-center gap-3">
-                              <img src={generateQRDataURL(ev.link)} alt="QR" className="w-14 h-14" />
+                              <img src={generateQRDataURL(ev.link)} alt="QR" className="w-16 h-16" />
                               <span className="text-xs text-gray-500">{ev.link}</span>
                             </div>
                           )}
@@ -1630,46 +1355,21 @@ export default function PerformanceEvidence() {
                             ev.displayAs === 'image'
                               ? <img src={ev.fileData} alt="" className="max-h-40 rounded" />
                               : <div className="flex items-center gap-3">
-                                  <img src={generateQRDataURL(ev.fileData.substring(0, 200))} alt="QR" className="w-14 h-14" />
+                                  <img src={generateQRDataURL(ev.fileData.substring(0, 200))} alt="QR" className="w-16 h-16" />
                                   <span className="text-xs text-gray-500">{ev.fileName}</span>
                                 </div>
                           )}
                           {(ev.type === 'video' || ev.type === 'file') && ev.fileData && (
                             <div className="flex items-center gap-3">
-                              <img src={generateQRDataURL(ev.fileName || 'file')} alt="QR" className="w-14 h-14" />
+                              <img src={generateQRDataURL(ev.fileName || 'file')} alt="QR" className="w-16 h-16" />
                               <span className="text-xs text-gray-500">{ev.fileName}</span>
                             </div>
                           )}
-                          {ev.formData && Object.entries(ev.formData).some(([k, v]) => v && !k.startsWith('label_')) && (
-                            <div className="text-sm space-y-2">
-                              {Object.entries(ev.formData).filter(([k, v]) => v && !k.startsWith('label_') && !k.startsWith('dynamic_')).map(([key, val]) => (
-                                <div key={key}>
-                                  {isOfficialTheme ? (
-                                    <>
-                                      <div className="text-[10px] font-medium mb-1 px-2 py-0.5 rounded" style={{ color: MOE_GREEN, backgroundColor: MOE_LIGHT }}>{key}</div>
-                                      <div className="px-3 py-1.5 rounded border text-xs" style={{ borderColor: MOE_BORDER }}>{val}</div>
-                                    </>
-                                  ) : (
-                                    <p><span className="text-gray-500">{key}:</span> {val}</p>
-                                  )}
-                                </div>
+                          {ev.formData && Object.entries(ev.formData).some(([_, v]) => v) && (
+                            <div className="text-sm space-y-1">
+                              {Object.entries(ev.formData).filter(([_, v]) => v).map(([key, val]) => (
+                                <p key={key}><span className="text-gray-500">{key}:</span> {val}</p>
                               ))}
-                              {Object.entries(ev.formData).filter(([k, v]) => k.startsWith('dynamic_') && v).map(([dynKey, val]) => {
-                                const labelKey = dynKey.replace('dynamic_', 'label_');
-                                const label = ev.formData?.[labelKey] || 'حقل إضافي';
-                                return (
-                                  <div key={dynKey}>
-                                    {isOfficialTheme ? (
-                                      <>
-                                        <div className="text-[10px] font-medium mb-1 px-2 py-0.5 rounded" style={{ color: MOE_GREEN, backgroundColor: MOE_LIGHT }}>{label}</div>
-                                        <div className="px-3 py-1.5 rounded border text-xs" style={{ borderColor: MOE_BORDER }}>{val}</div>
-                                      </>
-                                    ) : (
-                                      <p><span className="text-gray-500">{label}:</span> {val}</p>
-                                    )}
-                                  </div>
-                                );
-                              })}
                             </div>
                           )}
                         </div>
@@ -1682,19 +1382,17 @@ export default function PerformanceEvidence() {
               {/* Signatures */}
               <div className="mt-10 grid grid-cols-2 gap-8 text-center text-sm">
                 <div>
-                  <p className="text-gray-500 mb-8">{isOfficialTheme ? 'المعلم/ة' : 'توقيع المقيّم'}</p>
-                  <div className="border-t pt-2" style={{ borderColor: isOfficialTheme ? MOE_BORDER : '#d1d5db' }}>{personalInfo.evaluator || '____________'}</div>
+                  <p className="text-gray-500 mb-8">توقيع المقيّم</p>
+                  <div className="border-t border-gray-300 pt-2">{personalInfo.evaluator || '____________'}</div>
                   <p className="text-xs text-gray-400 mt-1">{personalInfo.evaluatorRole}</p>
                 </div>
                 <div>
-                  <p className="text-gray-500 mb-8">{isOfficialTheme ? 'مدير المدرسة' : 'توقيع الموظف'}</p>
-                  <div className="border-t pt-2" style={{ borderColor: isOfficialTheme ? MOE_BORDER : '#d1d5db' }}>{personalInfo.name || '____________'}</div>
+                  <p className="text-gray-500 mb-8">توقيع الموظف</p>
+                  <div className="border-t border-gray-300 pt-2">{personalInfo.name || '____________'}</div>
                   <p className="text-xs text-gray-400 mt-1">{selectedJob?.title}</p>
                 </div>
               </div>
             </div>
-            {/* شريط سفلي */}
-            {isOfficialTheme && <div className="h-2 w-full" style={{ backgroundColor: MOE_GREEN }} />}
           </div>
         </div>
       </div>
