@@ -578,6 +578,73 @@ export default function PerformanceEvidence() {
   const [showCoverageReport, setShowCoverageReport] = useState(false);
   const [isGeneratingReport, setIsGeneratingReport] = useState(false);
 
+  // ===== معاينة شاهد فردي =====
+  const [previewSubId, setPreviewSubId] = useState<string | null>(null);
+  const [previewCriterionId, setPreviewCriterionId] = useState<string | null>(null);
+
+  // ===== dialog إضافة صف ديناميكي =====
+  const [addRowDialog, setAddRowDialog] = useState<{ criterionId: string; subId: string; formEvId: string } | null>(null);
+  const [newRowLabel, setNewRowLabel] = useState('');
+
+  const confirmAddDynamicRow = () => {
+    if (!addRowDialog || !newRowLabel.trim()) return;
+    const { criterionId, formEvId } = addRowDialog;
+    const fieldId = `dynamic_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+    updateFormField(criterionId, formEvId, fieldId, '');
+    updateFormField(criterionId, formEvId, `__label_${fieldId}`, newRowLabel.trim());
+    toast.success(`تم إضافة حقل: ${newRowLabel.trim()}`);
+    setNewRowLabel('');
+    setAddRowDialog(null);
+  };
+
+  const addDynamicRow = (criterionId: string, subId: string, formEvId: string) => {
+    setAddRowDialog({ criterionId, subId, formEvId });
+    setNewRowLabel('');
+  };
+
+  const removeDynamicRow = (criterionId: string, formEvId: string, fieldId: string) => {
+    setCriteriaData(prev => {
+      const existing = prev[criterionId];
+      if (!existing) return prev;
+      return {
+        ...prev,
+        [criterionId]: {
+          ...existing,
+          evidences: existing.evidences.map(e => {
+            if (e.id !== formEvId || !e.formData) return e;
+            const newFormData = { ...e.formData };
+            delete newFormData[fieldId];
+            delete newFormData[`__label_${fieldId}`];
+            return { ...e, formData: newFormData };
+          }),
+        },
+      };
+    });
+    toast.success('تم حذف الحقل');
+  };
+
+  // ===== تصدير شاهد فردي =====
+  const exportSingleEvidence = async (criterionId: string, subId: string) => {
+    // فتح المعاينة أولاً
+    setPreviewCriterionId(criterionId);
+    setPreviewSubId(subId);
+    // انتظار render ثم تصدير
+    setTimeout(async () => {
+      const el = document.getElementById(`single-preview-${subId}`);
+      if (el) {
+        try {
+          await exportToPDF(`single-preview-${subId}`, `تقرير_${subId}.pdf`);
+          toast.success('تم تصدير التقرير بنجاح');
+        } catch { toast.error('فشل التصدير'); }
+      }
+    }, 500);
+  };
+
+  const openSinglePreview = (criterionId: string, subId: string) => {
+    setPreviewCriterionId(criterionId);
+    setPreviewSubId(subId);
+  };
+
   const handleDragStart = useCallback((ev: EvidenceItem, criterionId: string, subId: string) => {
     setDraggedEvidence({ evidence: ev, fromCriterionId: criterionId, fromSubId: subId });
   }, []);
@@ -1308,51 +1375,12 @@ export default function PerformanceEvidence() {
         </div>
       </div>
 
-      {/* عرض حقول النموذج إذا كان الـ sub-evidence يحتوي على formFields */}
-      {ev.type === 'text' && hasFormFields && ev.formData !== undefined && (
-        <div className="bg-primary/5 rounded-lg p-3 border border-primary/10">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
-            {linkedSub!.formFields!.map((field: FormField) => (
-              <div key={field.id} className={field.type === 'textarea' ? 'md:col-span-2' : ''}>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="block text-xs font-medium text-foreground">
-                    {field.label} {field.required && <span className="text-destructive">*</span>}
-                  </label>
-                  {field.type === 'textarea' && ev.formData?.[field.id] && (
-                    <button type="button" onClick={() => improveFieldText(criterionId, ev.id, field.id, ev.formData?.[field.id] || '')}
-                      disabled={aiLoading === `improve_${ev.id}_${field.id}`}
-                      className="text-[10px] text-violet-600 hover:text-violet-700 flex items-center gap-1">
-                      {aiLoading === `improve_${ev.id}_${field.id}` ? <Loader2 className="w-3 h-3 animate-spin" /> : <Wand2 className="w-3 h-3" />}
-                      تحسين
-                    </button>
-                  )}
-                </div>
-                {field.type === 'textarea' ? (
-                  <textarea value={ev.formData?.[field.id] || ''} onChange={(e) => updateFormField(criterionId, ev.id, field.id, e.target.value)}
-                    placeholder={field.placeholder} rows={3}
-                    className="w-full px-3 py-2 rounded-lg border border-border text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/20 bg-background" />
-                ) : field.type === 'select' ? (
-                  <select value={ev.formData?.[field.id] || ''} onChange={(e) => updateFormField(criterionId, ev.id, field.id, e.target.value)}
-                    className="w-full px-3 py-2.5 rounded-lg border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 bg-background">
-                    <option value="">اختر...</option>
-                    {field.options?.map(opt => <option key={opt} value={opt}>{opt}</option>)}
-                  </select>
-                ) : (
-                  <input type={field.type === 'date' ? 'date' : field.type === 'number' ? 'number' : 'text'}
-                    value={ev.formData?.[field.id] || ''} onChange={(e) => updateFormField(criterionId, ev.id, field.id, e.target.value)}
-                    placeholder={field.placeholder}
-                    className="w-full px-3 py-2.5 rounded-lg border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 bg-background" />
-                )}
-              </div>
-            ))}
-          </div>
-          <div className="flex justify-end mt-2">
-            <Button variant="secondary" size="sm" className="gap-1.5 text-xs"
-              onClick={() => fillFormWithAI(criterionId, ev.subEvidenceId, ev.id, linkedSub!.formFields!)}
-              disabled={aiLoading === `fill_${ev.id}`}>
-              {aiLoading === `fill_${ev.id}` ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5 text-violet-500" />}
-              تعبئة بالذكاء الاصطناعي
-            </Button>
+      {/* ملاحظة: حقول النموذج تظهر في criterion-detail فقط (نسخة واحدة) */}
+      {ev.type === 'text' && hasFormFields && ev.formData !== undefined && !isFormDataEmpty && (
+        <div className="bg-primary/5 rounded-lg p-2 border border-primary/10">
+          <div className="text-[10px] text-muted-foreground flex items-center gap-1">
+            <CheckCircle className="w-3 h-3 text-emerald-500" />
+            <span>تم تعبئة بيانات النموذج ({Object.values(ev.formData || {}).filter(v => v && v.trim()).length} حقل)</span>
           </div>
         </div>
       )}
@@ -2202,16 +2230,26 @@ export default function PerformanceEvidence() {
                             if (!formEv) return null;
                             return (
                               <div className="bg-primary/5 rounded-xl p-4 border border-primary/10">
-                                <div className="flex items-center justify-between mb-3">
+                                <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
                                   <h4 className="text-sm font-bold text-foreground flex items-center gap-2">
                                     <FileText className="w-4 h-4 text-primary" />نموذج التقرير
                                   </h4>
-                                  <Button variant="secondary" size="sm" className="gap-1.5 text-xs"
-                                    onClick={() => fillFormWithAI(currentCriterion.id, sub.id, formEv.id, sub.formFields!)}
-                                    disabled={aiLoading === `fill_${formEv.id}`}>
-                                    {aiLoading === `fill_${formEv.id}` ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5 text-violet-500" />}
-                                    تعبئة بالذكاء الاصطناعي
-                                  </Button>
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    <Button variant="outline" size="sm" className="gap-1 text-[10px] sm:text-xs h-7 sm:h-8 px-2 sm:px-3 border-emerald-300 text-emerald-700 hover:bg-emerald-50"
+                                      onClick={() => { setPreviewCriterionId(currentCriterion.id); setPreviewSubId(sub.id); }}>
+                                      <Eye className="w-3 h-3 sm:w-3.5 sm:h-3.5" />معاينة
+                                    </Button>
+                                    <Button variant="outline" size="sm" className="gap-1 text-[10px] sm:text-xs h-7 sm:h-8 px-2 sm:px-3 border-blue-300 text-blue-700 hover:bg-blue-50"
+                                      onClick={() => exportSingleEvidence(currentCriterion.id, sub.id)}>
+                                      <Download className="w-3 h-3 sm:w-3.5 sm:h-3.5" />تصدير PDF
+                                    </Button>
+                                    <Button variant="secondary" size="sm" className="gap-1.5 text-[10px] sm:text-xs h-7 sm:h-8"
+                                      onClick={() => fillFormWithAI(currentCriterion.id, sub.id, formEv.id, sub.formFields!)}
+                                      disabled={aiLoading === `fill_${formEv.id}`}>
+                                      {aiLoading === `fill_${formEv.id}` ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5 text-violet-500" />}
+                                      تعبئة AI
+                                    </Button>
+                                  </div>
                                 </div>
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                   {sub.formFields.map((field: FormField) => (
@@ -2247,6 +2285,33 @@ export default function PerformanceEvidence() {
                                       )}
                                     </div>
                                   ))}
+                                  {/* الصفوف الديناميكية المضافة */}
+                                  {formEv.formData && Object.keys(formEv.formData).filter(k => k.startsWith('dynamic_') && !k.startsWith('__label_')).map(fieldId => {
+                                    const label = formEv.formData?.[`__label_${fieldId}`] || 'حقل إضافي';
+                                    return (
+                                      <div key={fieldId} className="md:col-span-2">
+                                        <div className="flex items-center justify-between mb-1">
+                                          <label className="block text-xs font-medium text-foreground flex items-center gap-1">
+                                            <span className="text-primary">◇</span> {label}
+                                          </label>
+                                          <button type="button" onClick={() => removeDynamicRow(currentCriterion.id, formEv.id, fieldId)}
+                                            className="text-[10px] text-destructive hover:text-destructive/80 flex items-center gap-0.5">
+                                            <Trash2 className="w-3 h-3" />حذف
+                                          </button>
+                                        </div>
+                                        <textarea value={formEv.formData?.[fieldId] || ''} onChange={(e) => updateFormField(currentCriterion.id, formEv.id, fieldId, e.target.value)}
+                                          placeholder={`أدخل ${label}...`} rows={2}
+                                          className="w-full px-3 py-2 rounded-lg border border-border text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/20 bg-background" />
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                                {/* زر إضافة صف جديد */}
+                                <div className="mt-3 flex justify-start">
+                                  <Button variant="outline" size="sm" className="gap-1.5 text-xs border-dashed border-primary/40 text-primary"
+                                    onClick={() => addDynamicRow(currentCriterion.id, sub.id, formEv.id)}>
+                                    <Plus className="w-3.5 h-3.5" />إضافة صف جديد
+                                  </Button>
                                 </div>
                               </div>
                             );
@@ -2562,6 +2627,179 @@ export default function PerformanceEvidence() {
             </motion.div>
           );
           })()}
+
+          {/* ===== معاينة شاهد فردي بهوية وزارة التعليم ===== */}
+          {previewSubId && previewCriterionId && (() => {
+            const prevCrit = allCriteria.find(c => c.id === previewCriterionId);
+            if (!prevCrit) return null;
+            const prevCritData = criteriaData[previewCriterionId];
+            const allPrevSubs = [...prevCrit.subEvidences, ...(prevCritData?.customSubEvidences || [])];
+            const prevSub = allPrevSubs.find(s => s.id === previewSubId);
+            if (!prevSub) return null;
+            const prevEvidences = (prevCritData?.evidences || []).filter(e => e.subEvidenceId === previewSubId);
+            const formEv = prevEvidences.find(e => e.formData !== undefined);
+            const imageEvidences = prevEvidences.filter(e => e.type === 'image' && e.fileData);
+            const theme = selectedTheme;
+            // جمع الحقول الثابتة والديناميكية
+            const staticFields = (prevSub.formFields || []).map(f => ({ id: f.id, label: f.label, value: formEv?.formData?.[f.id] || '' }));
+            const dynamicFields = formEv?.formData ? Object.keys(formEv.formData).filter(k => k.startsWith('dynamic_') && !k.startsWith('__label_')).map(k => ({ id: k, label: formEv.formData?.[`__label_${k}`] || 'حقل إضافي', value: formEv.formData?.[k] || '' })) : [];
+            const allFields = [...staticFields, ...dynamicFields];
+            // فصل الحقول القصيرة والطويلة
+            const shortFields = allFields.filter(f => (f.value?.length || 0) < 80);
+            const longFields = allFields.filter(f => (f.value?.length || 0) >= 80);
+            return (
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 bg-black/60 z-50 flex items-start justify-center p-4 overflow-y-auto">
+                <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
+                  className="bg-white rounded-2xl shadow-2xl max-w-3xl w-full my-8 overflow-hidden">
+                  {/* شريط الأدوات */}
+                  <div className="flex items-center justify-between p-3 bg-gray-50 border-b">
+                    <div className="flex items-center gap-2">
+                      <Button size="sm" variant="outline" className="gap-1 text-xs h-7" onClick={() => exportSingleEvidence(previewCriterionId, previewSubId)}>
+                        <Download className="w-3 h-3" />تصدير PDF
+                      </Button>
+                      <Button size="sm" variant="outline" className="gap-1 text-xs h-7" onClick={() => { const el = document.getElementById(`single-preview-${previewSubId}`); if (el) printElement(`single-preview-${previewSubId}`); }}>
+                        <Printer className="w-3 h-3" />طباعة
+                      </Button>
+                    </div>
+                    <button onClick={() => { setPreviewSubId(null); setPreviewCriterionId(null); }} className="p-1.5 rounded-lg hover:bg-gray-200">
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
+                  {/* محتوى المعاينة */}
+                  <div id={`single-preview-${previewSubId}`} style={{ fontFamily: "'Cairo', 'Tajawal', sans-serif", direction: 'rtl' }}>
+                    <div style={{ background: 'white', padding: '0', maxWidth: '210mm', margin: '0 auto' }}>
+                      {/* === ترويسة وزارة التعليم === */}
+                      <div style={{ background: 'linear-gradient(135deg, #0C7B93, #27AE60, #2ECC71)', padding: '24px 30px', color: 'white', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div style={{ textAlign: 'right', fontSize: '11px', lineHeight: '1.8' }}>
+                          <div style={{ fontWeight: 'bold', fontSize: '12px' }}>المملكة العربية السعودية</div>
+                          <div>وزارة التعليم</div>
+                          <div>الإدارة العامة للتعليم بالمنطقة</div>
+                          <div>{personalInfo.school || 'مدرسة'}</div>
+                        </div>
+                        <div style={{ textAlign: 'center' }}>
+                          <div style={{ fontSize: '14px', fontWeight: 'bold', letterSpacing: '1px' }}>وزارة التعـــليم</div>
+                          <div style={{ fontSize: '10px', opacity: 0.9 }}>Ministry of Education</div>
+                        </div>
+                        <div style={{ textAlign: 'left', fontSize: '11px', lineHeight: '1.8' }}>
+                          <div>العام الدراسي {personalInfo.year || '1447هـ'}</div>
+                          <div>الفصل الدراسي {personalInfo.semester || 'الثاني'}</div>
+                        </div>
+                      </div>
+                      {/* خط فاصل */}
+                      <div style={{ height: '4px', background: 'linear-gradient(to right, #27AE60, #0C7B93, #2980B9)' }} />
+
+                      {/* === عنوان التقرير === */}
+                      <div style={{ padding: '20px 30px 10px' }}>
+                        <div style={{ background: 'linear-gradient(135deg, #27AE60, #2ECC71)', color: 'white', padding: '12px 24px', borderRadius: '8px', textAlign: 'center', fontWeight: 'bold', fontSize: '16px', marginBottom: '20px' }}>
+                          {prevSub.title}
+                        </div>
+
+                        {/* === حقول البيانات القصيرة === */}
+                        {shortFields.length > 0 && (
+                          <div style={{ display: 'grid', gridTemplateColumns: shortFields.length === 1 ? '1fr' : 'repeat(2, 1fr)', gap: '10px', marginBottom: '16px' }}>
+                            {shortFields.map(field => (
+                              <div key={field.id} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <div style={{ background: 'linear-gradient(135deg, #27AE60, #0C7B93)', color: 'white', padding: '6px 14px', borderRadius: '6px', fontSize: '11px', fontWeight: 'bold', whiteSpace: 'nowrap', minWidth: '90px', textAlign: 'center' }}>
+                                  {field.label}
+                                </div>
+                                <div style={{ flex: 1, border: '1.5px solid #A8E6CF', borderRadius: '6px', padding: '6px 12px', fontSize: '12px', textAlign: 'center', minHeight: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#F0FFF4' }}>
+                                  {field.value || '...'}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* === حقول البيانات الطويلة (كل واحد في قسم منفصل) === */}
+                        {longFields.map(field => (
+                          <div key={field.id} style={{ marginBottom: '16px' }}>
+                            <div style={{ background: 'linear-gradient(135deg, #27AE60, #0C7B93)', color: 'white', padding: '8px 20px', borderRadius: '8px 8px 0 0', fontSize: '12px', fontWeight: 'bold', textAlign: 'center' }}>
+                              {field.label}
+                            </div>
+                            <div style={{ border: '1.5px solid #A8E6CF', borderTop: 'none', borderRadius: '0 0 8px 8px', padding: '14px 18px', fontSize: '12px', lineHeight: '2', background: '#FAFFFE', whiteSpace: 'pre-wrap' }}>
+                              {field.value || '...'}
+                            </div>
+                          </div>
+                        ))}
+
+                        {/* === قسم الشواهد (صور) === */}
+                        {imageEvidences.length > 0 && (
+                          <div style={{ marginBottom: '16px' }}>
+                            <div style={{ background: 'linear-gradient(135deg, #27AE60, #0C7B93)', color: 'white', padding: '8px 20px', borderRadius: '8px 8px 0 0', fontSize: '12px', fontWeight: 'bold', textAlign: 'center' }}>
+                              الشواهد
+                            </div>
+                            <div style={{ border: '1.5px solid #A8E6CF', borderTop: 'none', borderRadius: '0 0 8px 8px', padding: '14px', display: 'grid', gridTemplateColumns: imageEvidences.length === 1 ? '1fr' : 'repeat(2, 1fr)', gap: '10px', background: '#FAFFFE' }}>
+                              {imageEvidences.map(ev => (
+                                <div key={ev.id} style={{ border: '1px solid #E0E0E0', borderRadius: '6px', overflow: 'hidden' }}>
+                                  <img src={ev.fileData?.startsWith('idb://') ? '' : (ev.fileData || '')} alt={ev.fileName} style={{ width: '100%', height: 'auto', maxHeight: '200px', objectFit: 'contain' }} />
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* === تذييل === */}
+                        <div style={{ display: 'flex', justifyContent: 'space-between', padding: '20px 30px', marginTop: '20px', borderTop: '2px solid #E8F5E9' }}>
+                          <div style={{ textAlign: 'center' }}>
+                            <div style={{ fontSize: '11px', fontWeight: 'bold', color: '#27AE60', marginBottom: '4px' }}>{selectedJob?.title || 'المعلم'}</div>
+                            <div style={{ fontSize: '12px', fontWeight: 'bold' }}>{personalInfo.name || 'اسم المعلم'}</div>
+                          </div>
+                          <div style={{ textAlign: 'center' }}>
+                            <div style={{ fontSize: '11px', fontWeight: 'bold', color: '#27AE60', marginBottom: '4px' }}>مدير المدرسة</div>
+                            <div style={{ fontSize: '12px', fontWeight: 'bold' }}>{personalInfo.evaluator || 'اسم المدير'}</div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* === شريط سفلي === */}
+                      <div style={{ height: '4px', background: 'linear-gradient(to right, #27AE60, #0C7B93, #2980B9)' }} />
+                      <div style={{ background: 'linear-gradient(135deg, #0C7B93, #27AE60)', padding: '8px', textAlign: 'center', color: 'white', fontSize: '10px' }}>
+                        SERS - نظام السجلات التعليمية الذكي
+                      </div>
+                    </div>
+                  </div>
+                </motion.div>
+              </motion.div>
+            );
+          })()}
+
+          {/* Dialog إضافة صف ديناميكي */}
+          <AnimatePresence>
+            {addRowDialog && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center p-4"
+                onClick={() => setAddRowDialog(null)}
+              >
+                <motion.div
+                  initial={{ scale: 0.9, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  exit={{ scale: 0.9, opacity: 0 }}
+                  className="bg-background rounded-xl shadow-2xl p-6 w-full max-w-md"
+                  dir="rtl"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <h3 className="text-lg font-bold mb-4" style={{ fontFamily: "'Tajawal', sans-serif" }}>إضافة صف جديد</h3>
+                  <p className="text-sm text-muted-foreground mb-3">أدخل عنوان الحقل الجديد الذي تريد إضافته للنموذج:</p>
+                  <input
+                    type="text"
+                    value={newRowLabel}
+                    onChange={(e) => setNewRowLabel(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') confirmAddDynamicRow(); }}
+                    placeholder="مثال: المنفذ، مكان التنفيذ، المستهدفون..."
+                    className="w-full px-4 py-3 rounded-lg border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 bg-background mb-4"
+                    autoFocus
+                  />
+                  <div className="flex gap-2 justify-end">
+                    <Button variant="outline" size="sm" onClick={() => setAddRowDialog(null)}>إلغاء</Button>
+                    <Button size="sm" onClick={confirmAddDynamicRow} disabled={!newRowLabel.trim()}>إضافة</Button>
+                  </div>
+                </motion.div>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           {/* Navigation */}
           <div className="flex items-center justify-between mt-4 sm:mt-6 gap-2">

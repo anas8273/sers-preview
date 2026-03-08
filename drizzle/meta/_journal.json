@@ -15,6 +15,20 @@
       "when": 1772847524638,
       "tag": "0001_tan_ultron",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1772942239391,
+      "tag": "0002_wise_prowler",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "5",
+      "when": 1772949657975,
+      "tag": "0003_white_starhawk",
+      "breakpoints": true
     }
   ]
 }
