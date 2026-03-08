@@ -138,7 +138,7 @@ function SectionView({ section, onBack, onNavigate }: { section: Section; onBack
 
   return (
     <div>
-      <button onClick={onBack} className="flex items-center gap-2 text-gray-500 hover:text-gray-700 mb-6 transition-colors">
+      <button type="button" onClick={onBack} className="flex items-center gap-2 text-gray-500 hover:text-gray-700 mb-6 transition-colors">
         <ArrowLeft className="w-4 h-4" />
         <span className="text-sm">العودة للأقسام</span>
       </button>
@@ -296,7 +296,7 @@ export default function Home() {
       <main className="lg:mr-72 min-h-screen">
         <header className="sticky top-0 z-30 bg-white/80 backdrop-blur-md border-b border-gray-100">
           <div className="flex items-center gap-4 px-6 py-3">
-            <button onClick={() => setSidebarOpen(true)} className="lg:hidden text-gray-600">
+            <button type="button" onClick={() => setSidebarOpen(true)} className="lg:hidden text-gray-600">
               <Menu className="w-5 h-5" />
             </button>
 
@@ -310,7 +310,7 @@ export default function Home() {
                 className="w-full pr-10 pl-4 py-2.5 rounded-xl bg-gray-50 border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-400 transition-all"
               />
               {searchQuery && (
-                <button onClick={() => setSearchQuery("")} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                <button type="button" onClick={() => setSearchQuery("")} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
                   <X className="w-4 h-4" />
                 </button>
               )}

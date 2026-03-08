@@ -1,531 +1,512 @@
 /**
- * شواهد الأداء الوظيفي - النسخة النهائية المتقدمة
- * ✅ ذكاء اصطناعي API حقيقي (OpenAI compatible)
- * ✅ إضافة شاهد واحد بزر واحد (بدل 5 خانات)
- * ✅ إضافة أقسام فرعية جديدة من المستخدم
- * ✅ معاينة ذكية: صور كصور، ملفات/فيديو/روابط → باركود QR حقيقي
- * ✅ PDF بثيمات متعددة
- * ✅ حفظ واستعادة محلي
+ * شواهد الأداء الوظيفي - SERS
+ * المعلم/المعلمة → نظام المعايير الـ 11 (نمط معياري) مع 45 مؤشر
+ * باقي الوظائف → النظام العادي (البنود) مع ميزات معياري
  */
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useMemo, useRef, useCallback, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import {
-  ArrowLeft, ArrowRight, Download, Printer, Eye, ChevronDown, ChevronUp,
-  Plus, Trash2, Upload, Link as LinkIcon, QrCode, Image,
-  FileText, Video, Type, Sparkles, Save, X,
-  Bot, Lightbulb, ChevronLeft, Star, BarChart3, Layers,
-  Settings, Loader2, Send, PlusCircle, GripVertical
-} from "lucide-react";
 import { useLocation } from "wouter";
-import { exportToPDF, printElement } from "@/lib/pdf-export";
+import { toast } from "sonner";
+import { trpc } from "@/lib/trpc";
+import { useAuth } from "@/_core/hooks/useAuth";
+import { usePortfolio } from "@/hooks/usePortfolio";
+import { useOfflineSync } from "@/hooks/useOfflineSync";
+import { saveFileToIDB, getFileFromIDB, deleteFileFromIDB, cleanOldFiles } from "@/hooks/useIndexedDB";
+import { getLoginUrl } from "@/const";
 import { generateQRDataURL } from "@/lib/qr-utils";
+import { exportToPDF, printElement } from "@/lib/pdf-export";
+import { STANDARDS, type Standard, type Indicator } from "@/lib/standards-data";
+import {
+  PRINCIPAL_STANDARDS, VICE_PRINCIPAL_STANDARDS, COUNSELOR_STANDARDS,
+  HEALTH_COUNSELOR_STANDARDS, ACTIVITY_LEADER_STANDARDS, LAB_TECHNICIAN_STANDARDS,
+  KINDERGARTEN_STANDARDS, SUPERVISOR_STANDARDS, SPECIAL_ED_STANDARDS, getStandardsForJob,
+} from "@/lib/all-jobs-standards";
+import {
+  ArrowLeft, ArrowRight, Sparkles, Upload, Plus, Trash2, Save,
+  Eye, Download, Printer, FileText, Image, Video, QrCode, Type,
+  LinkIcon, Loader2, ChevronDown, ChevronUp, Layers, BarChart3,
+  CheckCircle, AlertTriangle, XCircle, TrendingUp, Wand2, X,
+  GraduationCap, Building2, Users, Heart, Search as SearchIcon,
+  BookOpen, Baby, Accessibility, Briefcase, ClipboardList,
+  ClipboardCheck, Handshake, UserCheck, Target,
+  NotebookPen, Monitor, School, Award, PieChart, ListChecks,
+  GripVertical, Move, FlaskConical, Activity, Megaphone, Share2, Globe, Copy, Link2
+} from "lucide-react";
+import type { LucideIcon } from "lucide-react";
+
+// خريطة أيقونات Lucide لاستبدال emoji
+const STANDARD_ICONS: Record<string, LucideIcon> = {
+  "std-1": ClipboardCheck,   // أداء الواجبات الوظيفية
+  "std-2": Handshake,        // التفاعل مع المجتمع المهني
+  "std-3": UserCheck,        // التفاعل مع أولياء الأمور
+  "std-4": Target,           // التنويع في استراتيجيات التدريس
+  "std-5": TrendingUp,       // تحسين نتائج المتعلمين
+  "std-6": NotebookPen,      // إعداد وتنفيذ خطة التعلم
+  "std-7": Monitor,          // توظيف تقنيات ووسائل التعلم
+  "std-8": School,           // تهيئة البيئة التعليمية
+  "std-9": Award,            // الإدارة الصفية
+  "std-10": PieChart,        // تحليل نتائج المتعلمين
+  "std-11": ListChecks,      // تنوع أساليب التقويم
+};
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import UnifiedEvidenceForm from "@/components/UnifiedEvidenceForm";
+import type { EvidenceRow } from "@/components/UnifiedEvidenceForm";
 
 // ===== أنواع البيانات =====
 type EvidenceType = "text" | "image" | "link" | "file" | "video";
-
-interface SubEvidence {
-  id: string;
-  title: string;
-  description: string;
-  type: "report" | "upload" | "both";
-  formFields?: FormField[];
-  aiSuggestions?: string[];
-  isCustom?: boolean;
-}
-
-interface FormField {
-  id: string;
-  label: string;
-  type: "text" | "textarea" | "select" | "date" | "number";
-  placeholder?: string;
-  options?: string[];
-  required?: boolean;
-}
-
+type EvidencePriority = "essential" | "supporting" | "additional";
+interface FormField { id: string; label: string; type: "text" | "textarea" | "date" | "number" | "select"; placeholder?: string; required?: boolean; options?: string[]; }
+interface SubEvidence { id: string; title: string; description: string; type: "report" | "upload" | "both"; isCustom?: boolean; isSubItem?: boolean; parentTitle?: string; formFields?: FormField[]; }
+interface Criterion { id: string; title: string; maxScore: number; description: string; subEvidences: SubEvidence[]; }
 interface EvidenceItem {
-  id: string;
-  subEvidenceId: string;
-  type: EvidenceType;
-  text: string;
-  link: string;
-  fileData: string | null;
-  fileName: string;
-  displayAs: "image" | "qr";
-  formData?: Record<string, string>;
+  id: string; subEvidenceId: string; type: EvidenceType; text: string; link: string;
+  fileData: string | null; fileName: string; displayAs: "image" | "qr"; formData?: Record<string, string>;
+  comment?: string; priority?: EvidencePriority; keywords?: string[]; showBarcode?: boolean;
+}
+interface CriterionData { score: number; notes: string; evidences: EvidenceItem[]; customSubEvidences: SubEvidence[]; }
+
+// ===== بناء البنود للوظائف غير المعلم =====
+function makeSimpleCriteria(prefix: string, items: { id: string; title: string; desc: string; subTitle: string; formFields?: FormField[] }[]): Criterion[] {
+  return items.map(item => ({
+    id: `${prefix}_${item.id}`, title: item.title, maxScore: 5, description: item.desc,
+    subEvidences: [{
+      id: `${prefix}_${item.id}_sub`, title: item.subTitle, description: item.desc, type: "both" as const,
+      formFields: item.formFields || [
+        { id: "title", label: "العنوان", type: "text" as const, placeholder: "أدخل العنوان..." },
+        { id: "date", label: "التاريخ", type: "date" as const },
+        { id: "details", label: "التفاصيل", type: "textarea" as const, placeholder: "أدخل التفاصيل..." },
+        { id: "notes", label: "ملاحظات", type: "textarea" as const, placeholder: "ملاحظات إضافية..." },
+      ],
+    }],
+  }));
 }
 
-interface CriterionData {
-  score: number;
-  notes: string;
-  evidences: EvidenceItem[];
-  customSubEvidences: SubEvidence[];
-}
-
-// ===== البنود الحقيقية لتقييم أداء المعلم (12 بند) =====
-const TEACHER_CRITERIA = [
-  {
-    id: "t1", title: "أداء الواجبات الوظيفية", maxScore: 5,
-    description: "الالتزام بالحضور والانصراف وتنفيذ المهام الموكلة والمشاركة في الأعمال المدرسية",
-    subEvidences: [
+// ===== دالة عامة لبناء بنود أي وظيفة من النظام المعياري (3 مستويات) =====
+function buildStandardsCriteria(standards: Standard[]): Criterion[] {
+  return standards.map(std => ({
+    id: std.id,
+    title: std.title,
+    maxScore: 5,
+    description: `${std.items.length} بند \u00B7 الوزن ${std.weight}%`,
+    subEvidences: std.items.flatMap(item => [
       {
-        id: "t1-1", title: "تقرير تنفيذ إذاعة مدرسية", description: "توثيق تنفيذ الإذاعة المدرسية",
-        type: "report" as const,
-        formFields: [
-          { id: "topic", label: "موضوع الإذاعة", type: "text" as const, placeholder: "مثال: اليوم الوطني", required: true },
-          { id: "date", label: "تاريخ التنفيذ", type: "date" as const, required: true },
-          { id: "students_count", label: "عدد الطلاب المشاركين", type: "number" as const, placeholder: "مثال: 8" },
-          { id: "segments", label: "فقرات الإذاعة", type: "textarea" as const, placeholder: "القرآن الكريم - الحديث الشريف - كلمة الصباح..." },
-          { id: "notes", label: "ملاحظات إضافية", type: "textarea" as const, placeholder: "أي ملاحظات حول التنفيذ" },
-        ],
-        aiSuggestions: ["تقرير إذاعة مدرسية", "توثيق فقرات الإذاعة"],
-      },
-      {
-        id: "t1-2", title: "تقرير تنفيذ نشاط لا صفي", description: "توثيق الأنشطة اللاصفية",
-        type: "report" as const,
-        formFields: [
-          { id: "activity_name", label: "اسم النشاط", type: "text" as const, placeholder: "مثال: مسابقة القراءة", required: true },
-          { id: "date", label: "تاريخ التنفيذ", type: "date" as const, required: true },
-          { id: "target_group", label: "الفئة المستهدفة", type: "text" as const, placeholder: "مثال: طلاب الصف الرابع" },
-          { id: "objectives", label: "أهداف النشاط", type: "textarea" as const, placeholder: "الأهداف المراد تحقيقها..." },
-          { id: "description", label: "وصف النشاط", type: "textarea" as const, placeholder: "وصف تفصيلي..." },
-          { id: "results", label: "النتائج والتوصيات", type: "textarea" as const, placeholder: "ما تم تحقيقه..." },
-        ],
-        aiSuggestions: ["تقرير نشاط لاصفي", "توثيق الأنشطة"],
-      },
-      {
-        id: "t1-3", title: "تقرير حصة انتظار", description: "توثيق حصص الانتظار",
-        type: "report" as const,
-        formFields: [
-          { id: "class", label: "الصف والفصل", type: "text" as const, placeholder: "مثال: 3/أ", required: true },
-          { id: "date", label: "تاريخ الحصة", type: "date" as const, required: true },
-          { id: "period", label: "رقم الحصة", type: "select" as const, options: ["الأولى", "الثانية", "الثالثة", "الرابعة", "الخامسة", "السادسة", "السابعة"] },
-          { id: "activities", label: "الأنشطة المنفذة", type: "textarea" as const, placeholder: "ما تم تنفيذه..." },
-        ],
-        aiSuggestions: ["تقرير حصة انتظار"],
-      },
-      {
-        id: "t1-4", title: "المشاركة في لجان المدرسة", description: "توثيق المشاركة في اللجان",
-        type: "report" as const,
-        formFields: [
-          { id: "committee_name", label: "اسم اللجنة", type: "text" as const, placeholder: "مثال: لجنة الاختبارات", required: true },
-          { id: "role", label: "الدور في اللجنة", type: "text" as const, placeholder: "عضو / مقرر / رئيس" },
-          { id: "tasks", label: "المهام المنفذة", type: "textarea" as const, placeholder: "المهام التي تم تنفيذها..." },
-        ],
-        aiSuggestions: ["تقرير مشاركة في لجنة"],
-      },
-      {
-        id: "t1-5", title: "الإشراف اليومي", description: "توثيق الإشراف اليومي",
+        id: item.id,
+        title: item.text,
+        description: item.suggestedEvidence.join(" \u00B7 "),
         type: "both" as const,
         formFields: [
-          { id: "location", label: "مكان الإشراف", type: "select" as const, options: ["البوابة الرئيسية", "الفناء", "الممرات", "المقصف", "المصلى", "أخرى"] },
-          { id: "date", label: "التاريخ", type: "date" as const, required: true },
-          { id: "observations", label: "الملاحظات", type: "textarea" as const, placeholder: "ملاحظات الإشراف..." },
+          { id: "evidence_desc", label: "\u0648\u0635\u0641 \u0627\u0644\u0634\u0627\u0647\u062F", type: "textarea" as const, placeholder: "\u0627\u0643\u062A\u0628 \u0648\u0635\u0641\u0627\u064B \u0644\u0644\u0634\u0627\u0647\u062F \u0627\u0644\u0645\u0642\u062F\u0645..." },
+          { id: "date", label: "\u0627\u0644\u062A\u0627\u0631\u064A\u062E", type: "date" as const },
+          { id: "notes", label: "\u0645\u0644\u0627\u062D\u0638\u0627\u062A", type: "textarea" as const, placeholder: "\u0645\u0644\u0627\u062D\u0638\u0627\u062A \u0625\u0636\u0627\u0641\u064A\u0629..." },
         ],
-        aiSuggestions: ["تقرير إشراف يومي"],
       },
-    ],
-  },
-  {
-    id: "t2", title: "التفاعل مع المجتمع المهني", maxScore: 5,
-    description: "المشاركة في مجتمعات التعلم المهنية والزيارات التبادلية",
-    subEvidences: [
-      { id: "t2-1", title: "تقرير تبادل الزيارات", description: "توثيق الزيارات التبادلية الصفية", type: "report" as const,
+      ...(item.subItems || []).map(sub => ({
+        id: sub.id,
+        title: sub.title,
+        description: sub.suggestedEvidence.join(" \u00B7 "),
+        type: "both" as const,
+        isSubItem: true,
+        parentTitle: item.text,
         formFields: [
-          { id: "visited_teacher", label: "اسم المعلم/ة", type: "text" as const, required: true },
-          { id: "subject", label: "المادة", type: "text" as const, required: true },
-          { id: "date", label: "تاريخ الزيارة", type: "date" as const, required: true },
-          { id: "lesson", label: "عنوان الدرس", type: "text" as const },
-          { id: "strengths", label: "نقاط القوة", type: "textarea" as const },
-          { id: "improvements", label: "نقاط التحسين", type: "textarea" as const },
-        ], aiSuggestions: ["تقرير زيارة تبادلية"] },
-      { id: "t2-2", title: "محضر مجتمع التعلم المهني", description: "توثيق اجتماعات مجتمع التعلم", type: "report" as const,
-        formFields: [
-          { id: "topic", label: "الموضوع", type: "text" as const, required: true },
-          { id: "date", label: "التاريخ", type: "date" as const, required: true },
-          { id: "attendees", label: "الحضور", type: "textarea" as const },
-          { id: "outcomes", label: "المخرجات", type: "textarea" as const },
-        ], aiSuggestions: ["محضر مجتمع تعلم مهني"] },
-      { id: "t2-3", title: "بحث الدرس", description: "توثيق بحث الدرس التعاوني", type: "report" as const,
-        formFields: [
-          { id: "lesson", label: "عنوان الدرس", type: "text" as const, required: true },
-          { id: "team", label: "فريق العمل", type: "textarea" as const },
-          { id: "findings", label: "النتائج", type: "textarea" as const },
-        ], aiSuggestions: ["تقرير بحث درس"] },
-      { id: "t2-4", title: "شهادات الدورات التدريبية", description: "توثيق الدورات والورش", type: "upload" as const, aiSuggestions: ["شهادة دورة تدريبية"] },
-    ],
-  },
-  {
-    id: "t3", title: "التفاعل مع أولياء الأمور والمجتمع", maxScore: 5,
-    description: "التواصل الفعال مع أولياء الأمور وتعزيز الشراكة المجتمعية",
-    subEvidences: [
-      { id: "t3-1", title: "سجل التواصل مع أولياء الأمور", description: "توثيق التواصل", type: "report" as const,
-        formFields: [
-          { id: "parent_name", label: "اسم ولي الأمر", type: "text" as const },
-          { id: "student_name", label: "اسم الطالب", type: "text" as const },
-          { id: "date", label: "التاريخ", type: "date" as const },
-          { id: "method", label: "وسيلة التواصل", type: "select" as const, options: ["حضوري", "هاتفي", "رسالة نصية", "تطبيق مدرستي", "أخرى"] },
-          { id: "topic", label: "الموضوع", type: "textarea" as const },
-        ], aiSuggestions: ["تقرير تواصل مع ولي أمر"] },
-      { id: "t3-2", title: "تقرير مشاركة مجتمعية", description: "توثيق الشراكات المجتمعية", type: "both" as const,
-        formFields: [
-          { id: "activity", label: "النشاط", type: "text" as const },
-          { id: "partner", label: "الجهة الشريكة", type: "text" as const },
-          { id: "description", label: "الوصف", type: "textarea" as const },
-        ], aiSuggestions: ["تقرير مشاركة مجتمعية"] },
-    ],
-  },
-  {
-    id: "t4", title: "التنوع في استراتيجيات التدريس", maxScore: 5,
-    description: "استخدام استراتيجيات تدريس متنوعة وفعالة تراعي الفروق الفردية",
-    subEvidences: [
-      { id: "t4-1", title: "تقرير تطبيق استراتيجية", description: "توثيق تطبيق استراتيجية تدريسية", type: "report" as const,
-        formFields: [
-          { id: "strategy_name", label: "اسم الاستراتيجية", type: "text" as const, required: true },
-          { id: "subject", label: "المادة", type: "text" as const },
-          { id: "lesson", label: "الدرس", type: "text" as const },
-          { id: "steps", label: "خطوات التنفيذ", type: "textarea" as const },
-          { id: "results", label: "النتائج", type: "textarea" as const },
-        ], aiSuggestions: ["تقرير تطبيق استراتيجية تدريسية"] },
-      { id: "t4-2", title: "صور/فيديو تطبيق الاستراتيجيات", description: "توثيق بصري", type: "upload" as const, aiSuggestions: ["صور تطبيق استراتيجيات"] },
-    ],
-  },
-  {
-    id: "t5", title: "تحسين نتائج المتعلمين", maxScore: 5,
-    description: "العمل على رفع مستوى تحصيل الطلاب وتحسين نتائجهم",
-    subEvidences: [
-      { id: "t5-1", title: "خطة تحسين النتائج", description: "خطة لتحسين مستوى الطلاب", type: "report" as const,
-        formFields: [
-          { id: "subject", label: "المادة", type: "text" as const, required: true },
-          { id: "current_level", label: "المستوى الحالي", type: "textarea" as const },
-          { id: "target", label: "المستوى المستهدف", type: "textarea" as const },
-          { id: "strategies", label: "الاستراتيجيات المتبعة", type: "textarea" as const },
-        ], aiSuggestions: ["خطة تحسين نتائج"] },
-      { id: "t5-2", title: "مقارنة النتائج قبل وبعد", description: "مقارنة النتائج", type: "both" as const,
-        formFields: [
-          { id: "before", label: "النتائج قبل", type: "textarea" as const },
-          { id: "after", label: "النتائج بعد", type: "textarea" as const },
-          { id: "analysis", label: "التحليل", type: "textarea" as const },
-        ], aiSuggestions: ["مقارنة نتائج قبل وبعد"] },
-      { id: "t5-3", title: "برامج التقوية والمعالجة", description: "توثيق برامج التقوية", type: "report" as const,
-        formFields: [
-          { id: "program", label: "اسم البرنامج", type: "text" as const },
-          { id: "target_students", label: "الطلاب المستهدفون", type: "textarea" as const },
-          { id: "activities", label: "الأنشطة", type: "textarea" as const },
-        ], aiSuggestions: ["تقرير برنامج تقوية"] },
-    ],
-  },
-  {
-    id: "t6", title: "إعداد وتنفيذ خطة التعلم", maxScore: 5,
-    description: "إعداد خطط الدروس وتنفيذها بفاعلية مع تحقيق الأهداف التعليمية",
-    subEvidences: [
-      { id: "t6-1", title: "التحضير اليومي", description: "نماذج تحضير الدروس", type: "both" as const,
-        formFields: [
-          { id: "subject", label: "المادة", type: "text" as const },
-          { id: "lesson", label: "عنوان الدرس", type: "text" as const },
-          { id: "objectives", label: "الأهداف", type: "textarea" as const },
-          { id: "activities", label: "الأنشطة", type: "textarea" as const },
-          { id: "assessment", label: "التقويم", type: "textarea" as const },
-        ], aiSuggestions: ["نموذج تحضير درس"] },
-      { id: "t6-2", title: "توزيع المنهج", description: "خطة توزيع المنهج", type: "both" as const,
-        formFields: [
-          { id: "subject", label: "المادة", type: "text" as const },
-          { id: "semester", label: "الفصل الدراسي", type: "text" as const },
-          { id: "distribution", label: "التوزيع", type: "textarea" as const },
-        ], aiSuggestions: ["توزيع منهج دراسي"] },
-      { id: "t6-3", title: "خريطة نواتج التعلم", description: "خريطة المنهج", type: "both" as const,
-        formFields: [
-          { id: "subject", label: "المادة", type: "text" as const },
-          { id: "outcomes", label: "نواتج التعلم", type: "textarea" as const },
-        ], aiSuggestions: ["خريطة نواتج تعلم"] },
-    ],
-  },
-  {
-    id: "t7", title: "توظيف تقنيات ووسائل التعلم", maxScore: 5,
-    description: "استخدام التقنية والوسائل التعليمية بفاعلية في العملية التعليمية",
-    subEvidences: [
-      { id: "t7-1", title: "تقرير توظيف التقنية", description: "توثيق استخدام التقنية", type: "report" as const,
-        formFields: [
-          { id: "tool", label: "الأداة/التطبيق", type: "text" as const, required: true },
-          { id: "subject", label: "المادة", type: "text" as const },
-          { id: "usage", label: "كيفية الاستخدام", type: "textarea" as const },
-          { id: "impact", label: "الأثر على التعلم", type: "textarea" as const },
-        ], aiSuggestions: ["تقرير توظيف تقنية تعليمية"] },
-      { id: "t7-2", title: "وسائل تعليمية", description: "توثيق الوسائل التعليمية", type: "both" as const,
-        formFields: [
-          { id: "tool_name", label: "اسم الوسيلة", type: "text" as const },
-          { id: "description", label: "الوصف", type: "textarea" as const },
-        ], aiSuggestions: ["وسيلة تعليمية مبتكرة"] },
-    ],
-  },
-  {
-    id: "t8", title: "تهيئة البيئة التعليمية", maxScore: 5,
-    description: "توفير بيئة تعليمية محفزة وآمنة تدعم التعلم الفعال",
-    subEvidences: [
-      { id: "t8-1", title: "صور البيئة الصفية", description: "توثيق بصري للبيئة الصفية", type: "upload" as const, aiSuggestions: ["صور البيئة الصفية المحفزة"] },
-      { id: "t8-2", title: "ركن التعلم", description: "توثيق أركان التعلم", type: "both" as const,
-        formFields: [
-          { id: "corner_name", label: "اسم الركن", type: "text" as const },
-          { id: "description", label: "الوصف", type: "textarea" as const },
-        ], aiSuggestions: ["ركن تعلم مبتكر"] },
-    ],
-  },
-  {
-    id: "t9", title: "الإدارة الصفية", maxScore: 5,
-    description: "إدارة الصف بفاعلية وتوفير بيئة آمنة ومنظمة",
-    subEvidences: [
-      { id: "t9-1", title: "قوانين الصف", description: "قوانين الصف المتفق عليها", type: "both" as const,
-        formFields: [
-          { id: "rules", label: "قوانين الصف", type: "textarea" as const, placeholder: "1. الاستئذان\n2. احترام الآخرين..." },
-          { id: "rewards", label: "نظام المكافآت", type: "textarea" as const },
-        ], aiSuggestions: ["قوانين صفية"] },
-      { id: "t9-2", title: "خطة السلوك الإيجابي", description: "تعزيز السلوك الإيجابي", type: "report" as const,
-        formFields: [
-          { id: "behaviors", label: "السلوكيات المستهدفة", type: "textarea" as const },
-          { id: "reinforcement", label: "أساليب التعزيز", type: "textarea" as const },
-        ], aiSuggestions: ["خطة سلوك إيجابي"] },
-    ],
-  },
-  {
-    id: "t10", title: "تحليل نتائج المتعلمين", maxScore: 5,
-    description: "تحليل نتائج الطلاب وتشخيص نقاط القوة والضعف",
-    subEvidences: [
-      { id: "t10-1", title: "تحليل نتائج مادة", description: "تحليل نتائج مادة لصف", type: "both" as const,
-        formFields: [
-          { id: "subject", label: "المادة", type: "text" as const, required: true },
-          { id: "class", label: "الصف والفصل", type: "text" as const, required: true },
-          { id: "period", label: "الفترة", type: "select" as const, options: ["الأولى", "الثانية", "الثالثة", "النهائي"] },
-          { id: "total_students", label: "عدد الطلاب", type: "number" as const },
-          { id: "pass_count", label: "عدد الناجحين", type: "number" as const },
-          { id: "fail_count", label: "عدد الراسبين", type: "number" as const },
-          { id: "average", label: "المتوسط", type: "number" as const },
-          { id: "analysis", label: "التحليل والتوصيات", type: "textarea" as const },
-        ], aiSuggestions: ["تحليل نتائج مادة دراسية"] },
-      { id: "t10-2", title: "كشف تصنيف الطلاب", description: "تصنيف حسب المستوى", type: "report" as const,
-        formFields: [
-          { id: "subject", label: "المادة", type: "text" as const },
-          { id: "excellent", label: "متفوقون (90-100)", type: "textarea" as const },
-          { id: "good", label: "جيد جداً (80-89)", type: "textarea" as const },
-          { id: "average", label: "جيد (70-79)", type: "textarea" as const },
-          { id: "weak", label: "ضعيف (أقل من 60)", type: "textarea" as const },
-        ], aiSuggestions: ["كشف تصنيف طلاب"] },
-    ],
-  },
-  {
-    id: "t11", title: "تنوع أساليب التقويم", maxScore: 5,
-    description: "استخدام أساليب تقويم متنوعة لقياس مستوى التحصيل",
-    subEvidences: [
-      { id: "t11-1", title: "اختبار تشخيصي / قبلي", description: "نموذج اختبار تشخيصي", type: "both" as const,
-        formFields: [
-          { id: "subject", label: "المادة", type: "text" as const, required: true },
-          { id: "skills", label: "المهارات المستهدفة", type: "textarea" as const },
-          { id: "results_summary", label: "ملخص النتائج", type: "textarea" as const },
-        ], aiSuggestions: ["اختبار تشخيصي"] },
-      { id: "t11-2", title: "تقويم بديل (مشروع/ملف إنجاز)", description: "أساليب تقويم بديلة", type: "both" as const,
-        formFields: [
-          { id: "type", label: "نوع التقويم", type: "select" as const, options: ["مشروع", "ملف إنجاز", "عرض تقديمي", "بحث", "أخرى"] },
-          { id: "description", label: "الوصف", type: "textarea" as const },
-          { id: "criteria", label: "معايير التقييم", type: "textarea" as const },
-        ], aiSuggestions: ["تقويم بديل"] },
-      { id: "t11-3", title: "سلالم التقدير (روبريك)", description: "معايير تقييم واضحة", type: "both" as const,
-        formFields: [
-          { id: "skill", label: "المهارة", type: "text" as const },
-          { id: "levels", label: "مستويات الأداء", type: "textarea" as const },
-        ], aiSuggestions: ["سلم تقدير"] },
-    ],
-  },
-  {
-    id: "t12", title: "البرامج والأنشطة الطلابية", maxScore: 5,
-    description: "المشاركة في تنفيذ البرامج والأنشطة الطلابية المتنوعة",
-    subEvidences: [
-      { id: "t12-1", title: "تقرير برنامج طلابي", description: "توثيق تنفيذ برنامج", type: "report" as const,
-        formFields: [
-          { id: "program_name", label: "اسم البرنامج", type: "text" as const, required: true },
-          { id: "date", label: "التاريخ", type: "date" as const },
-          { id: "target", label: "الفئة المستهدفة", type: "text" as const },
-          { id: "description", label: "الوصف", type: "textarea" as const },
-          { id: "results", label: "النتائج", type: "textarea" as const },
-        ], aiSuggestions: ["تقرير برنامج طلابي"] },
-      { id: "t12-2", title: "صور الأنشطة والبرامج", description: "توثيق بصري", type: "upload" as const, aiSuggestions: ["صور أنشطة طلابية"] },
-      { id: "t12-3", title: "خطة النشاط الطلابي", description: "خطة الأنشطة", type: "report" as const,
-        formFields: [
-          { id: "semester", label: "الفصل", type: "text" as const },
-          { id: "activities", label: "الأنشطة المخططة", type: "textarea" as const },
-          { id: "timeline", label: "الجدول الزمني", type: "textarea" as const },
-        ], aiSuggestions: ["خطة نشاط طلابي"] },
-    ],
-  },
-];
+          { id: "evidence_desc", label: "\u0648\u0635\u0641 \u0627\u0644\u0634\u0627\u0647\u062F", type: "textarea" as const, placeholder: "\u0627\u0643\u062A\u0628 \u0648\u0635\u0641\u0627\u064B \u0644\u0644\u0634\u0627\u0647\u062F \u0627\u0644\u0645\u0642\u062F\u0645..." },
+          { id: "date", label: "\u0627\u0644\u062A\u0627\u0631\u064A\u062E", type: "date" as const },
+          { id: "notes", label: "\u0645\u0644\u0627\u062D\u0638\u0627\u062A", type: "textarea" as const, placeholder: "\u0645\u0644\u0627\u062D\u0638\u0627\u062A \u0625\u0636\u0627\u0641\u064A\u0629..." },
+        ],
+      })),
+    ]),
+  }));
+}
 
-// ===== بنود بقية الوظائف =====
-const PRINCIPAL_CRITERIA = [
-  { id: "p1", title: "القيادة المدرسية", maxScore: 5, description: "قيادة المدرسة بفاعلية", subEvidences: [
-    { id: "p1-1", title: "الخطة التشغيلية", type: "both" as const, description: "إعداد الخطة التشغيلية", formFields: [{ id: "plan", label: "ملخص الخطة", type: "textarea" as const }], aiSuggestions: ["خطة تشغيلية"] },
-    { id: "p1-2", title: "محاضر اجتماعات مجلس المدرسة", type: "both" as const, description: "توثيق الاجتماعات", formFields: [{ id: "meeting", label: "ملخص الاجتماع", type: "textarea" as const }], aiSuggestions: ["محضر اجتماع"] },
-  ]},
-  { id: "p2", title: "التخطيط الاستراتيجي", maxScore: 5, description: "وضع خطط استراتيجية", subEvidences: [{ id: "p2-1", title: "الخطة الاستراتيجية", type: "both" as const, description: "الخطة الاستراتيجية", formFields: [{ id: "strategy", label: "ملخص الخطة", type: "textarea" as const }], aiSuggestions: ["خطة استراتيجية"] }] },
-  { id: "p3", title: "إدارة الموارد البشرية", maxScore: 5, description: "إدارة وتطوير الكوادر", subEvidences: [{ id: "p3-1", title: "خطة التطوير المهني", type: "both" as const, description: "تطوير المعلمين", formFields: [{ id: "plan", label: "ملخص الخطة", type: "textarea" as const }], aiSuggestions: ["خطة تطوير مهني"] }] },
-  { id: "p4", title: "إدارة البيئة المدرسية", maxScore: 5, description: "توفير بيئة آمنة", subEvidences: [{ id: "p4-1", title: "تقرير السلامة", type: "report" as const, description: "تقرير السلامة", formFields: [{ id: "report", label: "التقرير", type: "textarea" as const }], aiSuggestions: ["تقرير سلامة"] }] },
-  { id: "p5", title: "العلاقات المجتمعية", maxScore: 5, description: "تعزيز الشراكة", subEvidences: [{ id: "p5-1", title: "سجل الشراكة المجتمعية", type: "both" as const, description: "توثيق الشراكات", formFields: [{ id: "partnership", label: "التفاصيل", type: "textarea" as const }], aiSuggestions: ["شراكة مجتمعية"] }] },
-  { id: "p6", title: "التطوير المهني", maxScore: 5, description: "دعم التطوير", subEvidences: [{ id: "p6-1", title: "خطة التدريب", type: "both" as const, description: "خطة التدريب", formFields: [{ id: "plan", label: "الملخص", type: "textarea" as const }], aiSuggestions: ["خطة تدريب"] }] },
-  { id: "p7", title: "الإشراف على العملية التعليمية", maxScore: 5, description: "متابعة العملية التعليمية", subEvidences: [{ id: "p7-1", title: "سجل الزيارات الصفية", type: "both" as const, description: "توثيق الزيارات", formFields: [{ id: "visits", label: "الملخص", type: "textarea" as const }], aiSuggestions: ["سجل زيارات صفية"] }] },
-  { id: "p8", title: "تحسين نتائج الطلاب", maxScore: 5, description: "رفع مستوى التحصيل", subEvidences: [{ id: "p8-1", title: "تقرير تحليل النتائج", type: "both" as const, description: "تحليل النتائج", formFields: [{ id: "analysis", label: "التحليل", type: "textarea" as const }], aiSuggestions: ["تحليل نتائج"] }] },
-  { id: "p9", title: "إدارة الأزمات", maxScore: 5, description: "الاستعداد للأزمات", subEvidences: [{ id: "p9-1", title: "خطة إدارة الأزمات", type: "both" as const, description: "خطة الطوارئ", formFields: [{ id: "plan", label: "الملخص", type: "textarea" as const }], aiSuggestions: ["خطة أزمات"] }] },
-];
+// ===== بنود جميع الوظائف (نظام معياري رسمي - 3 مستويات) =====
+const TEACHER_CRITERIA = buildStandardsCriteria(STANDARDS);
+const PRINCIPAL_CRITERIA = buildStandardsCriteria(PRINCIPAL_STANDARDS);
+const VICE_PRINCIPAL_CRITERIA = buildStandardsCriteria(VICE_PRINCIPAL_STANDARDS);
+const COUNSELOR_CRITERIA = buildStandardsCriteria(COUNSELOR_STANDARDS);
+const HEALTH_COUNSELOR_CRITERIA = buildStandardsCriteria(HEALTH_COUNSELOR_STANDARDS);
+const ACTIVITY_LEADER_CRITERIA = buildStandardsCriteria(ACTIVITY_LEADER_STANDARDS);
+const LAB_TECHNICIAN_CRITERIA = buildStandardsCriteria(LAB_TECHNICIAN_STANDARDS);
+const KINDERGARTEN_CRITERIA = buildStandardsCriteria(KINDERGARTEN_STANDARDS);
+const SUPERVISOR_CRITERIA = buildStandardsCriteria(SUPERVISOR_STANDARDS);
 
-const VICE_PRINCIPAL_CRITERIA = [
-  { id: "v1", title: "المشاركة في التخطيط", maxScore: 5, description: "المشاركة في إعداد الخطط", subEvidences: [{ id: "v1-1", title: "الخطة التشغيلية", type: "both" as const, description: "المشاركة في الخطة", formFields: [{ id: "plan", label: "الملخص", type: "textarea" as const }], aiSuggestions: ["خطة تشغيلية"] }] },
-  { id: "v2", title: "متابعة الحضور والغياب", maxScore: 5, description: "متابعة الحضور", subEvidences: [{ id: "v2-1", title: "سجل الحضور", type: "both" as const, description: "توثيق الحضور", formFields: [{ id: "record", label: "الملخص", type: "textarea" as const }], aiSuggestions: ["سجل حضور"] }] },
-  { id: "v3", title: "الإشراف على الاختبارات", maxScore: 5, description: "تنظيم الاختبارات", subEvidences: [{ id: "v3-1", title: "جدول الاختبارات", type: "both" as const, description: "إعداد الجداول", formFields: [{ id: "schedule", label: "الجدول", type: "textarea" as const }], aiSuggestions: ["جدول اختبارات"] }] },
-  { id: "v4", title: "متابعة النظام والانضباط", maxScore: 5, description: "الحفاظ على النظام", subEvidences: [{ id: "v4-1", title: "سجل الملاحظات السلوكية", type: "both" as const, description: "توثيق السلوك", formFields: [{ id: "notes", label: "الملاحظات", type: "textarea" as const }], aiSuggestions: ["سجل سلوكي"] }] },
-  { id: "v5", title: "إدارة شؤون الطلاب", maxScore: 5, description: "إدارة الشؤون", subEvidences: [{ id: "v5-1", title: "سجل شؤون الطلاب", type: "both" as const, description: "توثيق الشؤون", formFields: [{ id: "record", label: "الملخص", type: "textarea" as const }], aiSuggestions: ["سجل شؤون طلاب"] }] },
-  { id: "v6", title: "التواصل مع أولياء الأمور", maxScore: 5, description: "التواصل المستمر", subEvidences: [{ id: "v6-1", title: "سجل التواصل", type: "both" as const, description: "توثيق التواصل", formFields: [{ id: "comm", label: "الملخص", type: "textarea" as const }], aiSuggestions: ["سجل تواصل"] }] },
-  { id: "v7", title: "الإشراف على الأنشطة", maxScore: 5, description: "الإشراف على الأنشطة", subEvidences: [{ id: "v7-1", title: "خطة الأنشطة", type: "both" as const, description: "توثيق الأنشطة", formFields: [{ id: "activities", label: "الملخص", type: "textarea" as const }], aiSuggestions: ["خطة أنشطة"] }] },
-];
+// ===== بنود الوظائف التي ليس لها معايير رسمية (تبقى بسيطة) =====
+const LIBRARIAN_CRITERIA = makeSimpleCriteria("l", [
+  { id: "1", title: "تنظيم مصادر التعلم", desc: "تنظيم وفهرسة المصادر", subTitle: "سجل المصادر" },
+  { id: "2", title: "خدمة المستفيدين", desc: "تقديم خدمات متميزة", subTitle: "سجل الإعارة" },
+  { id: "3", title: "التقنيات التعليمية", desc: "توظيف التقنيات", subTitle: "تقرير التقنيات" },
+  { id: "4", title: "البرامج والأنشطة", desc: "تنفيذ البرامج", subTitle: "خطة البرامج" },
+]);
 
-const COUNSELOR_CRITERIA = [
-  { id: "c1", title: "التوجيه والإرشاد الفردي", maxScore: 5, description: "تقديم خدمات الإرشاد", subEvidences: [{ id: "c1-1", title: "سجل الحالات الفردية", type: "both" as const, description: "توثيق الحالات", formFields: [{ id: "cases", label: "الملخص", type: "textarea" as const }], aiSuggestions: ["سجل حالات فردية"] }] },
-  { id: "c2", title: "التوجيه الجماعي", maxScore: 5, description: "تنفيذ برامج جماعية", subEvidences: [{ id: "c2-1", title: "خطة البرامج الجماعية", type: "both" as const, description: "توثيق البرامج", formFields: [{ id: "programs", label: "الملخص", type: "textarea" as const }], aiSuggestions: ["برنامج إرشاد جماعي"] }] },
-  { id: "c3", title: "البرامج الوقائية", maxScore: 5, description: "تنفيذ البرامج الوقائية", subEvidences: [{ id: "c3-1", title: "خطة البرامج الوقائية", type: "both" as const, description: "توثيق البرامج", formFields: [{ id: "programs", label: "الملخص", type: "textarea" as const }], aiSuggestions: ["برنامج وقائي"] }] },
-  { id: "c4", title: "البرامج العلاجية", maxScore: 5, description: "تنفيذ البرامج العلاجية", subEvidences: [{ id: "c4-1", title: "خطط العلاج", type: "both" as const, description: "توثيق العلاج", formFields: [{ id: "plans", label: "الملخص", type: "textarea" as const }], aiSuggestions: ["برنامج علاجي"] }] },
-  { id: "c5", title: "التواصل مع أولياء الأمور", maxScore: 5, description: "التواصل المستمر", subEvidences: [{ id: "c5-1", title: "سجل التواصل", type: "both" as const, description: "توثيق التواصل", formFields: [{ id: "comm", label: "الملخص", type: "textarea" as const }], aiSuggestions: ["سجل تواصل"] }] },
-  { id: "c6", title: "دراسة الحالات السلوكية", maxScore: 5, description: "دراسة الحالات", subEvidences: [{ id: "c6-1", title: "ملفات الحالات", type: "both" as const, description: "توثيق الدراسة", formFields: [{ id: "cases", label: "الملخص", type: "textarea" as const }], aiSuggestions: ["دراسة حالة سلوكية"] }] },
-  { id: "c7", title: "التقارير والإحصاءات", maxScore: 5, description: "إعداد التقارير", subEvidences: [{ id: "c7-1", title: "التقارير الشهرية", type: "both" as const, description: "توثيق التقارير", formFields: [{ id: "reports", label: "الملخص", type: "textarea" as const }], aiSuggestions: ["تقرير شهري"] }] },
-];
+const SPECIAL_ED_CRITERIA = buildStandardsCriteria(SPECIAL_ED_STANDARDS);
 
-const HEALTH_COUNSELOR_CRITERIA = [
-  { id: "h1", title: "التثقيف الصحي", maxScore: 5, description: "تنفيذ برامج التثقيف", subEvidences: [{ id: "h1-1", title: "خطة التثقيف الصحي", type: "both" as const, description: "توثيق البرامج", formFields: [{ id: "plan", label: "الملخص", type: "textarea" as const }], aiSuggestions: ["برنامج تثقيف صحي"] }] },
-  { id: "h2", title: "الإسعافات الأولية", maxScore: 5, description: "تقديم الإسعافات", subEvidences: [{ id: "h2-1", title: "سجل الإسعافات", type: "both" as const, description: "توثيق الإسعافات", formFields: [{ id: "record", label: "الملخص", type: "textarea" as const }], aiSuggestions: ["سجل إسعافات"] }] },
-  { id: "h3", title: "البيئة الصحية", maxScore: 5, description: "متابعة البيئة الصحية", subEvidences: [{ id: "h3-1", title: "تقارير المتابعة", type: "both" as const, description: "توثيق المتابعة", formFields: [{ id: "reports", label: "الملخص", type: "textarea" as const }], aiSuggestions: ["تقرير بيئة صحية"] }] },
-  { id: "h4", title: "متابعة الحالات الصحية", maxScore: 5, description: "متابعة الحالات المزمنة", subEvidences: [{ id: "h4-1", title: "سجل الحالات", type: "both" as const, description: "توثيق الحالات", formFields: [{ id: "cases", label: "الملخص", type: "textarea" as const }], aiSuggestions: ["سجل حالات صحية"] }] },
-  { id: "h5", title: "التقارير الصحية", maxScore: 5, description: "إعداد التقارير", subEvidences: [{ id: "h5-1", title: "التقارير الشهرية", type: "both" as const, description: "توثيق التقارير", formFields: [{ id: "reports", label: "الملخص", type: "textarea" as const }], aiSuggestions: ["تقرير صحي شهري"] }] },
-];
-
-const SUPERVISOR_CRITERIA = [
-  { id: "s1", title: "التخطيط للإشراف", maxScore: 5, description: "إعداد خطط إشرافية", subEvidences: [{ id: "s1-1", title: "الخطة الإشرافية", type: "both" as const, description: "توثيق الخطة", formFields: [{ id: "plan", label: "الملخص", type: "textarea" as const }], aiSuggestions: ["خطة إشرافية"] }] },
-  { id: "s2", title: "الزيارات الصفية", maxScore: 5, description: "تنفيذ الزيارات", subEvidences: [{ id: "s2-1", title: "سجل الزيارات", type: "both" as const, description: "توثيق الزيارات", formFields: [{ id: "visits", label: "الملخص", type: "textarea" as const }], aiSuggestions: ["سجل زيارات صفية"] }] },
-  { id: "s3", title: "تطوير المعلمين", maxScore: 5, description: "دعم التطوير المهني", subEvidences: [{ id: "s3-1", title: "خطة التطوير", type: "both" as const, description: "توثيق التطوير", formFields: [{ id: "plan", label: "الملخص", type: "textarea" as const }], aiSuggestions: ["خطة تطوير مهني"] }] },
-  { id: "s4", title: "تحليل نتائج الطلاب", maxScore: 5, description: "تحليل النتائج", subEvidences: [{ id: "s4-1", title: "تقارير التحليل", type: "both" as const, description: "توثيق التحليل", formFields: [{ id: "analysis", label: "الملخص", type: "textarea" as const }], aiSuggestions: ["تحليل نتائج"] }] },
-  { id: "s5", title: "البرامج التدريبية", maxScore: 5, description: "تنفيذ البرامج", subEvidences: [{ id: "s5-1", title: "خطة التدريب", type: "both" as const, description: "توثيق التدريب", formFields: [{ id: "plan", label: "الملخص", type: "textarea" as const }], aiSuggestions: ["برنامج تدريبي"] }] },
-];
-
-const LIBRARIAN_CRITERIA = [
-  { id: "l1", title: "تنظيم مصادر التعلم", maxScore: 5, description: "تنظيم وفهرسة المصادر", subEvidences: [{ id: "l1-1", title: "سجل المصادر", type: "both" as const, description: "توثيق المصادر", formFields: [{ id: "record", label: "الملخص", type: "textarea" as const }], aiSuggestions: ["سجل مصادر تعلم"] }] },
-  { id: "l2", title: "خدمة المستفيدين", maxScore: 5, description: "تقديم خدمات متميزة", subEvidences: [{ id: "l2-1", title: "سجل الإعارة", type: "both" as const, description: "توثيق الإعارة", formFields: [{ id: "record", label: "الملخص", type: "textarea" as const }], aiSuggestions: ["سجل إعارة"] }] },
-  { id: "l3", title: "التقنيات التعليمية", maxScore: 5, description: "توظيف التقنيات", subEvidences: [{ id: "l3-1", title: "تقرير التقنيات", type: "both" as const, description: "توثيق التقنيات", formFields: [{ id: "report", label: "الملخص", type: "textarea" as const }], aiSuggestions: ["تقرير تقنيات"] }] },
-  { id: "l4", title: "البرامج والأنشطة", maxScore: 5, description: "تنفيذ البرامج", subEvidences: [{ id: "l4-1", title: "خطة البرامج", type: "both" as const, description: "توثيق البرامج", formFields: [{ id: "plan", label: "الملخص", type: "textarea" as const }], aiSuggestions: ["برنامج تشجيع قراءة"] }] },
-];
-
-const KINDERGARTEN_CRITERIA = [
-  { id: "k1", title: "التخطيط للأنشطة", maxScore: 5, description: "التخطيط لأنشطة تعليمية", subEvidences: [{ id: "k1-1", title: "خطة الأنشطة الأسبوعية", type: "both" as const, description: "توثيق الخطة", formFields: [{ id: "plan", label: "الملخص", type: "textarea" as const }], aiSuggestions: ["خطة أنشطة أسبوعية"] }] },
-  { id: "k2", title: "تنفيذ الأنشطة التعليمية", maxScore: 5, description: "تنفيذ أنشطة إبداعية", subEvidences: [{ id: "k2-1", title: "صور الأنشطة", type: "upload" as const, description: "توثيق بصري", aiSuggestions: ["صور أنشطة رياض أطفال"] }] },
-  { id: "k3", title: "إدارة الصف", maxScore: 5, description: "إدارة الصف بطريقة مناسبة", subEvidences: [{ id: "k3-1", title: "قوانين الصف", type: "both" as const, description: "توثيق القوانين", formFields: [{ id: "rules", label: "القوانين", type: "textarea" as const }], aiSuggestions: ["قوانين صفية للأطفال"] }] },
-  { id: "k4", title: "التقويم والمتابعة", maxScore: 5, description: "تقويم نمو الأطفال", subEvidences: [{ id: "k4-1", title: "سجل الملاحظات", type: "both" as const, description: "توثيق الملاحظات", formFields: [{ id: "notes", label: "الملاحظات", type: "textarea" as const }], aiSuggestions: ["سجل متابعة نمو"] }] },
-  { id: "k5", title: "التواصل مع أولياء الأمور", maxScore: 5, description: "التواصل المستمر", subEvidences: [{ id: "k5-1", title: "سجل التواصل", type: "both" as const, description: "توثيق التواصل", formFields: [{ id: "comm", label: "الملخص", type: "textarea" as const }], aiSuggestions: ["سجل تواصل أولياء أمور"] }] },
-  { id: "k6", title: "البيئة التعليمية", maxScore: 5, description: "تهيئة بيئة آمنة", subEvidences: [{ id: "k6-1", title: "صور البيئة الصفية", type: "upload" as const, description: "توثيق بصري", aiSuggestions: ["صور بيئة صفية"] }] },
-];
-
-const SPECIAL_ED_CRITERIA = [
-  { id: "se1", title: "إعداد الخطة التعليمية الفردية (IEP)", maxScore: 5, description: "إعداد خطط فردية", subEvidences: [{ id: "se1-1", title: "الخطة التعليمية الفردية", type: "both" as const, description: "توثيق الخطة", formFields: [{ id: "iep", label: "ملخص الخطة", type: "textarea" as const }], aiSuggestions: ["خطة تعليمية فردية"] }] },
-  { id: "se2", title: "تنفيذ البرامج التعليمية", maxScore: 5, description: "تنفيذ البرامج", subEvidences: [{ id: "se2-1", title: "سجل الجلسات", type: "both" as const, description: "توثيق الجلسات", formFields: [{ id: "sessions", label: "الملخص", type: "textarea" as const }], aiSuggestions: ["سجل جلسات تعليمية"] }] },
-  { id: "se3", title: "التقييم والتشخيص", maxScore: 5, description: "تقييم الاحتياجات", subEvidences: [{ id: "se3-1", title: "تقارير التقييم", type: "both" as const, description: "توثيق التقييم", formFields: [{ id: "assessment", label: "الملخص", type: "textarea" as const }], aiSuggestions: ["تقرير تقييم"] }] },
-  { id: "se4", title: "التواصل مع أولياء الأمور", maxScore: 5, description: "التواصل المستمر", subEvidences: [{ id: "se4-1", title: "سجل التواصل", type: "both" as const, description: "توثيق التواصل", formFields: [{ id: "comm", label: "الملخص", type: "textarea" as const }], aiSuggestions: ["سجل تواصل"] }] },
-  { id: "se5", title: "التعديل السلوكي", maxScore: 5, description: "تطبيق برامج التعديل", subEvidences: [{ id: "se5-1", title: "خطط التعديل السلوكي", type: "both" as const, description: "توثيق الخطط", formFields: [{ id: "plans", label: "الملخص", type: "textarea" as const }], aiSuggestions: ["خطة تعديل سلوكي"] }] },
-  { id: "se6", title: "التكامل مع المعلمين", maxScore: 5, description: "التعاون مع معلمي التعليم العام", subEvidences: [{ id: "se6-1", title: "خطط الدمج", type: "both" as const, description: "توثيق التعاون", formFields: [{ id: "plans", label: "الملخص", type: "textarea" as const }], aiSuggestions: ["خطة دمج"] }] },
-];
-
-const ADMIN_ASSISTANT_CRITERIA = [
-  { id: "a1", title: "الأعمال الإدارية", maxScore: 5, description: "تنفيذ الأعمال الإدارية", subEvidences: [{ id: "a1-1", title: "سجل المهام", type: "both" as const, description: "توثيق المهام", formFields: [{ id: "tasks", label: "الملخص", type: "textarea" as const }], aiSuggestions: ["سجل مهام إدارية"] }] },
-  { id: "a2", title: "المراسلات والتقارير", maxScore: 5, description: "إعداد المراسلات", subEvidences: [{ id: "a2-1", title: "سجل الصادر والوارد", type: "both" as const, description: "توثيق المراسلات", formFields: [{ id: "record", label: "الملخص", type: "textarea" as const }], aiSuggestions: ["سجل مراسلات"] }] },
-  { id: "a3", title: "متابعة الحضور والغياب", maxScore: 5, description: "متابعة الحضور", subEvidences: [{ id: "a3-1", title: "سجل الحضور", type: "both" as const, description: "توثيق الحضور", formFields: [{ id: "record", label: "الملخص", type: "textarea" as const }], aiSuggestions: ["سجل حضور"] }] },
-  { id: "a4", title: "خدمة المراجعين", maxScore: 5, description: "تقديم خدمة متميزة", subEvidences: [{ id: "a4-1", title: "سجل المراجعين", type: "both" as const, description: "توثيق الخدمة", formFields: [{ id: "record", label: "الملخص", type: "textarea" as const }], aiSuggestions: ["سجل مراجعين"] }] },
-  { id: "a5", title: "الأرشفة والتوثيق", maxScore: 5, description: "أرشفة الملفات", subEvidences: [{ id: "a5-1", title: "نظام الأرشفة", type: "both" as const, description: "توثيق الأرشفة", formFields: [{ id: "system", label: "الملخص", type: "textarea" as const }], aiSuggestions: ["نظام أرشفة"] }] },
-];
+const ADMIN_ASSISTANT_CRITERIA = makeSimpleCriteria("a", [
+  { id: "1", title: "الأعمال الإدارية", desc: "تنفيذ الأعمال الإدارية", subTitle: "سجل المهام" },
+  { id: "2", title: "المراسلات والتقارير", desc: "إعداد المراسلات", subTitle: "سجل الصادر والوارد" },
+  { id: "3", title: "متابعة الحضور والغياب", desc: "متابعة الحضور", subTitle: "سجل الحضور" },
+  { id: "4", title: "خدمة المراجعين", desc: "تقديم خدمة متميزة", subTitle: "سجل المراجعين" },
+  { id: "5", title: "الأرشفة والتوثيق", desc: "أرشفة الملفات", subTitle: "نظام الأرشفة" },
+]);
 
 // ===== أنواع الوظائف =====
 const JOB_TYPES = [
-  { id: "teacher", title: "معلم / معلمة", icon: "👨‍🏫", criteria: TEACHER_CRITERIA },
-  { id: "principal", title: "مدير / مديرة مدرسة", icon: "👔", criteria: PRINCIPAL_CRITERIA },
-  { id: "vice_principal", title: "وكيل / وكيلة مدرسة", icon: "📋", criteria: VICE_PRINCIPAL_CRITERIA },
-  { id: "counselor", title: "موجه/ة طلابي/ة", icon: "🤝", criteria: COUNSELOR_CRITERIA },
-  { id: "health_counselor", title: "موجه/ة صحي/ة", icon: "🏥", criteria: HEALTH_COUNSELOR_CRITERIA },
-  { id: "supervisor", title: "مشرف/ة تربوي/ة", icon: "🔍", criteria: SUPERVISOR_CRITERIA },
-  { id: "librarian", title: "أمين/ة مصادر تعلم", icon: "📚", criteria: LIBRARIAN_CRITERIA },
-  { id: "kindergarten", title: "معلمة رياض أطفال", icon: "🧒", criteria: KINDERGARTEN_CRITERIA },
-  { id: "special_ed", title: "معلم/ة تربية خاصة", icon: "♿", criteria: SPECIAL_ED_CRITERIA },
-  { id: "admin_assistant", title: "مساعد/ة إداري/ة", icon: "🗂️", criteria: ADMIN_ASSISTANT_CRITERIA },
+  { id: "teacher", title: "معلم / معلمة", icon: GraduationCap, emoji: "👨‍🏫", criteria: TEACHER_CRITERIA, hasStandards: true, color: "#059669", desc: "نظام شامل يغطي 11 معيار و 45 مؤشر أداء وفق المعايير الرسمية" },
+  { id: "principal", title: "مدير / مديرة مدرسة", icon: Building2, emoji: "👔", criteria: PRINCIPAL_CRITERIA, hasStandards: true, color: "#2563EB", desc: "معايير القيادة المدرسية والإدارة التعليمية والتطوير المهني" },
+  { id: "vice_principal", title: "وكيل / وكيلة مدرسة", icon: ClipboardList, emoji: "📋", criteria: VICE_PRINCIPAL_CRITERIA, hasStandards: true, color: "#7C3AED", desc: "معايير الإشراف على الشؤون التعليمية والإدارية بالمدرسة" },
+  { id: "counselor", title: "موجه/ة طلابي/ة", icon: Users, emoji: "🤝", criteria: COUNSELOR_CRITERIA, hasStandards: true, color: "#0891B2", desc: "معايير التوجيه والإرشاد الطلابي والدعم النفسي والاجتماعي" },
+  { id: "health_counselor", title: "معلم/ة مسند له توجيه صحي", icon: Heart, emoji: "🏥", criteria: HEALTH_COUNSELOR_CRITERIA, hasStandards: true, color: "#DC2626", desc: "معايير التوعية الصحية والإسعافات الأولية والبيئة المدرسية" },
+  { id: "activity_leader", title: "معلم/ة مسند له نشاط (رائد/ة نشاط)", icon: Megaphone, emoji: "🏆", criteria: ACTIVITY_LEADER_CRITERIA, hasStandards: true, color: "#F59E0B", desc: "معايير تخطيط وتنفيذ الأنشطة الطلابية والبرامج اللاصفية" },
+  { id: "lab_technician", title: "محضر/ة مختبر", icon: FlaskConical, emoji: "🧪", criteria: LAB_TECHNICIAN_CRITERIA, hasStandards: true, color: "#8B5CF6", desc: "معايير إعداد وتجهيز المختبرات وتطبيق معايير السلامة" },
+  { id: "supervisor", title: "مشرف/ة تربوي/ة (التشكيلات الإشرافية)", icon: SearchIcon, emoji: "🔍", criteria: SUPERVISOR_CRITERIA, hasStandards: true, color: "#CA8A04", desc: "معايير الإشراف التربوي والمتابعة الميدانية وتطوير الأداء" },
+  { id: "kindergarten", title: "معلمة رياض أطفال", icon: Baby, emoji: "🧒", criteria: KINDERGARTEN_CRITERIA, hasStandards: true, color: "#EC4899", desc: "معايير رعاية الطفولة المبكرة والتعلم باللعب والتنمية الشاملة" },
+  { id: "librarian", title: "أمين/ة مصادر تعلم", icon: BookOpen, emoji: "📚", criteria: LIBRARIAN_CRITERIA, hasStandards: false, color: "#9333EA", desc: "معايير إدارة مصادر التعلم وتنظيم المكتبة وخدمة المستفيدين" },
+  { id: "special_ed", title: "معلم/ة تربية خاصة", icon: Accessibility, emoji: "♿", criteria: SPECIAL_ED_CRITERIA, hasStandards: true, color: "#F97316", desc: "معايير التربية الخاصة والخطط الفردية والتقييم والتشخيص والدمج" },
+  { id: "admin_assistant", title: "مساعد/ة إداري/ة", icon: Briefcase, emoji: "🗂️", criteria: ADMIN_ASSISTANT_CRITERIA, hasStandards: false, color: "#6B7280", desc: "معايير الدعم الإداري والتنظيم المكتبي والمتابعة اليومية" },
 ];
 
 // ===== الثيمات =====
 const THEMES = [
-  { id: "simple", name: "بسيط", headerBg: "#f8f9fa", headerText: "#1a1a1a", accent: "#059669", borderColor: "#e5e7eb", bodyBg: "#fff" },
-  { id: "official", name: "الهوية الرسمية", headerBg: "#1B5E20", headerText: "#fff", accent: "#2E7D32", borderColor: "#1B5E20", bodyBg: "#fff" },
-  { id: "official-gradient", name: "تدرج رسمي", headerBg: "linear-gradient(135deg, #1B5E20, #2E7D32, #43A047)", headerText: "#fff", accent: "#2E7D32", borderColor: "#1B5E20", bodyBg: "#fff" },
-  { id: "blue", name: "أزرق كلاسيكي", headerBg: "#0D47A1", headerText: "#fff", accent: "#1565C0", borderColor: "#0D47A1", bodyBg: "#fff" },
-  { id: "purple", name: "بنفسجي أنيق", headerBg: "#4A148C", headerText: "#fff", accent: "#6A1B9A", borderColor: "#4A148C", bodyBg: "#fff" },
+  { id: "official", name: "الهوية الرسمية", headerBg: "#1B5E20", headerText: "#fff", accent: "#2E7D32", borderColor: "#1B5E20" },
+  { id: "official-gradient", name: "تدرج رسمي", headerBg: "linear-gradient(135deg, #1B5E20, #2E7D32, #43A047)", headerText: "#fff", accent: "#2E7D32", borderColor: "#1B5E20" },
+  { id: "edu-visual", name: "الهوية البصرية للتعليم", headerBg: "linear-gradient(135deg, #004D40, #00695C, #00897B)", headerText: "#fff", accent: "#00796B", borderColor: "#004D40" },
+  { id: "blue", name: "أزرق كلاسيكي", headerBg: "#0D47A1", headerText: "#fff", accent: "#1565C0", borderColor: "#0D47A1" },
+  { id: "blue-gradient", name: "أزرق متدرج", headerBg: "linear-gradient(135deg, #0D47A1, #1565C0, #1976D2)", headerText: "#fff", accent: "#1565C0", borderColor: "#0D47A1" },
+  { id: "purple", name: "بنفسجي أنيق", headerBg: "#4A148C", headerText: "#fff", accent: "#6A1B9A", borderColor: "#4A148C" },
+  { id: "gold", name: "ذهبي فاخر", headerBg: "linear-gradient(135deg, #5D4037, #795548, #8D6E63)", headerText: "#fff", accent: "#795548", borderColor: "#5D4037" },
+  { id: "modern-dark", name: "عصري داكن", headerBg: "linear-gradient(135deg, #1a1a2e, #16213e, #0f3460)", headerText: "#fff", accent: "#0f3460", borderColor: "#1a1a2e" },
+  { id: "simple", name: "بسيط ونظيف", headerBg: "#f8f9fa", headerText: "#1a1a1a", accent: "#059669", borderColor: "#e5e7eb" },
 ];
+
+// ===== إعدادات الأولوية =====
+const PRIORITY_CONFIG: Record<EvidencePriority, { label: string; color: string; bgColor: string; borderColor: string; icon: string }> = {
+  essential: { label: "أساسي", color: "#059669", bgColor: "bg-emerald-50 dark:bg-emerald-950/30", borderColor: "border-emerald-300", icon: "★" },
+  supporting: { label: "داعم", color: "#2563EB", bgColor: "bg-blue-50 dark:bg-blue-950/30", borderColor: "border-blue-300", icon: "◆" },
+  additional: { label: "إضافي", color: "#9333EA", bgColor: "bg-violet-50 dark:bg-violet-950/30", borderColor: "border-violet-300", icon: "○" },
+};
 
 function createEmptyEvidence(subEvidenceId: string = ""): EvidenceItem {
   return {
     id: `ev_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
     subEvidenceId, type: "text", text: "", link: "",
     fileData: null, fileName: "", displayAs: "image", formData: {},
+    priority: "essential", keywords: [], showBarcode: true,
   };
 }
 
 // ===== المكون الرئيسي =====
+// ===== مفاتيح التخزين المحلي (localStorage يبقى حتى بعد إغلاق المتصفح) =====
+const STORAGE_KEY = "sers_perf_state";
+const STORAGE_PENDING_UPLOAD = "sers_pending_upload";
+const STORAGE_AUTOSAVE_KEY = "sers_perf_autosave";
+
+// ===== حفظ واستعادة الـ state من localStorage (يبقى حتى بعد إغلاق المتصفح) =====
+function saveStateToStorage(data: {
+  step: string; jobId: string; themeId: string;
+  criteriaData: Record<string, CriterionData>; personalInfo: any;
+  customCriteria: Criterion[]; currentCriterionIndex: number;
+  activeTab: string; expandedSubEvidence: string | null;
+}) {
+  try {
+    // حفظ الصور الصغيرة فقط لتجنب تجاوز حد localStorage
+    // مراجع idb:// تُحفظ كما هي (حجمها صغير جداً)
+    const cleanCriteria: Record<string, any> = {};
+    for (const [key, val] of Object.entries(data.criteriaData)) {
+      cleanCriteria[key] = {
+        ...val,
+        evidences: val.evidences.map(ev => {
+          // إذا كان الملف محفوظ في IndexedDB، نحفظ المرجع فقط
+          const isIdbRef = ev.fileData?.startsWith('idb://');
+          return {
+            ...ev,
+            fileData: isIdbRef ? ev.fileData : (ev.fileData && ev.fileData.length < 100000 ? ev.fileData : null),
+            _hadFile: !!ev.fileData,
+          };
+        }),
+      };
+    }
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...data, criteriaData: cleanCriteria, timestamp: Date.now() }));
+  } catch {
+    // localStorage ممتلئ - حاول حذف البيانات القديمة
+    try {
+      localStorage.removeItem(STORAGE_AUTOSAVE_KEY);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...data, timestamp: Date.now() }));
+    } catch { /* ignore */ }
+  }
+}
+
+function loadStateFromStorage(): any | null {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+    const data = JSON.parse(raw);
+    // تجاهل البيانات القديمة (أكثر من 24 ساعة)
+    if (Date.now() - (data.timestamp || 0) > 86400000) {
+      localStorage.removeItem(STORAGE_KEY);
+      return null;
+    }
+    return data;
+  } catch { return null; }
+}
+
+function clearStorageState() {
+  try {
+    localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(STORAGE_PENDING_UPLOAD);
+  } catch { /* ignore */ }
+}
+
 export default function PerformanceEvidence() {
   const [, navigate] = useLocation();
-  const [step, setStep] = useState<"select" | "criteria-list" | "criterion-detail" | "final-review" | "preview">("select");
+  const { user, isAuthenticated, loading: authLoading } = useAuth();
+  const portfolio = usePortfolio(isAuthenticated);
+  const { isOnline, isSyncing, pendingCount, saveOfflineData, getOfflineData } = useOfflineSync();
+  const [step, setStep] = useState<"select" | "dashboard" | "criterion-detail" | "final-review" | "preview">("select");
   const [selectedJob, setSelectedJob] = useState<typeof JOB_TYPES[0] | null>(null);
-  const [selectedTheme, setSelectedTheme] = useState(THEMES[1]);
+  const [selectedTheme, setSelectedTheme] = useState(THEMES[0]);
+  // جلب القوالب من قاعدة البيانات
+  const { data: dbTemplates } = trpc.templates.list.useQuery(undefined, { staleTime: 60000 });
+  // دمج القوالب المحلية مع قوالب DB
+  const allThemes = useMemo(() => {
+    const local = [...THEMES];
+    if (dbTemplates && dbTemplates.length > 0) {
+      const dbMapped = dbTemplates.map((t: any) => ({
+        id: `db-${t.id}`,
+        name: t.name,
+        headerBg: t.headerBg,
+        headerText: t.headerText,
+        accent: t.accent,
+        borderColor: t.borderColor,
+        bodyBg: t.bodyBg || '#ffffff',
+        fontFamily: t.fontFamily || "'Cairo', 'Tajawal', sans-serif",
+        coverImageUrl: t.coverImageUrl,
+        logoUrl: t.logoUrl,
+      }));
+      return [...local, ...dbMapped];
+    }
+    return local;
+  }, [dbTemplates]);
+  const [portfolioId, setPortfolioId] = useState<number | null>(null);
   const [currentCriterionIndex, setCurrentCriterionIndex] = useState(0);
   const [expandedSubEvidence, setExpandedSubEvidence] = useState<string | null>(null);
   const [isExporting, setIsExporting] = useState(false);
+  const [activeTab, setActiveTab] = useState("criteria");
+  const [stateRestored, setStateRestored] = useState(false);
+  const [isSharing, setIsSharing] = useState(false);
+  const [shareUrl, setShareUrl] = useState<string | null>(null);
+
+  // Lightbox state
+  const [lightboxImage, setLightboxImage] = useState<string | null>(null);
 
   // AI State
-  const [aiApiKey, setAiApiKey] = useState(() => localStorage.getItem("sers_ai_key") || "");
-  const [showAiSettings, setShowAiSettings] = useState(false);
   const [aiLoading, setAiLoading] = useState<string | null>(null);
   const [aiChat, setAiChat] = useState<Record<string, string[]>>({});
   const [aiPrompt, setAiPrompt] = useState("");
 
-  // Per-evidence preview state
-  const [previewSubId, setPreviewSubId] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<Record<string, 'form' | 'table' | 'interactive'>>({});
+  // tRPC share mutation
+  const shareMutation = trpc.share.create.useMutation();
 
-  // Add custom sub-evidence
+  // tRPC AI mutations
+  const suggestMutation = trpc.ai.suggest.useMutation();
+  const fillFormMutation = trpc.ai.fillFormFields.useMutation();
+  const improveMutation = trpc.ai.improveText.useMutation();
+  const classifyMutation = trpc.ai.classifyEvidence.useMutation();
+
+  // View Mode for UnifiedEvidenceForm
+  const [evidenceViewMode, setEvidenceViewMode] = useState<"form" | "table" | "interactive">("form");
+
+  // Search & Filter
+  const [searchQuery, setSearchQuery] = useState("");
+  const [filterPriority, setFilterPriority] = useState<EvidencePriority | "all">("all");
+
+  // Custom sections
   const [showAddSub, setShowAddSub] = useState<string | null>(null);
   const [newSubTitle, setNewSubTitle] = useState("");
+  const [showAddMainSection, setShowAddMainSection] = useState(false);
+  const [newMainSectionTitle, setNewMainSectionTitle] = useState("");
+  const [newMainSectionDesc, setNewMainSectionDesc] = useState("");
+  const [customCriteria, setCustomCriteria] = useState<Criterion[]>([]);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const activeUploadRef = useRef<{ criterionId: string; subEvidenceId: string } | null>(null);
+  const smartUploadRef = useRef<HTMLInputElement>(null);
 
   const [personalInfo, setPersonalInfo] = useState({
     name: "", school: "",
     department: "المملكة العربية السعودية\nوزارة التعليم\nالإدارة العامة للتعليم بمنطقة",
-    year: "١٤٤٧هـ", semester: "الفصل الدراسي الثاني",
+    year: "", semester: "",
     evaluator: "", evaluatorRole: "مدير المدرسة", date: "",
   });
 
   const [criteriaData, setCriteriaData] = useState<Record<string, CriterionData>>({});
 
-  const initCriteriaData = (criteria: any[]) => {
+  const allCriteria = useMemo(() => [...(selectedJob?.criteria || []), ...customCriteria], [selectedJob, customCriteria]);
+
+  const initCriteriaData = (criteria: Criterion[]) => {
     const data: Record<string, CriterionData> = {};
-    criteria.forEach((c: any) => {
+    criteria.forEach((c) => {
       data[c.id] = { score: 0, notes: "", evidences: [], customSubEvidences: [] };
     });
     setCriteriaData(data);
   };
 
-  useEffect(() => {
-    if (aiApiKey) localStorage.setItem("sers_ai_key", aiApiKey);
-  }, [aiApiKey]);
-
   const handleSelectJob = (job: typeof JOB_TYPES[0]) => {
     setSelectedJob(job);
+    setCustomCriteria([]);
     initCriteriaData(job.criteria);
-    setStep("criteria-list");
+    setStep("dashboard");
   };
+
+  // ===== تنظيف ملفات IndexedDB القديمة =====
+  useEffect(() => {
+    cleanOldFiles().catch(() => {});
+  }, []);
+
+  // ===== استعادة الـ state من localStorage عند تحميل الصفحة (حل مشكلة الجوال + إغلاق المتصفح) =====
+  useEffect(() => {
+    if (stateRestored) return;
+    const saved = loadStateFromStorage();
+    if (saved && saved.jobId) {
+      const job = JOB_TYPES.find(j => j.id === saved.jobId);
+      if (job) {
+        setSelectedJob(job);
+        setStep((saved.step as any) || "dashboard");
+        setCurrentCriterionIndex(saved.currentCriterionIndex || 0);
+        setActiveTab(saved.activeTab || "criteria");
+        setExpandedSubEvidence(saved.expandedSubEvidence || null);
+        if (saved.personalInfo) setPersonalInfo(saved.personalInfo);
+        if (saved.customCriteria) setCustomCriteria(saved.customCriteria);
+        if (saved.themeId) {
+          const theme = THEMES.find(t => t.id === saved.themeId);
+          if (theme) setSelectedTheme(theme);
+        }
+        // استعادة criteriaData - دمج مع البيانات الافتراضية
+        if (saved.criteriaData) {
+          const allCrit = [...job.criteria, ...(saved.customCriteria || [])];
+          const merged: Record<string, CriterionData> = {};
+          allCrit.forEach(c => {
+            merged[c.id] = saved.criteriaData[c.id] || { score: 0, notes: "", evidences: [], customSubEvidences: [] };
+          });
+          setCriteriaData(merged);
+        } else {
+          initCriteriaData(job.criteria);
+        }
+        // إظهار رسالة استعادة
+        const wasPendingUpload = localStorage.getItem(STORAGE_PENDING_UPLOAD);
+        if (wasPendingUpload) {
+          toast.info("تم استعادة بياناتك بعد العودة", {
+            description: "يرجى رفع الشاهد مرة أخرى - المتصفح أعاد تحميل الصفحة",
+            duration: 6000,
+          });
+          localStorage.removeItem(STORAGE_PENDING_UPLOAD);
+        } else {
+          toast.success("تم استعادة بياناتك السابقة تلقائياً", { duration: 3000 });
+        }
+      }
+    }
+    setStateRestored(true);
+  }, [stateRestored]);
+
+  // ===== حفظ الـ state تلقائياً عند كل تغيير (مع تأجيل أثناء الرفع) =====
+  useEffect(() => {
+    if (!selectedJob || step === "select") return;
+    // لا نحفظ أثناء عملية الرفع لتجنب crash من حجم base64 الكبير
+    if (isUploadingRef.current) return;
+    // تأخير الحفظ لتجنب الحفظ المتكرر السريع
+    const timer = setTimeout(() => {
+      if (!isUploadingRef.current) {
+        saveStateToStorage({
+          step, jobId: selectedJob.id, themeId: selectedTheme.id,
+          criteriaData, personalInfo, customCriteria,
+          currentCriterionIndex, activeTab, expandedSubEvidence,
+        });
+      }
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [step, selectedJob, selectedTheme, criteriaData, personalInfo, customCriteria, currentCriterionIndex, activeTab, expandedSubEvidence]);
+
+  // ===== حفظ تلقائي عند إغلاق المتصفح أو الانتقال =====
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      if (!selectedJob || step === "select") return;
+      try {
+        saveStateToStorage({
+          step, jobId: selectedJob.id, themeId: selectedTheme.id,
+          criteriaData, personalInfo, customCriteria,
+          currentCriterionIndex, activeTab, expandedSubEvidence,
+        });
+      } catch { /* ignore - localStorage might be full */ }
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    // حفظ عند visibilitychange (عندما ينتقل المستخدم لتطبيق آخر على الجوال)
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "hidden" && selectedJob && step !== "select") {
+        try {
+          saveStateToStorage({
+            step, jobId: selectedJob.id, themeId: selectedTheme.id,
+            criteriaData, personalInfo, customCriteria,
+            currentCriterionIndex, activeTab, expandedSubEvidence,
+          });
+        } catch { /* ignore */ }
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [selectedJob, step, selectedTheme, criteriaData, personalInfo, customCriteria, currentCriterionIndex, activeTab, expandedSubEvidence]);
+
+  // ===== حسابات تحليل الفجوات =====
+  const gapAnalysis = useMemo(() => {
+    let totalEvidences = 0;
+    let coveredCriteria = 0;
+    let partialCriteria = 0;
+    let missedCriteria = 0;
+
+    allCriteria.forEach((c) => {
+      const data = criteriaData[c.id];
+      if (!data) { missedCriteria++; return; }
+      const evCount = data.evidences.length;
+      totalEvidences += evCount;
+      if (data.score >= 4 && evCount > 0) coveredCriteria++;
+      else if (evCount > 0 || data.score > 0) partialCriteria++;
+      else missedCriteria++;
+    });
+
+    const percentage = allCriteria.length > 0
+      ? Math.round(((coveredCriteria + partialCriteria * 0.5) / allCriteria.length) * 100)
+      : 0;
+
+    return { totalEvidences, coveredCriteria, partialCriteria, missedCriteria, percentage };
+  }, [allCriteria, criteriaData]);
+
+  // ===== عدد المؤشرات المغطاة (للمعلم) =====
+  const indicatorsCoverage = useMemo(() => {
+    if (!selectedJob?.hasStandards) return null;
+    const jobStds = selectedJob.id === "teacher" ? STANDARDS : getStandardsForJob(selectedJob.id);
+    let totalIndicators = 0;
+    let coveredIndicators = 0;
+    jobStds.forEach(std => {
+      std.items.forEach(item => {
+        totalIndicators++;
+        const data = criteriaData[std.id];
+        if (data && data.evidences.some(e => e.subEvidenceId === item.id)) {
+          coveredIndicators++;
+        }
+        // حساب البنود الفرعية أيضاً
+        (item.subItems || []).forEach(sub => {
+          totalIndicators++;
+          if (data && data.evidences.some(e => e.subEvidenceId === sub.id)) {
+            coveredIndicators++;
+          }
+        });
+      });
+    });
+    return { total: totalIndicators, covered: coveredIndicators, percentage: totalIndicators > 0 ? Math.round((coveredIndicators / totalIndicators) * 100) : 0 };
+  }, [selectedJob, criteriaData]);
 
   const updateScore = (criterionId: string, score: number) => {
     setCriteriaData((prev) => ({ ...prev, [criterionId]: { ...prev[criterionId], score } }));
@@ -571,8 +552,7 @@ export default function PerformanceEvidence() {
     const newSub: SubEvidence = {
       id: `custom_${Date.now()}`, title: newSubTitle.trim(),
       description: "قسم فرعي مخصص", type: "both", isCustom: true,
-      formFields: [{ id: "content", label: "المحتوى", type: "textarea" as const, placeholder: "أدخل المحتوى..." }],
-      aiSuggestions: ["محتوى مخصص"],
+      formFields: [{ id: "content", label: "المحتوى", type: "textarea", placeholder: "أدخل المحتوى..." }],
     };
     setCriteriaData((prev) => ({
       ...prev,
@@ -582,163 +562,539 @@ export default function PerformanceEvidence() {
     setShowAddSub(null);
   };
 
-  const handleFileUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !activeUploadRef.current) return;
+  const addCustomMainSection = () => {
+    if (!newMainSectionTitle.trim()) return;
+    const newCriterion: Criterion = {
+      id: `custom_main_${Date.now()}`, title: newMainSectionTitle.trim(), maxScore: 5,
+      description: newMainSectionDesc.trim() || "قسم رئيسي مخصص",
+      subEvidences: [{ id: `custom_main_${Date.now()}_sub1`, title: "شاهد عام", description: "شاهد عام", type: "both", formFields: [{ id: "content", label: "المحتوى", type: "textarea", placeholder: "أدخل التفاصيل..." }] }],
+    };
+    setCustomCriteria(prev => [...prev, newCriterion]);
+    setCriteriaData(prev => ({ ...prev, [newCriterion.id]: { score: 0, notes: "", evidences: [], customSubEvidences: [] } }));
+    setNewMainSectionTitle("");
+    setNewMainSectionDesc("");
+    setShowAddMainSection(false);
+  };
+
+  // ===== سحب وإفلات الشواهد بين البنود =====
+  const [draggedEvidence, setDraggedEvidence] = useState<{ evidence: EvidenceItem; fromCriterionId: string; fromSubId: string } | null>(null);
+  const [dragOverTarget, setDragOverTarget] = useState<{ criterionId: string; subId: string } | null>(null);
+  const [showMoveDialog, setShowMoveDialog] = useState<{ evidence: EvidenceItem; fromCriterionId: string } | null>(null);
+  const [showCoverageReport, setShowCoverageReport] = useState(false);
+  const [isGeneratingReport, setIsGeneratingReport] = useState(false);
+
+  const handleDragStart = useCallback((ev: EvidenceItem, criterionId: string, subId: string) => {
+    setDraggedEvidence({ evidence: ev, fromCriterionId: criterionId, fromSubId: subId });
+  }, []);
+
+  const handleDragOver = useCallback((e: React.DragEvent, criterionId: string, subId: string) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    setDragOverTarget({ criterionId, subId });
+  }, []);
+
+  const handleDragLeave = useCallback(() => {
+    setDragOverTarget(null);
+  }, []);
+
+  const handleDrop = useCallback((e: React.DragEvent, toCriterionId: string, toSubId: string) => {
+    e.preventDefault();
+    setDragOverTarget(null);
+    if (!draggedEvidence) return;
+    const { evidence, fromCriterionId } = draggedEvidence;
+    if (fromCriterionId === toCriterionId && evidence.subEvidenceId === toSubId) {
+      setDraggedEvidence(null);
+      return;
+    }
+    // نقل الشاهد: حذف من المصدر وإضافة للهدف
+    const movedEvidence = { ...evidence, subEvidenceId: toSubId };
+    setCriteriaData(prev => {
+      const updated = { ...prev };
+      // حذف من المصدر
+      updated[fromCriterionId] = {
+        ...updated[fromCriterionId],
+        evidences: updated[fromCriterionId].evidences.filter(e => e.id !== evidence.id),
+      };
+      // إضافة للهدف
+      updated[toCriterionId] = {
+        ...updated[toCriterionId],
+        evidences: [...updated[toCriterionId].evidences, movedEvidence],
+      };
+      return updated;
+    });
+    const toCrit = allCriteria.find(c => c.id === toCriterionId);
+    toast.success("تم نقل الشاهد بنجاح", {
+      description: `تم النقل إلى: ${toCrit?.title || 'بند آخر'}`,
+      duration: 3000,
+    });
+    setDraggedEvidence(null);
+  }, [draggedEvidence, allCriteria]);
+
+  const handleDragEnd = useCallback(() => {
+    setDraggedEvidence(null);
+    setDragOverTarget(null);
+  }, []);
+
+  const moveEvidenceToCriterion = useCallback((evidence: EvidenceItem, fromCriterionId: string, toCriterionId: string, toSubId: string) => {
+    if (fromCriterionId === toCriterionId && evidence.subEvidenceId === toSubId) return;
+    const movedEvidence = { ...evidence, subEvidenceId: toSubId };
+    setCriteriaData(prev => {
+      const updated = { ...prev };
+      updated[fromCriterionId] = {
+        ...updated[fromCriterionId],
+        evidences: updated[fromCriterionId].evidences.filter(e => e.id !== evidence.id),
+      };
+      updated[toCriterionId] = {
+        ...updated[toCriterionId],
+        evidences: [...updated[toCriterionId].evidences, movedEvidence],
+      };
+      return updated;
+    });
+    const toCrit = allCriteria.find(c => c.id === toCriterionId);
+    toast.success("تم نقل الشاهد بنجاح", {
+      description: `تم النقل إلى: ${toCrit?.title || 'بند آخر'}`,
+      duration: 3000,
+    });
+    setShowMoveDialog(null);
+  }, [allCriteria]);
+
+  // ===== رفع ذكي مع تصنيف AI تلقائي =====
+  const [isSmartUploading, setIsSmartUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<{ stage: string; percent: number } | null>(null);
+  const isUploadingRef = useRef(false); // flag لمنع حفظ localStorage أثناء الرفع
+
+  // ===== ضغط الصورة قبل إرسالها للـ AI =====
+  const compressImage = useCallback((base64: string, maxWidth = 800, quality = 0.6): Promise<string> => {
+    return new Promise((resolve) => {
+      const img = document.createElement('img');
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        let w = img.width, h = img.height;
+        if (w > maxWidth) { h = (maxWidth / w) * h; w = maxWidth; }
+        canvas.width = w; canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        ctx?.drawImage(img, 0, 0, w, h);
+        resolve(canvas.toDataURL('image/jpeg', quality));
+      };
+      img.onerror = () => resolve(base64); // fallback to original
+      img.src = base64;
+    });
+  }, []);
+
+  // ===== ضغط الصورة للحفظ في state (جودة متوسطة لتقليل استهلاك الذاكرة) =====
+  const compressImageForStorage = useCallback((base64: string, maxWidth = 1200, quality = 0.7): Promise<string> => {
+    return new Promise((resolve) => {
+      const img = document.createElement('img');
+      img.onload = () => {
+        try {
+          const canvas = document.createElement('canvas');
+          let w = img.width, h = img.height;
+          if (w > maxWidth) { h = (maxWidth / w) * h; w = maxWidth; }
+          canvas.width = w; canvas.height = h;
+          const ctx = canvas.getContext('2d');
+          ctx?.drawImage(img, 0, 0, w, h);
+          const compressed = canvas.toDataURL('image/jpeg', quality);
+          resolve(compressed);
+        } catch {
+          resolve(base64); // fallback to original
+        }
+      };
+      img.onerror = () => resolve(base64);
+      img.src = base64;
+    });
+  }, []);
+
+  // ===== دالة مساعدة لإضافة شاهد لبند معين =====
+  const addEvidenceToCriterion = useCallback((criterionId: string, newEv: EvidenceItem) => {
+    setCriteriaData((prev) => {
+      const existing = prev[criterionId];
+      if (!existing) return prev;
+      return {
+        ...prev,
+        [criterionId]: { ...existing, evidences: [...existing.evidences, newEv] },
+      };
+    });
+  }, []);
+
+  // ===== معالجة ملف واحد للتصنيف الذكي =====
+  const processSmartFile = useCallback(async (file: File, fileIndex: number, totalFiles: number): Promise<{ success: boolean; criterion?: string; indicator?: string }> => {
+    const isImage = file.type.startsWith("image/");
+    const isVideo = file.type.startsWith("video/");
+    const batchPrefix = totalFiles > 1 ? `[ملف ${fileIndex + 1}/${totalFiles}] ` : "";
+
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = async () => {
+        try {
+          const rawBase64 = reader.result as string;
+          let storageBase64 = rawBase64;
+          let aiImageUrl: string | undefined;
+          
+          if (isImage) {
+            storageBase64 = await compressImageForStorage(rawBase64, 1200, 0.7);
+            aiImageUrl = await compressImage(rawBase64, 800, 0.5);
+          }
+
+          let targetCriterionId: string | null = null;
+          let targetSubId: string = "";
+          let contentDesc: string = file.name;
+          let classificationSuccess = false;
+          let criterionTitle = "";
+          let indicatorText = "";
+          
+          try {
+            const result = await classifyMutation.mutateAsync({
+              fileName: file.name,
+              fileType: file.type,
+              description: file.name.replace(/\.[^/.]+$/, "").replace(/[-_]/g, " "),
+              fileUrl: aiImageUrl,
+            });
+
+            if (result.success && result.classification) {
+              const cls = result.classification;
+              const targetCriterion = allCriteria.find(c =>
+                c.id === cls.standardId || c.title.includes(cls.standardName) || cls.standardName.includes(c.title)
+              );
+              if (targetCriterion && criteriaData[targetCriterion.id]) {
+                const subs = [...targetCriterion.subEvidences, ...(criteriaData[targetCriterion.id]?.customSubEvidences || [])];
+                const targetSub = (cls.indicatorIndex > 0 && subs[cls.indicatorIndex - 1]) ? subs[cls.indicatorIndex - 1] : subs[0];
+                targetCriterionId = targetCriterion.id;
+                targetSubId = targetSub?.id || "";
+                contentDesc = cls.contentDescription || file.name;
+                classificationSuccess = true;
+                criterionTitle = targetCriterion.title;
+                indicatorText = cls.indicatorText;
+              }
+            }
+          } catch (aiErr) {
+            console.error("AI classification error:", aiErr);
+          }
+          
+          if (!classificationSuccess) {
+            const firstCriterion = allCriteria[0];
+            if (firstCriterion) {
+              targetCriterionId = firstCriterion.id;
+              targetSubId = firstCriterion.subEvidences[0]?.id || "";
+              criterionTitle = firstCriterion.title;
+            }
+          }
+          
+          if (targetCriterionId) {
+            const evId = `ev_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+            const newEv = createEmptyEvidence(targetSubId);
+            newEv.id = evId;
+            newEv.type = isImage ? "image" : isVideo ? "video" : "file";
+            newEv.fileName = file.name;
+            newEv.text = contentDesc;
+            newEv.displayAs = isImage ? "image" : "qr";
+            
+            try {
+              await saveFileToIDB({
+                id: evId,
+                data: storageBase64,
+                fileName: file.name,
+                fileType: file.type,
+                timestamp: Date.now(),
+              });
+              if (isImage && storageBase64.length < 200000) {
+                newEv.fileData = storageBase64;
+              } else {
+                newEv.fileData = `idb://${evId}`;
+              }
+            } catch {
+              newEv.fileData = storageBase64;
+            }
+            
+            addEvidenceToCriterion(targetCriterionId, newEv);
+            resolve({ success: classificationSuccess, criterion: criterionTitle, indicator: indicatorText });
+          } else {
+            resolve({ success: false });
+          }
+        } catch (err) {
+          console.error("Smart upload error:", err);
+          resolve({ success: false });
+        }
+      };
+      reader.onerror = () => resolve({ success: false });
+      reader.readAsDataURL(file);
+    });
+  }, [allCriteria, criteriaData, classifyMutation, compressImage, compressImageForStorage, addEvidenceToCriterion]);
+
+  const handleSmartUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const files = e.target.files;
+    if (!files || files.length === 0) {
+      return;
+    }
+    
+    // مسح قيمة input فوراً
+    const fileList = Array.from(files);
+    e.target.value = "";
+    
+    // التحقق من حجم الملفات
+    const oversized = fileList.filter(f => f.size > 16 * 1024 * 1024);
+    if (oversized.length > 0) {
+      toast.error(`${oversized.length} ملف تجاوز الحد الأقصى (16MB)`, { description: oversized.map(f => f.name).join(', ') });
+    }
+    const validFiles = fileList.filter(f => f.size <= 16 * 1024 * 1024);
+    if (validFiles.length === 0) return;
+    
+    // تفعيل flag منع الحفظ أثناء الرفع
+    isUploadingRef.current = true;
+    setIsSmartUploading(true);
+    
+    // إزالة pending upload flag
+    try { localStorage.removeItem(STORAGE_PENDING_UPLOAD); } catch {}
+    
+    const totalFiles = validFiles.length;
+    const results: { success: boolean; criterion?: string; indicator?: string; fileName: string }[] = [];
+    
+    for (let i = 0; i < totalFiles; i++) {
+      const currentFile = validFiles[i];
+      setUploadProgress({
+        stage: totalFiles > 1 
+          ? `جاري معالجة الملف ${i + 1} من ${totalFiles}: ${currentFile.name}`
+          : `جاري معالجة: ${currentFile.name}`,
+        percent: Math.round(10 + (80 * i / totalFiles)),
+      });
+      
+      const result = await processSmartFile(currentFile, i, totalFiles);
+      results.push({ ...result, fileName: currentFile.name });
+    }
+    
+    // عرض ملخص النتائج
+    const successCount = results.filter(r => r.success).length;
+    const failCount = results.filter(r => !r.success).length;
+    
+    if (totalFiles === 1) {
+      const r = results[0];
+      if (r.success) {
+        toast.success(`تم تصنيف الشاهد تلقائياً`, {
+          description: `البند: ${r.criterion}${r.indicator ? `\nالمؤشر: ${r.indicator}` : ''}`,
+          duration: 6000,
+        });
+      } else {
+        toast.warning("لم يتمكن النظام من تصنيف الشاهد تلقائياً", {
+          description: "تم إضافته للبند الأول. يمكنك نقله يدوياً.",
+          duration: 5000,
+        });
+      }
+    } else {
+      // ملخص الدفعة
+      const summaryLines = results.map(r => 
+        `${r.success ? '✅' : '⚠️'} ${r.fileName} → ${r.criterion || 'البند الأول'}`
+      ).join('\n');
+      
+      if (successCount === totalFiles) {
+        toast.success(`تم تصنيف ${totalFiles} شواهد بنجاح!`, {
+          description: summaryLines,
+          duration: 8000,
+        });
+      } else if (successCount > 0) {
+        toast.info(`تم تصنيف ${successCount} من ${totalFiles} شواهد`, {
+          description: summaryLines,
+          duration: 8000,
+        });
+      } else {
+        toast.warning(`تم إضافة ${totalFiles} شواهد للبند الأول`, {
+          description: "لم يتمكن النظام من تصنيفها تلقائياً. يمكنك نقلها يدوياً.",
+          duration: 6000,
+        });
+      }
+    }
+    
+    setUploadProgress({ stage: "اكتمل!", percent: 100 });
+    setTimeout(() => {
+      setUploadProgress(null);
+      setIsSmartUploading(false);
+      isUploadingRef.current = false;
+    }, 1000);
+  }, [processSmartFile]);
+
+  // ===== رفع ملف عادي (بدون تصنيف ذكي) - يدعم رفع متعدد =====
+  const handleFileUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const files = e.target.files;
+    if (!files || files.length === 0 || !activeUploadRef.current) return;
+    
+    // مسح قيمة input فوراً
+    const fileList = Array.from(files);
+    e.target.value = "";
+    
+    // التحقق من حجم الملفات
+    const oversized = fileList.filter(f => f.size > 16 * 1024 * 1024);
+    if (oversized.length > 0) {
+      toast.error(`${oversized.length} ملف تجاوز الحد الأقصى (16MB)`, { description: oversized.map(f => f.name).join(', ') });
+    }
+    const validFiles = fileList.filter(f => f.size <= 16 * 1024 * 1024);
+    if (validFiles.length === 0) return;
+    
+    // تفعيل flag منع الحفظ أثناء الرفع
+    isUploadingRef.current = true;
+    
     const { criterionId, subEvidenceId } = activeUploadRef.current;
-    const reader = new FileReader();
-    reader.onload = () => {
+    let addedCount = 0;
+    
+    for (const file of validFiles) {
       const isImage = file.type.startsWith("image/");
       const isVideo = file.type.startsWith("video/");
-      const newEv = createEmptyEvidence(subEvidenceId);
-      newEv.type = isImage ? "image" : isVideo ? "video" : "file";
-      newEv.fileData = reader.result as string;
-      newEv.fileName = file.name;
-      newEv.text = file.name;
-      newEv.displayAs = isImage ? "image" : "qr";
-      setCriteriaData((prev) => ({
-        ...prev,
-        [criterionId]: { ...prev[criterionId], evidences: [...prev[criterionId].evidences, newEv] },
-      }));
-    };
-    reader.readAsDataURL(file);
-    e.target.value = "";
-  }, []);
+      
+      try {
+        const fileData = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = () => reject(new Error('Failed to read file'));
+          reader.readAsDataURL(file);
+        });
+        
+        let processedData = fileData;
+        if (isImage) {
+          processedData = await compressImageForStorage(fileData, 1200, 0.7);
+        }
+        
+        const evId = `ev_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+        const newEv = createEmptyEvidence(subEvidenceId);
+        newEv.id = evId;
+        newEv.type = isImage ? "image" : isVideo ? "video" : "file";
+        newEv.fileName = file.name;
+        newEv.text = file.name;
+        newEv.displayAs = isImage ? "image" : "qr";
+        
+        // حفظ في IndexedDB للملفات الكبيرة
+        try {
+          await saveFileToIDB({
+            id: evId,
+            data: processedData,
+            fileName: file.name,
+            fileType: file.type,
+            timestamp: Date.now(),
+          });
+          if (isImage && processedData.length < 200000) {
+            newEv.fileData = processedData;
+          } else {
+            newEv.fileData = `idb://${evId}`;
+          }
+        } catch {
+          newEv.fileData = processedData;
+        }
+        
+        addEvidenceToCriterion(criterionId, newEv);
+        addedCount++;
+      } catch {
+        toast.error(`فشل معالجة: ${file.name}`);
+      }
+    }
+    
+    isUploadingRef.current = false;
+    if (addedCount > 0) {
+      toast.success(
+        addedCount === 1 ? "تم إضافة الشاهد بنجاح" : `تم إضافة ${addedCount} شواهد بنجاح`,
+        { description: validFiles.map(f => f.name).join(', '), duration: 3000 }
+      );
+    }
+    try { localStorage.removeItem(STORAGE_PENDING_UPLOAD); } catch {}
+  }, [compressImageForStorage, addEvidenceToCriterion]);
 
   const triggerFileUpload = (criterionId: string, subEvidenceId: string) => {
     activeUploadRef.current = { criterionId, subEvidenceId };
+    try { localStorage.setItem(STORAGE_PENDING_UPLOAD, "file"); } catch {}
     fileInputRef.current?.click();
   };
 
-  // ===== AI API Call =====
-  const callAI = async (criterionId: string, subId: string, context: string) => {
-    if (!aiApiKey) { setShowAiSettings(true); return; }
+  // ===== AI Functions =====
+  const callAI = async (criterionId: string, subId: string, userPrompt: string) => {
     const key = `${criterionId}_${subId}`;
     setAiLoading(key);
     try {
-      const apiUrl = aiApiKey.startsWith("sk-") ? "https://api.openai.com/v1/chat/completions" : aiApiKey;
-      const response = await fetch(apiUrl.includes("http") ? apiUrl : "https://api.openai.com/v1/chat/completions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${aiApiKey}` },
-        body: JSON.stringify({
-          model: "gpt-3.5-turbo",
-          messages: [
-            { role: "system", content: "أنت مساعد تعليمي متخصص في إعداد شواهد الأداء الوظيفي للمعلمين والإداريين في المملكة العربية السعودية. ساعد المستخدم في كتابة شواهد احترافية ومفصلة. أجب باللغة العربية فقط." },
-            { role: "user", content: context || aiPrompt },
-          ],
-          max_tokens: 500,
-          temperature: 0.7,
-        }),
+      const currentCrit = allCriteria.find(c => c.id === criterionId);
+      const allSubs = [...(currentCrit?.subEvidences || []), ...(criteriaData[criterionId]?.customSubEvidences || [])];
+      const currentSub = allSubs.find(s => s.id === subId);
+      const result = await suggestMutation.mutateAsync({
+        prompt: userPrompt || `اقترح شاهد أداء وظيفي لبند "${currentCrit?.title}" - ${currentSub?.title}`,
+        context: `الوظيفة: ${selectedJob?.title}, البند: ${currentCrit?.title}, الشاهد الفرعي: ${currentSub?.title}`,
       });
-      const data = await response.json();
-      const aiResponse = data.choices?.[0]?.message?.content || "عذراً، لم أتمكن من الحصول على اقتراح. تأكد من صحة مفتاح API.";
-      setAiChat((prev) => ({ ...prev, [key]: [...(prev[key] || []), aiResponse] }));
-    } catch (err) {
-      setAiChat((prev) => ({ ...prev, [key]: [...(prev[key] || []), "خطأ في الاتصال بالذكاء الاصطناعي. تأكد من مفتاح API والاتصال بالإنترنت."] }));
+      if (result.content) {
+        setAiChat((prev) => ({ ...prev, [key]: [...(prev[key] || []), result.content] }));
+      }
+    } catch {
+      setAiChat((prev) => ({ ...prev, [key]: [...(prev[key] || []), "حدث خطأ في الاتصال بالذكاء الاصطناعي. يرجى المحاولة مرة أخرى."] }));
     }
     setAiLoading(null);
     setAiPrompt("");
   };
 
-  const applyAIText = (criterionId: string, subId: string, text: string) => {
-    const ev = createEmptyEvidence(subId);
-    ev.text = text;
-    setCriteriaData((prev) => ({
-      ...prev,
-      [criterionId]: { ...prev[criterionId], evidences: [...prev[criterionId].evidences, ev] },
-    }));
-  };
-
   const fillFormWithAI = async (criterionId: string, subId: string, evId: string, fields: FormField[]) => {
-    if (!aiApiKey) { setShowAiSettings(true); return; }
     const key = `fill_${evId}`;
     setAiLoading(key);
     try {
-      const fieldNames = fields.map(f => f.label).join("، ");
-      const response = await fetch("https://api.openai.com/v1/chat/completions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${aiApiKey}` },
-        body: JSON.stringify({
-          model: "gpt-3.5-turbo",
-          messages: [
-            { role: "system", content: "أنت مساعد تعليمي. أعد بيانات JSON فقط بدون أي نص إضافي. المفاتيح هي معرفات الحقول." },
-            { role: "user", content: `املأ هذه الحقول ببيانات واقعية لمعلم سعودي: ${fieldNames}. أعد JSON بالمفاتيح: ${fields.map(f => f.id).join(", ")}` },
-          ],
-          max_tokens: 500,
-        }),
+      const currentCrit = allCriteria.find(c => c.id === criterionId);
+      const allSubs = [...(currentCrit?.subEvidences || []), ...(criteriaData[criterionId]?.customSubEvidences || [])];
+      const currentSub = allSubs.find(s => s.id === subId);
+      const result = await fillFormMutation.mutateAsync({
+        jobTitle: selectedJob?.title || "", criterionName: currentCrit?.title || "",
+        subEvidenceName: currentSub?.title || "",
+        formFields: fields.map(f => ({ id: f.id, label: f.label, type: f.type })),
       });
-      const data = await response.json();
-      const content = data.choices?.[0]?.message?.content || "{}";
-      try {
-        const jsonMatch = content.match(/\{[\s\S]*\}/);
-        if (jsonMatch) {
-          const parsed = JSON.parse(jsonMatch[0]);
-          Object.entries(parsed).forEach(([fieldId, value]) => {
-            updateFormField(criterionId, evId, fieldId, String(value));
-          });
-        }
-      } catch { /* ignore parse errors */ }
-    } catch { /* ignore network errors */ }
+      if (result.success && result.filledData) {
+        Object.entries(result.filledData).forEach(([fieldId, value]) => {
+          updateFormField(criterionId, evId, fieldId, String(value));
+        });
+        toast.success("تم تعبئة النموذج بالذكاء الاصطناعي");
+      }
+    } catch { toast.error("فشل تعبئة النموذج"); }
     setAiLoading(null);
   };
 
-  // إضافة صف ديناميكي جديد داخل نموذج (label + textarea فقط بدون نموذج كامل)
-  const addDynamicField = (criterionId: string, evidenceId: string) => {
-    const ts = Date.now();
-    setCriteriaData((prev) => {
-      const criterion = prev[criterionId];
-      if (!criterion) return prev;
-      return {
-        ...prev,
-        [criterionId]: {
-          ...criterion,
-          evidences: criterion.evidences.map(ev =>
-            ev.id === evidenceId
-              ? { ...ev, formData: { ...ev.formData, [`dynamic_${ts}`]: '', [`label_${ts}`]: 'حقل جديد' } }
-              : ev
-          )
-        }
-      };
-    });
+  const improveFieldText = async (criterionId: string, evId: string, fieldId: string, currentText: string) => {
+    if (!currentText.trim()) return;
+    const key = `improve_${evId}_${fieldId}`;
+    setAiLoading(key);
+    try {
+      const result = await improveMutation.mutateAsync({ text: currentText, context: `شاهد أداء وظيفي - ${selectedJob?.title}` });
+      if (result.improved) {
+        updateFormField(criterionId, evId, fieldId, result.improved);
+        toast.success("تم تحسين النص");
+      }
+    } catch { /* ignore */ }
+    setAiLoading(null);
   };
 
-  // حذف صف ديناميكي
-  const removeDynamicField = (criterionId: string, evidenceId: string, dynKey: string) => {
-    const labelKey = dynKey.replace('dynamic_', 'label_');
-    setCriteriaData((prev) => {
-      const criterion = prev[criterionId];
-      if (!criterion) return prev;
-      return {
-        ...prev,
-        [criterionId]: {
-          ...criterion,
-          evidences: criterion.evidences.map(ev => {
-            if (ev.id !== evidenceId) return ev;
-            const newFormData = { ...ev.formData };
-            delete newFormData[dynKey];
-            delete newFormData[labelKey];
-            return { ...ev, formData: newFormData };
-          })
-        }
-      };
-    });
-  };
+  // ===== Save & Calculations =====
+  const [isSaving, setIsSaving] = useState(false);
 
-  // تصدير شاهد فردي كـ PDF
-  const handleExportSingleEvidence = async (subId: string) => {
-    setIsExporting(true);
-    await exportToPDF(`preview-sub-${subId}`, `شاهد_${subId}.pdf`);
-    setIsExporting(false);
-  };
-
-  const saveReport = () => {
-    const data = { personalInfo, criteriaData, jobId: selectedJob?.id, themeId: selectedTheme.id };
-    localStorage.setItem(`sers_perf_${personalInfo.name || "draft"}`, JSON.stringify(data));
-    alert("تم حفظ البيانات بنجاح!");
+  const saveReport = async () => {
+    if (!selectedJob) return;
+    if (!isAuthenticated) {
+      // حفظ محلي كاحتياطي للمستخدمين غير المسجلين
+      const data = { personalInfo, criteriaData, jobId: selectedJob?.id, themeId: selectedTheme.id, customCriteria };
+      localStorage.setItem(`sers_perf_${personalInfo.name || "draft"}`, JSON.stringify(data));
+      toast.success("تم حفظ البيانات محلياً! سجل دخولك لحفظها في السحابة.");
+      return;
+    }
+    setIsSaving(true);
+    try {
+      const success = await portfolio.savePortfolio({
+        jobId: selectedJob.id,
+        jobTitle: selectedJob.title,
+        personalInfo,
+        criteriaData,
+        customCriteria,
+        themeId: selectedTheme.id,
+        completionPercentage: percentage,
+      });
+      if (success) {
+        toast.success("تم حفظ البيانات في السحابة بنجاح!");
+      }
+    } catch {
+      toast.error("فشل الحفظ، يرجى المحاولة مرة أخرى");
+    }
+    setIsSaving(false);
   };
 
   const totalScore = Object.values(criteriaData).reduce((sum, c) => sum + c.score, 0);
-  const maxScore = selectedJob ? selectedJob.criteria.length * 5 : 0;
+  const maxScore = allCriteria.length * 5;
   const percentage = maxScore > 0 ? Math.round((totalScore / maxScore) * 100) : 0;
   const getGrade = (pct: number) => {
     if (pct >= 90) return { label: "ممتاز", color: "#16A34A" };
@@ -754,369 +1110,419 @@ export default function PerformanceEvidence() {
     setIsExporting(false);
   };
 
-  const currentCriterion = selectedJob?.criteria[currentCriterionIndex];
+  const handleShareLink = async () => {
+    if (!isAuthenticated) {
+      toast.error("يجب تسجيل الدخول أولاً لمشاركة الملف كرابط");
+      return;
+    }
+    // حفظ أولاً إذا لم يكن محفوظاً
+    if (!portfolio.id) {
+      toast.info("جاري حفظ الملف أولاً...");
+      const saved = await portfolio.savePortfolio({
+        jobId: selectedJob!.id,
+        jobTitle: selectedJob!.title,
+        personalInfo,
+        criteriaData,
+        customCriteria,
+        themeId: selectedTheme.id,
+        completionPercentage: percentage,
+      });
+      if (!saved) {
+        toast.error("فشل حفظ الملف");
+        return;
+      }
+    }
+    setIsSharing(true);
+    try {
+      const result = await shareMutation.mutateAsync({
+        portfolioId: portfolio.id!,
+        expiresInDays: 30,
+        maxViews: 0,
+      });
+      const url = `${window.location.origin}/shared/${result.token}`;
+      setShareUrl(url);
+      await navigator.clipboard.writeText(url);
+      toast.success("تم نسخ رابط المشاركة!");
+    } catch {
+      toast.error("فشل إنشاء رابط المشاركة");
+    }
+    setIsSharing(false);
+  };
 
-  // ===== معاينة شاهد فردي (popup) =====
-  const renderSingleEvidencePreview = () => {
-    if (!previewSubId || !currentCriterion) return null;
-    const allSubs = [...(currentCriterion.subEvidences || []), ...(criteriaData[currentCriterion.id]?.customSubEvidences || [])];
-    const sub = allSubs.find(s => s.id === previewSubId);
-    if (!sub) return null;
-    const subEvs = criteriaData[currentCriterion.id]?.evidences.filter(e => e.subEvidenceId === previewSubId) || [];
-    const MOE_LOGO_P = 'https://d2xsxph8kpxj0f.cloudfront.net/310519663047121386/h34s4aPNVyHXdtjgZ7eNNf/moe-logo_fa6b1baa.png';
-    const MOE_GREEN_P = '#1B7A3D';
-    const MOE_LIGHT_P = '#E8F5E9';
-    const MOE_BORDER_P = '#A5D6A7';
+  const currentCriterion = allCriteria[currentCriterionIndex];
+
+  // ===== Render Evidence Item =====
+  // ===== مكون عرض ملف الشاهد (يدعم IndexedDB references) مع lightbox =====
+  const EvidenceFilePreview = ({ ev, criterionId }: { ev: EvidenceItem; criterionId: string }) => {
+    const [resolvedData, setResolvedData] = useState<string | null>(null);
+    const [loading, setLoading] = useState(false);
+    
+    useEffect(() => {
+      if (ev.fileData?.startsWith('idb://')) {
+        setLoading(true);
+        const idbId = ev.fileData.replace('idb://', '');
+        getFileFromIDB(idbId).then(file => {
+          if (file) {
+            setResolvedData(file.data);
+          }
+          setLoading(false);
+        }).catch(() => setLoading(false));
+      } else {
+        setResolvedData(ev.fileData);
+      }
+    }, [ev.fileData]);
+    
+    if (loading) {
+      return (
+        <div className="mt-2 flex items-center gap-2 p-3 bg-muted/50 rounded-lg">
+          <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+          <span className="text-xs text-muted-foreground">جاري تحميل الملف...</span>
+        </div>
+      );
+    }
+    
+    const displayData = resolvedData || ev.fileData;
+    if (!displayData) return null;
+    
     return (
-      <AnimatePresence>
-        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-          className="fixed inset-0 bg-black/60 z-50 flex items-start justify-center p-4 overflow-y-auto" onClick={() => setPreviewSubId(null)}>
-          <motion.div initial={{ scale: 0.95, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95, y: 20 }}
-            className="bg-white rounded-2xl shadow-2xl max-w-3xl w-full my-8" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between p-4 border-b border-gray-200 sticky top-0 bg-white rounded-t-2xl z-10">
-              <h3 className="font-bold text-gray-800 text-sm" style={{ fontFamily: "'Tajawal', sans-serif" }}>معاينة: {sub.title}</h3>
-              <div className="flex gap-2">
-                <button onClick={() => handleExportSingleEvidence(previewSubId)} disabled={isExporting}
-                  className="flex items-center gap-1.5 bg-emerald-600 text-white px-3 py-1.5 rounded-lg text-xs hover:bg-emerald-700 disabled:opacity-50">
-                  {isExporting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}تصدير PDF
-                </button>
-                <button onClick={() => printElement(`preview-sub-${previewSubId}`)}
-                  className="flex items-center gap-1.5 bg-blue-600 text-white px-3 py-1.5 rounded-lg text-xs hover:bg-blue-700">
-                  <Printer className="w-3.5 h-3.5" />طباعة
-                </button>
-                <button onClick={() => setPreviewSubId(null)} className="p-1.5 rounded-lg hover:bg-gray-100">
-                  <X className="w-4 h-4" />
-                </button>
+      <div className="mt-2">
+        {ev.type === 'image' && ev.displayAs === 'image' && (
+          <div className="relative group/img cursor-pointer" onClick={() => setLightboxImage(displayData.startsWith('idb://') ? '' : displayData)}>
+            <img src={displayData.startsWith('idb://') ? '' : displayData} alt="" className="max-h-56 rounded-xl border border-border shadow-sm transition-all group-hover/img:shadow-md group-hover/img:scale-[1.01]" />
+            <div className="absolute inset-0 bg-black/0 group-hover/img:bg-black/10 rounded-xl transition-all flex items-center justify-center">
+              <div className="opacity-0 group-hover/img:opacity-100 transition-opacity bg-white/90 dark:bg-black/70 rounded-full p-2 shadow-lg">
+                <Eye className="w-5 h-5 text-foreground" />
               </div>
             </div>
-            <div id={`preview-sub-${previewSubId}`} className="p-0" dir="rtl" style={{ fontFamily: "'Cairo', 'Tajawal', sans-serif" }}>
-              <div className="p-6 pb-4">
-                <div className="flex items-center justify-between">
-                  <div className="text-right text-xs leading-relaxed text-gray-600">
-                    {personalInfo.department.split('\n').map((line, i) => <div key={i}>{line}</div>)}
-                    <div className="font-bold text-gray-800">{personalInfo.school || 'المدرسة'}</div>
-                  </div>
-                  <img src={MOE_LOGO_P} alt="وزارة التعليم" className="w-20 h-20 object-contain" />
-                  <div className="text-left text-xs text-gray-600">
-                    <div>العام الدراسي {personalInfo.year}</div>
-                    <div>{personalInfo.semester}</div>
-                  </div>
-                </div>
-              </div>
-              <div className="mx-6 mb-4 text-center py-2 rounded-lg border-2" style={{ borderColor: MOE_GREEN_P, backgroundColor: MOE_LIGHT_P }}>
-                <h2 className="text-sm font-black" style={{ color: MOE_GREEN_P, fontFamily: "'Tajawal', sans-serif" }}>{sub.title}</h2>
-              </div>
-              <div className="mx-6 mb-4">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                  <div>
-                    <div className="text-[10px] font-medium mb-1" style={{ color: MOE_GREEN_P }}>المعلم/ة</div>
-                    <div className="px-3 py-2 rounded-lg border text-xs bg-white" style={{ borderColor: MOE_BORDER_P }}>{personalInfo.name || '—'}</div>
-                  </div>
-                  <div>
-                    <div className="text-[10px] font-medium mb-1" style={{ color: MOE_GREEN_P }}>المدرسة</div>
-                    <div className="px-3 py-2 rounded-lg border text-xs bg-white" style={{ borderColor: MOE_BORDER_P }}>{personalInfo.school || '—'}</div>
-                  </div>
-                  <div>
-                    <div className="text-[10px] font-medium mb-1" style={{ color: MOE_GREEN_P }}>التاريخ</div>
-                    <div className="px-3 py-2 rounded-lg border text-xs bg-white" style={{ borderColor: MOE_BORDER_P }}>{personalInfo.date || '—'}</div>
-                  </div>
-                </div>
-              </div>
-              <div className="mx-6 mb-4 space-y-3">
-                {subEvs.map((ev) => {
-                  if (ev.formData && Object.entries(ev.formData).some(([k, v]) => v && !k.startsWith('label_'))) {
-                    return (
-                      <div key={ev.id}>
-                        {Object.entries(ev.formData).filter(([k, v]) => v && !k.startsWith('label_') && !k.startsWith('dynamic_')).map(([key, val]) => (
-                          <div key={key} className="mb-3">
-                            <div className="text-[10px] font-medium mb-1 px-2 py-1 rounded" style={{ color: MOE_GREEN_P, backgroundColor: MOE_LIGHT_P }}>{key}</div>
-                            <div className="px-3 py-2 rounded-lg border text-xs leading-relaxed bg-white" style={{ borderColor: MOE_BORDER_P }}>{val}</div>
-                          </div>
-                        ))}
-                        {Object.entries(ev.formData).filter(([k]) => k.startsWith('dynamic_')).map(([dynKey, val]) => {
-                          if (!val) return null;
-                          const labelKey = dynKey.replace('dynamic_', 'label_');
-                          const label = ev.formData?.[labelKey] || 'حقل إضافي';
-                          return (
-                            <div key={dynKey} className="mb-3">
-                              <div className="text-[10px] font-medium mb-1 px-2 py-1 rounded" style={{ color: MOE_GREEN_P, backgroundColor: MOE_LIGHT_P }}>{label}</div>
-                              <div className="px-3 py-2 rounded-lg border text-xs leading-relaxed bg-white" style={{ borderColor: MOE_BORDER_P }}>{val}</div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    );
-                  }
-                  if (ev.type === 'text' && ev.text) {
-                    return <div key={ev.id} className="px-3 py-2 rounded-lg border text-xs leading-relaxed" style={{ borderColor: MOE_BORDER_P }}>{ev.text}</div>;
-                  }
-                  if (ev.type === 'link' && ev.link) {
-                    return (
-                      <div key={ev.id} className="flex items-center gap-3 px-3 py-2 rounded-lg border" style={{ borderColor: MOE_BORDER_P }}>
-                        <img src={generateQRDataURL(ev.link)} alt="QR" className="w-14 h-14" />
-                        <span className="text-xs text-gray-500 break-all">{ev.link}</span>
-                      </div>
-                    );
-                  }
-                  if (ev.type === 'image' && ev.fileData) {
-                    return (
-                      <div key={ev.id} className="rounded-lg border overflow-hidden" style={{ borderColor: MOE_BORDER_P }}>
-                        {ev.displayAs === 'image'
-                          ? <img src={ev.fileData} alt="" className="max-h-48 mx-auto" />
-                          : <div className="flex items-center gap-3 p-3"><img src={generateQRDataURL(ev.fileData.substring(0, 200))} alt="QR" className="w-14 h-14" /><span className="text-xs text-gray-500">{ev.fileName}</span></div>
-                        }
-                      </div>
-                    );
-                  }
-                  if ((ev.type === 'video' || ev.type === 'file') && ev.fileData) {
-                    return (
-                      <div key={ev.id} className="flex items-center gap-3 px-3 py-2 rounded-lg border" style={{ borderColor: MOE_BORDER_P }}>
-                        <img src={generateQRDataURL(ev.fileName || 'file')} alt="QR" className="w-14 h-14" />
-                        <span className="text-xs text-gray-500">{ev.fileName}</span>
-                      </div>
-                    );
-                  }
-                  return null;
-                })}
-              </div>
-              <div className="mx-6 mb-4 grid grid-cols-2 gap-8 text-center text-xs">
-                <div>
-                  <p className="text-gray-500 mb-6">المعلم/ة</p>
-                  <div className="border-t pt-2" style={{ borderColor: MOE_BORDER_P }}>{personalInfo.name || '____________'}</div>
-                </div>
-                <div>
-                  <p className="text-gray-500 mb-6">مدير المدرسة</p>
-                  <div className="border-t pt-2" style={{ borderColor: MOE_BORDER_P }}>{personalInfo.evaluator || '____________'}</div>
-                </div>
-              </div>
-              <div className="h-2 w-full" style={{ backgroundColor: MOE_GREEN_P }} />
+            <div className="absolute bottom-2 left-2 opacity-0 group-hover/img:opacity-100 transition-opacity">
+              <span className="text-[9px] bg-black/60 text-white px-2 py-0.5 rounded-full">{ev.fileName}</span>
             </div>
-          </motion.div>
-        </motion.div>
-      </AnimatePresence>
+          </div>
+        )}
+        {ev.type === 'image' && ev.displayAs === 'qr' && (
+          <div className="flex items-center gap-3 bg-violet-50 dark:bg-violet-950/30 p-3 rounded-lg">
+            <img src={generateQRDataURL((displayData.startsWith('idb://') ? ev.fileName : displayData).substring(0, 200))} alt="QR" className="w-16 h-16" />
+            <span className="text-xs text-violet-600">سيظهر كباركود QR عند الطباعة</span>
+          </div>
+        )}
+        {ev.type === 'video' && (
+          <div className="flex items-center gap-3 bg-red-50 dark:bg-red-950/30 p-4 rounded-xl border border-red-200/30">
+            <div className="w-12 h-12 rounded-xl bg-red-100 dark:bg-red-900/50 flex items-center justify-center shrink-0">
+              <Video className="w-6 h-6 text-red-500" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-foreground truncate">{ev.fileName}</p>
+              <p className="text-[10px] text-red-500 mt-0.5">سيتحول لباركود QR عند الطباعة</p>
+            </div>
+          </div>
+        )}
+        {ev.type === 'file' && (
+          <div className="flex items-center gap-3 bg-orange-50 dark:bg-orange-950/30 p-4 rounded-xl border border-orange-200/30">
+            <div className="w-12 h-12 rounded-xl bg-orange-100 dark:bg-orange-900/50 flex items-center justify-center shrink-0">
+              <FileText className="w-6 h-6 text-orange-500" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-foreground truncate">{ev.fileName}</p>
+              <p className="text-[10px] text-orange-500 mt-0.5">
+                {ev.fileName?.endsWith('.pdf') ? 'ملف PDF' : ev.fileName?.endsWith('.docx') || ev.fileName?.endsWith('.doc') ? 'مستند Word' : ev.fileName?.endsWith('.xlsx') || ev.fileName?.endsWith('.xls') ? 'جدول Excel' : ev.fileName?.endsWith('.pptx') || ev.fileName?.endsWith('.ppt') ? 'عرض تقديمي' : 'ملف مرفق'}
+              </p>
+            </div>
+          </div>
+        )}
+      </div>
     );
   };
 
-  // ===== AI Settings Modal =====
-  const AISettingsModal = () => (
-    <AnimatePresence>
-      {showAiSettings && (
-        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-          className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setShowAiSettings(false)}>
-          <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }} exit={{ scale: 0.9 }}
-            className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-black text-gray-900" style={{ fontFamily: "'Tajawal', sans-serif" }}>إعدادات الذكاء الاصطناعي</h3>
-              <button onClick={() => setShowAiSettings(false)} className="p-1 rounded-lg hover:bg-gray-100"><X className="w-5 h-5" /></button>
-            </div>
-            <p className="text-sm text-gray-500 mb-4">أدخل مفتاح API الخاص بك (OpenAI أو أي خدمة متوافقة) لتفعيل ميزات الذكاء الاصطناعي التفاعلية.</p>
-            <input type="password" value={aiApiKey} onChange={(e) => setAiApiKey(e.target.value)}
-              placeholder="sk-..." dir="ltr"
-              className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-400 mb-3" />
-            <p className="text-xs text-gray-400 mb-4">المفتاح يُحفظ محلياً في متصفحك فقط ولا يُرسل لأي جهة.</p>
-            <button onClick={() => setShowAiSettings(false)}
-              className="w-full bg-violet-600 text-white py-2.5 rounded-xl text-sm font-bold hover:bg-violet-700">حفظ</button>
-          </motion.div>
-        </motion.div>
-      )}
-    </AnimatePresence>
-  );
-
-  // ===== Render Evidence Item =====
-  const renderEvidenceItem = (ev: EvidenceItem, criterionId: string) => (
+  const renderEvidenceItem = (ev: EvidenceItem, criterionId: string) => {
+    const priority = ev.priority || 'essential';
+    const priorityConfig = PRIORITY_CONFIG[priority];
+    // البحث عن formFields من sub-evidence المرتبط
+    const criterion = allCriteria.find(c => c.id === criterionId);
+    const critData = criteriaData[criterionId];
+    const allSubs = [...(criterion?.subEvidences || []), ...(critData?.customSubEvidences || [])];
+    const linkedSub = allSubs.find(s => s.id === ev.subEvidenceId);
+    const hasFormFields = linkedSub?.formFields && linkedSub.formFields.length > 0;
+    const isFormDataEmpty = !ev.formData || Object.keys(ev.formData).length === 0 || !Object.values(ev.formData).some(v => v && v.trim());
+    return (
     <motion.div key={ev.id} initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }}
-      className="bg-gray-50 rounded-xl p-4 border border-gray-200 group">
+      draggable
+      onDragStart={() => handleDragStart(ev, criterionId, ev.subEvidenceId)}
+      onDragEnd={handleDragEnd}
+      className={`bg-muted/50 rounded-xl p-4 border group cursor-grab active:cursor-grabbing transition-all ${draggedEvidence?.evidence.id === ev.id ? 'opacity-40 scale-95 border-dashed border-primary' : priorityConfig.borderColor}`}>
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-2">
-          {ev.type === 'text' && <Type className="w-4 h-4 text-gray-500" />}
+          <div className="cursor-grab active:cursor-grabbing text-muted-foreground/50 hover:text-muted-foreground transition-colors" title="اسحب لنقل الشاهد">
+            <GripVertical className="w-4 h-4" />
+          </div>
+          {ev.type === 'text' && <Type className="w-4 h-4 text-muted-foreground" />}
           {ev.type === 'image' && <Image className="w-4 h-4 text-blue-500" />}
           {ev.type === 'link' && <LinkIcon className="w-4 h-4 text-purple-500" />}
           {ev.type === 'file' && <FileText className="w-4 h-4 text-orange-500" />}
           {ev.type === 'video' && <Video className="w-4 h-4 text-red-500" />}
-          <span className="text-xs font-medium text-gray-500">
-            {ev.type === 'text' ? 'نص' : ev.type === 'image' ? 'صورة' : ev.type === 'link' ? 'رابط' : ev.type === 'file' ? 'ملف' : 'فيديو'}
+          <span className="text-xs font-medium text-muted-foreground">
+            {ev.type === 'text' ? (hasFormFields ? 'نموذج' : 'نص') : ev.type === 'image' ? 'صورة' : ev.type === 'link' ? 'رابط' : ev.type === 'file' ? 'ملف' : 'فيديو'}
           </span>
-          {ev.fileName && <span className="text-xs text-gray-400">({ev.fileName})</span>}
+          {ev.fileName && <span className="text-xs text-muted-foreground/70">({ev.fileName})</span>}
+          {/* شارة الأولوية */}
+          <select
+            value={priority}
+            onChange={(e) => updateEvidence(criterionId, ev.id, { priority: e.target.value as EvidencePriority })}
+            className="text-[10px] px-1.5 py-0.5 rounded-full border-0 font-medium cursor-pointer focus:outline-none focus:ring-1 focus:ring-primary/30"
+            style={{ backgroundColor: priorityConfig.color + '15', color: priorityConfig.color }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {(Object.entries(PRIORITY_CONFIG) as [EvidencePriority, typeof PRIORITY_CONFIG[EvidencePriority]][]).map(([k, v]) => (
+              <option key={k} value={k}>{v.icon} {v.label}</option>
+            ))}
+          </select>
+          {/* زر التحكم بالباركود */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button type="button" onClick={(e) => { e.stopPropagation(); updateEvidence(criterionId, ev.id, { showBarcode: !(ev.showBarcode !== false) }); }}
+                className={`p-1 rounded-full text-[10px] transition-colors ${ev.showBarcode !== false ? 'bg-violet-100 dark:bg-violet-950/30 text-violet-600' : 'bg-gray-100 dark:bg-gray-800 text-gray-400'}`}>
+                <QrCode className="w-3 h-3" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>{ev.showBarcode !== false ? 'الباركود مفعّل - اضغط لتعطيل' : 'الباركود معطّل - اضغط لتفعيل'}</TooltipContent>
+          </Tooltip>
         </div>
         <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
           {ev.type === 'image' && (
-            <button onClick={() => updateEvidence(criterionId, ev.id, { displayAs: ev.displayAs === 'image' ? 'qr' : 'image' })}
-              className={`p-1.5 rounded-lg text-xs ${ev.displayAs === 'qr' ? 'bg-violet-100 text-violet-600' : 'bg-blue-100 text-blue-600'}`}
-              title={ev.displayAs === 'image' ? 'تحويل لباركود' : 'عرض كصورة'}>
-              {ev.displayAs === 'image' ? <QrCode className="w-3.5 h-3.5" /> : <Image className="w-3.5 h-3.5" />}
-            </button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button type="button" onClick={() => updateEvidence(criterionId, ev.id, { displayAs: ev.displayAs === 'image' ? 'qr' : 'image' })}
+                  className={`p-1.5 rounded-lg text-xs ${ev.displayAs === 'qr' ? 'bg-violet-100 text-violet-600' : 'bg-blue-100 text-blue-600'}`}>
+                  {ev.displayAs === 'image' ? <QrCode className="w-3.5 h-3.5" /> : <Image className="w-3.5 h-3.5" />}
+                </button>
+              </TooltipTrigger>
+              <TooltipContent>{ev.displayAs === 'image' ? 'تحويل لباركود QR' : 'عرض كصورة'}</TooltipContent>
+            </Tooltip>
           )}
-          <button onClick={() => removeEvidence(criterionId, ev.id)} className="p-1.5 rounded-lg text-red-400 hover:text-red-600 hover:bg-red-50">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button type="button" onClick={() => setShowMoveDialog({ evidence: ev, fromCriterionId: criterionId })}
+                className="p-1.5 rounded-lg text-blue-400 hover:text-blue-600 hover:bg-blue-50">
+                <Move className="w-3.5 h-3.5" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>نقل إلى بند آخر</TooltipContent>
+          </Tooltip>
+          <button type="button" onClick={() => removeEvidence(criterionId, ev.id)} className="p-1.5 rounded-lg text-red-400 hover:text-red-600 hover:bg-red-50">
             <Trash2 className="w-3.5 h-3.5" />
           </button>
         </div>
       </div>
 
-      {ev.type === 'text' && !ev.formData && (
+      {/* عرض حقول النموذج إذا كان الـ sub-evidence يحتوي على formFields */}
+      {ev.type === 'text' && hasFormFields && ev.formData !== undefined && (
+        <div className="bg-primary/5 rounded-lg p-3 border border-primary/10">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+            {linkedSub!.formFields!.map((field: FormField) => (
+              <div key={field.id} className={field.type === 'textarea' ? 'md:col-span-2' : ''}>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-medium text-foreground">
+                    {field.label} {field.required && <span className="text-destructive">*</span>}
+                  </label>
+                  {field.type === 'textarea' && ev.formData?.[field.id] && (
+                    <button type="button" onClick={() => improveFieldText(criterionId, ev.id, field.id, ev.formData?.[field.id] || '')}
+                      disabled={aiLoading === `improve_${ev.id}_${field.id}`}
+                      className="text-[10px] text-violet-600 hover:text-violet-700 flex items-center gap-1">
+                      {aiLoading === `improve_${ev.id}_${field.id}` ? <Loader2 className="w-3 h-3 animate-spin" /> : <Wand2 className="w-3 h-3" />}
+                      تحسين
+                    </button>
+                  )}
+                </div>
+                {field.type === 'textarea' ? (
+                  <textarea value={ev.formData?.[field.id] || ''} onChange={(e) => updateFormField(criterionId, ev.id, field.id, e.target.value)}
+                    placeholder={field.placeholder} rows={3}
+                    className="w-full px-3 py-2 rounded-lg border border-border text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/20 bg-background" />
+                ) : field.type === 'select' ? (
+                  <select value={ev.formData?.[field.id] || ''} onChange={(e) => updateFormField(criterionId, ev.id, field.id, e.target.value)}
+                    className="w-full px-3 py-2.5 rounded-lg border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 bg-background">
+                    <option value="">اختر...</option>
+                    {field.options?.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                  </select>
+                ) : (
+                  <input type={field.type === 'date' ? 'date' : field.type === 'number' ? 'number' : 'text'}
+                    value={ev.formData?.[field.id] || ''} onChange={(e) => updateFormField(criterionId, ev.id, field.id, e.target.value)}
+                    placeholder={field.placeholder}
+                    className="w-full px-3 py-2.5 rounded-lg border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 bg-background" />
+                )}
+              </div>
+            ))}
+          </div>
+          <div className="flex justify-end mt-2">
+            <Button variant="secondary" size="sm" className="gap-1.5 text-xs"
+              onClick={() => fillFormWithAI(criterionId, ev.subEvidenceId, ev.id, linkedSub!.formFields!)}
+              disabled={aiLoading === `fill_${ev.id}`}>
+              {aiLoading === `fill_${ev.id}` ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5 text-violet-500" />}
+              تعبئة بالذكاء الاصطناعي
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* عرض textarea عادي إذا لم تكن هناك formFields */}
+      {ev.type === 'text' && !hasFormFields && (
         <textarea value={ev.text} onChange={(e) => updateEvidence(criterionId, ev.id, { text: e.target.value })}
           placeholder="اكتب نص الشاهد هنا..." rows={2}
-          className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-emerald-500/20" />
+          className="w-full px-3 py-2 rounded-lg border border-border text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/20 bg-background" />
       )}
 
       {ev.type === 'link' && (
         <input type="url" value={ev.link} onChange={(e) => updateEvidence(criterionId, ev.id, { link: e.target.value })}
           placeholder="https://example.com" dir="ltr"
-          className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20" />
+          className="w-full px-3 py-2 rounded-lg border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 bg-background" />
       )}
 
       {(ev.type === 'image' || ev.type === 'video' || ev.type === 'file') && ev.fileData && (
-        <div className="mt-2">
-          {ev.type === 'image' && ev.displayAs === 'image' && (
-            <img src={ev.fileData} alt="" className="max-h-48 rounded-lg border border-gray-200" />
-          )}
-          {ev.type === 'image' && ev.displayAs === 'qr' && (
-            <div className="flex items-center gap-3 bg-violet-50 p-3 rounded-lg">
-              <img src={generateQRDataURL(ev.fileData.substring(0, 200))} alt="QR" className="w-16 h-16" />
-              <span className="text-xs text-violet-600">سيظهر كباركود QR عند الطباعة</span>
-            </div>
-          )}
-          {ev.type === 'video' && (
-            <div className="flex items-center gap-3 bg-red-50 p-3 rounded-lg">
-              <Video className="w-8 h-8 text-red-500" />
-              <div>
-                <p className="text-sm font-medium text-gray-700">{ev.fileName}</p>
-                <p className="text-xs text-red-500">سيتحول لباركود QR عند الطباعة</p>
-              </div>
-            </div>
-          )}
-          {ev.type === 'file' && (
-            <div className="flex items-center gap-3 bg-orange-50 p-3 rounded-lg">
-              <FileText className="w-8 h-8 text-orange-500" />
-              <div>
-                <p className="text-sm font-medium text-gray-700">{ev.fileName}</p>
-                <p className="text-xs text-orange-500">سيتحول لباركود QR عند الطباعة</p>
-              </div>
-            </div>
-          )}
-        </div>
+        <EvidenceFilePreview ev={ev} criterionId={criterionId} />
       )}
+
+      {/* تعليق نصي */}
+      <div className="mt-2">
+        {ev.comment !== undefined && ev.comment !== '' ? (
+          <div className="bg-amber-50/50 dark:bg-amber-950/20 rounded-lg p-2.5 border border-amber-200/30">
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-[10px] font-medium text-amber-700 dark:text-amber-400">تعليق</span>
+              <button type="button" onClick={() => updateEvidence(criterionId, ev.id, { comment: '' })}
+                className="text-[10px] text-muted-foreground hover:text-red-500 transition-colors">حذف</button>
+            </div>
+            <textarea value={ev.comment} onChange={(e) => updateEvidence(criterionId, ev.id, { comment: e.target.value })}
+              placeholder="أضف تعليقك هنا..." rows={2}
+              className="w-full px-2 py-1.5 rounded-md border border-amber-200/50 text-xs resize-none focus:outline-none focus:ring-1 focus:ring-amber-400/30 bg-white/50 dark:bg-background/50" />
+          </div>
+        ) : (
+          <button type="button" onClick={() => updateEvidence(criterionId, ev.id, { comment: ' ' })}
+            className="text-[10px] text-muted-foreground hover:text-amber-600 transition-colors flex items-center gap-1 opacity-0 group-hover:opacity-100">
+            <Plus className="w-3 h-3" />إضافة تعليق
+          </button>
+        )}
+      </div>
+
+      {/* كلمات مفتاحية */}
+      <div className="mt-2">
+        {ev.keywords && ev.keywords.length > 0 ? (
+          <div className="flex items-center gap-1 flex-wrap">
+            {ev.keywords.map((kw, ki) => (
+              <span key={ki} className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[9px] font-medium bg-sky-50 dark:bg-sky-950/30 text-sky-700 dark:text-sky-400 border border-sky-200/50">
+                {kw}
+                <button type="button" onClick={() => updateEvidence(criterionId, ev.id, { keywords: ev.keywords?.filter((_, idx) => idx !== ki) })}
+                  className="text-sky-400 hover:text-red-500 mr-0.5">
+                  <X className="w-2.5 h-2.5" />
+                </button>
+              </span>
+            ))}
+            <button type="button" onClick={() => {
+              const kw = prompt('أضف كلمة مفتاحية:');
+              if (kw?.trim()) updateEvidence(criterionId, ev.id, { keywords: [...(ev.keywords || []), kw.trim()] });
+            }} className="text-[9px] text-sky-500 hover:text-sky-700 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+              <Plus className="w-2.5 h-2.5" />إضافة
+            </button>
+          </div>
+        ) : (
+          <button type="button" onClick={() => {
+            const kw = prompt('أضف كلمة مفتاحية:');
+            if (kw?.trim()) updateEvidence(criterionId, ev.id, { keywords: [kw.trim()] });
+          }} className="text-[10px] text-muted-foreground hover:text-sky-600 transition-colors flex items-center gap-1 opacity-0 group-hover:opacity-100">
+            <Plus className="w-3 h-3" />إضافة كلمات مفتاحية
+          </button>
+        )}
+      </div>
     </motion.div>
   );
+  };
 
-  // ===== Step 1: اختيار الوظيفة =====
+  // ======================================================================
+  // ===== الخطوة 1: اختيار الوظيفة =====
+  // ======================================================================
   if (step === "select") {
     return (
-      <div className="min-h-screen bg-[#F8FAFC] p-6" dir="rtl">
-        <AISettingsModal />
+      <div className="min-h-screen bg-gradient-to-b from-background to-muted/30 p-3 sm:p-4 md:p-8" dir="rtl">
         <div className="max-w-5xl mx-auto">
-          <div className="flex items-center justify-between mb-6">
-            <button onClick={() => navigate("/")} className="flex items-center gap-2 text-gray-500 hover:text-gray-700">
-              <ArrowLeft className="w-4 h-4" /><span className="text-sm">العودة للرئيسية</span>
-            </button>
-            <button onClick={() => setShowAiSettings(true)} className="flex items-center gap-2 text-violet-600 hover:text-violet-700 text-sm bg-violet-50 px-3 py-2 rounded-lg">
-              <Settings className="w-4 h-4" />إعدادات AI
-            </button>
-          </div>
-          <div className="text-center mb-10">
-            <div className="w-16 h-16 rounded-2xl bg-emerald-100 flex items-center justify-center mx-auto mb-4"><span className="text-3xl">📊</span></div>
-            <h1 className="text-3xl font-black text-gray-900 mb-2" style={{ fontFamily: "'Tajawal', sans-serif" }}>شواهد الأداء الوظيفي</h1>
-            <p className="text-gray-500 max-w-lg mx-auto text-sm">اختر الوظيفة لبدء إعداد الشواهد. كل بند يحتوي على شواهد فرعية مع فورمات تفاعلية وذكاء اصطناعي حقيقي.</p>
-            {aiApiKey && <p className="text-xs text-emerald-600 mt-2 flex items-center justify-center gap-1"><Sparkles className="w-3 h-3" />الذكاء الاصطناعي مفعّل</p>}
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {JOB_TYPES.map((job, i) => (
-              <motion.button key={job.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.04 }}
-                whileHover={{ y: -4, boxShadow: "0 12px 30px rgba(0,0,0,0.08)" }}
-                onClick={() => handleSelectJob(job)}
-                className="bg-white rounded-xl p-5 border border-gray-200 text-right hover:border-emerald-300 transition-all">
-                <div className="text-3xl mb-3">{job.icon}</div>
-                <h3 className="font-bold text-gray-800 mb-1 text-sm" style={{ fontFamily: "'Tajawal', sans-serif" }}>{job.title}</h3>
-                <p className="text-xs text-gray-500">{job.criteria.length} بند تقييم</p>
-              </motion.button>
-            ))}
-          </div>
-        </div>
-      </div>
-    );
-  }
+          <button type="button" onClick={() => navigate("/")} className="flex items-center gap-1.5 sm:gap-2 text-muted-foreground hover:text-foreground mb-5 sm:mb-8 transition-colors group">
+            <ArrowLeft className="w-3.5 h-3.5 sm:w-4 sm:h-4 transition-transform group-hover:-translate-x-1" /><span className="text-xs sm:text-sm">العودة للرئيسية</span>
+          </button>
 
-  // ===== Step 2: قائمة البنود =====
-  if (step === "criteria-list") {
-    return (
-      <div className="min-h-screen bg-[#F8FAFC] p-4 md:p-6" dir="rtl">
-        <AISettingsModal />
-        <div className="max-w-5xl mx-auto">
-          <div className="flex items-center justify-between mb-5 bg-white rounded-xl p-4 shadow-sm border border-gray-100">
-            <div className="flex items-center gap-3">
-              <button onClick={() => setStep("select")} className="flex items-center gap-1.5 text-gray-500 hover:text-gray-700 text-sm">
-                <ArrowLeft className="w-4 h-4" />تغيير الوظيفة
-              </button>
-              <button onClick={saveReport} className="flex items-center gap-1.5 text-blue-600 text-sm"><Save className="w-4 h-4" />حفظ</button>
-              <button onClick={() => setShowAiSettings(true)} className="flex items-center gap-1.5 text-violet-600 text-sm"><Sparkles className="w-4 h-4" />AI</button>
+          {/* Hero Section - Mobile Optimized */}
+          <div className="text-center mb-6 sm:mb-10">
+            <div className="relative w-12 h-12 sm:w-16 sm:h-16 rounded-xl sm:rounded-2xl bg-gradient-to-br from-emerald-500 to-emerald-700 flex items-center justify-center mx-auto mb-3 sm:mb-5 shadow-lg shadow-emerald-500/20">
+              <BarChart3 className="w-6 h-6 sm:w-8 sm:h-8 text-white" />
             </div>
-            <div className="flex items-center gap-4">
-              <div className="text-left">
-                <div className="text-2xl font-black" style={{ color: getGrade(percentage).color }}>{percentage}%</div>
-                <div className="text-xs text-gray-500">{getGrade(percentage).label} · {totalScore}/{maxScore}</div>
-              </div>
-              <button onClick={() => setStep("final-review")} className="flex items-center gap-2 bg-emerald-600 text-white px-5 py-2.5 rounded-lg text-sm font-medium hover:bg-emerald-700">
-                <Eye className="w-4 h-4" />التقييم النهائي
-              </button>
+            <h1 className="text-xl sm:text-3xl md:text-4xl font-black text-foreground mb-2 sm:mb-3" style={{ fontFamily: "var(--font-heading)" }}>
+              شواهد الأداء الوظيفي
+            </h1>
+            <p className="text-muted-foreground max-w-lg mx-auto leading-relaxed text-xs sm:text-sm px-2">
+              اختر وظيفتك لبدء إعداد ملف الإنجاز. يتضمن النظام ذكاء اصطناعي تفاعلي لتصنيف الشواهد وتعبئة النماذج تلقائياً.
+            </p>
+            <div className="flex items-center justify-center gap-2 mt-3 sm:mt-4">
+              <Badge variant="secondary" className="gap-1 sm:gap-1.5 py-1 sm:py-1.5 px-3 sm:px-4 text-[10px] sm:text-xs">
+                <Sparkles className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-violet-500" />
+                ذكاء اصطناعي مفعّل تلقائياً
+              </Badge>
             </div>
           </div>
 
-          <h1 className="text-2xl font-black text-gray-900 mb-1" style={{ fontFamily: "'Tajawal', sans-serif" }}>
-            {selectedJob?.icon} {selectedJob?.title}
-          </h1>
-          <p className="text-sm text-gray-500 mb-6">اضغط على أي بند لفتح الشواهد الفرعية</p>
-
-          {/* البيانات الشخصية */}
-          <div className="bg-white rounded-xl border border-gray-200 p-5 mb-5">
-            <h2 className="font-bold text-gray-800 mb-4 text-base flex items-center gap-2"><FileText className="w-5 h-5 text-emerald-600" />البيانات الأساسية</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {[
-                { key: "name", label: "الاسم الكامل", placeholder: "أدخل الاسم الرباعي" },
-                { key: "school", label: "المدرسة", placeholder: "اسم المدرسة" },
-                { key: "year", label: "العام الدراسي", placeholder: "١٤٤٧هـ" },
-                { key: "semester", label: "الفصل الدراسي", placeholder: "الفصل الدراسي الثاني" },
-                { key: "evaluator", label: "اسم المقيّم", placeholder: "اسم المقيّم" },
-                { key: "evaluatorRole", label: "صفة المقيّم", placeholder: "مدير المدرسة" },
-                { key: "date", label: "تاريخ التقييم", placeholder: "١٤٤٧/٠٦/١٥" },
-              ].map((field) => (
-                <div key={field.key}>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">{field.label}</label>
-                  <input type="text" value={(personalInfo as any)[field.key]}
-                    onChange={(e) => setPersonalInfo((prev) => ({ ...prev, [field.key]: e.target.value }))}
-                    placeholder={field.placeholder}
-                    className="w-full px-3 py-2.5 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-400" />
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* قائمة البنود */}
-          <div className="space-y-3">
-            {selectedJob?.criteria.map((criterion: any, index: number) => {
-              const data = criteriaData[criterion.id];
-              if (!data) return null;
-              const evidenceCount = data.evidences.length;
+          {/* جميع الوظائف - تصميم موحد */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+            {JOB_TYPES.map((job, i) => {
+              const Icon = job.icon;
+              const standards = job.id === "teacher" ? STANDARDS :
+                job.id === "special_ed" ? SPECIAL_ED_STANDARDS :
+                getStandardsForJob(job.id);
+              const standardsCount = standards.length;
+              const indicatorsCount = standards.reduce((sum, s) => sum + s.items.reduce((si, item) => si + (item.subItems?.length || 0) + 1, 0), 0);
+              const isTeacher = job.id === "teacher";
               return (
-                <motion.button key={criterion.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.02 }}
-                  onClick={() => { setCurrentCriterionIndex(index); setStep("criterion-detail"); }}
-                  className="w-full bg-white rounded-xl border border-gray-200 p-4 hover:border-emerald-300 hover:shadow-md transition-all text-right group">
-                  <div className="flex items-center gap-4">
-                    <div className="w-10 h-10 rounded-lg bg-emerald-50 flex items-center justify-center text-emerald-700 font-bold text-sm shrink-0 group-hover:bg-emerald-100">
-                      {index + 1}
-                    </div>
-                    <div className="flex-1">
-                      <h3 className="font-bold text-gray-800 text-sm" style={{ fontFamily: "'Tajawal', sans-serif" }}>{criterion.title}</h3>
-                      <p className="text-xs text-gray-500">{criterion.description}</p>
-                    </div>
-                    <div className="flex items-center gap-3 shrink-0">
-                      <div className="text-center">
-                        <div className="text-lg font-black" style={{ color: data.score >= 4 ? '#16A34A' : data.score >= 3 ? '#CA8A04' : '#9CA3AF' }}>{data.score}</div>
-                        <div className="text-[10px] text-gray-400">من {criterion.maxScore}</div>
+                <motion.div key={job.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.04 }}
+                  className={isTeacher ? "sm:col-span-2" : ""}>
+                  <Card className={`cursor-pointer hover:shadow-xl transition-all duration-300 overflow-hidden relative group h-full ${
+                    isTeacher ? 'border-emerald-200 bg-gradient-to-l from-emerald-50/80 to-background hover:border-emerald-300' : 'border-border/60 hover:border-opacity-100'
+                  }`}
+                    style={!isTeacher ? { ['--hover-border' as string]: job.color } : {}}
+                    onClick={() => handleSelectJob(job)}>
+                    <CardContent className="p-4 sm:p-5 md:p-6">
+                      <div className="flex items-center gap-3 sm:gap-4">
+                        <div className={`w-11 h-11 sm:w-14 sm:h-14 rounded-xl sm:rounded-2xl flex items-center justify-center shrink-0 shadow-md group-hover:scale-105 transition-transform ${
+                          isTeacher ? 'bg-gradient-to-br from-emerald-500 to-emerald-700 shadow-emerald-500/20' : ''
+                        }`}
+                          style={!isTeacher ? { background: `linear-gradient(135deg, ${job.color}dd, ${job.color})`, boxShadow: `0 4px 12px ${job.color}30` } : {}}>
+                          <Icon className={`w-5 h-5 sm:w-7 sm:h-7 text-white`} />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-1.5 sm:gap-2 mb-0.5 sm:mb-1 flex-wrap">
+                            <h3 className={`font-black text-foreground ${isTeacher ? 'text-base sm:text-xl' : 'text-sm sm:text-base'}`} style={{ fontFamily: "var(--font-heading)" }}>{job.title}</h3>
+                            {isTeacher && <Badge className="bg-emerald-600 text-white text-[9px] sm:text-[10px] hover:bg-emerald-700">الأكثر استخداماً</Badge>}
+                          </div>
+                          <p className="text-[10px] sm:text-xs text-muted-foreground mb-1.5 sm:mb-2 line-clamp-2">{job.desc}</p>
+                          <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+                            {job.hasStandards && standardsCount > 0 ? (
+                              <>
+                                <Badge variant="outline" className="text-[9px] sm:text-[10px] gap-0.5 sm:gap-1 py-0.5 px-2"
+                                  style={{ borderColor: job.color + '40', color: job.color }}>
+                                  <Sparkles className="w-2.5 h-2.5 sm:w-3 sm:h-3" />{standardsCount} معيار
+                                </Badge>
+                                <Badge variant="outline" className="text-[9px] sm:text-[10px] gap-0.5 py-0.5 px-2"
+                                  style={{ borderColor: job.color + '40', color: job.color }}>
+                                  {indicatorsCount} مؤشر
+                                </Badge>
+                                <Badge variant="outline" className="text-[9px] sm:text-[10px] gap-0.5 py-0.5 px-2"
+                                  style={{ borderColor: job.color + '40', color: job.color }}>
+                                  {job.criteria.length} بند
+                                </Badge>
+                              </>
+                            ) : (
+                              <Badge variant="outline" className="text-[9px] sm:text-[10px] gap-0.5 py-0.5 px-2" style={{ borderColor: job.color + '40', color: job.color }}>
+                                {job.criteria.length} بند تقييم
+                              </Badge>
+                            )}
+                          </div>
+                        </div>
+                        <ArrowLeft className="w-4 h-4 sm:w-5 sm:h-5 text-muted-foreground group-hover:text-foreground transition-colors shrink-0" />
                       </div>
-                      <span className="text-[10px] text-gray-400 bg-gray-100 px-2 py-1 rounded-md">{evidenceCount} شاهد</span>
-                      <ChevronLeft className="w-5 h-5 text-gray-300 group-hover:text-emerald-500" />
-                    </div>
-                  </div>
-                </motion.button>
+                    </CardContent>
+                  </Card>
+                </motion.div>
               );
             })}
           </div>
@@ -1125,576 +1531,1462 @@ export default function PerformanceEvidence() {
     );
   }
 
-  // ===== Step 3: تفاصيل البند =====
+  // ======================================================================
+  // ===== الخطوة 2: لوحة التحكم الرئيسية =====
+  // ======================================================================
+  if (step === "dashboard") {
+    const grade = getGrade(percentage);
+    return (
+      <div className="min-h-screen bg-background p-3 sm:p-4 md:p-6" dir="rtl">
+        <input type="file" ref={smartUploadRef} className="hidden" accept="image/*,video/*,.pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx" multiple onChange={handleSmartUpload} />
+        <div className="max-w-6xl mx-auto">
+
+          {/* ===== Header Bar - Mobile Optimized ===== */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-3 mb-4 sm:mb-6 bg-card/80 backdrop-blur-sm rounded-xl p-2.5 sm:p-3 border border-border/40 shadow-sm">
+            <div className="flex items-center gap-1.5 sm:gap-2">
+              <Button variant="ghost" size="sm" onClick={() => { clearStorageState(); setStep("select"); }} className="gap-1 sm:gap-1.5 text-muted-foreground hover:text-foreground text-xs sm:text-sm h-8 sm:h-9 px-2 sm:px-3">
+                <ArrowRight className="w-3.5 h-3.5 sm:w-4 sm:h-4" />تغيير الوظيفة
+              </Button>
+              <div className="w-px h-4 sm:h-5 bg-border/60" />
+              <Button variant="ghost" size="sm" onClick={saveReport} disabled={isSaving} className="gap-1 sm:gap-1.5 text-xs sm:text-sm h-8 sm:h-9 px-2 sm:px-3">
+                {isSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5 sm:w-4 sm:h-4" />}
+                <span className="hidden xs:inline">{isSaving ? "جاري الحفظ..." : "حفظ"}</span>
+              </Button>
+              {/* مؤشر حالة الاتصال */}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className={`flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-medium transition-all ${
+                    !isOnline ? 'bg-red-100 text-red-700 border border-red-200' :
+                    isSyncing ? 'bg-yellow-100 text-yellow-700 border border-yellow-200' :
+                    pendingCount > 0 ? 'bg-orange-100 text-orange-700 border border-orange-200' :
+                    'bg-emerald-100 text-emerald-700 border border-emerald-200'
+                  }`}>
+                    <div className={`w-1.5 h-1.5 rounded-full ${
+                      !isOnline ? 'bg-red-500' :
+                      isSyncing ? 'bg-yellow-500 animate-pulse' :
+                      pendingCount > 0 ? 'bg-orange-500' :
+                      'bg-emerald-500'
+                    }`} />
+                    <span className="hidden sm:inline">
+                      {!isOnline ? 'غير متصل' : isSyncing ? 'جاري المزامنة' : pendingCount > 0 ? `${pendingCount} معلق` : 'متصل'}
+                    </span>
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent>
+                  {!isOnline ? 'لا يوجد اتصال - البيانات محفوظة محلياً' :
+                   isSyncing ? 'جاري مزامنة البيانات...' :
+                   pendingCount > 0 ? `${pendingCount} إجراء بانتظار المزامنة` :
+                   'متصل بالإنترنت'}
+                </TooltipContent>
+              </Tooltip>
+            </div>
+            <div className="flex items-center gap-2 sm:gap-3">
+              <div className="flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg" style={{ backgroundColor: grade.color + '12' }}>
+                <span className="text-base sm:text-xl font-black" style={{ color: grade.color }}>{percentage}%</span>
+                <span className="text-[10px] sm:text-xs font-medium" style={{ color: grade.color }}>{grade.label}</span>
+              </div>
+              <Button onClick={() => setStep("final-review")} size="sm" className="gap-1 sm:gap-1.5 text-xs sm:text-sm h-8 sm:h-9 px-2.5 sm:px-3">
+                <Eye className="w-3.5 h-3.5 sm:w-4 sm:h-4" /><span className="hidden sm:inline">التقييم النهائي</span><span className="sm:hidden">التقييم</span>
+              </Button>
+            </div>
+          </div>
+
+          {/* ===== Title - Mobile Optimized ===== */}
+          <div className="mb-4 sm:mb-6">
+            <div className="flex items-center gap-2.5 sm:gap-3">
+              {selectedJob && (
+                <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center shrink-0" style={{ backgroundColor: selectedJob.color + '15' }}>
+                  <selectedJob.icon className="w-4.5 h-4.5 sm:w-5 sm:h-5" style={{ color: selectedJob.color }} />
+                </div>
+              )}
+              <div className="min-w-0">
+                <h1 className="text-lg sm:text-xl md:text-2xl font-black text-foreground truncate" style={{ fontFamily: "var(--font-heading)" }}>
+                  {selectedJob?.title}
+                </h1>
+                {selectedJob?.hasStandards && (
+                  <p className="text-[10px] sm:text-xs text-muted-foreground mt-0.5 truncate">نظام المعايير الرسمي · {indicatorsCoverage?.covered || 0}/{indicatorsCoverage?.total || 0} بند مغطى</p>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* ===== لوحة تحليل الفجوات - Mobile Optimized ===== */}
+          <Card className="mb-4 sm:mb-6 border-border/40 shadow-sm">
+            <CardContent className="p-3 sm:p-5">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-3 mb-3 sm:mb-4">
+                <div className="flex items-center gap-2">
+                  <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                    <TrendingUp className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-primary" />
+                  </div>
+                  <h2 className="font-bold text-foreground text-xs sm:text-sm" style={{ fontFamily: "var(--font-heading)" }}>تحليل الجاهزية</h2>
+                </div>
+                <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+                  <Button onClick={(e) => { e.preventDefault(); e.stopPropagation(); try { localStorage.setItem(STORAGE_PENDING_UPLOAD, "smart"); } catch {} smartUploadRef.current?.click(); }} disabled={isSmartUploading}
+                    variant="default" size="sm" className="gap-1.5 bg-violet-600 hover:bg-violet-700 shadow-sm text-xs h-8 sm:h-9 w-full sm:w-auto">
+                    {isSmartUploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+                    {isSmartUploading ? "جاري التصنيف..." : "رفع شواهد مع تصنيف ذكي"}
+                  </Button>
+                  <Button onClick={(e) => { e.preventDefault(); e.stopPropagation(); setShowCoverageReport(true); }}
+                    variant="outline" size="sm" className="gap-1.5 text-xs h-8 sm:h-9 w-full sm:w-auto border-emerald-300 text-emerald-700 hover:bg-emerald-50 dark:border-emerald-700 dark:text-emerald-400 dark:hover:bg-emerald-950/30">
+                    <BarChart3 className="w-3.5 h-3.5" />
+                    تقرير التغطية
+                  </Button>
+                </div>
+              </div>
+
+              {/* شريط تقدم التصنيف الذكي */}
+              {uploadProgress && (
+                <motion.div
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  className="mb-3 sm:mb-4 bg-gradient-to-r from-violet-50 to-indigo-50 dark:from-violet-950/30 dark:to-indigo-950/30 rounded-xl p-4 border border-violet-200/50 shadow-sm">
+                  {/* مراحل التقدم */}
+                  <div className="flex items-center justify-between mb-3">
+                    {[
+                      { label: "قراءة", threshold: 10, icon: Upload },
+                      { label: "ضغط", threshold: 40, icon: Image },
+                      { label: "تصنيف", threshold: 60, icon: Sparkles },
+                      { label: "إضافة", threshold: 85, icon: CheckCircle },
+                    ].map((phase, i) => {
+                      const isActive = uploadProgress.percent >= phase.threshold;
+                      const isCurrent = uploadProgress.percent >= phase.threshold && (i === 3 || uploadProgress.percent < [10, 40, 60, 85, 100][i + 1]);
+                      const PhaseIcon = phase.icon;
+                      return (
+                        <div key={phase.label} className="flex flex-col items-center gap-1 flex-1">
+                          <div className={`w-8 h-8 rounded-full flex items-center justify-center transition-all duration-500 ${
+                            isCurrent ? 'bg-violet-600 text-white shadow-lg shadow-violet-600/30 scale-110' :
+                            isActive ? 'bg-violet-500 text-white' :
+                            'bg-violet-100 text-violet-400 dark:bg-violet-900/50'
+                          }`}>
+                            {isCurrent ? <Loader2 className="w-4 h-4 animate-spin" /> : <PhaseIcon className="w-4 h-4" />}
+                          </div>
+                          <span className={`text-[9px] font-medium transition-colors ${
+                            isActive ? 'text-violet-700 dark:text-violet-300' : 'text-violet-400 dark:text-violet-600'
+                          }`}>{phase.label}</span>
+                          {i < 3 && (
+                            <div className="absolute" style={{ display: 'none' }} />
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                  {/* شريط التقدم الرئيسي */}
+                  <div className="flex items-center justify-between text-xs mb-1.5">
+                    <span className="font-medium text-violet-700 dark:text-violet-400">{uploadProgress.stage}</span>
+                    <span className="font-bold text-violet-600">{uploadProgress.percent}%</span>
+                  </div>
+                  <div className="w-full bg-violet-200/30 dark:bg-violet-800/30 rounded-full h-2.5 overflow-hidden">
+                    <motion.div
+                      initial={{ width: 0 }}
+                      animate={{ width: `${uploadProgress.percent}%` }}
+                      transition={{ duration: 0.5, ease: 'easeOut' }}
+                      className={`h-full rounded-full ${
+                        uploadProgress.percent === 100
+                          ? 'bg-gradient-to-r from-emerald-500 to-emerald-400'
+                          : 'bg-gradient-to-r from-violet-600 to-indigo-500'
+                      }`}
+                    />
+                  </div>
+                  {uploadProgress.percent === 100 && (
+                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex items-center gap-1.5 mt-2 text-emerald-600">
+                      <CheckCircle className="w-3.5 h-3.5" />
+                      <span className="text-xs font-medium">تم بنجاح!</span>
+                    </motion.div>
+                  )}
+                </motion.div>
+              )}
+
+              {/* شريط التقدم العام */}
+              <div className="mb-3 sm:mb-4">
+                <div className="flex items-center justify-between text-xs sm:text-sm mb-1.5 sm:mb-2">
+                  <span className="font-bold" style={{ color: grade.color }}>{gapAnalysis.percentage}% جاهزية</span>
+                  <span className="text-[10px] sm:text-xs text-muted-foreground">{gapAnalysis.totalEvidences} شاهد مرفوع</span>
+                </div>
+                <Progress value={gapAnalysis.percentage} className="h-2 sm:h-2.5" />
+              </div>
+
+              {/* إحصائيات سريعة - Mobile Grid */}
+              <div className="grid grid-cols-3 gap-2 sm:gap-3">
+                <div className="flex flex-col sm:flex-row items-center sm:items-center gap-1.5 sm:gap-3 bg-emerald-50 dark:bg-emerald-950/30 rounded-lg sm:rounded-xl p-2 sm:p-3 border border-emerald-200/50 text-center sm:text-right">
+                  <div className="w-7 h-7 sm:w-9 sm:h-9 rounded-lg bg-emerald-100 dark:bg-emerald-900/50 flex items-center justify-center shrink-0">
+                    <CheckCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-600" />
+                  </div>
+                  <div>
+                    <p className="text-base sm:text-lg font-black text-emerald-700 dark:text-emerald-400 leading-none">{gapAnalysis.coveredCriteria}</p>
+                    <p className="text-[9px] sm:text-[10px] text-emerald-600 dark:text-emerald-500 mt-0.5">مكتمل</p>
+                  </div>
+                </div>
+                <div className="flex flex-col sm:flex-row items-center sm:items-center gap-1.5 sm:gap-3 bg-amber-50 dark:bg-amber-950/30 rounded-lg sm:rounded-xl p-2 sm:p-3 border border-amber-200/50 text-center sm:text-right">
+                  <div className="w-7 h-7 sm:w-9 sm:h-9 rounded-lg bg-amber-100 dark:bg-amber-900/50 flex items-center justify-center shrink-0">
+                    <AlertTriangle className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-600" />
+                  </div>
+                  <div>
+                    <p className="text-base sm:text-lg font-black text-amber-700 dark:text-amber-400 leading-none">{gapAnalysis.partialCriteria}</p>
+                    <p className="text-[9px] sm:text-[10px] text-amber-600 dark:text-amber-500 mt-0.5">جزئي</p>
+                  </div>
+                </div>
+                <div className="flex flex-col sm:flex-row items-center sm:items-center gap-1.5 sm:gap-3 bg-red-50 dark:bg-red-950/30 rounded-lg sm:rounded-xl p-2 sm:p-3 border border-red-200/50 text-center sm:text-right">
+                  <div className="w-7 h-7 sm:w-9 sm:h-9 rounded-lg bg-red-100 dark:bg-red-900/50 flex items-center justify-center shrink-0">
+                    <XCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-red-500" />
+                  </div>
+                  <div>
+                    <p className="text-base sm:text-lg font-black text-red-600 dark:text-red-400 leading-none">{gapAnalysis.missedCriteria}</p>
+                    <p className="text-[9px] sm:text-[10px] text-red-500 dark:text-red-400 mt-0.5">مفقود</p>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* ===== Tabs ===== */}
+          <Tabs value={activeTab} onValueChange={setActiveTab}>
+            <TabsList className="mb-4">
+              <TabsTrigger value="criteria">البنود ({allCriteria.length})</TabsTrigger>
+              <TabsTrigger value="info">البيانات الشخصية</TabsTrigger>
+            </TabsList>
+
+            {/* ===== تبويب البنود ===== */}
+            <TabsContent value="criteria">
+              {/* ===== شريط البحث والفلتر ===== */}
+              <div className="mb-4 space-y-2">
+                <div className="relative">
+                  <SearchIcon className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="ابحث في الشواهد بالعنوان أو الوصف أو الكلمات المفتاحية..."
+                    className="w-full pr-10 pl-4 py-2.5 rounded-xl border border-border text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40"
+                  />
+                  {searchQuery && (
+                    <button type="button" onClick={() => setSearchQuery("")} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                      <X className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-[10px] text-muted-foreground">فلتر الأولوية:</span>
+                  <button type="button" onClick={() => setFilterPriority('all')}
+                    className={`px-2.5 py-1 rounded-full text-[10px] font-medium transition-all ${filterPriority === 'all' ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:bg-muted/80'}`}>
+                    الكل
+                  </button>
+                  {(Object.entries(PRIORITY_CONFIG) as [EvidencePriority, typeof PRIORITY_CONFIG[EvidencePriority]][]).map(([key, config]) => (
+                    <button key={key} type="button" onClick={() => setFilterPriority(key)}
+                      className={`px-2.5 py-1 rounded-full text-[10px] font-medium transition-all flex items-center gap-1 ${filterPriority === key ? 'text-white' : 'bg-muted text-muted-foreground hover:bg-muted/80'}`}
+                      style={filterPriority === key ? { backgroundColor: config.color } : {}}>
+                      <span>{config.icon}</span>{config.label}
+                    </button>
+                  ))}
+                </div>
+                {/* نتائج البحث */}
+                {searchQuery && (() => {
+                  const results: { criterionId: string; criterionTitle: string; evidence: EvidenceItem; criterionIndex: number }[] = [];
+                  const q = searchQuery.toLowerCase();
+                  allCriteria.forEach((c, idx) => {
+                    const data = criteriaData[c.id];
+                    if (!data) return;
+                    data.evidences.forEach(ev => {
+                      const matchText = ev.text?.toLowerCase().includes(q);
+                      const matchFile = ev.fileName?.toLowerCase().includes(q);
+                      const matchComment = ev.comment?.toLowerCase().includes(q);
+                      const matchKeywords = ev.keywords?.some(k => k.toLowerCase().includes(q));
+                      const matchFormData = ev.formData && Object.values(ev.formData).some(v => v?.toLowerCase().includes(q));
+                      if (matchText || matchFile || matchComment || matchKeywords || matchFormData) {
+                        results.push({ criterionId: c.id, criterionTitle: c.title, evidence: ev, criterionIndex: idx });
+                      }
+                    });
+                  });
+                  if (results.length === 0) return (
+                    <div className="text-center py-4 text-muted-foreground text-xs">
+                      <SearchIcon className="w-8 h-8 mx-auto mb-2 opacity-30" />
+                      <p>لا توجد نتائج مطابقة لـ "{searchQuery}"</p>
+                    </div>
+                  );
+                  return (
+                    <Card className="border-primary/20 bg-primary/5">
+                      <CardContent className="p-3">
+                        <h4 className="text-xs font-bold text-foreground mb-2 flex items-center gap-1.5">
+                          <SearchIcon className="w-3.5 h-3.5 text-primary" />
+                          {results.length} نتيجة لـ "{searchQuery}"
+                        </h4>
+                        <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                          {results.map(r => (
+                            <div key={r.evidence.id}
+                              className="flex items-center justify-between gap-2 p-2 rounded-lg bg-background border border-border/50 cursor-pointer hover:border-primary/30 transition-colors"
+                              onClick={() => { setCurrentCriterionIndex(r.criterionIndex); setStep('criterion-detail'); setSearchQuery(''); }}>
+                              <div className="flex items-center gap-2 min-w-0">
+                                {r.evidence.priority && (
+                                  <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium" style={{ backgroundColor: PRIORITY_CONFIG[r.evidence.priority].color + '15', color: PRIORITY_CONFIG[r.evidence.priority].color }}>
+                                    {PRIORITY_CONFIG[r.evidence.priority].icon}
+                                  </span>
+                                )}
+                                <span className="text-xs text-foreground truncate">{r.evidence.text || r.evidence.fileName || 'شاهد'}</span>
+                              </div>
+                              <Badge variant="outline" className="text-[9px] shrink-0">{r.criterionTitle}</Badge>
+                            </div>
+                          ))}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  );
+                })()}
+              </div>
+
+              {/* قائمة البنود */}
+              <div className="space-y-3">
+                {allCriteria.map((criterion, index) => {
+                  const data = criteriaData[criterion.id];
+                  if (!data) return null;
+                  const evidenceCount = data.evidences.length;
+                  const isCustom = criterion.id.startsWith("custom_main_");
+                  const status = data.score >= 4 && evidenceCount > 0 ? "complete" : evidenceCount > 0 || data.score > 0 ? "partial" : "missing";
+                  const jobStandards = selectedJob?.id === "teacher" ? STANDARDS : (selectedJob ? getStandardsForJob(selectedJob.id) : []);
+                  const hasStd = selectedJob?.hasStandards;
+                  const standard = hasStd ? jobStandards.find(s => s.id === criterion.id) : null;
+                  const indicatorProgress = hasStd && standard ? (() => {
+                    let total = 0;
+                    let covered = 0;
+                    standard.items.forEach(item => {
+                      total++;
+                      if (data.evidences.some(e => e.subEvidenceId === item.id)) covered++;
+                      (item.subItems || []).forEach(sub => {
+                        total++;
+                        if (data.evidences.some(e => e.subEvidenceId === sub.id)) covered++;
+                      });
+                    });
+                    return { covered, total, pct: total > 0 ? Math.round((covered / total) * 100) : 0 };
+                  })() : null;
+
+                  return (
+                    <Card key={criterion.id}
+                      className={`cursor-pointer hover:shadow-md transition-all duration-200 group ${
+                        status === "complete" ? "border-emerald-300 bg-emerald-50/20 hover:border-emerald-400"
+                        : status === "partial" ? "border-amber-300 bg-amber-50/20 hover:border-amber-400"
+                        : "border-border/50 hover:border-primary/30"
+                      }`}
+                      onClick={() => { setCurrentCriterionIndex(index); setStep("criterion-detail"); }}>
+                      <CardContent className="p-3 sm:p-4">
+                        <div className="flex items-start sm:items-center gap-2.5 sm:gap-4">
+                          {/* رقم البند / أيقونة */}
+                          <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-lg sm:rounded-xl flex items-center justify-center font-bold text-base sm:text-lg shrink-0 transition-transform group-hover:scale-105 ${
+                            isCustom ? "bg-violet-100 text-violet-700" : ""
+                          }`}
+                            style={standard ? { backgroundColor: standard.color + "15" } : !isCustom ? (
+                              status === "complete" ? { backgroundColor: "#dcfce7" } : status === "partial" ? { backgroundColor: "#fef3c7" } : { backgroundColor: "#f1f5f9" }
+                            ) : undefined}>
+                            {standard ? (() => { const StdIcon = STANDARD_ICONS[standard.id]; return StdIcon ? <StdIcon className="w-5 h-5 sm:w-6 sm:h-6" style={{ color: standard.color }} /> : <span className="text-base sm:text-lg font-bold" style={{ color: standard.color }}>{standard.number}</span>; })() : isCustom ? <Plus className="w-4 h-4 sm:w-5 sm:h-5" /> : <span className="text-base sm:text-lg font-bold" style={{ color: status === "complete" ? "#16a34a" : status === "partial" ? "#ca8a04" : "#64748b" }}>{index + 1}</span>}
+                          </div>
+
+                          {/* المحتوى */}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-1.5 sm:gap-2 mb-0.5">
+                              <h3 className="font-bold text-foreground text-xs sm:text-sm truncate" style={{ fontFamily: "var(--font-heading)" }}>
+                                {criterion.title}
+                              </h3>
+                              {isCustom && <Badge variant="outline" className="text-[9px] sm:text-[10px] shrink-0">مخصص</Badge>}
+                            </div>
+                            {hasStd && standard && indicatorProgress ? (
+                              <div className="flex items-center gap-1.5 sm:gap-2 mt-0.5 sm:mt-1">
+                                <span className="text-[10px] sm:text-[11px] text-muted-foreground shrink-0">{indicatorProgress.covered}/{indicatorProgress.total} مؤشر</span>
+                                <div className="flex-1 h-1 sm:h-1.5 bg-muted rounded-full overflow-hidden max-w-[80px] sm:max-w-[120px]">
+                                  <div className="h-full rounded-full transition-all duration-300" style={{ width: `${indicatorProgress.pct}%`, backgroundColor: standard.color }} />
+                                </div>
+                                <span className="text-[9px] sm:text-[10px] font-medium hidden sm:inline" style={{ color: standard.color }}>الوزن {standard.weight}%</span>
+                              </div>
+                            ) : (
+                              <p className="text-[10px] sm:text-xs text-muted-foreground truncate">{criterion.description}</p>
+                            )}
+                            {/* Mobile: إحصائيات مصغرة */}
+                            <div className="flex items-center gap-2 mt-1.5 sm:hidden">
+                              <span className="text-[10px] font-bold" style={{ color: status === "complete" ? "#16A34A" : status === "partial" ? "#CA8A04" : "#9CA3AF" }}>
+                                {data.score}/{criterion.maxScore}
+                              </span>
+                              <span className="text-[10px] text-muted-foreground">{evidenceCount} شاهد</span>
+                              {status === "complete" && <CheckCircle className="w-3 h-3 text-emerald-500" />}
+                              {status === "partial" && <AlertTriangle className="w-3 h-3 text-amber-500" />}
+                              {status === "missing" && <XCircle className="w-3 h-3 text-red-400" />}
+                            </div>
+                            {/* Thumbnails مصغرة للشواهد */}
+                            {evidenceCount > 0 && (() => {
+                              const imageEvs = data.evidences.filter(e => e.type === 'image' && e.fileData && !e.fileData.startsWith('idb://'));
+                              const fileEvs = data.evidences.filter(e => e.type === 'file');
+                              const textEvs = data.evidences.filter(e => e.type === 'text');
+                              const linkEvs = data.evidences.filter(e => e.type === 'link');
+                              const videoEvs = data.evidences.filter(e => e.type === 'video');
+                              return (
+                                <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+                                  {/* مصغرات الصور */}
+                                  {imageEvs.slice(0, 3).map((img, idx) => (
+                                    <div key={idx} className="w-8 h-8 sm:w-9 sm:h-9 rounded-lg overflow-hidden border border-border/50 shrink-0">
+                                      <img src={img.fileData!} alt="" className="w-full h-full object-cover" />
+                                    </div>
+                                  ))}
+                                  {imageEvs.length > 3 && (
+                                    <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-lg bg-muted/80 border border-border/50 flex items-center justify-center shrink-0">
+                                      <span className="text-[9px] font-bold text-muted-foreground">+{imageEvs.length - 3}</span>
+                                    </div>
+                                  )}
+                                  {/* أيقونات الأنواع الأخرى */}
+                                  {fileEvs.length > 0 && (
+                                    <div className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-orange-50 dark:bg-orange-950/30 border border-orange-200/30">
+                                      <FileText className="w-3 h-3 text-orange-500" />
+                                      <span className="text-[9px] font-medium text-orange-600">{fileEvs.length}</span>
+                                    </div>
+                                  )}
+                                  {textEvs.length > 0 && (
+                                    <div className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-blue-50 dark:bg-blue-950/30 border border-blue-200/30">
+                                      <Type className="w-3 h-3 text-blue-500" />
+                                      <span className="text-[9px] font-medium text-blue-600">{textEvs.length}</span>
+                                    </div>
+                                  )}
+                                  {linkEvs.length > 0 && (
+                                    <div className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-purple-50 dark:bg-purple-950/30 border border-purple-200/30">
+                                      <LinkIcon className="w-3 h-3 text-purple-500" />
+                                      <span className="text-[9px] font-medium text-purple-600">{linkEvs.length}</span>
+                                    </div>
+                                  )}
+                                  {videoEvs.length > 0 && (
+                                    <div className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-red-50 dark:bg-red-950/30 border border-red-200/30">
+                                      <Video className="w-3 h-3 text-red-500" />
+                                      <span className="text-[9px] font-medium text-red-600">{videoEvs.length}</span>
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })()}
+                          </div>
+
+                          {/* الإحصائيات - Desktop Only */}
+                          <div className="hidden sm:flex items-center gap-4 shrink-0">
+                            <div className="flex items-center gap-1.5">
+                              {status === "complete" && <CheckCircle className="w-4 h-4 text-emerald-500" />}
+                              {status === "partial" && <AlertTriangle className="w-4 h-4 text-amber-500" />}
+                              {status === "missing" && <XCircle className="w-4 h-4 text-red-400" />}
+                              <div className="text-center">
+                                <p className="text-sm font-bold" style={{ color: status === "complete" ? "#16A34A" : status === "partial" ? "#CA8A04" : "#9CA3AF" }}>
+                                  {data.score}/{criterion.maxScore}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="text-center border-r border-border/50 pr-3">
+                              <p className="text-xs font-bold text-foreground">{evidenceCount}</p>
+                              <p className="text-[10px] text-muted-foreground">شاهد</p>
+                            </div>
+                            <ArrowLeft className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors" />
+                          </div>
+                          {/* Mobile arrow */}
+                          <ArrowLeft className="w-4 h-4 text-muted-foreground sm:hidden shrink-0 mt-3" />
+                        </div>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+              </div>
+
+              {/* إضافة قسم رئيسي مخصص */}
+              {!showAddMainSection ? (
+                <Button variant="outline" className="w-full mt-4 border-dashed gap-2" onClick={() => setShowAddMainSection(true)}>
+                  <Plus className="w-4 h-4" />إضافة قسم رئيسي مخصص
+                </Button>
+              ) : (
+                <Card className="mt-4 border-violet-200 bg-violet-50/30">
+                  <CardContent className="p-4 space-y-3">
+                    <input type="text" value={newMainSectionTitle} onChange={(e) => setNewMainSectionTitle(e.target.value)}
+                      placeholder="اسم القسم الرئيسي" className="w-full px-3 py-2.5 rounded-lg border border-border text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/20" />
+                    <input type="text" value={newMainSectionDesc} onChange={(e) => setNewMainSectionDesc(e.target.value)}
+                      placeholder="وصف مختصر (اختياري)" className="w-full px-3 py-2 rounded-lg border border-border text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/20" />
+                    <div className="flex gap-2">
+                      <Button size="sm" onClick={addCustomMainSection} disabled={!newMainSectionTitle.trim()}>إضافة</Button>
+                      <Button size="sm" variant="ghost" onClick={() => setShowAddMainSection(false)}>إلغاء</Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+            </TabsContent>
+
+            {/* ===== تبويب البيانات الشخصية ===== */}
+            <TabsContent value="info">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <FileText className="w-5 h-5 text-primary" />البيانات الأساسية
+                  </CardTitle>
+                  <p className="text-xs text-muted-foreground mt-1">هذه البيانات ستظهر في جميع التقارير والملفات المصدّرة والعرض الإلكتروني</p>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {[
+                      { key: "name", label: "الاسم الكامل", placeholder: "أدخل الاسم الرباعي", required: true },
+                      { key: "school", label: "المدرسة", placeholder: "اسم المدرسة", required: true },
+                      { key: "year", label: "العام الدراسي", placeholder: "مثال: ١٤٤٧هـ" },
+                      { key: "semester", label: "الفصل الدراسي", placeholder: "مثال: الفصل الدراسي الثاني" },
+                      { key: "evaluator", label: "اسم المقيّم", placeholder: "اسم المقيّم" },
+                      { key: "evaluatorRole", label: "صفة المقيّم", placeholder: "مثال: مدير المدرسة" },
+                      { key: "date", label: "تاريخ التقييم", placeholder: "مثال: ١٤٤٧/٠٦/١٥" },
+                    ].map((field) => (
+                      <div key={field.key}>
+                        <label className="block text-sm font-medium text-foreground mb-1.5">
+                          {field.label}
+                          {(field as any).required && <span className="text-red-500 mr-1">*</span>}
+                        </label>
+                        <input type="text" value={(personalInfo as any)[field.key]}
+                          onChange={(e) => setPersonalInfo((prev) => ({ ...prev, [field.key]: e.target.value }))}
+                          placeholder={field.placeholder}
+                          className="w-full px-3 py-2.5 rounded-lg border border-border text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40" />
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* حقل الجهة / الإدارة */}
+                  <div className="mt-4">
+                    <label className="block text-sm font-medium text-foreground mb-1.5">الجهة / الإدارة</label>
+                    <textarea value={personalInfo.department}
+                      onChange={(e) => setPersonalInfo((prev) => ({ ...prev, department: e.target.value }))}
+                      placeholder="المملكة العربية السعودية\nوزارة التعليم\nالإدارة العامة للتعليم بمنطقة..."
+                      rows={3}
+                      className="w-full px-3 py-2.5 rounded-lg border border-border text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40 resize-none" />
+                    <p className="text-[10px] text-muted-foreground mt-1">يظهر في رأس التقرير والغلاف (سطر لكل مستوى)</p>
+                  </div>
+
+                  {/* تنبيه */}
+                  <div className="mt-4 p-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-xs flex items-start gap-2">
+                    <Sparkles className="w-4 h-4 shrink-0 mt-0.5" />
+                    <span>جميع البيانات التي تدخلها هنا ستظهر تلقائياً في التقييم النهائي وتقرير التغطية وملف PDF المصدّر والعرض الإلكتروني التفاعلي.</span>
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+          </Tabs>
+        </div>
+      </div>
+    );
+  }
+
+  // ======================================================================
+  // ===== الخطوة 3: تفاصيل البند =====
+  // ======================================================================
   if (step === "criterion-detail" && currentCriterion) {
     const data = criteriaData[currentCriterion.id] || { score: 0, notes: "", evidences: [], customSubEvidences: [] };
     const allSubEvidences = [...(currentCriterion.subEvidences || []), ...(data.customSubEvidences || [])];
+    const jobStandardsDetail = selectedJob?.id === "teacher" ? STANDARDS : (selectedJob ? getStandardsForJob(selectedJob.id) : []);
+    const isStandardBased = selectedJob?.hasStandards;
+    const standard = isStandardBased ? jobStandardsDetail.find(s => s.id === currentCriterion.id) : null;
 
     return (
-      <div className="min-h-screen bg-[#F8FAFC] p-4 md:p-6" dir="rtl">
-        <AISettingsModal />
-        <input type="file" ref={fileInputRef} className="hidden" accept="image/*,video/*,.pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx" onChange={handleFileUpload} />
+      <div className="min-h-screen bg-background p-3 sm:p-4 md:p-6" dir="rtl">
+        <input type="file" ref={fileInputRef} className="hidden" accept="image/*,video/*,.pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx" multiple onChange={handleFileUpload} />
+        {/* Lightbox Overlay */}
+        <AnimatePresence>
+          {lightboxImage && <LightboxOverlay src={lightboxImage} onClose={() => setLightboxImage(null)} />}
+        </AnimatePresence>
         <div className="max-w-4xl mx-auto">
-          {/* Header */}
-          <div className="flex items-center justify-between mb-5">
-            <div className="flex items-center gap-3">
-              <button onClick={() => setStep("criteria-list")} className="flex items-center gap-1.5 text-gray-500 hover:text-gray-700 text-sm bg-white px-3 py-2 rounded-lg border border-gray-200">
-                <ArrowRight className="w-4 h-4" />العودة للبنود
-              </button>
-              <div className="flex gap-1">
-                <button disabled={currentCriterionIndex === 0} onClick={() => setCurrentCriterionIndex(i => i - 1)} className="p-2 rounded-lg bg-white border border-gray-200 disabled:opacity-30"><ArrowRight className="w-4 h-4" /></button>
-                <button disabled={currentCriterionIndex === (selectedJob?.criteria.length || 0) - 1} onClick={() => setCurrentCriterionIndex(i => i + 1)} className="p-2 rounded-lg bg-white border border-gray-200 disabled:opacity-30"><ArrowLeft className="w-4 h-4" /></button>
+
+          {/* Header - Mobile Optimized */}
+          <div className="flex items-center justify-between mb-4 sm:mb-5 gap-2">
+            <div className="flex items-center gap-1.5 sm:gap-2">
+              <Button variant="outline" size="sm" onClick={() => setStep("dashboard")} className="text-xs sm:text-sm h-8 sm:h-9 px-2 sm:px-3">
+                <ArrowRight className="w-3.5 h-3.5 sm:w-4 sm:h-4 ml-0.5 sm:ml-1" /><span className="hidden sm:inline">العودة للبنود</span><span className="sm:hidden">البنود</span>
+              </Button>
+              <div className="flex gap-0.5 sm:gap-1">
+                <Button variant="outline" size="icon" className="h-8 w-8 sm:h-9 sm:w-9" disabled={currentCriterionIndex === 0}
+                  onClick={() => setCurrentCriterionIndex(i => i - 1)}><ArrowRight className="w-3.5 h-3.5 sm:w-4 sm:h-4" /></Button>
+                <Button variant="outline" size="icon" className="h-8 w-8 sm:h-9 sm:w-9" disabled={currentCriterionIndex === allCriteria.length - 1}
+                  onClick={() => setCurrentCriterionIndex(i => i + 1)}><ArrowLeft className="w-3.5 h-3.5 sm:w-4 sm:h-4" /></Button>
               </div>
             </div>
-            <span className="text-sm text-gray-500">البند {currentCriterionIndex + 1} من {selectedJob?.criteria.length}</span>
+            <Badge variant="secondary" className="text-[10px] sm:text-xs">{currentCriterionIndex + 1} / {allCriteria.length}</Badge>
           </div>
 
-          {/* Criterion Header */}
-          <div className="bg-white rounded-xl border border-gray-200 p-5 mb-5">
-            <div className="flex items-start justify-between mb-4">
-              <div>
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="w-8 h-8 rounded-lg bg-emerald-100 flex items-center justify-center text-emerald-700 font-bold text-sm">{currentCriterionIndex + 1}</span>
-                  <h1 className="text-xl font-black text-gray-900" style={{ fontFamily: "'Tajawal', sans-serif" }}>{currentCriterion.title}</h1>
+          {/* Criterion Header Card - Mobile Optimized */}
+          <Card className="mb-4 sm:mb-5">
+            <CardContent className="p-3 sm:p-5">
+              {/* Breadcrumb مسار التصنيف */}
+              {isStandardBased && standard && (
+                <div className="flex items-center gap-1.5 text-[10px] sm:text-[11px] text-muted-foreground mb-2.5 sm:mb-3 flex-wrap">
+                  <span className="font-medium" style={{ color: selectedJob?.color }}>{selectedJob?.title}</span>
+                  <ChevronDown className="w-3 h-3 rotate-[-90deg]" />
+                  <span className="font-medium" style={{ color: standard.color }}>معيار {standard.number}: {standard.title}</span>
+                  <ChevronDown className="w-3 h-3 rotate-[-90deg]" />
+                  <span className="text-foreground font-bold">{standard.items.length} بند</span>
                 </div>
-                <p className="text-sm text-gray-500 mr-10">{currentCriterion.description}</p>
-              </div>
-              <div className="text-center">
-                <label className="text-xs text-gray-500 block mb-1">الدرجة</label>
-                <div className="flex gap-1">
-                  {[1, 2, 3, 4, 5].map((s) => (
-                    <button key={s} onClick={() => updateScore(currentCriterion.id, s)}
-                      className={`w-9 h-9 rounded-lg text-sm font-bold transition-all ${data.score >= s ? 'bg-emerald-600 text-white shadow-md' : 'bg-gray-100 text-gray-400 hover:bg-gray-200'}`}>{s}</button>
-                  ))}
+              )}
+              {!isStandardBased && (
+                <div className="flex items-center gap-1.5 text-[10px] sm:text-[11px] text-muted-foreground mb-2.5 sm:mb-3 flex-wrap">
+                  <span className="font-medium" style={{ color: selectedJob?.color }}>{selectedJob?.title}</span>
+                  <ChevronDown className="w-3 h-3 rotate-[-90deg]" />
+                  <span className="text-foreground font-bold">بند {currentCriterionIndex + 1}</span>
                 </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Sub-Evidences */}
-          <div className="space-y-4">
-            {allSubEvidences.map((sub: any) => {
-              const subEvidences = data.evidences.filter(e => e.subEvidenceId === sub.id);
-              const isExpanded = expandedSubEvidence === sub.id;
-              const aiKey = `${currentCriterion.id}_${sub.id}`;
-              const aiMessages = aiChat[aiKey] || [];
-
-              // Auto-create form evidence for report types
-              const hasFormEvidence = subEvidences.some(e => e.formData && Object.keys(e.formData).length > 0);
-              let formEvId = subEvidences.find(e => e.formData)?.id;
-
-              return (
-                <div key={sub.id} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-                  {/* Sub Header */}
-                  <div role="button" tabIndex={0} onClick={() => {
-                    setExpandedSubEvidence(isExpanded ? null : sub.id);
-                    // Auto-create form evidence when expanding report type
-                    if (!isExpanded && (sub.type === 'report' || sub.type === 'both') && sub.formFields && !hasFormEvidence) {
-                      addEvidence(currentCriterion.id, sub.id, "text");
-                    }
-                  }}
-                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setExpandedSubEvidence(isExpanded ? null : sub.id); }}
-                    className="w-full flex items-center justify-between p-4 hover:bg-gray-50 transition-colors text-right cursor-pointer">
-                    <div className="flex items-center gap-3">
-                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm ${sub.type === 'report' ? 'bg-blue-50 text-blue-600' : sub.type === 'upload' ? 'bg-orange-50 text-orange-600' : 'bg-purple-50 text-purple-600'}`}>
-                        {sub.type === 'report' ? <FileText className="w-4 h-4" /> : sub.type === 'upload' ? <Upload className="w-4 h-4" /> : <Layers className="w-4 h-4" />}
+              )}
+              {/* Mobile: Stack layout */}
+              <div className="flex flex-col gap-3">
+                <div className="flex items-start gap-2.5 sm:gap-3">
+                  <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-lg sm:rounded-xl flex items-center justify-center text-base sm:text-lg shrink-0"
+                    style={{ backgroundColor: (standard?.color || selectedJob?.color || "#059669") + "15" }}>
+                    {standard ? (() => { const StdIcon = STANDARD_ICONS[standard.id]; return StdIcon ? <StdIcon className="w-5 h-5 sm:w-6 sm:h-6" style={{ color: standard.color }} /> : <span className="text-base sm:text-lg font-bold">{standard.number}</span>; })() : <span className="text-base sm:text-lg font-bold">{currentCriterionIndex + 1}</span>}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h1 className="text-base sm:text-xl font-black text-foreground mb-0.5 sm:mb-1 leading-snug" style={{ fontFamily: "var(--font-heading)" }}>
+                      {currentCriterion.title}
+                    </h1>
+                    <p className="text-[11px] sm:text-sm text-muted-foreground leading-relaxed">{currentCriterion.description}</p>
+                    {isStandardBased && standard && (
+                      <div className="flex items-center gap-1.5 sm:gap-2 mt-1.5 sm:mt-2">
+                        <Badge variant="outline" className="text-[9px] sm:text-[10px]">الوزن: {standard.weight}%</Badge>
+                        <Badge variant="outline" className="text-[9px] sm:text-[10px]">{standard.items.length} بند</Badge>
                       </div>
-                      <div>
-                        <h3 className="font-bold text-gray-800 text-sm">{sub.title} {sub.isCustom && <span className="text-xs text-violet-500 mr-1">(مخصص)</span>}</h3>
-                        <p className="text-xs text-gray-500">{sub.description} · {subEvidences.length} شاهد</p>
+                    )}
+                  </div>
+                </div>
+                {/* الدرجة - منفصلة على الجوال */}
+                <div className="flex items-center justify-between bg-muted/30 rounded-lg p-2.5 sm:p-3 border border-border/30">
+                  <label className="text-xs text-muted-foreground font-medium">الدرجة</label>
+                  <div className="flex gap-1 sm:gap-1.5">
+                    {[1, 2, 3, 4, 5].map((s) => (
+                      <button type="button" key={s} onClick={(e) => { e.stopPropagation(); updateScore(currentCriterion.id, s); }}
+                        className={`w-8 h-8 sm:w-9 sm:h-9 rounded-lg text-xs sm:text-sm font-bold transition-all ${data.score >= s ? 'bg-primary text-primary-foreground shadow-md' : 'bg-background text-muted-foreground hover:bg-muted/80 border border-border/50'}`}>{s}</button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Sub-Evidences - نموذج إدخال موحد */}
+          <UnifiedEvidenceForm
+            criterionId={currentCriterion.id}
+            criterionTitle={currentCriterion.title}
+            subEvidences={allSubEvidences as any}
+            evidences={data.evidences as any}
+            formFields={allSubEvidences[0]?.formFields || [
+              { id: "title", label: "العنوان", type: "text" as const, placeholder: "أدخل العنوان..." },
+              { id: "date", label: "التاريخ", type: "date" as const },
+              { id: "details", label: "التفاصيل", type: "textarea" as const, placeholder: "أدخل التفاصيل..." },
+              { id: "notes", label: "ملاحظات", type: "textarea" as const, placeholder: "ملاحظات إضافية..." },
+            ]}
+            onAddRow={(subEvidenceId, type) => addEvidence(currentCriterion.id, subEvidenceId, type)}
+            onRemoveRow={(evidenceId) => removeEvidence(currentCriterion.id, evidenceId)}
+            onUpdateRow={(evidenceId, updates) => updateEvidence(currentCriterion.id, evidenceId, updates)}
+            onUpdateFormField={(evidenceId, fieldId, value) => updateFormField(currentCriterion.id, evidenceId, fieldId, value)}
+            onFileUpload={(subEvidenceId) => triggerFileUpload(currentCriterion.id, subEvidenceId)}
+            onDragUpload={(files, subEvidenceId) => {
+              activeUploadRef.current = { criterionId: currentCriterion.id, subEvidenceId };
+              const dt = new DataTransfer();
+              Array.from(files).forEach(f => dt.items.add(f));
+              const input = fileInputRef.current;
+              if (input) { input.files = dt.files; input.dispatchEvent(new Event('change', { bubbles: true })); }
+            }}
+            onAISuggest={async (prompt) => {
+              const key = `${currentCriterion.id}_${allSubEvidences[0]?.id || ''}`;
+              setAiLoading(key);
+              try {
+                const result = await suggestMutation.mutateAsync({
+                  prompt: prompt || `اقترح شاهد أداء وظيفي لبند "${currentCriterion.title}"`,
+                  context: `الوظيفة: ${selectedJob?.title}, البند: ${currentCriterion.title}`,
+                });
+                setAiLoading(null);
+                return result.content || null;
+              } catch {
+                setAiLoading(null);
+                return "حدث خطأ في الاتصال بالذكاء الاصطناعي. يرجى المحاولة مرة أخرى.";
+              }
+            }}
+            onAIFillForm={async (evidenceId, fields) => {
+              const ev = data.evidences.find(e => e.id === evidenceId);
+              const sub = allSubEvidences.find(s => s.id === ev?.subEvidenceId);
+              await fillFormWithAI(currentCriterion.id, sub?.id || '', evidenceId, fields);
+            }}
+            onAIImproveText={async (evidenceId, fieldId, text) => {
+              await improveFieldText(currentCriterion.id, evidenceId, fieldId, text);
+            }}
+            aiLoading={aiLoading}
+            onPreviewReport={() => {
+              setStep('preview');
+            }}
+            onExportReport={() => {
+              handleExportPDF();
+            }}
+            viewMode={evidenceViewMode}
+            onViewModeChange={setEvidenceViewMode}
+          />
+
+
+          {/* إضافة قسم فرعي مخصص */}
+          {showAddSub === currentCriterion.id ? (
+            <Card className="mt-3 border-violet-200">
+              <CardContent className="p-4 flex gap-2">
+                <input type="text" value={newSubTitle} onChange={(e) => setNewSubTitle(e.target.value)}
+                  placeholder="اسم القسم الفرعي الجديد"
+                  className="flex-1 px-3 py-2 rounded-lg border border-border text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/20" />
+                <Button size="sm" onClick={() => addCustomSubEvidence(currentCriterion.id)} disabled={!newSubTitle.trim()}>إضافة</Button>
+                <Button size="sm" variant="ghost" onClick={() => setShowAddSub(null)}>إلغاء</Button>
+              </CardContent>
+            </Card>
+          ) : (
+            <Button variant="outline" size="sm" className="mt-3 gap-1.5 border-dashed" onClick={() => setShowAddSub(currentCriterion.id)}>
+              <Plus className="w-3.5 h-3.5" />إضافة قسم فرعي مخصص
+            </Button>
+          )}
+
+          {/* Move Evidence Dialog */}
+          {showMoveDialog && (
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setShowMoveDialog(null)}>
+              <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
+                className="bg-background rounded-2xl shadow-2xl max-w-md w-full max-h-[80vh] overflow-hidden" onClick={(e) => e.stopPropagation()}>
+                <div className="p-4 border-b border-border flex items-center justify-between">
+                  <h3 className="font-bold text-foreground flex items-center gap-2">
+                    <Move className="w-4 h-4 text-primary" />نقل الشاهد إلى بند آخر
+                  </h3>
+                  <button type="button" onClick={() => setShowMoveDialog(null)} className="p-1 rounded-lg hover:bg-muted">
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+                <div className="p-2 overflow-y-auto max-h-[60vh]">
+                  {allCriteria.map((crit) => {
+                    const critData = criteriaData[crit.id];
+                    const allSubs = [...crit.subEvidences, ...(critData?.customSubEvidences || [])];
+                    const isCurrent = crit.id === showMoveDialog.fromCriterionId;
+                    return (
+                      <div key={crit.id} className={`mb-1 ${isCurrent ? 'opacity-50' : ''}`}>
+                        <div className="px-3 py-2 text-xs font-bold text-muted-foreground">{crit.title}</div>
+                        {allSubs.map((sub) => (
+                          <button type="button" key={sub.id}
+                            disabled={isCurrent && showMoveDialog.evidence.subEvidenceId === sub.id}
+                            onClick={() => moveEvidenceToCriterion(showMoveDialog.evidence, showMoveDialog.fromCriterionId, crit.id, sub.id)}
+                            className="w-full text-right px-4 py-2.5 hover:bg-muted/80 rounded-lg flex items-center gap-2 transition-colors disabled:opacity-30 disabled:cursor-not-allowed">
+                            <Layers className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                            <span className="text-sm truncate">{sub.title}</span>
+                            {isCurrent && showMoveDialog.evidence.subEvidenceId === sub.id && (
+                              <Badge variant="secondary" className="text-[9px] mr-auto">الموقع الحالي</Badge>
+                            )}
+                          </button>
+                        ))}
+                      </div>
+                    );
+                  })}
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+
+          {/* ===== تقرير التغطية Dialog ===== */}
+          {showCoverageReport && (() => {
+            const reportGrade = getGrade(percentage);
+            return (
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={() => setShowCoverageReport(false)}>
+              <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
+                className="bg-card rounded-2xl shadow-2xl border border-border max-w-2xl w-full max-h-[85vh] overflow-y-auto p-6" onClick={e => e.stopPropagation()}>
+                <div className="flex items-center justify-between mb-6">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-emerald-100 dark:bg-emerald-900/40 flex items-center justify-center">
+                      <BarChart3 className="w-5 h-5 text-emerald-600" />
+                    </div>
+                    <div>
+                      <h2 className="text-lg font-bold" style={{ fontFamily: "var(--font-heading)" }}>تقرير تغطية البنود بالشواهد</h2>
+                      <p className="text-xs text-muted-foreground">{personalInfo.name || 'ملف الإنجاز'} - {selectedJob?.title}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={async (e) => {
+                      e.preventDefault();
+                      setIsGeneratingReport(true);
+                      try {
+                        await exportToPDF('coverage-report-content', `تقرير_التغطية_${personalInfo.name || 'مستند'}.pdf`);
+                        toast.success('تم تصدير التقرير بنجاح');
+                      } catch { toast.error('فشل تصدير التقرير'); }
+                      setIsGeneratingReport(false);
+                    }}>
+                      {isGeneratingReport ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+                      تحميل PDF
+                    </Button>
+                    <button onClick={() => setShowCoverageReport(false)} className="p-1.5 rounded-lg hover:bg-muted">
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+
+                <div id="coverage-report-content" className="space-y-6" dir="rtl">
+                  {/* ملخص عام */}
+                  <div className="bg-gradient-to-r from-emerald-50 to-teal-50 dark:from-emerald-950/30 dark:to-teal-950/30 rounded-xl p-5 border border-emerald-200/50">
+                    <h3 className="font-bold text-sm mb-3" style={{ fontFamily: "var(--font-heading)" }}>ملخص عام</h3>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                      <div className="bg-white/80 dark:bg-card/80 rounded-lg p-3 text-center">
+                        <div className="text-2xl font-bold text-emerald-600">{gapAnalysis.coveredCriteria}</div>
+                        <div className="text-[10px] text-muted-foreground">بند مكتمل</div>
+                      </div>
+                      <div className="bg-white/80 dark:bg-card/80 rounded-lg p-3 text-center">
+                        <div className="text-2xl font-bold text-amber-600">{gapAnalysis.partialCriteria}</div>
+                        <div className="text-[10px] text-muted-foreground">بند جزئي</div>
+                      </div>
+                      <div className="bg-white/80 dark:bg-card/80 rounded-lg p-3 text-center">
+                        <div className="text-2xl font-bold text-red-600">{gapAnalysis.missedCriteria}</div>
+                        <div className="text-[10px] text-muted-foreground">بند مفقود</div>
+                      </div>
+                      <div className="bg-white/80 dark:bg-card/80 rounded-lg p-3 text-center">
+                        <div className="text-2xl font-bold text-blue-600">{gapAnalysis.totalEvidences}</div>
+                        <div className="text-[10px] text-muted-foreground">إجمالي الشواهد</div>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      {/* أزرار معاينة وتصدير لكل شاهد */}
-                      {subEvidences.length > 0 && (
-                        <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
-                          <button onClick={() => { setPreviewSubId(sub.id); }} className="p-1.5 rounded-lg bg-emerald-50 text-emerald-600 hover:bg-emerald-100 text-xs" title="معاينة">
-                            <Eye className="w-3.5 h-3.5" />
-                          </button>
-                          <button onClick={() => handleExportSingleEvidence(sub.id)} disabled={isExporting} className="p-1.5 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 text-xs" title="تصدير PDF">
-                            <Download className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      )}
-                      {isExpanded ? <ChevronUp className="w-5 h-5 text-gray-400" /> : <ChevronDown className="w-5 h-5 text-gray-400" />}
+                    <div className="mt-3">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-xs font-medium">نسبة التغطية الإجمالية</span>
+                        <span className="text-xs font-bold" style={{ color: reportGrade.color }}>{percentage}%</span>
+                      </div>
+                      <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-3">
+                        <div className="h-3 rounded-full transition-all duration-500" style={{ width: `${percentage}%`, backgroundColor: reportGrade.color }} />
+                      </div>
+                      <div className="text-center mt-2">
+                        <Badge variant="outline" className="text-sm font-bold" style={{ borderColor: reportGrade.color, color: reportGrade.color }}>
+                          التقدير: {reportGrade.label}
+                        </Badge>
+                      </div>
                     </div>
                   </div>
 
-                  {/* Expanded Content */}
-                  <AnimatePresence>
-                    {isExpanded && (
-                      <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }}
-                        className="border-t border-gray-100 overflow-hidden">
-                        <div className="p-4 space-y-4">
-                          {/* Form Fields - نموذج واحد مع إمكانية إضافة صفوف */}
-                          {(sub.type === 'report' || sub.type === 'both') && sub.formFields && (() => {
-                            const formEv = subEvidences.find(e => e.formData !== undefined);
-                            if (!formEv) return null;
-                            // جمع الحقول الأصلية + الحقول المضافة ديناميكياً
-                            const dynamicFields = Object.keys(formEv.formData || {}).filter(k => k.startsWith('dynamic_')).map(k => ({
-                              id: k, label: formEv.formData![k.replace('dynamic_', 'label_')] || k.replace('dynamic_', '').replace(/_/g, ' '),
-                              type: 'text' as const, placeholder: '', required: false
-                            }));
-                            const dynamicLabels = Object.keys(formEv.formData || {}).filter(k => k.startsWith('label_'));
-                            return (
-                              <div className="bg-blue-50/50 rounded-xl p-4 border border-blue-100">
-                                <div className="flex items-center justify-between mb-3">
-                                  <h4 className="text-sm font-bold text-gray-700 flex items-center gap-2"><FileText className="w-4 h-4 text-blue-500" />نموذج التقرير</h4>
-                                  <div className="flex gap-2">
-                                    {aiApiKey && (
-                                      <button onClick={() => fillFormWithAI(currentCriterion.id, sub.id, formEv.id, sub.formFields!)}
-                                        disabled={aiLoading === `fill_${formEv.id}`}
-                                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-violet-100 text-violet-700 text-xs font-medium hover:bg-violet-200 disabled:opacity-50">
-                                        {aiLoading === `fill_${formEv.id}` ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
-                                        تعبئة بالذكاء الاصطناعي
-                                      </button>
-                                    )}
-                                    <button onClick={() => addDynamicField(currentCriterion.id, formEv.id)}
-                                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-100 text-emerald-700 text-xs font-medium hover:bg-emerald-200">
-                                      <Plus className="w-3.5 h-3.5" />إضافة صف
-                                    </button>
-                                  </div>
-                                </div>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                  {sub.formFields.map((field: FormField) => (
-                                    <div key={field.id} className={field.type === 'textarea' ? 'md:col-span-2' : ''}>
-                                      <label className="block text-xs font-medium text-gray-600 mb-1">
-                                        {field.label} {field.required && <span className="text-red-500">*</span>}
-                                      </label>
-                                      {field.type === 'textarea' ? (
-                                        <textarea value={formEv.formData?.[field.id] || ''} onChange={(e) => updateFormField(currentCriterion.id, formEv.id, field.id, e.target.value)}
-                                          placeholder={field.placeholder} rows={3}
-                                          className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-500/20 bg-white" />
-                                      ) : field.type === 'select' ? (
-                                        <select value={formEv.formData?.[field.id] || ''} onChange={(e) => updateFormField(currentCriterion.id, formEv.id, field.id, e.target.value)}
-                                          className="w-full px-3 py-2.5 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 bg-white">
-                                          <option value="">اختر...</option>
-                                          {field.options?.map(opt => <option key={opt} value={opt}>{opt}</option>)}
-                                        </select>
-                                      ) : (
-                                        <input type={field.type === 'date' ? 'date' : field.type === 'number' ? 'number' : 'text'}
-                                          value={formEv.formData?.[field.id] || ''} onChange={(e) => updateFormField(currentCriterion.id, formEv.id, field.id, e.target.value)}
-                                          placeholder={field.placeholder}
-                                          className="w-full px-3 py-2.5 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 bg-white" />
-                                      )}
-                                    </div>
-                                  ))}
-                                  {/* الحقول الديناميكية المضافة */}
-                                  {Object.keys(formEv.formData || {}).filter(k => k.startsWith('dynamic_')).map((dynKey) => {
-                                    const labelKey = dynKey.replace('dynamic_', 'label_');
-                                    const fieldLabel = formEv.formData?.[labelKey] || '';
-                                    return (
-                                      <div key={dynKey} className="md:col-span-2">
-                                        <div className="flex items-center gap-2 mb-1">
-                                          <input type="text" value={fieldLabel}
-                                            onChange={(e) => updateFormField(currentCriterion.id, formEv.id, labelKey, e.target.value)}
-                                            placeholder="عنوان الحقل..."
-                                            className="text-xs font-medium text-gray-600 bg-transparent border-b border-dashed border-gray-300 focus:border-blue-400 focus:outline-none px-1 py-0.5 flex-1" />
-                                          <button onClick={() => removeDynamicField(currentCriterion.id, formEv.id, dynKey)}
-                                            className="p-1 rounded text-red-400 hover:text-red-600 hover:bg-red-50">
-                                            <X className="w-3.5 h-3.5" />
-                                          </button>
-                                        </div>
-                                        <textarea value={formEv.formData?.[dynKey] || ''}
-                                          onChange={(e) => updateFormField(currentCriterion.id, formEv.id, dynKey, e.target.value)}
-                                          placeholder="أدخل البيانات هنا..."
-                                          rows={2}
-                                          className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-500/20 bg-white" />
-                                      </div>
-                                    );
-                                  })}
-                                </div>
+                  {/* رسم بياني شريطي لكل بند */}
+                  <div>
+                    <h3 className="font-bold text-sm mb-3" style={{ fontFamily: "var(--font-heading)" }}>تفصيل التغطية لكل بند</h3>
+                    <div className="space-y-2">
+                      {allCriteria.map((criterion, idx) => {
+                        const data = criteriaData[criterion.id];
+                        const evidenceCount = data?.evidences?.length || 0;
+                        const subCount = criterion.subEvidences.length + (data?.customSubEvidences?.length || 0);
+                        const coveredSubs = new Set(data?.evidences?.map(e => e.subEvidenceId) || []).size;
+                        const subCoverage = subCount > 0 ? Math.round((coveredSubs / subCount) * 100) : 0;
+                        const barColor = subCoverage >= 80 ? '#16A34A' : subCoverage >= 50 ? '#CA8A04' : subCoverage > 0 ? '#EA580C' : '#DC2626';
+                        const StatusIcon = subCoverage >= 80 ? CheckCircle : subCoverage >= 50 ? AlertTriangle : XCircle;
+                        
+                        return (
+                          <div key={criterion.id} className="bg-muted/30 rounded-lg p-3 border border-border/50">
+                            <div className="flex items-center justify-between mb-1.5">
+                              <div className="flex items-center gap-2 flex-1 min-w-0">
+                                <StatusIcon className="w-4 h-4 shrink-0" style={{ color: barColor }} />
+                                <span className="text-xs font-medium truncate">{idx + 1}. {criterion.title}</span>
                               </div>
-                            );
-                          })()}
-
-                          {/* Evidences List */}
-                          {subEvidences.filter(e => !(e.formData && Object.keys(e.formData).length === 0 && e.type === 'text' && !e.text)).length > 0 && (
-                            <div className="space-y-2">
-                              {subEvidences.filter(e => {
-                                // Don't show empty form evidences as separate items
-                                if (e.formData && Object.keys(e.formData).some(k => e.formData![k])) return false;
-                                if (e.type === 'text' && !e.text && e.formData) return false;
-                                return true;
-                              }).map((ev) => renderEvidenceItem(ev, currentCriterion.id))}
+                              <div className="flex items-center gap-2 shrink-0">
+                                <span className="text-[10px] text-muted-foreground">{evidenceCount} شاهد</span>
+                                <span className="text-xs font-bold" style={{ color: barColor }}>{subCoverage}%</span>
+                              </div>
                             </div>
-                          )}
-
-                          {/* Add Evidence Button */}
-                          <div className="flex flex-wrap gap-2">
-                            <button onClick={() => addEvidence(currentCriterion.id, sub.id, "text")}
-                              className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl border-2 border-dashed border-emerald-300 text-emerald-600 hover:bg-emerald-50 text-xs font-medium transition-colors">
-                              <Plus className="w-4 h-4" />إضافة شاهد نصي
-                            </button>
-                            <button onClick={() => triggerFileUpload(currentCriterion.id, sub.id)}
-                              className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl border-2 border-dashed border-blue-300 text-blue-600 hover:bg-blue-50 text-xs font-medium transition-colors">
-                              <Upload className="w-4 h-4" />رفع صورة / ملف / فيديو
-                            </button>
-                            <button onClick={() => addEvidence(currentCriterion.id, sub.id, "link")}
-                              className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl border-2 border-dashed border-purple-300 text-purple-600 hover:bg-purple-50 text-xs font-medium transition-colors">
-                              <LinkIcon className="w-4 h-4" />إضافة رابط
-                            </button>
-                          </div>
-
-                          {/* مساعد AI مركزي مصغر - زر واحد فقط */}
-                          <div className="flex items-center gap-2 pt-2 border-t border-gray-100">
-                            {aiApiKey && (
-                              <button onClick={() => callAI(currentCriterion.id, sub.id, `اقترح شاهد أداء وظيفي لبند "${currentCriterion.title}" - ${sub.title}`)}
-                                disabled={aiLoading === aiKey}
-                                className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-violet-50 text-violet-700 text-xs font-medium hover:bg-violet-100 disabled:opacity-50 border border-violet-200">
-                                {aiLoading === aiKey ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
-                                اقتراح بالذكاء الاصطناعي
-                              </button>
+                            <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                              <div className="h-2 rounded-full transition-all duration-500" style={{ width: `${subCoverage}%`, backgroundColor: barColor }} />
+                            </div>
+                            {evidenceCount === 0 && (
+                              <p className="text-[10px] text-red-500 mt-1">⚠ لا توجد شواهد مرفقة - يرجى إضافة شواهد</p>
                             )}
-                            {aiMessages.length > 0 && (
-                              <div className="flex-1 flex gap-2 overflow-x-auto">
-                                {aiMessages.slice(-2).map((msg, idx) => (
-                                  <button key={idx} onClick={() => applyAIText(currentCriterion.id, sub.id, msg)}
-                                    className="text-xs bg-white border border-violet-200 text-violet-700 px-2.5 py-1.5 rounded-lg hover:bg-violet-50 truncate max-w-[200px]" title={msg}>
-                                    + {msg.substring(0, 30)}...
-                                  </button>
-                                ))}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* توزيع أنواع الشواهد */}
+                  <div>
+                    <h3 className="font-bold text-sm mb-3" style={{ fontFamily: "var(--font-heading)" }}>توزيع أنواع الشواهد</h3>
+                    {(() => {
+                      const allEvs = Object.values(criteriaData).flatMap(c => c.evidences);
+                      const typeCounts = { image: 0, file: 0, text: 0, link: 0, video: 0 };
+                      allEvs.forEach(ev => { if (ev.type in typeCounts) typeCounts[ev.type as keyof typeof typeCounts]++; });
+                      const typeLabels = { image: 'صورة', file: 'ملف', text: 'نص', link: 'رابط', video: 'فيديو' };
+                      const typeColors = { image: '#3B82F6', file: '#F97316', text: '#8B5CF6', link: '#A855F7', video: '#EF4444' };
+                      const total = allEvs.length || 1;
+                      return (
+                        <div className="grid grid-cols-5 gap-2">
+                          {Object.entries(typeCounts).map(([type, count]) => (
+                            <div key={type} className="text-center">
+                              <div className="relative w-full aspect-square rounded-xl flex items-center justify-center mb-1" style={{ backgroundColor: typeColors[type as keyof typeof typeColors] + '15' }}>
+                                <span className="text-lg font-bold" style={{ color: typeColors[type as keyof typeof typeColors] }}>{count}</span>
                               </div>
-                            )}
-                          </div>
+                              <span className="text-[10px] text-muted-foreground">{typeLabels[type as keyof typeof typeLabels]}</span>
+                              <div className="text-[9px] font-medium" style={{ color: typeColors[type as keyof typeof typeColors] }}>{Math.round((count / total) * 100)}%</div>
+                            </div>
+                          ))}
                         </div>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-                </div>
-              );
-            })}
-          </div>
+                      );
+                    })()}
+                  </div>
 
-          {/* Add Custom Sub-Evidence */}
-          <div className="mt-4">
-            {showAddSub === currentCriterion.id ? (
-              <div className="bg-white rounded-xl border-2 border-dashed border-violet-300 p-4">
-                <h4 className="text-sm font-bold text-violet-700 mb-3 flex items-center gap-2"><PlusCircle className="w-4 h-4" />إضافة قسم فرعي جديد</h4>
-                <div className="flex gap-2">
-                  <input type="text" value={newSubTitle} onChange={(e) => setNewSubTitle(e.target.value)}
-                    placeholder="اسم القسم الفرعي الجديد..."
-                    className="flex-1 px-3 py-2.5 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/20" />
-                  <button onClick={() => addCustomSubEvidence(currentCriterion.id)}
-                    className="px-4 py-2.5 rounded-lg bg-violet-600 text-white text-sm font-medium hover:bg-violet-700">إضافة</button>
-                  <button onClick={() => { setShowAddSub(null); setNewSubTitle(""); }}
-                    className="px-3 py-2.5 rounded-lg bg-gray-100 text-gray-600 text-sm hover:bg-gray-200"><X className="w-4 h-4" /></button>
+                  {/* توصيات */}
+                  {gapAnalysis.missedCriteria > 0 && (
+                    <div className="bg-amber-50 dark:bg-amber-950/30 rounded-xl p-4 border border-amber-200/50">
+                      <h3 className="font-bold text-sm mb-2 text-amber-800 dark:text-amber-300" style={{ fontFamily: "var(--font-heading)" }}>توصيات لتحسين التغطية</h3>
+                      <ul className="space-y-1">
+                        {allCriteria.filter(c => !criteriaData[c.id]?.evidences?.length).map(c => (
+                          <li key={c.id} className="text-xs text-amber-700 dark:text-amber-400 flex items-start gap-1.5">
+                            <AlertTriangle className="w-3 h-3 mt-0.5 shrink-0" />
+                            <span>أضف شواهد لـبند "{c.title}" لرفع نسبة التغطية</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
                 </div>
-              </div>
-            ) : (
-              <button onClick={() => setShowAddSub(currentCriterion.id)}
-                className="w-full flex items-center justify-center gap-2 p-4 rounded-xl border-2 border-dashed border-gray-300 text-gray-500 hover:border-violet-400 hover:text-violet-600 transition-colors text-sm">
-                <PlusCircle className="w-5 h-5" />إضافة قسم فرعي جديد
-              </button>
-            )}
-          </div>
+              </motion.div>
+            </motion.div>
+          );
+          })()}
 
           {/* Navigation */}
-          <div className="flex items-center justify-between mt-6 bg-white rounded-xl p-4 border border-gray-200">
-            <button disabled={currentCriterionIndex === 0} onClick={() => setCurrentCriterionIndex(i => i - 1)}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-gray-100 text-gray-700 text-sm disabled:opacity-30">
-              <ArrowRight className="w-4 h-4" />البند السابق
-            </button>
-            {currentCriterionIndex < (selectedJob?.criteria.length || 0) - 1 ? (
-              <button onClick={() => setCurrentCriterionIndex(i => i + 1)}
-                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm hover:bg-emerald-700">
-                البند التالي<ArrowLeft className="w-4 h-4" />
-              </button>
+          <div className="flex items-center justify-between mt-4 sm:mt-6 gap-2">
+            {currentCriterionIndex > 0 ? (
+              <Button variant="outline" size="sm" className="text-xs sm:text-sm h-8 sm:h-9" onClick={() => setCurrentCriterionIndex(i => i - 1)}>
+                <ArrowRight className="w-3.5 h-3.5 sm:w-4 sm:h-4 ml-0.5 sm:ml-1" /><span className="hidden sm:inline">البند السابق</span><span className="sm:hidden">السابق</span>
+              </Button>
+            ) : <div />}
+            {currentCriterionIndex < allCriteria.length - 1 ? (
+              <Button variant="outline" size="sm" className="text-xs sm:text-sm h-8 sm:h-9" onClick={() => setCurrentCriterionIndex(i => i + 1)}>
+                <span className="hidden sm:inline">البند التالي</span><span className="sm:hidden">التالي</span><ArrowLeft className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-0.5 sm:mr-1" />
+              </Button>
             ) : (
-              <button onClick={() => setStep('final-review')}
-                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm hover:bg-emerald-700">
-                <BarChart3 className="w-4 h-4" />التقييم النهائي
-              </button>
+              <Button size="sm" className="gap-1 sm:gap-1.5 text-xs sm:text-sm h-8 sm:h-9" onClick={() => setStep('final-review')}>
+                <BarChart3 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />التقييم النهائي
+              </Button>
             )}
           </div>
         </div>
-        {renderSingleEvidencePreview()}
       </div>
     );
   }
 
-  // ===== Step 4: التقييم النهائي =====
+  // ======================================================================
+  // ===== الخطوة 4: التقييم النهائي =====
+  // ======================================================================
   if (step === 'final-review') {
     const grade = getGrade(percentage);
     return (
-      <div className="min-h-screen bg-[#F8FAFC] p-4 md:p-6" dir="rtl">
+      <div className="min-h-screen bg-background p-4 md:p-6" dir="rtl">
         <div className="max-w-4xl mx-auto">
           <div className="flex items-center justify-between mb-5">
-            <button onClick={() => setStep('criteria-list')} className="flex items-center gap-1.5 text-gray-500 hover:text-gray-700 text-sm bg-white px-3 py-2 rounded-lg border border-gray-200">
-              <ArrowRight className="w-4 h-4" />العودة للبنود
-            </button>
+            <Button variant="outline" size="sm" onClick={() => setStep('dashboard')}>
+              <ArrowRight className="w-4 h-4 ml-1" />العودة للبنود
+            </Button>
             <div className="flex gap-2">
-              <button onClick={saveReport} className="flex items-center gap-1.5 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700"><Save className="w-4 h-4" />حفظ</button>
-              <button onClick={() => setStep('preview')} className="flex items-center gap-1.5 bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-emerald-700"><Eye className="w-4 h-4" />معاينة وتصدير</button>
+              <Button variant="outline" size="sm" onClick={saveReport} disabled={isSaving} className="gap-1.5">
+                {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                {isSaving ? "جاري الحفظ..." : "حفظ"}
+              </Button>
+              {isAuthenticated && portfolio.id && (
+                <Button variant="outline" size="sm" onClick={portfolio.submitForReview} className="gap-1.5 text-emerald-600 border-emerald-200 hover:bg-emerald-50">
+                  <CheckCircle className="w-4 h-4" />تقديم للمراجعة
+                </Button>
+              )}
+              <Button size="sm" onClick={() => setStep('preview')} className="gap-1.5">
+                <Eye className="w-4 h-4" />معاينة وتصدير
+              </Button>
+              <Button size="sm" variant="outline" onClick={handleShareLink} disabled={isSharing} className="gap-1.5 text-blue-600 border-blue-200 hover:bg-blue-50">
+                {isSharing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Share2 className="w-4 h-4" />}
+                {isSharing ? 'جاري...' : 'مشاركة كرابط'}
+              </Button>
             </div>
           </div>
 
-          <div className="bg-white rounded-xl border border-gray-200 p-6 mb-5 text-center">
-            <h1 className="text-2xl font-black text-gray-900 mb-4" style={{ fontFamily: "'Tajawal', sans-serif" }}>ملخص التقييم النهائي</h1>
-            <div className="flex items-center justify-center gap-8">
-              <div>
-                <div className="text-5xl font-black" style={{ color: grade.color }}>{percentage}%</div>
-                <div className="text-lg font-bold mt-1" style={{ color: grade.color }}>{grade.label}</div>
+          {/* ملخص التقييم */}
+          <Card className="mb-5">
+            <CardContent className="p-6 text-center">
+              <h1 className="text-2xl font-black text-foreground mb-4" style={{ fontFamily: "var(--font-heading)" }}>ملخص التقييم النهائي</h1>
+              <div className="flex items-center justify-center gap-8">
+                <div>
+                  <div className="text-5xl font-black" style={{ color: grade.color }}>{percentage}%</div>
+                  <div className="text-lg font-bold mt-1" style={{ color: grade.color }}>{grade.label}</div>
+                </div>
+                <div className="text-right space-y-1">
+                  <p className="text-sm text-muted-foreground">المجموع: <strong className="text-foreground">{totalScore}</strong> من <strong className="text-foreground">{maxScore}</strong></p>
+                  <p className="text-sm text-muted-foreground">الوظيفة: <strong className="text-foreground">{selectedJob?.title}</strong></p>
+                  <p className="text-sm text-muted-foreground">الاسم: <strong className="text-foreground">{personalInfo.name || '—'}</strong></p>
+                  {indicatorsCoverage && (
+                    <p className="text-sm text-muted-foreground">المؤشرات: <strong className="text-foreground">{indicatorsCoverage.covered}/{indicatorsCoverage.total}</strong></p>
+                  )}
+                </div>
               </div>
-              <div className="text-right">
-                <p className="text-sm text-gray-500">المجموع: <strong className="text-gray-800">{totalScore}</strong> من <strong className="text-gray-800">{maxScore}</strong></p>
-                <p className="text-sm text-gray-500">الوظيفة: <strong className="text-gray-800">{selectedJob?.title}</strong></p>
-                <p className="text-sm text-gray-500">الاسم: <strong className="text-gray-800">{personalInfo.name || '—'}</strong></p>
-              </div>
-            </div>
-          </div>
+            </CardContent>
+          </Card>
 
-          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+          {/* جدول البنود */}
+          <Card className="mb-5 overflow-hidden">
             <table className="w-full">
-              <thead className="bg-gray-50">
+              <thead className="bg-muted">
                 <tr>
-                  <th className="text-right text-xs font-bold text-gray-600 p-3">م</th>
-                  <th className="text-right text-xs font-bold text-gray-600 p-3">البند</th>
-                  <th className="text-center text-xs font-bold text-gray-600 p-3">الدرجة</th>
-                  <th className="text-center text-xs font-bold text-gray-600 p-3">الشواهد</th>
+                  <th className="text-right text-xs font-bold text-muted-foreground p-3">م</th>
+                  <th className="text-right text-xs font-bold text-muted-foreground p-3">البند</th>
+                  <th className="text-center text-xs font-bold text-muted-foreground p-3">الدرجة</th>
+                  <th className="text-center text-xs font-bold text-muted-foreground p-3">الشواهد</th>
+                  <th className="text-center text-xs font-bold text-muted-foreground p-3">الحالة</th>
                 </tr>
               </thead>
               <tbody>
-                {selectedJob?.criteria.map((c: any, i: number) => {
+                {allCriteria.map((c, i) => {
                   const d = criteriaData[c.id];
+                  const evCount = d?.evidences.length || 0;
+                  const status = (d?.score || 0) >= 4 && evCount > 0 ? "complete" : evCount > 0 || (d?.score || 0) > 0 ? "partial" : "missing";
                   return (
-                    <tr key={c.id} className="border-t border-gray-100 hover:bg-gray-50 cursor-pointer" onClick={() => { setCurrentCriterionIndex(i); setStep('criterion-detail'); }}>
-                      <td className="p-3 text-sm text-gray-500">{i + 1}</td>
-                      <td className="p-3 text-sm font-medium text-gray-800">{c.title}</td>
+                    <tr key={c.id} className="border-t border-border hover:bg-muted/30 cursor-pointer transition-colors"
+                      onClick={() => { setCurrentCriterionIndex(i); setStep('criterion-detail'); }}>
+                      <td className="p-3 text-sm text-muted-foreground">{i + 1}</td>
+                      <td className="p-3 text-sm font-medium text-foreground">{c.title}</td>
                       <td className="p-3 text-center">
-                        <span className={`inline-block px-2 py-1 rounded-md text-sm font-bold ${d?.score >= 4 ? 'bg-green-100 text-green-700' : d?.score >= 3 ? 'bg-yellow-100 text-yellow-700' : 'bg-gray-100 text-gray-500'}`}>
+                        <Badge variant={((d?.score || 0) >= 4) ? "default" : ((d?.score || 0) >= 3) ? "secondary" : "outline"}>
                           {d?.score || 0}/{c.maxScore}
-                        </span>
+                        </Badge>
                       </td>
-                      <td className="p-3 text-center text-sm text-gray-500">{d?.evidences.length || 0}</td>
+                      <td className="p-3 text-center text-sm text-muted-foreground">{evCount}</td>
+                      <td className="p-3 text-center">
+                        {status === "complete" && <CheckCircle className="w-4 h-4 text-emerald-500 mx-auto" />}
+                        {status === "partial" && <AlertTriangle className="w-4 h-4 text-amber-500 mx-auto" />}
+                        {status === "missing" && <XCircle className="w-4 h-4 text-red-400 mx-auto" />}
+                      </td>
                     </tr>
                   );
                 })}
               </tbody>
             </table>
-          </div>
+          </Card>
 
-          <div className="bg-white rounded-xl border border-gray-200 p-5 mt-5">
-            <h3 className="font-bold text-gray-800 mb-3 text-sm">اختر ثيم التصدير</h3>
-            <div className="flex flex-wrap gap-2">
-              {THEMES.map((t) => (
-                <button key={t.id} onClick={() => setSelectedTheme(t)}
-                  className={`px-4 py-2 rounded-lg text-sm border transition-all ${selectedTheme.id === t.id ? 'border-emerald-500 bg-emerald-50 text-emerald-700 font-bold' : 'border-gray-200 text-gray-600 hover:border-gray-300'}`}>
-                  {t.name}
-                </button>
-              ))}
-            </div>
-          </div>
+          {/* اختيار الثيم */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-sm">اختر ثيم التصدير</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex flex-wrap gap-2">
+                {allThemes.map((t) => (
+                  <Button key={t.id} variant={selectedTheme.id === t.id ? "default" : "outline"} size="sm"
+                    onClick={() => setSelectedTheme(t)}>
+                    {t.id.startsWith('db-') && <span className="inline-block w-2 h-2 rounded-full ml-1" style={{ backgroundColor: t.accent }} />}
+                    {t.name}
+                  </Button>
+                ))}
+              </div>
+              {/* خيارات الباركود */}
+              <div className="border-t border-border pt-4">
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="text-sm font-bold text-foreground flex items-center gap-2">
+                    <QrCode className="w-4 h-4 text-primary" />خيارات الباركود
+                  </h4>
+                  <div className="flex gap-2">
+                    <Button variant="outline" size="sm" className="text-xs h-7 gap-1"
+                      onClick={() => {
+                        setCriteriaData(prev => {
+                          const updated = { ...prev };
+                          Object.keys(updated).forEach(k => {
+                            updated[k] = { ...updated[k], evidences: updated[k].evidences.map(e => ({ ...e, showBarcode: true })) };
+                          });
+                          return updated;
+                        });
+                        toast.success('تم تفعيل الباركود لجميع الشواهد');
+                      }}>
+                      <CheckCircle className="w-3 h-3" />تفعيل الكل
+                    </Button>
+                    <Button variant="outline" size="sm" className="text-xs h-7 gap-1"
+                      onClick={() => {
+                        setCriteriaData(prev => {
+                          const updated = { ...prev };
+                          Object.keys(updated).forEach(k => {
+                            updated[k] = { ...updated[k], evidences: updated[k].evidences.map(e => ({ ...e, showBarcode: false })) };
+                          });
+                          return updated;
+                        });
+                        toast.success('تم تعطيل الباركود لجميع الشواهد');
+                      }}>
+                      <XCircle className="w-3 h-3" />تعطيل الكل
+                    </Button>
+                  </div>
+                </div>
+                <p className="text-[10px] text-muted-foreground">يمكنك التحكم في ظهور الباركود لكل شاهد على حدة من صفحة البند، أو تفعيل/تعطيل الكل من هنا</p>
+              </div>
+            </CardContent>
+          </Card>
         </div>
       </div>
     );
   }
 
-  // ===== Step 5: المعاينة والتصدير =====
+  // ======================================================================
+  // ===== الخطوة 5: المعاينة والتصدير =====
+  // ======================================================================
   if (step === 'preview') {
     const grade = getGrade(percentage);
     const theme = selectedTheme;
-    const MOE_LOGO = 'https://d2xsxph8kpxj0f.cloudfront.net/310519663047121386/h34s4aPNVyHXdtjgZ7eNNf/moe-logo_fa6b1baa.png';
-    const MOE_GREEN = '#1B7A3D';
-    const MOE_LIGHT = '#E8F5E9';
-    const MOE_BORDER = '#A5D6A7';
-    const isOfficialTheme = theme.id === 'official' || theme.id === 'official-gradient';
     return (
-      <div className="min-h-screen bg-gray-100 p-4" dir="rtl">
+      <div className="min-h-screen bg-muted p-4" dir="rtl">
         <div className="max-w-4xl mx-auto">
-          <div className="flex items-center justify-between mb-4 bg-white rounded-xl p-4 shadow-sm border border-gray-200 sticky top-2 z-10">
-            <button onClick={() => setStep('final-review')} className="flex items-center gap-1.5 text-gray-500 hover:text-gray-700 text-sm">
-              <ArrowRight className="w-4 h-4" />العودة
-            </button>
-            <div className="flex gap-2">
-              <button onClick={handleExportPDF} disabled={isExporting}
-                className="flex items-center gap-1.5 bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-emerald-700 disabled:opacity-50">
+          <div className="flex items-center justify-between mb-4 bg-background rounded-xl p-4 shadow-sm border border-border sticky top-2 z-10">
+            <Button variant="outline" size="sm" onClick={() => setStep('final-review')}>
+              <ArrowRight className="w-4 h-4 ml-1" />العودة
+            </Button>
+            <div className="flex gap-2 flex-wrap">
+              <Button size="sm" onClick={handleExportPDF} disabled={isExporting} className="gap-1.5">
                 {isExporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
                 {isExporting ? 'جاري التصدير...' : 'تحميل PDF'}
-              </button>
-              <button onClick={() => printElement('preview-content')}
-                className="flex items-center gap-1.5 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700">
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => printElement('preview-content')} className="gap-1.5">
                 <Printer className="w-4 h-4" />طباعة
-              </button>
+              </Button>
+              <Button size="sm" variant="outline" onClick={handleShareLink} disabled={isSharing} className="gap-1.5 text-blue-600 border-blue-200 hover:bg-blue-50">
+                {isSharing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Share2 className="w-4 h-4" />}
+                {isSharing ? 'جاري...' : 'مشاركة كرابط'}
+              </Button>
             </div>
           </div>
 
-          {/* Preview Content */}
-          <div id="preview-content" className="bg-white rounded-xl shadow-lg overflow-hidden" style={{ fontFamily: "'Cairo', 'Tajawal', sans-serif" }}>
-            {/* ترويسة هوية وزارة التعليم */}
-            {isOfficialTheme ? (
-              <div className="p-6 pb-4">
-                <div className="flex items-center justify-between">
-                  <div className="text-right text-xs leading-relaxed text-gray-600">
-                    {personalInfo.department.split('\n').map((line, i) => <div key={i}>{line}</div>)}
-                    <div className="font-bold text-gray-800">{personalInfo.school || 'المدرسة'}</div>
-                  </div>
-                  <img src={MOE_LOGO} alt="وزارة التعليم" className="w-24 h-24 object-contain" />
-                  <div className="text-left text-xs text-gray-600">
-                    <div>العام الدراسي {personalInfo.year}</div>
-                    <div>{personalInfo.semester}</div>
-                  </div>
-                </div>
-                <div className="mt-4 text-center py-2.5 rounded-lg border-2" style={{ borderColor: MOE_GREEN, backgroundColor: MOE_LIGHT }}>
-                  <h1 className="text-lg font-black" style={{ color: MOE_GREEN, fontFamily: "'Tajawal', sans-serif" }}>شواهد الأداء الوظيفي - {selectedJob?.title}</h1>
+          {/* رابط المشاركة */}
+          {shareUrl && (
+            <div className="mb-4 bg-blue-50 border border-blue-200 rounded-xl p-4 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2 min-w-0">
+                <Globe className="w-5 h-5 text-blue-600 shrink-0" />
+                <div className="min-w-0">
+                  <p className="text-xs font-bold text-blue-800 mb-0.5">رابط العرض الإلكتروني</p>
+                  <p className="text-xs text-blue-600 truncate" dir="ltr">{shareUrl}</p>
                 </div>
               </div>
-            ) : (
-              <div style={{ background: theme.headerBg, color: theme.headerText, padding: '2rem', textAlign: 'center' }}>
-                <p className="text-sm opacity-80 mb-1">{personalInfo.department}</p>
-                <h1 className="text-2xl font-black mb-1">شواهد الأداء الوظيفي</h1>
-                <p className="text-lg font-bold">{selectedJob?.title}</p>
-                <p className="text-sm opacity-80 mt-1">{personalInfo.year} - {personalInfo.semester}</p>
+              <div className="flex gap-2 shrink-0">
+                <Button size="sm" variant="outline" className="gap-1 text-xs h-7 border-blue-300 text-blue-700 hover:bg-blue-100"
+                  onClick={() => { navigator.clipboard.writeText(shareUrl); toast.success('تم نسخ الرابط!'); }}>
+                  <Copy className="w-3 h-3" />نسخ
+                </Button>
+                <Button size="sm" variant="outline" className="gap-1 text-xs h-7 border-blue-300 text-blue-700 hover:bg-blue-100"
+                  onClick={() => window.open(shareUrl, '_blank')}>
+                  <Globe className="w-3 h-3" />فتح
+                </Button>
               </div>
-            )}
+            </div>
+          )}
 
-            {/* Personal Info */}
-            {isOfficialTheme ? (
-              <div className="px-6 pb-4">
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                  {[
-                    { label: 'الاسم', value: personalInfo.name },
-                    { label: 'المدرسة', value: personalInfo.school },
-                    { label: 'المقيّم', value: personalInfo.evaluator },
-                    { label: 'التاريخ', value: personalInfo.date },
-                  ].map((item, i) => (
-                    <div key={i}>
-                      <div className="text-[10px] font-medium mb-1" style={{ color: MOE_GREEN }}>{item.label}</div>
-                      <div className="px-3 py-2 rounded-lg border text-xs bg-white" style={{ borderColor: MOE_BORDER }}>{item.value || '—'}</div>
+          <div id="preview-content" style={{ fontFamily: "'Cairo', 'Tajawal', sans-serif" }}>
+            {/* === صفحة الغلاف === */}
+            <div className="bg-white shadow-lg mx-auto mb-6" style={{ width: '210mm', minHeight: '297mm', maxWidth: '100%', position: 'relative', overflow: 'hidden', pageBreakAfter: 'always' }}>
+              {/* غلاف احترافي */}
+              <div style={{ background: theme.headerBg, color: theme.headerText, padding: '4rem 2.5rem', textAlign: 'center', position: 'relative', overflow: 'hidden', minHeight: '297mm', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                {/* زخارف الخلفية */}
+                <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, background: 'linear-gradient(135deg, rgba(255,255,255,0.12) 0%, transparent 40%, rgba(0,0,0,0.1) 100%)', pointerEvents: 'none' }} />
+                <div style={{ position: 'absolute', top: '-50px', right: '-50px', width: '200px', height: '200px', borderRadius: '50%', background: 'rgba(255,255,255,0.06)', pointerEvents: 'none' }} />
+                <div style={{ position: 'absolute', bottom: '-40px', left: '-40px', width: '150px', height: '150px', borderRadius: '50%', background: 'rgba(255,255,255,0.04)', pointerEvents: 'none' }} />
+                <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', width: '350px', height: '350px', borderRadius: '50%', background: 'rgba(255,255,255,0.03)', pointerEvents: 'none' }} />
+                {/* إطار زخرفي */}
+                <div style={{ position: 'absolute', top: '16px', left: '16px', right: '16px', bottom: '16px', border: '1.5px solid rgba(255,255,255,0.15)', borderRadius: '12px', pointerEvents: 'none' }} />
+                <div style={{ position: 'relative', zIndex: 1 }}>
+                  <div style={{ fontSize: '0.8rem', opacity: 0.65, marginBottom: '0.3rem', letterSpacing: '0.2em' }}>المملكة العربية السعودية</div>
+                  <div style={{ fontSize: '0.95rem', opacity: 0.8, marginBottom: '0.5rem', fontWeight: 600 }}>وزارة التعليم</div>
+                  {personalInfo.department && <p style={{ fontSize: '0.9rem', opacity: 0.85, marginBottom: '1rem', lineHeight: 1.7, whiteSpace: 'pre-line' }}>{personalInfo.department}</p>}
+                  <div style={{ width: '80px', height: '2px', background: 'rgba(255,255,255,0.3)', margin: '0 auto 1.5rem' }} />
+                  <h1 style={{ fontSize: '2.5rem', fontWeight: 900, marginBottom: '0.75rem', fontFamily: "'Tajawal', sans-serif", letterSpacing: '-0.01em' }}>شواهد الأداء الوظيفي</h1>
+                  <p style={{ fontSize: '1.4rem', fontWeight: 700, opacity: 0.95, marginBottom: '0.5rem' }}>{selectedJob?.title}</p>
+                  <div style={{ width: '50px', height: '2px', background: 'rgba(255,255,255,0.25)', margin: '1rem auto' }} />
+                  <p style={{ fontSize: '1rem', opacity: 0.85 }}>{personalInfo.year} - {personalInfo.semester}</p>
+                  <div style={{ marginTop: '3rem', display: 'flex', justifyContent: 'center', gap: '3rem', fontSize: '0.9rem', opacity: 0.9 }}>
+                    <div style={{ textAlign: 'center', minWidth: '120px' }}>
+                      <div style={{ fontSize: '0.7rem', opacity: 0.6, marginBottom: '0.3rem' }}>الاسم</div>
+                      <div style={{ fontWeight: 700, fontSize: '1.1rem' }}>{personalInfo.name || '—'}</div>
                     </div>
-                  ))}
+                    <div style={{ width: '1px', background: 'rgba(255,255,255,0.2)' }} />
+                    <div style={{ textAlign: 'center', minWidth: '120px' }}>
+                      <div style={{ fontSize: '0.7rem', opacity: 0.6, marginBottom: '0.3rem' }}>المدرسة</div>
+                      <div style={{ fontWeight: 700, fontSize: '1.1rem' }}>{personalInfo.school || '—'}</div>
+                    </div>
+                  </div>
+                  {/* تذييل الغلاف */}
+                  <div style={{ marginTop: '4rem', fontSize: '0.7rem', opacity: 0.5 }}>
+                    نظام SERS - السجلات التعليمية الذكية
+                  </div>
                 </div>
               </div>
-            ) : (
-              <div className="p-6 border-b" style={{ borderColor: theme.borderColor }}>
-                <div className="grid grid-cols-2 gap-4 text-sm">
-                  <div><span className="text-gray-500">الاسم:</span> <strong>{personalInfo.name || '—'}</strong></div>
-                  <div><span className="text-gray-500">المدرسة:</span> <strong>{personalInfo.school || '—'}</strong></div>
-                  <div><span className="text-gray-500">المقيّم:</span> <strong>{personalInfo.evaluator || '—'}</strong></div>
-                  <div><span className="text-gray-500">التاريخ:</span> <strong>{personalInfo.date || '—'}</strong></div>
-                </div>
-              </div>
-            )}
+            </div>
 
-            {/* Criteria Table */}
-            <div className="p-6">
-              <table className="w-full border-collapse text-sm" style={{ borderColor: isOfficialTheme ? MOE_BORDER : theme.borderColor }}>
+            {/* === صفحة فهرس المحتويات + البيانات الشخصية === */}
+            <div className="bg-white shadow-lg mx-auto mb-6" style={{ width: '210mm', minHeight: '297mm', maxWidth: '100%', padding: '2rem 2.5rem', position: 'relative', pageBreakAfter: 'always' }}>
+              {/* ترويسة الصفحة */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: `2px solid ${theme.accent}`, paddingBottom: '0.75rem', marginBottom: '1.5rem' }}>
+                <div style={{ fontSize: '0.7rem', color: '#9CA3AF' }}>شواهد الأداء الوظيفي - {personalInfo.name}</div>
+                <div style={{ fontSize: '0.7rem', color: theme.accent, fontWeight: 700 }}>{selectedJob?.title}</div>
+              </div>
+
+              {/* فهرس المحتويات */}
+              <h2 style={{ fontSize: '1rem', fontWeight: 800, color: theme.accent, fontFamily: "'Tajawal', sans-serif", marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <span style={{ width: '4px', height: '20px', borderRadius: '2px', backgroundColor: theme.accent, display: 'inline-block' }} />
+                فهرس المحتويات
+              </h2>
+              <div style={{ marginBottom: '2rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8rem', color: '#4B5563', padding: '0.5rem 0', borderBottom: '1px dashed #E5E7EB' }}>
+                  <span style={{ fontWeight: 700, color: theme.accent, minWidth: '20px' }}>1</span>
+                  <span>البيانات الشخصية</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8rem', color: '#4B5563', padding: '0.5rem 0', borderBottom: '1px dashed #E5E7EB' }}>
+                  <span style={{ fontWeight: 700, color: theme.accent, minWidth: '20px' }}>2</span>
+                  <span>جدول التقييم</span>
+                </div>
+                {allCriteria.map((c, i) => {
+                  const d = criteriaData[c.id];
+                  if (!d || d.evidences.length === 0) return null;
+                  return (
+                    <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8rem', color: '#4B5563', padding: '0.5rem 0', borderBottom: '1px dashed #E5E7EB' }}>
+                      <span style={{ fontWeight: 700, color: theme.accent, minWidth: '20px' }}>{i + 3}</span>
+                      <span>{c.title} ({d.evidences.length} شاهد)</span>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* البيانات الشخصية */}
+              <h2 style={{ fontSize: '1rem', fontWeight: 800, color: theme.accent, fontFamily: "'Tajawal', sans-serif", marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <span style={{ width: '4px', height: '20px', borderRadius: '2px', backgroundColor: theme.accent, display: 'inline-block' }} />
+                البيانات الشخصية
+              </h2>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                {[
+                  { label: 'الاسم الكامل', value: personalInfo.name },
+                  { label: 'المدرسة', value: personalInfo.school },
+                  { label: 'الوظيفة', value: selectedJob?.title },
+                  { label: 'العام الدراسي', value: personalInfo.year },
+                  { label: 'الفصل الدراسي', value: personalInfo.semester },
+                  { label: 'اسم المقيّم', value: personalInfo.evaluator },
+                  { label: 'صفة المقيّم', value: personalInfo.evaluatorRole },
+                  { label: 'تاريخ التقييم', value: personalInfo.date },
+                ].map((item, idx) => (
+                  <div key={idx} style={{ backgroundColor: '#F9FAFB', borderRadius: '8px', padding: '0.75rem', border: '1px solid #F3F4F6' }}>
+                    <span style={{ fontSize: '0.65rem', color: '#9CA3AF', display: 'block', marginBottom: '0.2rem' }}>{item.label}</span>
+                    <strong style={{ fontSize: '0.85rem', color: '#1F2937' }}>{item.value || '—'}</strong>
+                  </div>
+                ))}
+              </div>
+              {personalInfo.department && (
+                <div style={{ marginTop: '0.75rem', backgroundColor: '#F9FAFB', borderRadius: '8px', padding: '0.75rem', border: '1px solid #F3F4F6' }}>
+                  <span style={{ fontSize: '0.65rem', color: '#9CA3AF', display: 'block', marginBottom: '0.2rem' }}>الجهة / الإدارة</span>
+                  <strong style={{ fontSize: '0.85rem', color: '#1F2937', whiteSpace: 'pre-line' as const }}>{personalInfo.department}</strong>
+                </div>
+              )}
+
+              {/* تذييل الصفحة */}
+              <div style={{ position: 'absolute', bottom: '1.5rem', left: '2.5rem', right: '2.5rem', borderTop: `1px solid ${theme.borderColor}`, paddingTop: '0.5rem', display: 'flex', justifyContent: 'space-between', fontSize: '0.6rem', color: '#9CA3AF' }}>
+                <span>نظام SERS - السجلات التعليمية الذكية</span>
+                <span>صفحة 2</span>
+              </div>
+            </div>
+
+            {/* === صفحة جدول التقييم === */}
+            <div className="bg-white shadow-lg mx-auto mb-6" style={{ width: '210mm', minHeight: '297mm', maxWidth: '100%', padding: '2rem 2.5rem', position: 'relative', pageBreakAfter: 'always' }}>
+              {/* ترويسة */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: `2px solid ${theme.accent}`, paddingBottom: '0.75rem', marginBottom: '1.5rem' }}>
+                <div style={{ fontSize: '0.7rem', color: '#9CA3AF' }}>شواهد الأداء الوظيفي - {personalInfo.name}</div>
+                <div style={{ fontSize: '0.7rem', color: theme.accent, fontWeight: 700 }}>جدول التقييم</div>
+              </div>
+
+              <h2 style={{ fontSize: '1rem', fontWeight: 800, color: theme.accent, fontFamily: "'Tajawal', sans-serif", marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <span style={{ width: '4px', height: '20px', borderRadius: '2px', backgroundColor: theme.accent, display: 'inline-block' }} />
+                جدول التقييم
+              </h2>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
                 <thead>
-                  <tr style={{ background: isOfficialTheme ? MOE_GREEN : theme.accent, color: '#fff' }}>
-                    <th className="p-2 border text-center" style={{ borderColor: isOfficialTheme ? MOE_BORDER : theme.borderColor }}>م</th>
-                    <th className="p-2 border text-right" style={{ borderColor: isOfficialTheme ? MOE_BORDER : theme.borderColor }}>البند</th>
-                    <th className="p-2 border text-center" style={{ borderColor: isOfficialTheme ? MOE_BORDER : theme.borderColor }}>الدرجة</th>
+                  <tr style={{ background: theme.accent, color: '#fff' }}>
+                    <th style={{ padding: '10px', border: `1px solid ${theme.borderColor}`, textAlign: 'center', width: '40px' }}>م</th>
+                    <th style={{ padding: '10px', border: `1px solid ${theme.borderColor}`, textAlign: 'right' }}>البند</th>
+                    <th style={{ padding: '10px', border: `1px solid ${theme.borderColor}`, textAlign: 'center', width: '70px' }}>الدرجة</th>
+                    <th style={{ padding: '10px', border: `1px solid ${theme.borderColor}`, textAlign: 'center', width: '70px' }}>الشواهد</th>
+                    <th style={{ padding: '10px', border: `1px solid ${theme.borderColor}`, textAlign: 'center', width: '60px' }}>الحالة</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {selectedJob?.criteria.map((c: any, i: number) => (
-                    <tr key={c.id} className={i % 2 === 0 ? '' : 'bg-gray-50'}>
-                      <td className="p-2 border text-center" style={{ borderColor: isOfficialTheme ? MOE_BORDER : theme.borderColor }}>{i + 1}</td>
-                      <td className="p-2 border" style={{ borderColor: isOfficialTheme ? MOE_BORDER : theme.borderColor }}>{c.title}</td>
-                      <td className="p-2 border text-center font-bold" style={{ borderColor: isOfficialTheme ? MOE_BORDER : theme.borderColor }}>{criteriaData[c.id]?.score || 0}/{c.maxScore}</td>
-                    </tr>
-                  ))}
-                  <tr style={{ background: isOfficialTheme ? MOE_GREEN : theme.accent, color: '#fff' }}>
-                    <td colSpan={2} className="p-2 border text-center font-bold" style={{ borderColor: isOfficialTheme ? MOE_BORDER : theme.borderColor }}>المجموع</td>
-                    <td className="p-2 border text-center font-bold" style={{ borderColor: isOfficialTheme ? MOE_BORDER : theme.borderColor }}>{totalScore}/{maxScore}</td>
+                  {allCriteria.map((c, i) => {
+                    const d = criteriaData[c.id];
+                    const score = d?.score || 0;
+                    const evCount = d?.evidences.length || 0;
+                    const scoreColor = score >= 4 ? '#16A34A' : score >= 2 ? '#CA8A04' : score > 0 ? '#EA580C' : '#9CA3AF';
+                    return (
+                      <tr key={c.id} style={{ backgroundColor: i % 2 === 0 ? '#fff' : '#f9fafb' }}>
+                        <td style={{ padding: '8px', border: `1px solid ${theme.borderColor}`, textAlign: 'center', fontSize: '0.75rem' }}>{i + 1}</td>
+                        <td style={{ padding: '8px', border: `1px solid ${theme.borderColor}` }}>{c.title}</td>
+                        <td style={{ padding: '8px', border: `1px solid ${theme.borderColor}`, textAlign: 'center', fontWeight: 700, color: scoreColor }}>{score}/{c.maxScore}</td>
+                        <td style={{ padding: '8px', border: `1px solid ${theme.borderColor}`, textAlign: 'center' }}>{evCount}</td>
+                        <td style={{ padding: '8px', border: `1px solid ${theme.borderColor}`, textAlign: 'center' }}>
+                          <span style={{ fontSize: '0.65rem', padding: '2px 6px', borderRadius: '9999px', fontWeight: 600, backgroundColor: score >= 4 ? '#dcfce7' : score >= 2 ? '#fef9c3' : score > 0 ? '#ffedd5' : '#f3f4f6', color: scoreColor }}>
+                            {score >= 4 ? 'مكتمل' : score >= 2 ? 'جزئي' : score > 0 ? 'ضعيف' : '—'}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  <tr style={{ background: theme.accent, color: '#fff' }}>
+                    <td colSpan={2} style={{ padding: '10px', border: `1px solid ${theme.borderColor}`, textAlign: 'center', fontWeight: 700 }}>المجموع</td>
+                    <td style={{ padding: '10px', border: `1px solid ${theme.borderColor}`, textAlign: 'center', fontWeight: 700 }}>{totalScore}/{maxScore}</td>
+                    <td style={{ padding: '10px', border: `1px solid ${theme.borderColor}`, textAlign: 'center', fontWeight: 700 }}>{Object.values(criteriaData).reduce((s, d) => s + d.evidences.length, 0)}</td>
+                    <td style={{ padding: '10px', border: `1px solid ${theme.borderColor}`, textAlign: 'center', fontWeight: 700 }}>{percentage}%</td>
                   </tr>
                 </tbody>
               </table>
 
-              {/* Grade */}
-              <div className="text-center mt-6 p-4 rounded-xl" style={{ background: `${grade.color}15` }}>
-                <p className="text-sm text-gray-600">التقدير النهائي</p>
-                <p className="text-3xl font-black" style={{ color: grade.color }}>{percentage}% - {grade.label}</p>
+              <div style={{ textAlign: 'center', marginTop: '2rem', padding: '1.5rem', borderRadius: '12px', background: `${grade.color}12` }}>
+                <p style={{ fontSize: '0.75rem', color: '#6B7280', marginBottom: '0.25rem' }}>التقدير النهائي</p>
+                <p style={{ fontSize: '2.5rem', fontWeight: 900, color: grade.color }}>{percentage}%</p>
+                <p style={{ fontSize: '1.2rem', fontWeight: 700, color: grade.color, marginTop: '0.25rem' }}>{grade.label}</p>
+                {indicatorsCoverage && (
+                  <p style={{ fontSize: '0.75rem', color: '#6B7280', marginTop: '0.5rem' }}>المؤشرات المغطاة: {indicatorsCoverage.covered} من {indicatorsCoverage.total}</p>
+                )}
               </div>
 
-              {/* Evidences */}
-              {selectedJob?.criteria.map((c: any, i: number) => {
+              {/* تذييل */}
+              <div style={{ position: 'absolute', bottom: '1.5rem', left: '2.5rem', right: '2.5rem', borderTop: `1px solid ${theme.borderColor}`, paddingTop: '0.5rem', display: 'flex', justifyContent: 'space-between', fontSize: '0.6rem', color: '#9CA3AF' }}>
+                <span>نظام SERS - السجلات التعليمية الذكية</span>
+                <span>صفحة 3</span>
+              </div>
+            </div>
+
+            {/* === صفحات الشواهد - كل بند في صفحة منفصلة === */}
+            {(() => {
+              let pageCounter = 4;
+              return allCriteria.map((c, i) => {
                 const d = criteriaData[c.id];
                 if (!d || d.evidences.length === 0) return null;
+                const currentPage = pageCounter++;
+                const allSubs = [...(c.subEvidences || []), ...(d.customSubEvidences || [])];
                 return (
-                  <div key={c.id} className="mt-6 page-break-inside-avoid">
-                    <div className="text-sm font-bold mb-2 px-2 py-1 rounded" style={{ color: isOfficialTheme ? MOE_GREEN : theme.accent, backgroundColor: isOfficialTheme ? MOE_LIGHT : 'transparent' }}>
-                      {i + 1}. {c.title}
+                  <div key={c.id} className="bg-white shadow-lg mx-auto mb-6" style={{ width: '210mm', minHeight: '297mm', maxWidth: '100%', padding: '2rem 2.5rem', position: 'relative', pageBreakAfter: 'always', pageBreakInside: 'avoid' }}>
+                    {/* ترويسة */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: `2px solid ${theme.accent}`, paddingBottom: '0.75rem', marginBottom: '1.5rem' }}>
+                      <div style={{ fontSize: '0.7rem', color: '#9CA3AF' }}>شواهد الأداء الوظيفي - {personalInfo.name}</div>
+                      <div style={{ fontSize: '0.7rem', color: theme.accent, fontWeight: 700 }}>بند {i + 1}</div>
                     </div>
-                    <div className="space-y-2">
-                      {d.evidences.map((ev) => (
-                        <div key={ev.id} className="p-3 rounded-lg border" style={{ borderColor: isOfficialTheme ? MOE_BORDER : theme.borderColor }}>
-                          {ev.type === 'text' && ev.text && <p className="text-sm">{ev.text}</p>}
-                          {ev.type === 'link' && ev.link && (
-                            <div className="flex items-center gap-3">
-                              <img src={generateQRDataURL(ev.link)} alt="QR" className="w-14 h-14" />
-                              <span className="text-xs text-gray-500">{ev.link}</span>
-                            </div>
-                          )}
-                          {ev.type === 'image' && ev.fileData && (
-                            ev.displayAs === 'image'
-                              ? <img src={ev.fileData} alt="" className="max-h-40 rounded" />
-                              : <div className="flex items-center gap-3">
-                                  <img src={generateQRDataURL(ev.fileData.substring(0, 200))} alt="QR" className="w-14 h-14" />
-                                  <span className="text-xs text-gray-500">{ev.fileName}</span>
-                                </div>
-                          )}
-                          {(ev.type === 'video' || ev.type === 'file') && ev.fileData && (
-                            <div className="flex items-center gap-3">
-                              <img src={generateQRDataURL(ev.fileName || 'file')} alt="QR" className="w-14 h-14" />
-                              <span className="text-xs text-gray-500">{ev.fileName}</span>
-                            </div>
-                          )}
-                          {ev.formData && Object.entries(ev.formData).some(([k, v]) => v && !k.startsWith('label_')) && (
-                            <div className="text-sm space-y-2">
-                              {Object.entries(ev.formData).filter(([k, v]) => v && !k.startsWith('label_') && !k.startsWith('dynamic_')).map(([key, val]) => (
-                                <div key={key}>
-                                  {isOfficialTheme ? (
-                                    <>
-                                      <div className="text-[10px] font-medium mb-1 px-2 py-0.5 rounded" style={{ color: MOE_GREEN, backgroundColor: MOE_LIGHT }}>{key}</div>
-                                      <div className="px-3 py-1.5 rounded border text-xs" style={{ borderColor: MOE_BORDER }}>{val}</div>
-                                    </>
-                                  ) : (
-                                    <p><span className="text-gray-500">{key}:</span> {val}</p>
-                                  )}
-                                </div>
-                              ))}
-                              {Object.entries(ev.formData).filter(([k, v]) => k.startsWith('dynamic_') && v).map(([dynKey, val]) => {
-                                const labelKey = dynKey.replace('dynamic_', 'label_');
-                                const label = ev.formData?.[labelKey] || 'حقل إضافي';
-                                return (
-                                  <div key={dynKey}>
-                                    {isOfficialTheme ? (
-                                      <>
-                                        <div className="text-[10px] font-medium mb-1 px-2 py-0.5 rounded" style={{ color: MOE_GREEN, backgroundColor: MOE_LIGHT }}>{label}</div>
-                                        <div className="px-3 py-1.5 rounded border text-xs" style={{ borderColor: MOE_BORDER }}>{val}</div>
-                                      </>
-                                    ) : (
-                                      <p><span className="text-gray-500">{label}:</span> {val}</p>
-                                    )}
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          )}
+
+                    {/* رأس البند */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.25rem', paddingBottom: '0.75rem', borderBottom: `3px solid ${theme.accent}` }}>
+                      <div style={{ width: '36px', height: '36px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: '0.85rem', fontWeight: 700, backgroundColor: theme.accent, flexShrink: 0 }}>{i + 1}</div>
+                      <div style={{ flex: 1 }}>
+                        <h3 style={{ fontWeight: 800, fontSize: '0.95rem', color: theme.accent, fontFamily: "'Tajawal', sans-serif" }}>{c.title}</h3>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginTop: '0.25rem' }}>
+                          <span style={{ fontSize: '0.7rem', color: '#6B7280' }}>الدرجة: <strong style={{ color: d.score >= 4 ? '#16A34A' : d.score >= 2 ? '#CA8A04' : '#9CA3AF' }}>{d.score}/{c.maxScore}</strong></span>
+                          <span style={{ fontSize: '0.7rem', color: '#9CA3AF' }}>•</span>
+                          <span style={{ fontSize: '0.7rem', color: '#6B7280' }}>{d.evidences.length} شاهد</span>
                         </div>
-                      ))}
+                      </div>
+                    </div>
+
+                    {/* الشواهد */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                      {d.evidences.map((ev, evIdx) => {
+                        const evPriority = ev.priority || 'essential';
+                        const evPriorityConfig = PRIORITY_CONFIG[evPriority];
+                        const linkedSub = allSubs.find(s => s.id === ev.subEvidenceId);
+                        const formFields = linkedSub?.formFields;
+                        return (
+                          <div key={ev.id} style={{ padding: '0.75rem', borderRadius: '8px', border: `1px solid ${theme.borderColor}`, borderRight: `3px solid ${evPriorityConfig.color}`, pageBreakInside: 'avoid' }}>
+                            {/* رأس الشاهد */}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                              <span style={{ fontSize: '0.65rem', fontWeight: 700, color: '#9CA3AF' }}>شاهد {evIdx + 1}</span>
+                              {linkedSub && <span style={{ fontSize: '0.6rem', color: '#6B7280', backgroundColor: '#F3F4F6', padding: '1px 6px', borderRadius: '4px' }}>{linkedSub.title.length > 50 ? linkedSub.title.substring(0, 50) + '...' : linkedSub.title}</span>}
+                              <span style={{ fontSize: '0.6rem', padding: '1px 6px', borderRadius: '9999px', fontWeight: 600, backgroundColor: evPriorityConfig.color + '15', color: evPriorityConfig.color }}>
+                                {evPriorityConfig.icon} {evPriorityConfig.label}
+                              </span>
+                            </div>
+                            {/* محتوى الشاهد */}
+                            {ev.type === 'text' && ev.text && <p style={{ fontSize: '0.8rem', lineHeight: 1.7, color: '#374151' }}>{ev.text}</p>}
+                            {ev.type === 'link' && ev.link && (
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                                {ev.showBarcode !== false && <img src={generateQRDataURL(ev.link)} alt="QR" style={{ width: '80px', height: '80px', borderRadius: '4px' }} />}
+                                <div>
+                                  <span style={{ fontSize: '0.7rem', color: '#6B7280', display: 'block' }}>رابط إلكتروني</span>
+                                  <span style={{ fontSize: '0.7rem', color: '#2563EB', wordBreak: 'break-all' as const }}>{ev.link}</span>
+                                </div>
+                              </div>
+                            )}
+                            {ev.type === 'image' && ev.fileData && (
+                              ev.displayAs === 'image'
+                                ? <img src={ev.fileData.startsWith('idb://') ? '' : ev.fileData} alt="" style={{ maxHeight: '200px', borderRadius: '8px', border: '1px solid #E5E7EB' }} />
+                                : <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                                    {ev.showBarcode !== false && <img src={generateQRDataURL((ev.fileData.startsWith('idb://') ? ev.fileName || '' : ev.fileData).substring(0, 200))} alt="QR" style={{ width: '80px', height: '80px', borderRadius: '4px' }} />}
+                                    <div>
+                                      <span style={{ fontSize: '0.7rem', color: '#6B7280', display: 'block' }}>صورة {ev.showBarcode !== false ? '(باركود)' : ''}</span>
+                                      <span style={{ fontSize: '0.7rem', color: '#4B5563' }}>{ev.fileName}</span>
+                                    </div>
+                                  </div>
+                            )}
+                            {(ev.type === 'video' || ev.type === 'file') && ev.fileData && (
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                                {ev.showBarcode !== false && <img src={generateQRDataURL(ev.fileName || 'file')} alt="QR" style={{ width: '80px', height: '80px', borderRadius: '4px' }} />}
+                                <div>
+                                  <span style={{ fontSize: '0.7rem', color: '#6B7280', display: 'block' }}>{ev.type === 'video' ? 'فيديو' : 'ملف مرفق'}</span>
+                                  <span style={{ fontSize: '0.7rem', color: '#4B5563' }}>{ev.fileName}</span>
+                                </div>
+                              </div>
+                            )}
+                            {/* عرض بيانات النموذج باستخدام أسماء الحقول الفعلية */}
+                            {ev.formData && Object.entries(ev.formData).some(([, v]) => v) && (
+                              <div style={{ marginTop: '0.5rem', border: `1px solid ${theme.accent}20`, borderRadius: '8px', overflow: 'hidden' }}>
+                                <div style={{ background: `${theme.accent}10`, borderBottom: `1px solid ${theme.accent}15`, padding: '6px 12px' }}>
+                                  <span style={{ fontSize: '0.7rem', fontWeight: 700, color: theme.accent }}>بيانات النموذج</span>
+                                </div>
+                                <div style={{ padding: '8px 12px' }}>
+                                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                                    <tbody>
+                                      {Object.entries(ev.formData).filter(([, v]) => v).map(([key, val], fi, arr) => {
+                                        // البحث عن اسم الحقل الفعلي من formFields
+                                        const matchedField = formFields?.find(f => f.id === key);
+                                        const fieldLabel = matchedField?.label || (key === 'evidence_desc' ? 'وصف الشاهد' : key === 'date' ? 'التاريخ' : key === 'notes' ? 'ملاحظات' : key === 'title' ? 'العنوان' : key === 'details' ? 'التفاصيل' : key === 'content' ? 'المحتوى' : key);
+                                        return (
+                                          <tr key={key} style={{ borderBottom: fi < arr.length - 1 ? '1px solid #f0f0f0' : 'none' }}>
+                                            <td style={{ padding: '6px 8px', fontSize: '0.7rem', fontWeight: 600, color: theme.accent, width: '110px', verticalAlign: 'top' }}>{fieldLabel}</td>
+                                            <td style={{ padding: '6px 8px', fontSize: '0.78rem', color: '#374151', lineHeight: 1.7, whiteSpace: 'pre-wrap' as const }}>{val}</td>
+                                          </tr>
+                                        );
+                                      })}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              </div>
+                            )}
+                            {/* التعليق */}
+                            {ev.comment && ev.comment.trim() && (
+                              <div style={{ marginTop: '0.5rem', backgroundColor: '#FFFBEB', borderRadius: '6px', padding: '0.5rem', fontSize: '0.75rem', color: '#92400E', border: '1px solid #FDE68A' }}>
+                                <strong>تعليق:</strong> {ev.comment}
+                              </div>
+                            )}
+                            {/* الكلمات المفتاحية */}
+                            {ev.keywords && ev.keywords.length > 0 && (
+                              <div style={{ marginTop: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.25rem', flexWrap: 'wrap' as const }}>
+                                {ev.keywords.map((kw, ki) => (
+                                  <span key={ki} style={{ fontSize: '0.6rem', padding: '1px 6px', borderRadius: '9999px', backgroundColor: '#F0F9FF', color: '#0369A1', border: '1px solid #BAE6FD' }}>{kw}</span>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* تذييل */}
+                    <div style={{ position: 'absolute', bottom: '1.5rem', left: '2.5rem', right: '2.5rem', borderTop: `1px solid ${theme.borderColor}`, paddingTop: '0.5rem', display: 'flex', justifyContent: 'space-between', fontSize: '0.6rem', color: '#9CA3AF' }}>
+                      <span>نظام SERS - السجلات التعليمية الذكية</span>
+                      <span>صفحة {currentPage}</span>
                     </div>
                   </div>
                 );
-              })}
+              });
+            })()}
 
-              {/* Signatures */}
-              <div className="mt-10 grid grid-cols-2 gap-8 text-center text-sm">
+            {/* === صفحة التوقيعات === */}
+            <div className="bg-white shadow-lg mx-auto mb-6" style={{ width: '210mm', minHeight: '297mm', maxWidth: '100%', padding: '2rem 2.5rem', position: 'relative', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+              {/* ترويسة */}
+              <div style={{ position: 'absolute', top: '2rem', left: '2.5rem', right: '2.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: `2px solid ${theme.accent}`, paddingBottom: '0.75rem' }}>
+                <div style={{ fontSize: '0.7rem', color: '#9CA3AF' }}>شواهد الأداء الوظيفي - {personalInfo.name}</div>
+                <div style={{ fontSize: '0.7rem', color: theme.accent, fontWeight: 700 }}>التوقيعات</div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '3rem', textAlign: 'center', padding: '0 2rem' }}>
                 <div>
-                  <p className="text-gray-500 mb-8">{isOfficialTheme ? 'المعلم/ة' : 'توقيع المقيّم'}</p>
-                  <div className="border-t pt-2" style={{ borderColor: isOfficialTheme ? MOE_BORDER : '#d1d5db' }}>{personalInfo.evaluator || '____________'}</div>
-                  <p className="text-xs text-gray-400 mt-1">{personalInfo.evaluatorRole}</p>
+                  <p style={{ color: '#6B7280', marginBottom: '5rem', fontSize: '0.9rem' }}>توقيع المقيّم</p>
+                  <div style={{ borderTop: '2px solid #D1D5DB', paddingTop: '0.75rem', fontWeight: 700, fontSize: '0.95rem' }}>{personalInfo.evaluator || '____________'}</div>
+                  <p style={{ fontSize: '0.75rem', color: '#9CA3AF', marginTop: '0.25rem' }}>{personalInfo.evaluatorRole}</p>
                 </div>
                 <div>
-                  <p className="text-gray-500 mb-8">{isOfficialTheme ? 'مدير المدرسة' : 'توقيع الموظف'}</p>
-                  <div className="border-t pt-2" style={{ borderColor: isOfficialTheme ? MOE_BORDER : '#d1d5db' }}>{personalInfo.name || '____________'}</div>
-                  <p className="text-xs text-gray-400 mt-1">{selectedJob?.title}</p>
+                  <p style={{ color: '#6B7280', marginBottom: '5rem', fontSize: '0.9rem' }}>توقيع الموظف</p>
+                  <div style={{ borderTop: '2px solid #D1D5DB', paddingTop: '0.75rem', fontWeight: 700, fontSize: '0.95rem' }}>{personalInfo.name || '____________'}</div>
+                  <p style={{ fontSize: '0.75rem', color: '#9CA3AF', marginTop: '0.25rem' }}>{selectedJob?.title}</p>
                 </div>
               </div>
+
+              {/* تذييل */}
+              <div style={{ position: 'absolute', bottom: '1.5rem', left: '2.5rem', right: '2.5rem', borderTop: `1px solid ${theme.borderColor}`, paddingTop: '0.5rem', display: 'flex', justifyContent: 'space-between', fontSize: '0.6rem', color: '#9CA3AF' }}>
+                <span>نظام SERS - السجلات التعليمية الذكية</span>
+                <span>{personalInfo.name} • {selectedJob?.title} • {personalInfo.year}</span>
+              </div>
             </div>
-            {/* شريط سفلي */}
-            {isOfficialTheme && <div className="h-2 w-full" style={{ backgroundColor: MOE_GREEN }} />}
           </div>
         </div>
       </div>
@@ -1702,4 +2994,27 @@ export default function PerformanceEvidence() {
   }
 
   return null;
+}
+
+// ===== Lightbox Overlay Component =====
+function LightboxOverlay({ src, onClose }: { src: string; onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4" onClick={onClose}>
+      <motion.div
+        initial={{ opacity: 0, scale: 0.9 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.9 }}
+        className="relative max-w-4xl max-h-[90vh] w-full flex items-center justify-center"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <img src={src} alt="" className="max-w-full max-h-[85vh] rounded-2xl shadow-2xl object-contain" />
+        <button
+          onClick={onClose}
+          className="absolute -top-3 -left-3 w-10 h-10 rounded-full bg-white dark:bg-gray-800 shadow-lg flex items-center justify-center hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+        >
+          <X className="w-5 h-5 text-foreground" />
+        </button>
+      </motion.div>
+    </div>
+  );
 }
