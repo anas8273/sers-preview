@@ -15,7 +15,6 @@ import {
   ToggleRight, Upload, Star, GripVertical, AlertTriangle
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import ReportTemplatesPanel from "@/components/ReportTemplatesPanel";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -44,7 +43,7 @@ const JOB_TITLES: Record<string, string> = {
   admin_assistant: "مساعد/ة إداري/ة",
 };
 
-type AdminTab = "portfolios" | "templates" | "report-templates" | "settings";
+type AdminTab = "portfolios" | "templates" | "settings";
 
 // ─── مكون إدارة القوالب المدمج ────────────────────────────
 function TemplatesPanel() {
@@ -681,8 +680,7 @@ export default function AdminDashboard() {
 
   const TABS: { id: AdminTab; label: string; icon: any; description: string }[] = [
     { id: "portfolios", label: "ملفات الإنجاز", icon: FileText, description: "مراجعة واعتماد الملفات" },
-    { id: "templates", label: "قوالب PDF", icon: Palette, description: "إدارة قوالب التصدير" },
-    { id: "report-templates", label: "قوالب التقارير", icon: LayoutDashboard, description: "إدارة حقول وتخطيط التقارير" },
+    { id: "templates", label: "القوالب", icon: Palette, description: "إدارة قوالب PDF" },
     { id: "settings", label: "الإعدادات", icon: Settings, description: "إعدادات النظام" },
   ];
 
@@ -781,7 +779,6 @@ export default function AdminDashboard() {
         <div className="p-6">
           {activeTab === "portfolios" && <PortfoliosPanel />}
           {activeTab === "templates" && <TemplatesPanel />}
-          {activeTab === "report-templates" && <ReportTemplatesPanel />}
           {activeTab === "settings" && <SettingsPanel />}
         </div>
       </main>
