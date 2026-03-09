@@ -2777,203 +2777,234 @@ export default function PerformanceEvidence() {
                   <div id={`single-preview-${previewSubId}`} style={{ fontFamily: "'Cairo', sans-serif", direction: 'rtl' }}>
                     <div style={{
                       background: 'white',
-                      maxWidth: '210mm',
-                      minHeight: '297mm',
+                      width: '210mm',
                       margin: '0 auto',
-                      border: '1px solid #e5e7eb',
-                      overflow: 'hidden',
+                      border: '2px solid #0d7377',
                       position: 'relative' as const,
-                      display: 'flex',
-                      flexDirection: 'column' as const,
+                      boxSizing: 'border-box' as const,
                     }}>
 
-                      {/* === خط علوي رفيع بلون الثيم === */}
-                      <div style={{ height: '4px', background: theme.footerBg || theme.accent, flexShrink: 0 }} />
+                      {/* ========== الترويسة الرسمية ========== */}
+                      <div style={{ 
+                        borderBottom: '2px solid #0d7377',
+                        padding: '12px 20px 8px',
+                        background: '#fff',
+                      }}>
+                        <table style={{ width: '100%', borderCollapse: 'collapse' as const }}>
+                          <tbody>
+                            <tr>
+                              {/* الجانب الأيمن - بيانات الجهة */}
+                              <td style={{ width: '35%', verticalAlign: 'top', textAlign: 'right', padding: '0' }}>
+                                <div style={{ fontWeight: 800, fontSize: '12px', color: '#1a1a1a', lineHeight: '1.8' }}>المملكة العربية السعودية</div>
+                                <div style={{ fontWeight: 700, fontSize: '11px', color: '#333', lineHeight: '1.8' }}>وزارة التعليم</div>
+                                {filteredDeptLines.map((line: string, i: number) => (
+                                  <div key={i} style={{ fontSize: '10px', color: '#555', fontWeight: 600, lineHeight: '1.6' }}>{line}</div>
+                                ))}
+                                {personalInfo.school && (
+                                  <div style={{ fontWeight: 700, fontSize: '10px', color: '#333', lineHeight: '1.6' }}>{personalInfo.school}</div>
+                                )}
+                              </td>
 
-                      {/* ========== الترويسة الرسمية - مضغوطة بخلفية بيضاء ========== */}
-                      <div style={{ padding: '14px 28px 10px', background: 'white', flexShrink: 0 }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          {/* الجانب الأيمن - بيانات الجهة */}
-                          <div style={{ textAlign: 'right', fontSize: '9.5px', lineHeight: '1.7', flex: '1' }}>
-                            <div style={{ fontWeight: 800, fontSize: '11px' }}>المملكة العربية السعودية</div>
-                            <div style={{ fontWeight: 700, fontSize: '10px' }}>وزارة التعليم</div>
-                            {filteredDeptLines.map((line: string, i: number) => <div key={i} style={{ fontSize: '9.5px' }}>{line}</div>)}
-                            {personalInfo.school && <div style={{ fontWeight: 700, fontSize: '10px' }}>{personalInfo.school}</div>}
-                          </div>
-                          {/* الشعار في المنتصف */}
-                          <div style={{ textAlign: 'center', padding: '0 16px' }}>
-                            <img src={MOE_LOGO} alt="شعار وزارة التعليم" style={{ height: '55px', objectFit: 'contain' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
-                            {personalInfo.extraLogo && (
-                              <img src={personalInfo.extraLogo} alt="شعار إضافي" style={{ height: '28px', objectFit: 'contain', marginTop: '3px' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
-                            )}
-                          </div>
-                          {/* الجانب الأيسر - العام والفصل */}
-                          <div style={{ textAlign: 'left', fontSize: '9.5px', lineHeight: '1.7', flex: '1' }}>
-                            <div style={{ fontWeight: 700 }}>العام الدراسي {personalInfo.year || '............'}</div>
-                            <div style={{ fontWeight: 700 }}>الفصل الدراسي {personalInfo.semester || '............'}</div>
-                          </div>
-                        </div>
+                              {/* الشعار في المنتصف */}
+                              <td style={{ width: '30%', verticalAlign: 'middle', textAlign: 'center', padding: '0' }}>
+                                <img
+                                  src={MOE_LOGO}
+                                  alt="شعار وزارة التعليم"
+                                  style={{ height: '65px', objectFit: 'contain' as const, display: 'inline-block' }}
+                                  onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                                />
+                                <div style={{ fontSize: '9px', color: '#0d7377', fontWeight: 700, marginTop: '2px' }}>وزارة التعـــليم</div>
+                                <div style={{ fontSize: '7px', color: '#999', fontStyle: 'italic' }}>Ministry of Education</div>
+                              </td>
+
+                              {/* الجانب الأيسر - العام والفصل */}
+                              <td style={{ width: '35%', verticalAlign: 'top', textAlign: 'left', padding: '0' }}>
+                                <div style={{ fontWeight: 700, fontSize: '10px', color: '#333', lineHeight: '1.8' }}>العام الدراسي</div>
+                                <div style={{ fontWeight: 800, fontSize: '11px', color: '#1a1a1a', lineHeight: '1.8' }}>{personalInfo.year || '............'}</div>
+                                <div style={{ fontWeight: 700, fontSize: '10px', color: '#333', lineHeight: '1.8', marginTop: '4px' }}>الفصل الدراسي</div>
+                                <div style={{ fontWeight: 800, fontSize: '11px', color: '#1a1a1a', lineHeight: '1.8' }}>{personalInfo.semester || '............'}</div>
+                              </td>
+                            </tr>
+                          </tbody>
+                        </table>
                       </div>
 
-                      {/* ========== شريط العنوان - رفيع ========== */}
+                      {/* ========== شريط العنوان ========== */}
                       <div style={{
-                        background: theme.titleBg || theme.accent,
+                        background: `linear-gradient(135deg, ${theme.titleBg || theme.accent}, ${theme.accent})`,
                         color: 'white',
-                        padding: '8px 28px',
+                        padding: '8px 20px',
                         textAlign: 'center',
                         fontWeight: 800,
-                        fontSize: '12px',
-                        letterSpacing: '0.3px',
-                        flexShrink: 0,
+                        fontSize: '13px',
+                        letterSpacing: '0.5px',
                       }}>
                         {prevSub.title}
                       </div>
 
-                      {/* ========== محتوى التقرير ========== */}
-                      <div style={{ padding: '12px 28px', flex: '1', display: 'flex', flexDirection: 'column' as const }}>
-
-                        {/* === الحقول القصيرة - تنسيق 3 أعمدة مع خطوط تحتية (مثل edu-forms) === */}
-                        {shortFields.length > 0 && (() => {
-                          const rows: typeof shortFields[] = [];
-                          for (let i = 0; i < shortFields.length; i += 3) rows.push(shortFields.slice(i, i + 3));
-                          return (
-                            <div style={{ marginBottom: '10px' }}>
-                              {rows.map((row, ri) => (
-                                <div key={ri} style={{ display: 'flex', gap: '0', borderBottom: `1px solid ${theme.accent}30` }}>
-                                  {row.map((field, fi) => (
-                                    <div key={field.id} style={{
-                                      flex: 1,
-                                      padding: '7px 10px',
-                                      borderLeft: fi > 0 ? `1px solid ${theme.accent}20` : 'none',
-                                    }}>
-                                      <div style={{
-                                        fontSize: '8.5px',
+                      {/* ========== جدول البيانات الرئيسي ========== */}
+                      <div style={{ padding: '12px 20px' }}>
+                        <table style={{ width: '100%', borderCollapse: 'collapse' as const, border: '1px solid #d1d5db' }}>
+                          <tbody>
+                            {/* الحقول القصيرة - كل صف 3 حقول */}
+                            {shortFields.length > 0 && (() => {
+                              const rows: typeof shortFields[] = [];
+                              for (let i = 0; i < shortFields.length; i += 3) rows.push(shortFields.slice(i, i + 3));
+                              return rows.map((row, ri) => (
+                                <tr key={`short-${ri}`}>
+                                  {row.map((field) => (
+                                    <React.Fragment key={field.id}>
+                                      <td style={{
+                                        border: '1px solid #d1d5db',
+                                        padding: '6px 10px',
                                         fontWeight: 700,
-                                        color: theme.accent,
-                                        marginBottom: '2px',
-                                        borderBottom: `1.5px solid ${theme.accent}`,
-                                        paddingBottom: '1px',
-                                        display: 'inline-block',
+                                        fontSize: '10px',
+                                        color: '#fff',
+                                        background: theme.accent,
+                                        width: '15%',
+                                        textAlign: 'center',
                                       }}>
                                         {field.label}
-                                      </div>
-                                      <div style={{ fontSize: '9.5px', color: '#1a1a1a', lineHeight: '1.6', marginTop: '2px' }}>
-                                        {field.value || '................'}
-                                      </div>
-                                    </div>
+                                      </td>
+                                      <td style={{
+                                        border: '1px solid #d1d5db',
+                                        padding: '6px 10px',
+                                        fontSize: '10px',
+                                        color: '#1a1a1a',
+                                        background: '#fff',
+                                        width: ri === 0 && row.length <= 3 ? `${(100 - 15 * row.length) / row.length}%` : undefined,
+                                      }}>
+                                        {field.value || '....................'}
+                                      </td>
+                                    </React.Fragment>
                                   ))}
+                                  {/* خلايا فارغة لملء الصف */}
                                   {row.length < 3 && Array.from({ length: 3 - row.length }).map((_, i) => (
-                                    <div key={`empty-${i}`} style={{ flex: 1 }} />
+                                    <React.Fragment key={`empty-${i}`}>
+                                      <td style={{ border: '1px solid #d1d5db', padding: '6px 10px', background: theme.accent, width: '15%' }}></td>
+                                      <td style={{ border: '1px solid #d1d5db', padding: '6px 10px', background: '#fff' }}></td>
+                                    </React.Fragment>
                                   ))}
-                                </div>
-                              ))}
-                            </div>
-                          );
-                        })()}
+                                </tr>
+                              ));
+                            })()}
 
-                        {/* === الحقول الطويلة - عمودين متوازيين (مثل edu-forms) === */}
-                        {longFields.length > 0 && (() => {
-                          const pairs: typeof longFields[] = [];
-                          for (let i = 0; i < longFields.length; i += 2) pairs.push(longFields.slice(i, i + 2));
-                          return pairs.map((pair, pi) => (
-                            <div key={pi} style={{
-                              display: 'grid',
-                              gridTemplateColumns: pair.length === 2 ? '1fr 1fr' : '1fr',
-                              gap: '0',
-                              borderBottom: `1px solid ${theme.accent}25`,
-                              marginBottom: '2px',
-                            }}>
-                              {pair.map((field, fi) => (
-                                <div key={field.id} style={{
+                            {/* الحقول الطويلة - كل حقل صف كامل */}
+                            {longFields.map((field) => (
+                              <tr key={field.id}>
+                                <td style={{
+                                  border: '1px solid #d1d5db',
                                   padding: '6px 10px',
-                                  borderLeft: fi > 0 ? `1px solid ${theme.accent}20` : 'none',
+                                  fontWeight: 700,
+                                  fontSize: '10px',
+                                  color: '#fff',
+                                  background: theme.accent,
+                                  width: '15%',
+                                  textAlign: 'center',
+                                  verticalAlign: 'top',
                                 }}>
-                                  <div style={{
-                                    fontSize: '8.5px',
-                                    fontWeight: 700,
-                                    color: theme.accent,
-                                    marginBottom: '3px',
-                                    borderBottom: `1.5px solid ${theme.accent}`,
-                                    paddingBottom: '1px',
-                                    display: 'inline-block',
-                                  }}>
-                                    {field.label}
-                                  </div>
-                                  <div style={{
-                                    fontSize: '9px',
-                                    lineHeight: '1.7',
-                                    color: '#1a1a1a',
-                                    whiteSpace: 'pre-wrap' as const,
-                                  }}>
-                                    {field.value || '................'}
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          ));
-                        })()}
-
-                        {/* === قسم الشواهد - QR codes مضغوطة === */}
-                        {allMediaEvidences.length > 0 && (
-                          <div style={{ marginTop: '8px', paddingTop: '6px', borderTop: `1px solid ${theme.accent}30` }}>
-                            <div style={{ fontSize: '9px', fontWeight: 700, color: theme.accent, marginBottom: '6px', textAlign: 'center' }}>
-                              الشواهد والأدلة
-                            </div>
-                            <div style={{ display: 'flex', justifyContent: 'center', gap: '12px', flexWrap: 'wrap' as const }}>
-                              {allMediaEvidences.slice(0, 6).map(ev => {
-                                const qrData = ev.type === 'link' ? ev.link :
-                                  (ev.fileData?.startsWith('idb://') ? ev.fileName : (ev.fileData || ev.fileName || ''));
-                                return (
-                                  <div key={ev.id} style={{ textAlign: 'center' }}>
-                                    <img src={generateQRDataURL((qrData || '').substring(0, 200), 3)} alt="QR" style={{ width: '55px', height: '55px' }} />
-                                    <div style={{ fontSize: '6.5px', color: '#888', maxWidth: '55px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const }}>
-                                      {ev.type === 'link' ? (ev.link || '').substring(0, 25) : ev.fileName}
-                                    </div>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                            {allMediaEvidences.length > 6 && (
-                              <div style={{ fontSize: '7px', color: '#999', textAlign: 'center', marginTop: '3px' }}>
-                                + {allMediaEvidences.length - 6} شواهد إضافية
-                              </div>
-                            )}
-                          </div>
-                        )}
-
-                        {/* === مساحة مرنة لملء الصفحة === */}
-                        <div style={{ flex: 1, minHeight: '20px' }} />
-
-                        {/* === التوقيعات - سطر واحد بسيط (مثل edu-forms) === */}
-                        <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '12px', borderTop: `1px solid ${theme.accent}30`, marginTop: '8px' }}>
-                          <div style={{ flex: 1, textAlign: 'center' }}>
-                            <div style={{ fontSize: '9px', fontWeight: 700, color: '#333' }}>المعلم/ة : {personalInfo.name || 'اسم المعلم'}</div>
-                            <div style={{ width: '120px', borderBottom: '1.5px solid #999', margin: '10px auto 0' }} />
-                          </div>
-                          <div style={{ flex: 1, textAlign: 'center' }}>
-                            <div style={{ fontSize: '9px', fontWeight: 700, color: '#333' }}>{personalInfo.evaluatorRole || 'مدير المدرسة'} : {personalInfo.evaluator || 'اسم المدير'}</div>
-                            <div style={{ width: '120px', borderBottom: '1.5px solid #999', margin: '10px auto 0' }} />
-                          </div>
-                        </div>
+                                  {field.label}
+                                </td>
+                                <td colSpan={5} style={{
+                                  border: '1px solid #d1d5db',
+                                  padding: '8px 12px',
+                                  fontSize: '10px',
+                                  lineHeight: '1.6',
+                                  color: '#1a1a1a',
+                                  background: '#fff',
+                                  whiteSpace: 'pre-wrap' as const,
+                                }}>
+                                  {field.value || '....................'}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
                       </div>
 
-                      {/* ========== الفوتر - رفيع ========== */}
+                      {/* ========== قسم الشواهد والأدلة ========== */}
+                      {allMediaEvidences.length > 0 && (
+                        <div style={{ padding: '0 20px 12px' }}>
+                          <div style={{
+                            fontSize: '11px',
+                            fontWeight: 700,
+                            color: '#fff',
+                            background: theme.accent,
+                            padding: '4px 12px',
+                            display: 'inline-block',
+                            borderRadius: '4px 4px 0 0',
+                          }}>
+                            الشواهد والأدلة ({allMediaEvidences.length})
+                          </div>
+                          <div style={{
+                            border: '1px solid #d1d5db',
+                            borderTop: `2px solid ${theme.accent}`,
+                            padding: '10px',
+                            display: 'flex',
+                            justifyContent: 'center',
+                            gap: '12px',
+                            flexWrap: 'wrap' as const,
+                          }}>
+                            {allMediaEvidences.slice(0, 6).map(ev => {
+                              const qrData = ev.type === 'link' ? ev.link :
+                                (ev.fileData?.startsWith('idb://') ? ev.fileName : (ev.fileData || ev.fileName || ''));
+                              return (
+                                <div key={ev.id} style={{ textAlign: 'center' }}>
+                                  <img src={generateQRDataURL((qrData || '').substring(0, 200), 4)} alt="QR" style={{ width: '50px', height: '50px', border: '1px solid #e5e7eb' }} />
+                                  <div style={{ fontSize: '7px', color: '#666', maxWidth: '60px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const, marginTop: '3px' }}>
+                                    {ev.type === 'link' ? (ev.link || '').substring(0, 30) : ev.fileName}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                          {allMediaEvidences.length > 6 && (
+                            <div style={{ fontSize: '9px', color: '#999', textAlign: 'center', marginTop: '4px' }}>
+                              + {allMediaEvidences.length - 6} شواهد إضافية
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* ========== التوقيعات ========== */}
+                      <div style={{ padding: '8px 20px 12px', borderTop: '1px solid #d1d5db' }}>
+                        <table style={{ width: '100%', borderCollapse: 'collapse' as const }}>
+                          <tbody>
+                            <tr>
+                              <td style={{ width: '50%', textAlign: 'center', padding: '8px 20px', verticalAlign: 'top' }}>
+                                <div style={{ fontSize: '11px', fontWeight: 700, color: '#1a1a1a', marginBottom: '4px' }}>المعلم / المعلمة</div>
+                                <div style={{ fontSize: '10px', color: '#333', marginBottom: '8px' }}>{personalInfo.name || '........................'}</div>
+                                <div style={{ width: '120px', borderBottom: '2px dotted #444', margin: '0 auto' }} />
+                                <div style={{ fontSize: '8px', color: '#888', marginTop: '3px' }}>التوقيع</div>
+                              </td>
+                              <td style={{ width: '50%', textAlign: 'center', padding: '8px 20px', verticalAlign: 'top', borderRight: '1px solid #d1d5db' }}>
+                                <div style={{ fontSize: '11px', fontWeight: 700, color: '#1a1a1a', marginBottom: '4px' }}>{personalInfo.evaluatorRole || 'مدير/ة المدرسة'}</div>
+                                <div style={{ fontSize: '10px', color: '#333', marginBottom: '8px' }}>{personalInfo.evaluator || '........................'}</div>
+                                <div style={{ width: '120px', borderBottom: '2px dotted #444', margin: '0 auto' }} />
+                                <div style={{ fontSize: '8px', color: '#888', marginTop: '3px' }}>التوقيع والختم</div>
+                              </td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+
+                      {/* ========== الفوتر ========== */}
                       <div style={{
-                        background: theme.footerBg || theme.accent,
-                        padding: '6px 28px',
+                        background: `linear-gradient(135deg, ${theme.footerBg || theme.accent}, ${theme.accent})`,
+                        padding: '6px 20px',
+                        fontSize: '9px',
                         color: '#fff',
-                        fontSize: '7.5px',
                         display: 'flex',
                         justifyContent: 'space-between',
                         alignItems: 'center',
-                        flexShrink: 0,
                       }}>
                         <span style={{ fontWeight: 700 }}>SERS - نظام السجلات التعليمية الذكي</span>
-                        <span style={{ opacity: 0.85 }}>صفحة 1</span>
+                        <span style={{ opacity: 0.9 }}>صفحة 1</span>
                       </div>
 
                     </div>
                   </div>
+
                 </motion.div>
               </motion.div>
             );
