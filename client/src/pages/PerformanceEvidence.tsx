@@ -2730,18 +2730,25 @@ export default function PerformanceEvidence() {
             const fileEvidences = prevEvidences.filter(e => (e.type === 'file' || e.type === 'video') && e.fileData);
             const allMediaEvidences = [...imageEvidences, ...linkEvidences, ...fileEvidences];
             const theme = selectedTheme;
-            const themeColors = {
-              headerBg: theme.headerBg.includes('gradient') ? theme.headerBg : theme.headerBg,
-              accent: theme.accent,
-              lightBg: theme.accent + '10',
-              borderClr: theme.accent + '40',
-            };
             const staticFields = (prevSub.formFields || []).map(f => ({ id: f.id, label: f.label, value: formEv?.formData?.[f.id] || '' }));
             const dynamicFields = formEv?.formData ? Object.keys(formEv.formData).filter(k => k.startsWith('dynamic_') && !k.startsWith('__label_')).map(k => ({ id: k, label: formEv.formData?.[`__label_${k}`] || 'حقل إضافي', value: formEv.formData?.[k] || '' })) : [];
             const allFields = [...staticFields, ...dynamicFields];
             const shortFields = allFields.filter(f => (f.value?.length || 0) < 80);
             const longFields = allFields.filter(f => (f.value?.length || 0) >= 80);
             const MOE_LOGO = 'https://d2xsxph8kpxj0f.cloudfront.net/310519663047121386/h34s4aPNVyHXdtjgZ7eNNf/UntiTtled-1-1568x1192_bfb97198.png';
+
+            // === استخراج بيانات الإدارة بدون تكرار ===
+            const deptLines = (personalInfo.department || '').split('\n').filter((l: string) => l.trim());
+            const filteredDeptLines = deptLines.filter((l: string) => {
+              const trimmed = l.trim();
+              if (trimmed === 'المملكة العربية السعودية') return false;
+              if (trimmed === 'وزارة التعليم') return false;
+              if (personalInfo.school && trimmed === personalInfo.school.trim()) return false;
+              return true;
+            });
+            const isDarkHeader = theme.headerBg !== '#ffffff' && theme.headerBg !== '#f8f9fa' && !theme.headerBg.includes('#fff');
+            const logoFilter = isDarkHeader ? 'brightness(0) invert(1)' : 'none';
+
             return (
               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 bg-black/60 z-50 flex items-start justify-center p-4 overflow-y-auto">
                 <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
@@ -2765,129 +2772,116 @@ export default function PerformanceEvidence() {
                       <X className="w-5 h-5" />
                     </button>
                   </div>
-                  {/* محتوى المعاينة - تصميم ديناميكي حسب layoutType */}
-                  <div id={`single-preview-${previewSubId}`} style={{ fontFamily: "'Cairo', 'Tajawal', sans-serif", direction: 'rtl' }}>
+
+                  {/* ========== محتوى المعاينة - تصميم احترافي مطابق لنماذج تعليمية ========== */}
+                  <div id={`single-preview-${previewSubId}`} style={{ fontFamily: "'Cairo', sans-serif", direction: 'rtl' }}>
                     <div style={{ background: theme.bodyBg || 'white', padding: '0', maxWidth: '210mm', margin: '0 auto', border: '1px solid #e5e7eb', overflow: 'hidden', position: 'relative' as const }}>
-                      {/* === شريط جانبي ملون يمتد على كامل الصفحة (قالب البطاقات) === */}
+
+                      {/* === شريط جانبي ملون (قالب البطاقات) === */}
                       {theme.layoutType === 'white-header-sidebar' && (
                         <div style={{ position: 'absolute' as const, top: 0, right: 0, bottom: 0, width: '14px', background: theme.sidebarBg || theme.footerBg, zIndex: 1 }} />
                       )}
-                      
-                      {/* === خط علوي رفيع (حسب الثيم) === */}
+
+                      {/* === خط علوي رفيع === */}
                       {theme.showTopLine !== false && theme.layoutType !== 'white-header-sidebar' && (
-                        <div style={{ height: '4px', background: theme.footerBg || `linear-gradient(to left, ${theme.borderColor}, ${theme.accent})` }} />
+                        <div style={{ height: '5px', background: theme.footerBg || `linear-gradient(to left, ${theme.borderColor}, ${theme.accent})` }} />
                       )}
 
-                      {/* === الترويسة - تتغير حسب layoutType === */}
+                      {/* ========== الترويسة الرسمية ========== */}
                       {(() => {
-                        // استخراج بيانات الإدارة بدون تكرار
-                        const deptLines = (personalInfo.department || '').split('\n').filter((l: string) => l.trim());
-                        // إزالة الأسطر المكررة: المملكة، وزارة التعليم (بالضبط)، واسم المدرسة إذا موجود في حقل school
-                        const filteredDeptLines = deptLines.filter((l: string) => {
-                          const trimmed = l.trim();
-                          // إزالة المطابقة التامة فقط
-                          if (trimmed === 'المملكة العربية السعودية') return false;
-                          if (trimmed === 'وزارة التعليم') return false;
-                          // إزالة اسم المدرسة إذا كان موجوداً في حقل school لتجنب التكرار
-                          if (personalInfo.school && trimmed === personalInfo.school.trim()) return false;
-                          return true;
-                        });
-                        const isDark = theme.headerBg !== '#ffffff' && theme.headerBg !== '#f8f9fa';
-                        const logoFilter = isDark ? 'brightness(0) invert(1)' : 'none';
-
-                        // --- نمط الشريط الجانبي (white-header-sidebar) ---
+                        // --- نمط الشريط الجانبي ---
                         if (theme.layoutType === 'white-header-sidebar') {
                           return (
                             <>
-                              <div style={{ background: theme.headerBg, padding: '18px 24px', paddingRight: '38px', color: theme.headerText }}>
+                              <div style={{ background: theme.headerBg, padding: '20px 28px', paddingRight: '40px', color: theme.headerText }}>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                  <div style={{ textAlign: 'right', fontSize: '10px', lineHeight: '1.8', flex: '1' }}>
-                                    <div style={{ fontWeight: 'bold', fontSize: '11px' }}>المملكة العربية السعودية</div>
-                                    <div style={{ fontWeight: 'bold' }}>وزارة التعليم</div>
-                                    {filteredDeptLines.map((line: string, i: number) => <div key={i}>{line}</div>)}
-                                    {personalInfo.school && <div style={{ fontWeight: 'bold' }}>{personalInfo.school}</div>}
+                                  <div style={{ textAlign: 'right', fontSize: '10.5px', lineHeight: '1.9', flex: '1' }}>
+                                    <div style={{ fontWeight: 800, fontSize: '12px' }}>المملكة العربية السعودية</div>
+                                    <div style={{ fontWeight: 700, fontSize: '11px' }}>وزارة التعليم</div>
+                                    {filteredDeptLines.map((line: string, i: number) => <div key={i} style={{ fontSize: '10.5px' }}>{line}</div>)}
+                                    {personalInfo.school && <div style={{ fontWeight: 700, fontSize: '11px' }}>{personalInfo.school}</div>}
                                   </div>
-                                  <div style={{ textAlign: 'center', padding: '0 16px' }}>
-                                    <img src={MOE_LOGO} alt="شعار وزارة التعليم" style={{ height: '60px', objectFit: 'contain', filter: logoFilter }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                                  <div style={{ textAlign: 'center', padding: '0 20px' }}>
+                                    <img src={MOE_LOGO} alt="شعار وزارة التعليم" style={{ height: '65px', objectFit: 'contain', filter: logoFilter }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
                                   </div>
-                                  <div style={{ textAlign: 'left', fontSize: '10px', lineHeight: '1.8', flex: '1' }}>
-                                    <div>العام: {personalInfo.year || '......'}</div>
-                                    <div>الفصل: {personalInfo.semester || '......'}</div>
+                                  <div style={{ textAlign: 'left', fontSize: '10.5px', lineHeight: '1.9', flex: '1' }}>
+                                    <div style={{ fontWeight: 700 }}>العام الدراسي: {personalInfo.year || '................'}</div>
+                                    <div style={{ fontWeight: 700 }}>الفصل الدراسي: {personalInfo.semester || '................'}</div>
                                   </div>
                                 </div>
                               </div>
-                              {theme.headerSeparator && <div style={{ height: '3px', background: theme.footerBg || theme.accent }} />}
+                              {theme.headerSeparator && <div style={{ height: '4px', background: theme.footerBg || theme.accent }} />}
                             </>
                           );
                         }
 
-                        // --- نمط الخلفية الفاتحة (white-header-light) ---
+                        // --- نمط الخلفية الفاتحة ---
                         if (theme.layoutType === 'white-header-light') {
                           return (
                             <>
-                              <div style={{ background: theme.headerBg, padding: '16px 28px', color: theme.headerText }}>
+                              <div style={{ background: theme.headerBg, padding: '18px 30px', color: theme.headerText }}>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                  <div style={{ textAlign: 'right', fontSize: '10px', lineHeight: '1.8', flex: '1' }}>
-                                    <div style={{ fontWeight: 'bold', fontSize: '11px' }}>المملكة العربية السعودية</div>
-                                    <div style={{ fontWeight: 'bold' }}>وزارة التعليم</div>
-                                    {filteredDeptLines.map((line: string, i: number) => <div key={i}>{line}</div>)}
-                                    {personalInfo.school && <div style={{ fontWeight: 'bold' }}>{personalInfo.school}</div>}
+                                  <div style={{ textAlign: 'right', fontSize: '10.5px', lineHeight: '1.9', flex: '1' }}>
+                                    <div style={{ fontWeight: 800, fontSize: '12px' }}>المملكة العربية السعودية</div>
+                                    <div style={{ fontWeight: 700, fontSize: '11px' }}>وزارة التعليم</div>
+                                    {filteredDeptLines.map((line: string, i: number) => <div key={i} style={{ fontSize: '10.5px' }}>{line}</div>)}
+                                    {personalInfo.school && <div style={{ fontWeight: 700, fontSize: '11px' }}>{personalInfo.school}</div>}
                                   </div>
-                                  <div style={{ textAlign: 'center', padding: '0 16px' }}>
-                                    <img src={MOE_LOGO} alt="شعار وزارة التعليم" style={{ height: '60px', objectFit: 'contain', filter: logoFilter }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                                  <div style={{ textAlign: 'center', padding: '0 20px' }}>
+                                    <img src={MOE_LOGO} alt="شعار وزارة التعليم" style={{ height: '65px', objectFit: 'contain', filter: logoFilter }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
                                   </div>
-                                  <div style={{ textAlign: 'left', fontSize: '10px', lineHeight: '1.8', flex: '1' }}>
-                                    <div>العام: {personalInfo.year || '......'}</div>
-                                    <div>الفصل: {personalInfo.semester || '......'}</div>
+                                  <div style={{ textAlign: 'left', fontSize: '10.5px', lineHeight: '1.9', flex: '1' }}>
+                                    <div style={{ fontWeight: 700 }}>العام الدراسي: {personalInfo.year || '................'}</div>
+                                    <div style={{ fontWeight: 700 }}>الفصل الدراسي: {personalInfo.semester || '................'}</div>
                                   </div>
                                 </div>
                               </div>
-                              <div style={{ height: '3px', background: theme.footerBg || theme.accent }} />
+                              <div style={{ height: '4px', background: theme.footerBg || theme.accent }} />
                             </>
                           );
                         }
 
-                        // --- نمط الأبيض الكلاسيكي (white-header-classic) ---
+                        // --- نمط الأبيض الكلاسيكي ---
                         if (theme.layoutType === 'white-header-classic') {
                           return (
-                            <div style={{ background: '#fff', padding: '20px 28px', borderBottom: `2px solid ${theme.accent}` }}>
+                            <div style={{ background: '#fff', padding: '22px 30px', borderBottom: `3px solid ${theme.accent}` }}>
                               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <div style={{ textAlign: 'right', fontSize: '10px', lineHeight: '1.8', flex: '1', color: theme.headerText }}>
-                                  <div style={{ fontWeight: 'bold', fontSize: '11px' }}>المملكة العربية السعودية</div>
-                                  <div style={{ fontWeight: 'bold' }}>وزارة التعليم</div>
-                                  {filteredDeptLines.map((line: string, i: number) => <div key={i}>{line}</div>)}
-                                  {personalInfo.school && <div style={{ fontWeight: 'bold' }}>{personalInfo.school}</div>}
+                                <div style={{ textAlign: 'right', fontSize: '10.5px', lineHeight: '1.9', flex: '1', color: theme.headerText }}>
+                                  <div style={{ fontWeight: 800, fontSize: '12px' }}>المملكة العربية السعودية</div>
+                                  <div style={{ fontWeight: 700, fontSize: '11px' }}>وزارة التعليم</div>
+                                  {filteredDeptLines.map((line: string, i: number) => <div key={i} style={{ fontSize: '10.5px' }}>{line}</div>)}
+                                  {personalInfo.school && <div style={{ fontWeight: 700, fontSize: '11px' }}>{personalInfo.school}</div>}
                                 </div>
-                                <div style={{ textAlign: 'center', padding: '0 16px' }}>
-                                  <img src={MOE_LOGO} alt="شعار وزارة التعليم" style={{ height: '65px', objectFit: 'contain' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                                <div style={{ textAlign: 'center', padding: '0 20px' }}>
+                                  <img src={MOE_LOGO} alt="شعار وزارة التعليم" style={{ height: '70px', objectFit: 'contain' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
                                 </div>
-                                <div style={{ textAlign: 'left', fontSize: '10px', lineHeight: '1.8', flex: '1', color: theme.headerText }}>
-                                  <div>العام: {personalInfo.year || '......'}</div>
-                                  <div>الفصل: {personalInfo.semester || '......'}</div>
+                                <div style={{ textAlign: 'left', fontSize: '10.5px', lineHeight: '1.9', flex: '1', color: theme.headerText }}>
+                                  <div style={{ fontWeight: 700 }}>العام الدراسي: {personalInfo.year || '................'}</div>
+                                  <div style={{ fontWeight: 700 }}>الفصل الدراسي: {personalInfo.semester || '................'}</div>
                                 </div>
                               </div>
                             </div>
                           );
                         }
 
-                        // --- نمط الأعمدة المتعددة (white-header-multi) ---
+                        // --- نمط الأعمدة المتعددة ---
                         if (theme.layoutType === 'white-header-multi') {
                           return (
                             <>
-                              <div style={{ background: '#fff', padding: '16px 28px', borderBottom: `1px solid ${theme.accent}30` }}>
+                              <div style={{ background: '#fff', padding: '18px 30px', borderBottom: `1px solid ${theme.accent}30` }}>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                  <div style={{ textAlign: 'right', fontSize: '10px', lineHeight: '1.8', flex: '1', color: theme.headerText }}>
-                                    <div style={{ fontWeight: 'bold', fontSize: '11px' }}>المملكة العربية السعودية</div>
-                                    <div style={{ fontWeight: 'bold' }}>وزارة التعليم</div>
-                                    {filteredDeptLines.map((line: string, i: number) => <div key={i}>{line}</div>)}
+                                  <div style={{ textAlign: 'right', fontSize: '10.5px', lineHeight: '1.9', flex: '1', color: theme.headerText }}>
+                                    <div style={{ fontWeight: 800, fontSize: '12px' }}>المملكة العربية السعودية</div>
+                                    <div style={{ fontWeight: 700, fontSize: '11px' }}>وزارة التعليم</div>
+                                    {filteredDeptLines.map((line: string, i: number) => <div key={i} style={{ fontSize: '10.5px' }}>{line}</div>)}
                                   </div>
-                                  <div style={{ textAlign: 'center', padding: '0 16px' }}>
-                                    <img src={MOE_LOGO} alt="شعار وزارة التعليم" style={{ height: '55px', objectFit: 'contain' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                                  <div style={{ textAlign: 'center', padding: '0 20px' }}>
+                                    <img src={MOE_LOGO} alt="شعار وزارة التعليم" style={{ height: '60px', objectFit: 'contain' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
                                   </div>
-                                  <div style={{ textAlign: 'left', fontSize: '10px', lineHeight: '1.8', flex: '1', color: theme.headerText }}>
-                                    <div>العام: {personalInfo.year || '......'}</div>
-                                    <div>الفصل: {personalInfo.semester || '......'}</div>
-                                    {personalInfo.school && <div>{personalInfo.school}</div>}
+                                  <div style={{ textAlign: 'left', fontSize: '10.5px', lineHeight: '1.9', flex: '1', color: theme.headerText }}>
+                                    <div style={{ fontWeight: 700 }}>العام الدراسي: {personalInfo.year || '................'}</div>
+                                    <div style={{ fontWeight: 700 }}>الفصل الدراسي: {personalInfo.semester || '................'}</div>
+                                    {personalInfo.school && <div style={{ fontSize: '10.5px' }}>{personalInfo.school}</div>}
                                   </div>
                                 </div>
                               </div>
@@ -2895,17 +2889,17 @@ export default function PerformanceEvidence() {
                           );
                         }
 
-                        // --- نمط بسيط ونظيف (minimal-clean) ---
+                        // --- نمط بسيط ونظيف ---
                         if (theme.layoutType === 'minimal-clean') {
                           return (
-                            <div style={{ padding: '20px 28px', borderBottom: `2px solid ${theme.accent}` }}>
+                            <div style={{ padding: '22px 30px', borderBottom: `3px solid ${theme.accent}` }}>
                               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                 <div style={{ textAlign: 'right', flex: '1' }}>
-                                  <div style={{ fontSize: '13px', fontWeight: 'bold', color: '#333' }}>وزارة التعليم</div>
-                                  {filteredDeptLines.length > 0 && <div style={{ fontSize: '10px', color: '#666', marginTop: '2px' }}>{filteredDeptLines.join(' - ')}</div>}
+                                  <div style={{ fontSize: '14px', fontWeight: 800, color: '#333' }}>وزارة التعليم</div>
+                                  {filteredDeptLines.length > 0 && <div style={{ fontSize: '11px', color: '#666', marginTop: '3px' }}>{filteredDeptLines.join(' - ')}</div>}
                                 </div>
-                                <img src={MOE_LOGO} alt="شعار" style={{ height: '45px', objectFit: 'contain' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
-                                <div style={{ textAlign: 'left', flex: '1', fontSize: '10px', color: '#666' }}>
+                                <img src={MOE_LOGO} alt="شعار" style={{ height: '50px', objectFit: 'contain' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                                <div style={{ textAlign: 'left', flex: '1', fontSize: '11px', color: '#666' }}>
                                   <div>{personalInfo.year} - {personalInfo.semester}</div>
                                 </div>
                               </div>
@@ -2913,49 +2907,48 @@ export default function PerformanceEvidence() {
                           );
                         }
 
-                        // --- الافتراضي: ترويسة داكنة (dark-header-table / dark-header-simple) ---
+                        // --- الافتراضي: ترويسة داكنة (مطابق لنماذج تعليمية) ---
                         return (
-                          <>
-                            <div style={{ background: theme.headerBg, padding: '20px 28px', color: theme.headerText }}>
-                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <div style={{ textAlign: 'right', fontSize: '10px', lineHeight: '1.8', flex: '1' }}>
-                                  <div style={{ fontWeight: 'bold', fontSize: '11px' }}>المملكة العربية السعودية</div>
-                                  <div style={{ fontWeight: 'bold' }}>وزارة التعليم</div>
-                                  {filteredDeptLines.map((line: string, i: number) => <div key={i}>{line}</div>)}
-                                  {personalInfo.school && <div style={{ fontWeight: 'bold' }}>{personalInfo.school}</div>}
-                                </div>
-                                <div style={{ textAlign: 'center', padding: '0 20px' }}>
-                                  <img src={MOE_LOGO} alt="شعار وزارة التعليم" style={{ height: '65px', objectFit: 'contain', filter: logoFilter }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
-                                  {personalInfo.extraLogo && (
-                                    <img src={personalInfo.extraLogo} alt="شعار إضافي" style={{ height: '35px', objectFit: 'contain', marginTop: '4px' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
-                                  )}
-                                </div>
-                                <div style={{ textAlign: 'left', fontSize: '10px', lineHeight: '1.8', flex: '1' }}>
-                                  <div>العام الدراسي: {personalInfo.year || '......'}</div>
-                                  <div>الفصل الدراسي: {personalInfo.semester || '......'}</div>
-                                </div>
+                          <div style={{ background: theme.headerBg, padding: '24px 32px 20px', color: theme.headerText }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                              {/* الجانب الأيمن - بيانات الجهة */}
+                              <div style={{ textAlign: 'right', fontSize: '11px', lineHeight: '2.1', flex: '1' }}>
+                                <div style={{ fontWeight: 800, fontSize: '13px', marginBottom: '1px' }}>المملكة العربية السعودية</div>
+                                <div style={{ fontWeight: 700, fontSize: '12px' }}>وزارة التعليم</div>
+                                {filteredDeptLines.map((line: string, i: number) => <div key={i} style={{ fontSize: '11px' }}>{line}</div>)}
+                                {personalInfo.school && <div style={{ fontWeight: 700, fontSize: '11px' }}>{personalInfo.school}</div>}
+                              </div>
+                              {/* الشعار في المنتصف */}
+                              <div style={{ textAlign: 'center', padding: '0 28px', display: 'flex', flexDirection: 'column' as const, alignItems: 'center', justifyContent: 'center' }}>
+                                <img src={MOE_LOGO} alt="شعار وزارة التعليم" style={{ height: '80px', objectFit: 'contain', filter: logoFilter }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                                {personalInfo.extraLogo && (
+                                  <img src={personalInfo.extraLogo} alt="شعار إضافي" style={{ height: '38px', objectFit: 'contain', marginTop: '6px' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                                )}
+                              </div>
+                              {/* الجانب الأيسر - العام والفصل */}
+                              <div style={{ textAlign: 'left', fontSize: '11px', lineHeight: '2.1', flex: '1' }}>
+                                <div style={{ fontWeight: 700 }}>العام الدراسي: {personalInfo.year || '................'}</div>
+                                <div style={{ fontWeight: 700 }}>الفصل الدراسي: {personalInfo.semester || '................'}</div>
                               </div>
                             </div>
-                            <div style={{ height: '3px', background: theme.footerBg || `linear-gradient(to left, ${theme.borderColor}, ${theme.accent})` }} />
-                          </>
+                          </div>
                         );
                       })()}
 
-                      {/* === عنوان التقرير - يتغير حسب titleStyle === */}
+                      {/* ========== عنوان التقرير ========== */}
                       {(() => {
                         const titleText = prevSub.title;
-                        const pad = theme.layoutType === 'white-header-sidebar' ? '0 24px' : '0 28px';
                         if (theme.titleStyle === 'full-width') {
                           return (
-                            <div style={{ background: theme.titleBg || theme.accent, color: 'white', padding: '12px 28px', textAlign: 'center', fontWeight: 'bold', fontSize: '15px', margin: '0' }}>
+                            <div style={{ background: theme.titleBg || theme.accent, color: 'white', padding: '14px 32px', textAlign: 'center', fontWeight: 800, fontSize: '16px', letterSpacing: '0.5px' }}>
                               {titleText}
                             </div>
                           );
                         }
                         if (theme.titleStyle === 'bordered') {
                           return (
-                            <div style={{ padding: `16px 28px 0`, margin: pad }}>
-                              <div style={{ border: `2px solid ${theme.accent}`, color: theme.accent, padding: '10px 24px', borderRadius: '0', textAlign: 'center', fontWeight: 'bold', fontSize: '15px', marginBottom: '16px' }}>
+                            <div style={{ padding: '18px 30px 0' }}>
+                              <div style={{ border: `2.5px solid ${theme.accent}`, color: theme.accent, padding: '12px 28px', textAlign: 'center', fontWeight: 800, fontSize: '15px', marginBottom: '18px' }}>
                                 {titleText}
                               </div>
                             </div>
@@ -2963,8 +2956,8 @@ export default function PerformanceEvidence() {
                         }
                         if (theme.titleStyle === 'underlined') {
                           return (
-                            <div style={{ padding: '16px 28px 0' }}>
-                              <div style={{ color: theme.accent, padding: '10px 0', borderBottom: `3px solid ${theme.accent}`, textAlign: 'center', fontWeight: 'bold', fontSize: '15px', marginBottom: '16px' }}>
+                            <div style={{ padding: '18px 30px 0' }}>
+                              <div style={{ color: theme.accent, padding: '12px 0', borderBottom: `3px solid ${theme.accent}`, textAlign: 'center', fontWeight: 800, fontSize: '15px', marginBottom: '18px' }}>
                                 {titleText}
                               </div>
                             </div>
@@ -2972,8 +2965,8 @@ export default function PerformanceEvidence() {
                         }
                         if (theme.titleStyle === 'badge') {
                           return (
-                            <div style={{ padding: '16px 28px 0' }}>
-                              <div style={{ display: 'inline-block', background: theme.titleBg || theme.accent, color: 'white', padding: '8px 28px', borderRadius: '20px', fontWeight: 'bold', fontSize: '14px', marginBottom: '16px' }}>
+                            <div style={{ padding: '18px 30px 0', textAlign: 'center' }}>
+                              <div style={{ display: 'inline-block', background: theme.titleBg || theme.accent, color: 'white', padding: '10px 32px', borderRadius: '24px', fontWeight: 800, fontSize: '14px', marginBottom: '18px' }}>
                                 {titleText}
                               </div>
                             </div>
@@ -2981,8 +2974,8 @@ export default function PerformanceEvidence() {
                         }
                         if (theme.titleStyle === 'simple') {
                           return (
-                            <div style={{ padding: '16px 28px 0' }}>
-                              <div style={{ color: theme.accent, fontWeight: 'bold', fontSize: '16px', marginBottom: '16px' }}>
+                            <div style={{ padding: '18px 30px 0' }}>
+                              <div style={{ color: theme.accent, fontWeight: 800, fontSize: '16px', marginBottom: '18px' }}>
                                 {titleText}
                               </div>
                             </div>
@@ -2990,45 +2983,42 @@ export default function PerformanceEvidence() {
                         }
                         // rounded (default)
                         return (
-                          <div style={{ padding: '16px 28px 0' }}>
-                            <div style={{ background: theme.titleBg || theme.accent, color: 'white', padding: '10px 24px', borderRadius: '8px', textAlign: 'center', fontWeight: 'bold', fontSize: '15px', marginBottom: '16px' }}>
+                          <div style={{ padding: '18px 32px 0' }}>
+                            <div style={{ background: theme.titleBg || theme.accent, color: 'white', padding: '13px 28px', borderRadius: '8px', textAlign: 'center', fontWeight: 800, fontSize: '15px', marginBottom: '18px', letterSpacing: '0.3px' }}>
                               {titleText}
                             </div>
                           </div>
                         );
                       })()}
 
-                      {/* === محتوى التقرير - يتغير حسب fieldStyle === */}
-                      <div style={{ padding: theme.layoutType === 'white-header-sidebar' ? '0 24px 16px' : '0 28px 16px' }}>
+                      {/* ========== محتوى التقرير (الحقول) ========== */}
+                      <div style={{ padding: theme.layoutType === 'white-header-sidebar' ? '0 26px 22px' : '0 32px 22px' }}>
+
                         {/* --- نمط الجدول (table) --- */}
-                        {theme.fieldStyle === 'table' && (
-                          <>
-                            {allFields.length > 0 && (
-                              <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '14px', border: `1px solid ${theme.accent}40` }}>
-                                <tbody>
-                                  {(() => {
-                                    const rows: typeof allFields[] = [];
-                                    for (let i = 0; i < allFields.length; i += 2) rows.push(allFields.slice(i, i + 2));
-                                    return rows.map((row, ri) => (
-                                      <tr key={ri}>
-                                        {row.map((field) => (
-                                          <React.Fragment key={field.id}>
-                                            <td style={{ background: theme.fieldLabelBg, color: 'white', padding: '8px 12px', fontSize: '10px', fontWeight: 'bold', textAlign: 'center', border: `1px solid ${theme.accent}40`, width: '15%' }}>
-                                              {field.label}
-                                            </td>
-                                            <td style={{ padding: '8px 12px', fontSize: '11px', border: `1px solid ${theme.accent}40`, background: 'white', color: '#333', whiteSpace: 'pre-wrap' as const }}>
-                                              {field.value || '................'}
-                                            </td>
-                                          </React.Fragment>
-                                        ))}
-                                        {row.length === 1 && <><td style={{ border: `1px solid ${theme.accent}40`, background: theme.fieldLabelBg }} /><td style={{ border: `1px solid ${theme.accent}40` }} /></>}
-                                      </tr>
-                                    ));
-                                  })()}
-                                </tbody>
-                              </table>
-                            )}
-                          </>
+                        {theme.fieldStyle === 'table' && allFields.length > 0 && (
+                          <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '18px', border: `1.5px solid ${theme.accent}50` }}>
+                            <tbody>
+                              {(() => {
+                                const rows: typeof allFields[] = [];
+                                for (let i = 0; i < allFields.length; i += 2) rows.push(allFields.slice(i, i + 2));
+                                return rows.map((row, ri) => (
+                                  <tr key={ri}>
+                                    {row.map((field) => (
+                                      <React.Fragment key={field.id}>
+                                        <td style={{ background: theme.fieldLabelBg, color: 'white', padding: '11px 16px', fontSize: '11px', fontWeight: 700, textAlign: 'center', border: `1px solid ${theme.accent}40`, width: '16%', letterSpacing: '0.2px' }}>
+                                          {field.label}
+                                        </td>
+                                        <td style={{ padding: '11px 16px', fontSize: '12px', border: `1px solid ${theme.accent}40`, background: 'white', color: '#1a1a1a', whiteSpace: 'pre-wrap' as const, lineHeight: '1.9' }}>
+                                          {field.value || '................'}
+                                        </td>
+                                      </React.Fragment>
+                                    ))}
+                                    {row.length === 1 && <><td style={{ border: `1px solid ${theme.accent}40`, background: theme.fieldLabelBg }} /><td style={{ border: `1px solid ${theme.accent}40` }} /></>}
+                                  </tr>
+                                ));
+                              })()}
+                            </tbody>
+                          </table>
                         )}
 
                         {/* --- نمط fieldset --- */}
@@ -3038,15 +3028,15 @@ export default function PerformanceEvidence() {
                               const rows: typeof shortFields[] = [];
                               for (let i = 0; i < shortFields.length; i += 2) rows.push(shortFields.slice(i, i + 2));
                               return (
-                                <div style={{ marginBottom: '14px' }}>
+                                <div style={{ marginBottom: '18px' }}>
                                   {rows.map((row, ri) => (
-                                    <div key={ri} style={{ display: 'flex', borderTop: `1px solid ${theme.accent}30`, borderLeft: `1px solid ${theme.accent}30`, borderRight: `1px solid ${theme.accent}30`, borderBottom: ri === rows.length - 1 ? `1px solid ${theme.accent}30` : 'none' }}>
+                                    <div key={ri} style={{ display: 'flex', borderTop: `1px solid ${theme.accent}40`, borderLeft: `1px solid ${theme.accent}40`, borderRight: `1px solid ${theme.accent}40`, borderBottom: ri === rows.length - 1 ? `1px solid ${theme.accent}40` : 'none' }}>
                                       {row.map((field, fi) => (
-                                        <div key={field.id} style={{ display: 'flex', flex: 1, borderLeft: fi > 0 ? `1px solid ${theme.accent}30` : 'none' }}>
-                                          <div style={{ background: theme.fieldLabelBg, color: 'white', padding: '8px 12px', fontSize: '10px', fontWeight: 'bold', minWidth: '90px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                        <div key={field.id} style={{ display: 'flex', flex: 1, borderLeft: fi > 0 ? `1px solid ${theme.accent}40` : 'none' }}>
+                                          <div style={{ background: theme.fieldLabelBg, color: 'white', padding: '11px 16px', fontSize: '11px', fontWeight: 700, minWidth: '105px', display: 'flex', alignItems: 'center', justifyContent: 'center', letterSpacing: '0.2px' }}>
                                             {field.label}
                                           </div>
-                                          <div style={{ flex: 1, padding: '8px 12px', fontSize: '11px', display: 'flex', alignItems: 'center', background: 'white', color: '#333' }}>
+                                          <div style={{ flex: 1, padding: '11px 16px', fontSize: '12px', display: 'flex', alignItems: 'center', background: 'white', color: '#1a1a1a', lineHeight: '1.9' }}>
                                             {field.value || '................'}
                                           </div>
                                         </div>
@@ -3061,13 +3051,13 @@ export default function PerformanceEvidence() {
                               const pairs: typeof longFields[] = [];
                               for (let i = 0; i < longFields.length; i += 2) pairs.push(longFields.slice(i, i + 2));
                               return pairs.map((pair, pi) => (
-                                <div key={pi} style={{ display: 'grid', gridTemplateColumns: pair.length === 2 ? '1fr 1fr' : '1fr', gap: '0', borderLeft: `1px solid ${theme.accent}30`, borderRight: `1px solid ${theme.accent}30`, borderBottom: `1px solid ${theme.accent}30`, borderTop: pi === 0 && shortFields.length > 0 ? 'none' : `1px solid ${theme.accent}30` }}>
+                                <div key={pi} style={{ display: 'grid', gridTemplateColumns: pair.length === 2 ? '1fr 1fr' : '1fr', gap: '0', borderLeft: `1px solid ${theme.accent}40`, borderRight: `1px solid ${theme.accent}40`, borderBottom: `1px solid ${theme.accent}40`, borderTop: pi === 0 && shortFields.length > 0 ? 'none' : `1px solid ${theme.accent}40` }}>
                                   {pair.map((field, fi) => (
-                                    <div key={field.id} style={{ borderLeft: fi > 0 ? `1px solid ${theme.accent}30` : 'none' }}>
-                                      <div style={{ background: theme.fieldLabelBg, color: 'white', padding: '8px 14px', textAlign: 'center', fontWeight: 'bold', fontSize: '11px' }}>
+                                    <div key={field.id} style={{ borderLeft: fi > 0 ? `1px solid ${theme.accent}40` : 'none' }}>
+                                      <div style={{ background: theme.fieldLabelBg, color: 'white', padding: '11px 16px', textAlign: 'center', fontWeight: 700, fontSize: '11px', letterSpacing: '0.2px' }}>
                                         {field.label}
                                       </div>
-                                      <div style={{ padding: '12px 14px', fontSize: '11px', lineHeight: '2', background: 'white', whiteSpace: 'pre-wrap', minHeight: '60px', color: '#333' }}>
+                                      <div style={{ padding: '14px 18px', fontSize: '12px', lineHeight: '2.1', background: 'white', whiteSpace: 'pre-wrap' as const, minHeight: '60px', color: '#1a1a1a' }}>
                                         {field.value || '................'}
                                       </div>
                                     </div>
@@ -3082,11 +3072,11 @@ export default function PerformanceEvidence() {
                         {theme.fieldStyle === 'underlined' && (
                           <>
                             {shortFields.length > 0 && (
-                              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px 20px', marginBottom: '16px' }}>
+                              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px 28px', marginBottom: '20px' }}>
                                 {shortFields.map(field => (
                                   <div key={field.id}>
-                                    <div style={{ fontSize: '10px', fontWeight: 'bold', color: theme.accent, marginBottom: '4px' }}>{field.label}</div>
-                                    <div style={{ fontSize: '11px', color: '#333', paddingBottom: '6px', borderBottom: `1.5px solid ${theme.accent}30` }}>
+                                    <div style={{ fontSize: '11px', fontWeight: 700, color: theme.accent, marginBottom: '6px' }}>{field.label}</div>
+                                    <div style={{ fontSize: '12px', color: '#1a1a1a', paddingBottom: '8px', borderBottom: `1.5px solid ${theme.accent}40`, lineHeight: '1.9' }}>
                                       {field.value || '................'}
                                     </div>
                                   </div>
@@ -3094,9 +3084,9 @@ export default function PerformanceEvidence() {
                               </div>
                             )}
                             {longFields.map(field => (
-                              <div key={field.id} style={{ marginBottom: '14px' }}>
-                                <div style={{ fontSize: '11px', fontWeight: 'bold', color: theme.accent, marginBottom: '6px', paddingBottom: '4px', borderBottom: `2px solid ${theme.accent}` }}>{field.label}</div>
-                                <div style={{ fontSize: '11px', lineHeight: '2', color: '#333', whiteSpace: 'pre-wrap', padding: '8px 0', minHeight: '40px' }}>
+                              <div key={field.id} style={{ marginBottom: '18px' }}>
+                                <div style={{ fontSize: '12px', fontWeight: 700, color: theme.accent, marginBottom: '8px', paddingBottom: '6px', borderBottom: `2.5px solid ${theme.accent}` }}>{field.label}</div>
+                                <div style={{ fontSize: '12px', lineHeight: '2.1', color: '#1a1a1a', whiteSpace: 'pre-wrap' as const, padding: '12px 0', minHeight: '40px' }}>
                                   {field.value || '................'}
                                 </div>
                               </div>
@@ -3108,11 +3098,11 @@ export default function PerformanceEvidence() {
                         {theme.fieldStyle === 'cards' && (
                           <>
                             {shortFields.length > 0 && (
-                              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '16px' }}>
+                              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '20px' }}>
                                 {shortFields.map(field => (
-                                  <div key={field.id} style={{ background: '#f8fafc', borderRadius: '8px', padding: '12px', border: `1px solid ${theme.accent}20` }}>
-                                    <div style={{ fontSize: '9px', fontWeight: 'bold', color: theme.accent, marginBottom: '4px', textTransform: 'uppercase' as const }}>{field.label}</div>
-                                    <div style={{ fontSize: '12px', color: '#1a1a1a', fontWeight: '500' }}>
+                                  <div key={field.id} style={{ background: '#f8fafb', borderRadius: '10px', padding: '16px', border: `1px solid ${theme.accent}25` }}>
+                                    <div style={{ fontSize: '10px', fontWeight: 700, color: theme.accent, marginBottom: '6px', letterSpacing: '0.2px', textTransform: 'uppercase' as const }}>{field.label}</div>
+                                    <div style={{ fontSize: '13px', color: '#1a1a1a', fontWeight: 500, lineHeight: '1.9' }}>
                                       {field.value || '................'}
                                     </div>
                                   </div>
@@ -3120,9 +3110,9 @@ export default function PerformanceEvidence() {
                               </div>
                             )}
                             {longFields.map(field => (
-                              <div key={field.id} style={{ background: '#f8fafc', borderRadius: '8px', padding: '14px', marginBottom: '10px', border: `1px solid ${theme.accent}20` }}>
-                                <div style={{ fontSize: '10px', fontWeight: 'bold', color: theme.accent, marginBottom: '8px' }}>{field.label}</div>
-                                <div style={{ fontSize: '11px', lineHeight: '2', color: '#333', whiteSpace: 'pre-wrap' as const, minHeight: '40px' }}>
+                              <div key={field.id} style={{ background: '#f8fafb', borderRadius: '10px', padding: '18px', marginBottom: '14px', border: `1px solid ${theme.accent}25` }}>
+                                <div style={{ fontSize: '11px', fontWeight: 700, color: theme.accent, marginBottom: '10px', letterSpacing: '0.2px' }}>{field.label}</div>
+                                <div style={{ fontSize: '12px', lineHeight: '2.1', color: '#1a1a1a', whiteSpace: 'pre-wrap' as const, minHeight: '40px' }}>
                                   {field.value || '................'}
                                 </div>
                               </div>
@@ -3134,19 +3124,19 @@ export default function PerformanceEvidence() {
                         {theme.fieldStyle === 'minimal' && (
                           <>
                             {shortFields.length > 0 && (
-                              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 24px', marginBottom: '16px' }}>
+                              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px 28px', marginBottom: '20px' }}>
                                 {shortFields.map(field => (
-                                  <div key={field.id} style={{ display: 'flex', gap: '8px', alignItems: 'baseline', paddingBottom: '6px', borderBottom: '1px solid #eee' }}>
-                                    <span style={{ fontSize: '10px', color: '#888', minWidth: '70px' }}>{field.label}:</span>
-                                    <span style={{ fontSize: '11px', color: '#333' }}>{field.value || '...'}</span>
+                                  <div key={field.id} style={{ display: 'flex', gap: '12px', alignItems: 'baseline', paddingBottom: '10px', borderBottom: '1px solid #e5e5e5' }}>
+                                    <span style={{ fontSize: '11px', color: '#666', minWidth: '85px', fontWeight: 700 }}>{field.label}:</span>
+                                    <span style={{ fontSize: '12px', color: '#1a1a1a' }}>{field.value || '...'}</span>
                                   </div>
                                 ))}
                               </div>
                             )}
                             {longFields.map(field => (
-                              <div key={field.id} style={{ marginBottom: '12px' }}>
-                                <div style={{ fontSize: '11px', color: '#888', marginBottom: '4px' }}>{field.label}:</div>
-                                <div style={{ fontSize: '11px', lineHeight: '1.8', color: '#333', whiteSpace: 'pre-wrap' as const, paddingRight: '8px' }}>
+                              <div key={field.id} style={{ marginBottom: '16px' }}>
+                                <div style={{ fontSize: '12px', color: '#666', marginBottom: '6px', fontWeight: 700 }}>{field.label}:</div>
+                                <div style={{ fontSize: '12px', lineHeight: '2.1', color: '#1a1a1a', whiteSpace: 'pre-wrap' as const, paddingRight: '12px' }}>
                                   {field.value || '................'}
                                 </div>
                               </div>
@@ -3154,18 +3144,18 @@ export default function PerformanceEvidence() {
                           </>
                         )}
 
-                        {/* === قسم الشواهد (مشترك لجميع التنسيقات) === */}
+                        {/* ========== قسم الشواهد (مشترك لجميع التنسيقات) ========== */}
                         {allMediaEvidences.length > 0 && (
-                          <div style={{ marginTop: '10px', borderTop: `1px solid ${theme.accent}30`, borderLeft: `1px solid ${theme.accent}30`, borderRight: `1px solid ${theme.accent}30`, borderBottom: `1px solid ${theme.accent}30` }}>
-                            <div style={{ background: theme.fieldLabelBg || theme.accent, color: 'white', padding: '8px 14px', textAlign: 'center', fontWeight: 'bold', fontSize: '11px' }}>
-                              الشواهد
+                          <div style={{ marginTop: '20px', border: `1.5px solid ${theme.accent}40`, borderRadius: '4px', overflow: 'hidden' }}>
+                            <div style={{ background: theme.fieldLabelBg || theme.accent, color: 'white', padding: '11px 16px', textAlign: 'center', fontWeight: 700, fontSize: '12px', letterSpacing: '0.3px' }}>
+                              الشواهد والأدلة
                             </div>
-                            <div style={{ padding: '12px', display: 'grid', gridTemplateColumns: allMediaEvidences.length >= 2 ? '1fr 1fr' : '1fr', gap: '10px', background: theme.bodyBg || 'white' }}>
+                            <div style={{ padding: '16px', display: 'grid', gridTemplateColumns: allMediaEvidences.length >= 2 ? '1fr 1fr' : '1fr', gap: '14px', background: theme.bodyBg || 'white' }}>
                               {allMediaEvidences.map(ev => {
                                 if (ev.type === 'link') {
                                   return (
-                                    <div key={ev.id} style={{ border: '1px solid #E0E0E0', borderRadius: '6px', padding: '10px', textAlign: 'center', background: '#FAFAFA' }}>
-                                      <img src={generateQRDataURL(ev.link, 4)} alt="QR" style={{ width: '90px', height: '90px', margin: '0 auto 6px' }} />
+                                    <div key={ev.id} style={{ border: '1px solid #E0E0E0', borderRadius: '8px', padding: '12px', textAlign: 'center', background: '#FAFAFA' }}>
+                                      <img src={generateQRDataURL(ev.link, 4)} alt="QR" style={{ width: '95px', height: '95px', margin: '0 auto 8px' }} />
                                       <div style={{ fontSize: '8px', color: '#666', wordBreak: 'break-all', maxHeight: '24px', overflow: 'hidden' }}>{ev.link}</div>
                                     </div>
                                   );
@@ -3173,23 +3163,23 @@ export default function PerformanceEvidence() {
                                 if (ev.type === 'file' || ev.type === 'video') {
                                   const qrData = ev.fileData?.startsWith('idb://') ? ev.fileName : (ev.fileData || ev.fileName);
                                   return (
-                                    <div key={ev.id} style={{ border: '1px solid #E0E0E0', borderRadius: '6px', padding: '10px', textAlign: 'center', background: '#FAFAFA' }}>
-                                      <img src={generateQRDataURL(qrData.substring(0, 200), 4)} alt="QR" style={{ width: '90px', height: '90px', margin: '0 auto 6px' }} />
-                                      <div style={{ fontSize: '8px', color: '#666', fontWeight: 'bold' }}>{ev.fileName}</div>
+                                    <div key={ev.id} style={{ border: '1px solid #E0E0E0', borderRadius: '8px', padding: '12px', textAlign: 'center', background: '#FAFAFA' }}>
+                                      <img src={generateQRDataURL(qrData.substring(0, 200), 4)} alt="QR" style={{ width: '95px', height: '95px', margin: '0 auto 8px' }} />
+                                      <div style={{ fontSize: '8px', color: '#666', fontWeight: 700 }}>{ev.fileName}</div>
                                     </div>
                                   );
                                 }
                                 if (ev.displayAs === 'qr') {
                                   const qrData = ev.fileData?.startsWith('idb://') ? ev.fileName : (ev.fileData || ev.fileName);
                                   return (
-                                    <div key={ev.id} style={{ border: '1px solid #E0E0E0', borderRadius: '6px', padding: '10px', textAlign: 'center', background: '#FAFAFA' }}>
-                                      <img src={generateQRDataURL(qrData.substring(0, 200), 4)} alt="QR" style={{ width: '90px', height: '90px', margin: '0 auto 6px' }} />
+                                    <div key={ev.id} style={{ border: '1px solid #E0E0E0', borderRadius: '8px', padding: '12px', textAlign: 'center', background: '#FAFAFA' }}>
+                                      <img src={generateQRDataURL(qrData.substring(0, 200), 4)} alt="QR" style={{ width: '95px', height: '95px', margin: '0 auto 8px' }} />
                                       <div style={{ fontSize: '8px', color: '#666' }}>{ev.fileName}</div>
                                     </div>
                                   );
                                 }
                                 return (
-                                  <div key={ev.id} style={{ border: '1px solid #E0E0E0', borderRadius: '6px', overflow: 'hidden', background: '#FAFAFA' }}>
+                                  <div key={ev.id} style={{ border: '1px solid #E0E0E0', borderRadius: '8px', overflow: 'hidden', background: '#FAFAFA' }}>
                                     <img src={ev.fileData?.startsWith('idb://') ? '' : (ev.fileData || '')} alt={ev.fileName} style={{ width: '100%', height: 'auto', maxHeight: '200px', objectFit: 'contain' }} />
                                   </div>
                                 );
@@ -3198,44 +3188,37 @@ export default function PerformanceEvidence() {
                           </div>
                         )}
 
-                        {/* === التوقيعات - تتغير حسب signatureStyle === */}
-                        {(() => {
-                          const sigBorder = (style?: string) => {
-                            switch (style) {
-                              case 'solid': return '2px solid #333';
-                              case 'boxed': return `2px solid ${theme.accent}`;
-                              case 'lined': return `1px solid ${theme.accent}60`;
-                              case 'stamped': return `2px double ${theme.accent}`;
-                              default: return '1.5px dotted #999';
-                            }
-                          };
-                          const isStamped = theme.signatureStyle === 'stamped';
-                          return (
-                            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '20px', paddingTop: '12px' }}>
-                              <div style={{ textAlign: 'center', flex: 1, ...(isStamped ? { border: `2px double ${theme.accent}`, borderRadius: '8px', padding: '12px', margin: '0 8px' } : {}) }}>
-                                <div style={{ fontSize: '11px', fontWeight: 'bold', color: theme.accent, marginBottom: '6px' }}>التنفيذ: أ/</div>
-                                <div style={{ fontSize: '12px', fontWeight: 'bold', color: '#1a1a1a' }}>{personalInfo.name || '................'}</div>
-                                {!isStamped && <div style={{ width: '120px', borderBottom: sigBorder(theme.signatureStyle), margin: '10px auto 0' }} />}
-                              </div>
-                              <div style={{ textAlign: 'center', flex: 1, ...(isStamped ? { border: `2px double ${theme.accent}`, borderRadius: '8px', padding: '12px', margin: '0 8px' } : {}) }}>
-                                <div style={{ fontSize: '11px', fontWeight: 'bold', color: theme.accent, marginBottom: '6px' }}>مدير/ة المدرسة: أ/</div>
-                                <div style={{ fontSize: '12px', fontWeight: 'bold', color: '#1a1a1a' }}>{personalInfo.evaluator || '................'}</div>
-                                {!isStamped && <div style={{ width: '120px', borderBottom: sigBorder(theme.signatureStyle), margin: '10px auto 0' }} />}
-                              </div>
-                            </div>
-                          );
-                        })()}
+                        {/* ========== التوقيعات - تصميم احترافي ========== */}
+                        <div style={{ marginTop: '28px', borderTop: `2px solid ${theme.accent}40`, paddingTop: '18px' }}>
+                          <table style={{ width: '100%', borderCollapse: 'collapse', border: `1.5px solid ${theme.accent}40` }}>
+                            <thead>
+                              <tr>
+                                <th style={{ background: theme.fieldLabelBg || theme.accent, color: 'white', padding: '11px 16px', fontSize: '11.5px', fontWeight: 700, textAlign: 'center', border: `1px solid ${theme.accent}40`, width: '50%' }}>المعلم/ة : اسم المنفذ</th>
+                                <th style={{ background: theme.fieldLabelBg || theme.accent, color: 'white', padding: '11px 16px', fontSize: '11.5px', fontWeight: 700, textAlign: 'center', border: `1px solid ${theme.accent}40`, width: '50%' }}>{personalInfo.evaluatorRole || 'مدير/ة المدرسة'}</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              <tr>
+                                <td style={{ padding: '20px 16px', textAlign: 'center', border: `1px solid ${theme.accent}40`, background: 'white', minHeight: '60px' }}>
+                                  <div style={{ fontSize: '13px', fontWeight: 700, color: '#1a1a1a', marginBottom: '12px' }}>{personalInfo.name || '................'}</div>
+                                  <div style={{ width: '150px', borderBottom: '2px dotted #999', margin: '0 auto' }} />
+                                </td>
+                                <td style={{ padding: '20px 16px', textAlign: 'center', border: `1px solid ${theme.accent}40`, background: 'white', minHeight: '60px' }}>
+                                  <div style={{ fontSize: '13px', fontWeight: 700, color: '#1a1a1a', marginBottom: '12px' }}>{personalInfo.evaluator || '................'}</div>
+                                  <div style={{ width: '150px', borderBottom: '2px dotted #999', margin: '0 auto' }} />
+                                </td>
+                              </tr>
+                            </tbody>
+                          </table>
+                        </div>
                       </div>
 
-                      {/* === شريط سفلي (حسب الثيم) === */}
+                      {/* ========== الشريط السفلي (الفوتر) ========== */}
                       {theme.showBottomBar !== false && (
-                        <>
-                          <div style={{ height: '3px', background: theme.footerBg || theme.accent }} />
-                          <div style={{ background: theme.footerBg || theme.accent, padding: '8px 20px', textAlign: 'center', color: '#fff', fontSize: '9px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <span>SERS - نظام السجلات التعليمية الذكي</span>
-                            <span style={{ opacity: 0.7 }}>صفحة 1</span>
-                          </div>
-                        </>
+                        <div style={{ background: theme.footerBg || theme.accent, padding: '12px 32px', color: '#fff', fontSize: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ fontWeight: 700, letterSpacing: '0.3px' }}>SERS - نظام السجلات التعليمية الذكي</span>
+                          <span style={{ opacity: 0.85, fontSize: '9px' }}>صفحة 1</span>
+                        </div>
                       )}
 
                     </div>
@@ -3244,6 +3227,7 @@ export default function PerformanceEvidence() {
               </motion.div>
             );
           })()}
+
 
           {/* Navigation */}
           <div className="flex items-center justify-between mt-4 sm:mt-6 gap-2">
@@ -3492,7 +3476,7 @@ export default function PerformanceEvidence() {
             </div>
           )}
 
-          <div id="preview-content" style={{ fontFamily: "'Cairo', 'Tajawal', sans-serif" }}>
+          <div id="preview-content" style={{ fontFamily: "'Cairo', sans-serif" }}>
             {/* === صفحة الغلاف - تتغير حسب coverStyle === */}
             {(() => {
               const cs = theme.coverStyle || 'gradient-center';
@@ -3503,7 +3487,7 @@ export default function PerformanceEvidence() {
                   <div style={{ fontSize: '0.95rem', opacity: 0.8, marginBottom: '0.5rem', fontWeight: 600 }}>وزارة التعليم</div>
                   {personalInfo.department && <p style={{ fontSize: '0.9rem', opacity: 0.85, marginBottom: '1rem', lineHeight: 1.7, whiteSpace: 'pre-line' as const }}>{personalInfo.department}</p>}
                   <div style={{ width: '80px', height: '2px', background: 'rgba(255,255,255,0.3)', margin: '0 auto 1.5rem' }} />
-                  <h1 style={{ fontSize: '2.5rem', fontWeight: 900, marginBottom: '0.75rem', fontFamily: "'Tajawal', sans-serif", letterSpacing: '-0.01em' }}>{personalInfo.reportTitle || 'شواهد الأداء الوظيفي'}</h1>
+                  <h1 style={{ fontSize: '2.5rem', fontWeight: 900, marginBottom: '0.75rem', fontFamily: "'Cairo', sans-serif", letterSpacing: '-0.01em' }}>{personalInfo.reportTitle || 'شواهد الأداء الوظيفي'}</h1>
                   <p style={{ fontSize: '1.4rem', fontWeight: 700, opacity: 0.95, marginBottom: '0.5rem' }}>{selectedJob?.title}</p>
                   <div style={{ width: '50px', height: '2px', background: 'rgba(255,255,255,0.25)', margin: '1rem auto' }} />
                   <p style={{ fontSize: '1rem', opacity: 0.85 }}>{personalInfo.year} - {personalInfo.semester}</p>
@@ -3540,7 +3524,7 @@ export default function PerformanceEvidence() {
                 <div className="bg-white shadow-lg mx-auto mb-6" style={{ width: '210mm', minHeight: '297mm', maxWidth: '100%', position: 'relative', overflow: 'hidden', pageBreakAfter: 'always', display: 'flex' }}>
                   <div style={{ width: '35%', background: theme.headerBg, minHeight: '297mm', position: 'relative', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', padding: '2rem', color: theme.headerText }}>
                     <div style={{ position: 'absolute', top: 0, right: 0, width: '4px', background: `linear-gradient(to bottom, ${a2}, ${theme.accent})`, height: '100%' }} />
-                    <div style={{ fontSize: '4rem', fontWeight: 900, opacity: 0.15, position: 'absolute', top: '3rem', fontFamily: "'Tajawal'" }}>SERS</div>
+                    <div style={{ fontSize: '4rem', fontWeight: 900, opacity: 0.15, position: 'absolute', top: '3rem', fontFamily: "'Cairo'" }}>SERS</div>
                     <div style={{ textAlign: 'center', position: 'relative', zIndex: 1 }}>
                       <div style={{ fontSize: '0.75rem', opacity: 0.6, letterSpacing: '0.15em', marginBottom: '1rem' }}>المملكة العربية السعودية</div>
                       <div style={{ fontSize: '0.85rem', opacity: 0.8, fontWeight: 600 }}>وزارة التعليم</div>
@@ -3550,7 +3534,7 @@ export default function PerformanceEvidence() {
                     </div>
                   </div>
                   <div style={{ width: '65%', display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '4rem 3rem', color: theme.borderColor }}>
-                    <h1 style={{ fontSize: '2.2rem', fontWeight: 900, marginBottom: '1rem', fontFamily: "'Tajawal', sans-serif", color: theme.accent }}>{personalInfo.reportTitle || 'شواهد الأداء الوظيفي'}</h1>
+                    <h1 style={{ fontSize: '2.2rem', fontWeight: 900, marginBottom: '1rem', fontFamily: "'Cairo', sans-serif", color: theme.accent }}>{personalInfo.reportTitle || 'شواهد الأداء الوظيفي'}</h1>
                     <p style={{ fontSize: '1.2rem', fontWeight: 700, color: theme.borderColor, marginBottom: '2rem' }}>{selectedJob?.title}</p>
                     <div style={{ width: '60px', height: '3px', background: theme.accent, marginBottom: '2rem' }} />
                     <div style={{ display: 'flex', gap: '2rem' }}>
@@ -3575,7 +3559,7 @@ export default function PerformanceEvidence() {
                     </div>
                     <div style={{ background: 'white', borderRadius: '16px', padding: '3rem', boxShadow: '0 8px 32px rgba(0,0,0,0.1)', border: `2px solid ${theme.accent}20`, maxWidth: '500px', margin: '0 auto' }}>
                       <div style={{ width: '60px', height: '4px', background: `linear-gradient(to left, ${theme.accent}, ${a2})`, margin: '0 auto 1.5rem', borderRadius: '2px' }} />
-                      <h1 style={{ fontSize: '1.8rem', fontWeight: 900, color: theme.accent, fontFamily: "'Tajawal', sans-serif", marginBottom: '0.75rem' }}>{personalInfo.reportTitle || 'شواهد الأداء الوظيفي'}</h1>
+                      <h1 style={{ fontSize: '1.8rem', fontWeight: 900, color: theme.accent, fontFamily: "'Cairo', sans-serif", marginBottom: '0.75rem' }}>{personalInfo.reportTitle || 'شواهد الأداء الوظيفي'}</h1>
                       <p style={{ fontSize: '1.1rem', fontWeight: 700, color: theme.borderColor, marginBottom: '1.5rem' }}>{selectedJob?.title}</p>
                       <div style={{ display: 'flex', justifyContent: 'center', gap: '2rem', fontSize: '0.85rem', color: '#6B7280' }}>
                         <div><strong style={{ color: theme.accent }}>{personalInfo.name || '—'}</strong></div>
@@ -3599,7 +3583,7 @@ export default function PerformanceEvidence() {
                     <div style={{ fontSize: '0.95rem', color: '#6B7280', fontWeight: 600, marginBottom: '0.5rem' }}>وزارة التعليم</div>
                     {personalInfo.department && <p style={{ fontSize: '0.85rem', color: '#9CA3AF', marginBottom: '1.5rem', lineHeight: 1.7, whiteSpace: 'pre-line' as const }}>{personalInfo.department}</p>}
                     <div style={{ width: '100px', height: '3px', background: `linear-gradient(to left, ${theme.accent}, ${a2})`, margin: '0 auto 2rem', borderRadius: '2px' }} />
-                    <h1 style={{ fontSize: '2.5rem', fontWeight: 900, marginBottom: '1rem', fontFamily: "'Tajawal', sans-serif" }}>{personalInfo.reportTitle || 'شواهد الأداء الوظيفي'}</h1>
+                    <h1 style={{ fontSize: '2.5rem', fontWeight: 900, marginBottom: '1rem', fontFamily: "'Cairo', sans-serif" }}>{personalInfo.reportTitle || 'شواهد الأداء الوظيفي'}</h1>
                     <p style={{ fontSize: '1.3rem', fontWeight: 700, color: theme.borderColor, marginBottom: '0.5rem' }}>{selectedJob?.title}</p>
                     <div style={{ width: '100px', height: '3px', background: `linear-gradient(to left, ${a2}, ${theme.accent})`, margin: '2rem auto', borderRadius: '2px' }} />
                     <div style={{ display: 'flex', justifyContent: 'center', gap: '3rem', marginTop: '1rem' }}>
@@ -3628,7 +3612,7 @@ export default function PerformanceEvidence() {
                   <div style={{ height: '4px', background: `linear-gradient(to left, ${theme.accent}, ${a2})` }} />
                   <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', padding: '5rem 3rem', minHeight: 'calc(297mm - 120px)', textAlign: 'center' }}>
                     <div style={{ width: '80px', height: '3px', background: theme.accent, marginBottom: '2rem', borderRadius: '2px' }} />
-                    <h1 style={{ fontSize: '2.5rem', fontWeight: 900, color: theme.accent, fontFamily: "'Tajawal', sans-serif", marginBottom: '1rem' }}>{personalInfo.reportTitle || 'شواهد الأداء الوظيفي'}</h1>
+                    <h1 style={{ fontSize: '2.5rem', fontWeight: 900, color: theme.accent, fontFamily: "'Cairo', sans-serif", marginBottom: '1rem' }}>{personalInfo.reportTitle || 'شواهد الأداء الوظيفي'}</h1>
                     <p style={{ fontSize: '1.3rem', fontWeight: 700, color: theme.borderColor, marginBottom: '2rem' }}>{selectedJob?.title}</p>
                     <div style={{ display: 'flex', gap: '2rem', marginTop: '1rem' }}>
                       <div style={{ borderBottom: `2px solid ${theme.accent}`, paddingBottom: '0.5rem' }}>
@@ -3653,7 +3637,7 @@ export default function PerformanceEvidence() {
                     <div style={{ fontSize: '0.8rem', color: '#9CA3AF', letterSpacing: '0.15em', marginBottom: '0.3rem' }}>المملكة العربية السعودية · وزارة التعليم</div>
                     {personalInfo.department && <p style={{ fontSize: '0.8rem', color: '#9CA3AF', marginBottom: '1rem', whiteSpace: 'pre-line' as const }}>{personalInfo.department}</p>}
                     <div style={{ width: '1px', height: '60px', background: theme.accent, margin: '1.5rem auto' }} />
-                    <h1 style={{ fontSize: '2rem', fontWeight: 900, color: theme.accent, fontFamily: "'Tajawal', sans-serif", marginBottom: '0.75rem' }}>{personalInfo.reportTitle || 'شواهد الأداء الوظيفي'}</h1>
+                    <h1 style={{ fontSize: '2rem', fontWeight: 900, color: theme.accent, fontFamily: "'Cairo', sans-serif", marginBottom: '0.75rem' }}>{personalInfo.reportTitle || 'شواهد الأداء الوظيفي'}</h1>
                     <p style={{ fontSize: '1.1rem', fontWeight: 600, color: '#6B7280', marginBottom: '1rem' }}>{selectedJob?.title}</p>
                     <div style={{ width: '1px', height: '60px', background: theme.accent, margin: '1.5rem auto' }} />
                     <div style={{ display: 'flex', justifyContent: 'center', gap: '3rem', color: '#4B5563' }}>
@@ -3676,7 +3660,7 @@ export default function PerformanceEvidence() {
               </div>
 
               {/* فهرس المحتويات */}
-              <h2 style={{ fontSize: '1rem', fontWeight: 800, color: theme.accent, fontFamily: "'Tajawal', sans-serif", marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <h2 style={{ fontSize: '1rem', fontWeight: 800, color: theme.accent, fontFamily: "'Cairo', sans-serif", marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                 <span style={{ width: '4px', height: '20px', borderRadius: '2px', backgroundColor: theme.accent, display: 'inline-block' }} />
                 فهرس المحتويات
               </h2>
@@ -3707,7 +3691,7 @@ export default function PerformanceEvidence() {
               </div>
 
               {/* البيانات الشخصية */}
-              <h2 style={{ fontSize: '1rem', fontWeight: 800, color: theme.accent, fontFamily: "'Tajawal', sans-serif", marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <h2 style={{ fontSize: '1rem', fontWeight: 800, color: theme.accent, fontFamily: "'Cairo', sans-serif", marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                 <span style={{ width: '4px', height: '20px', borderRadius: '2px', backgroundColor: theme.accent, display: 'inline-block' }} />
                 البيانات الشخصية
               </h2>
@@ -3750,7 +3734,7 @@ export default function PerformanceEvidence() {
                 <div style={{ fontSize: '0.7rem', color: theme.accent, fontWeight: 700 }}>جدول التقييم</div>
               </div>
 
-              <h2 style={{ fontSize: '1rem', fontWeight: 800, color: theme.accent, fontFamily: "'Tajawal', sans-serif", marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <h2 style={{ fontSize: '1rem', fontWeight: 800, color: theme.accent, fontFamily: "'Cairo', sans-serif", marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                 <span style={{ width: '4px', height: '20px', borderRadius: '2px', backgroundColor: theme.accent, display: 'inline-block' }} />
                 جدول التقييم
               </h2>
@@ -3848,7 +3832,7 @@ export default function PerformanceEvidence() {
                             <div style={{ position: 'relative', zIndex: 1 }}>
                               <div style={{ width: '80px', height: '80px', borderRadius: '50%', background: 'rgba(255,255,255,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 2rem', fontSize: '2rem', fontWeight: 900 }}>{i + 1}</div>
                               <div style={{ fontSize: '0.8rem', opacity: 0.6, marginBottom: '0.5rem', letterSpacing: '0.15em' }}>البند {i + 1} من {allCriteria.length}</div>
-                              <h2 style={{ fontSize: '2rem', fontWeight: 900, fontFamily: "'Tajawal', sans-serif", marginBottom: '1rem', lineHeight: 1.4 }}>{c.title}</h2>
+                              <h2 style={{ fontSize: '2rem', fontWeight: 900, fontFamily: "'Cairo', sans-serif", marginBottom: '1rem', lineHeight: 1.4 }}>{c.title}</h2>
                               <div style={{ width: '60px', height: '2px', background: 'rgba(255,255,255,0.3)', margin: '1.5rem auto' }} />
                               {sectionStats}
                             </div>
@@ -3867,7 +3851,7 @@ export default function PerformanceEvidence() {
                           </div>
                           <div style={{ width: '70%', display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '4rem 3rem' }}>
                             <div style={{ fontSize: '0.8rem', color: '#9CA3AF', marginBottom: '0.5rem', letterSpacing: '0.1em' }}>البند {i + 1} من {allCriteria.length}</div>
-                            <h2 style={{ fontSize: '1.8rem', fontWeight: 900, color: theme.accent, fontFamily: "'Tajawal', sans-serif", marginBottom: '1rem', lineHeight: 1.4 }}>{c.title}</h2>
+                            <h2 style={{ fontSize: '1.8rem', fontWeight: 900, color: theme.accent, fontFamily: "'Cairo', sans-serif", marginBottom: '1rem', lineHeight: 1.4 }}>{c.title}</h2>
                             <div style={{ width: '60px', height: '3px', background: theme.accent, marginBottom: '2rem' }} />
                             <div style={{ display: 'flex', gap: '2rem' }}>
                               <div style={{ padding: '1rem 1.5rem', border: `1px solid ${theme.accent}30`, borderRadius: '8px', textAlign: 'center' }}>
@@ -3893,7 +3877,7 @@ export default function PerformanceEvidence() {
                           <div style={{ height: '4px', background: `linear-gradient(to left, ${theme.accent}, ${a2})` }} />
                           <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', textAlign: 'center', padding: '5rem 3rem', minHeight: 'calc(297mm - 100px)' }}>
                             <div style={{ width: '70px', height: '70px', borderRadius: '50%', border: `3px solid ${theme.accent}`, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 2rem', fontSize: '1.8rem', fontWeight: 900, color: theme.accent }}>{i + 1}</div>
-                            <h2 style={{ fontSize: '1.8rem', fontWeight: 900, color: theme.accent, fontFamily: "'Tajawal', sans-serif", marginBottom: '1rem', lineHeight: 1.4 }}>{c.title}</h2>
+                            <h2 style={{ fontSize: '1.8rem', fontWeight: 900, color: theme.accent, fontFamily: "'Cairo', sans-serif", marginBottom: '1rem', lineHeight: 1.4 }}>{c.title}</h2>
                             <div style={{ width: '60px', height: '3px', background: `linear-gradient(to left, ${theme.accent}, ${a2})`, margin: '1.5rem auto', borderRadius: '2px' }} />
                             <div style={{ display: 'flex', gap: '3rem', marginTop: '1rem' }}>
                               <div style={{ textAlign: 'center' }}><div style={{ fontSize: '2rem', fontWeight: 900, color: theme.accent }}>{d.evidences.length}</div><div style={{ fontSize: '0.75rem', color: '#9CA3AF' }}>شاهد</div></div>
@@ -3912,7 +3896,7 @@ export default function PerformanceEvidence() {
                             <div style={{ background: 'white', borderRadius: '16px', padding: '3rem 4rem', boxShadow: '0 4px 20px rgba(0,0,0,0.08)', border: `1px solid ${theme.accent}20`, maxWidth: '480px', width: '100%' }}>
                               <div style={{ width: '60px', height: '60px', borderRadius: '12px', background: `${theme.accent}15`, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1.5rem', fontSize: '1.5rem', fontWeight: 900, color: theme.accent }}>{i + 1}</div>
                               <div style={{ fontSize: '0.75rem', color: '#9CA3AF', marginBottom: '0.5rem' }}>البند {i + 1} من {allCriteria.length}</div>
-                              <h2 style={{ fontSize: '1.5rem', fontWeight: 900, color: theme.accent, fontFamily: "'Tajawal', sans-serif", marginBottom: '1rem', lineHeight: 1.4 }}>{c.title}</h2>
+                              <h2 style={{ fontSize: '1.5rem', fontWeight: 900, color: theme.accent, fontFamily: "'Cairo', sans-serif", marginBottom: '1rem', lineHeight: 1.4 }}>{c.title}</h2>
                               <div style={{ width: '50px', height: '3px', background: `linear-gradient(to left, ${theme.accent}, ${a2})`, margin: '1rem auto', borderRadius: '2px' }} />
                               <div style={{ display: 'flex', justifyContent: 'center', gap: '2rem', marginTop: '1.5rem' }}>
                                 <div style={{ padding: '0.75rem 1.5rem', background: `${theme.accent}08`, borderRadius: '8px' }}>
@@ -3937,7 +3921,7 @@ export default function PerformanceEvidence() {
                             <div style={{ width: '100%', maxWidth: '500px', borderTop: `4px solid ${theme.accent}`, borderBottom: `4px solid ${theme.accent}`, padding: '3rem 2rem' }}>
                               <div style={{ fontSize: '4rem', fontWeight: 900, color: theme.accent, opacity: 0.15, marginBottom: '0.5rem' }}>{String(i + 1).padStart(2, '0')}</div>
                               <div style={{ fontSize: '0.8rem', color: '#9CA3AF', marginBottom: '0.5rem', letterSpacing: '0.1em' }}>البند {i + 1} من {allCriteria.length}</div>
-                              <h2 style={{ fontSize: '1.8rem', fontWeight: 900, color: theme.accent, fontFamily: "'Tajawal', sans-serif", marginBottom: '1.5rem', lineHeight: 1.4 }}>{c.title}</h2>
+                              <h2 style={{ fontSize: '1.8rem', fontWeight: 900, color: theme.accent, fontFamily: "'Cairo', sans-serif", marginBottom: '1.5rem', lineHeight: 1.4 }}>{c.title}</h2>
                               <div style={{ display: 'flex', justifyContent: 'center', gap: '2rem' }}>
                                 <div><span style={{ fontSize: '1.5rem', fontWeight: 900, color: theme.accent }}>{d.evidences.length}</span> <span style={{ fontSize: '0.75rem', color: '#9CA3AF' }}>شاهد</span></div>
                                 <div style={{ color: '#D1D5DB' }}>|</div>
@@ -3955,7 +3939,7 @@ export default function PerformanceEvidence() {
                           <div style={{ minHeight: '297mm', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', textAlign: 'center', padding: '4rem 3rem', position: 'relative' }}>
                             <div style={{ width: '1px', height: '60px', background: theme.accent, marginBottom: '2rem' }} />
                             <div style={{ fontSize: '0.8rem', color: '#9CA3AF', letterSpacing: '0.1em', marginBottom: '0.5rem' }}>البند {i + 1} من {allCriteria.length}</div>
-                            <h2 style={{ fontSize: '1.8rem', fontWeight: 900, color: theme.accent, fontFamily: "'Tajawal', sans-serif", marginBottom: '1rem', lineHeight: 1.4 }}>{c.title}</h2>
+                            <h2 style={{ fontSize: '1.8rem', fontWeight: 900, color: theme.accent, fontFamily: "'Cairo', sans-serif", marginBottom: '1rem', lineHeight: 1.4 }}>{c.title}</h2>
                             <div style={{ width: '1px', height: '60px', background: theme.accent, margin: '1.5rem 0' }} />
                             <div style={{ display: 'flex', gap: '3rem', color: '#4B5563' }}>
                               <div><span style={{ fontSize: '0.7rem', color: '#9CA3AF' }}>الشواهد: </span><strong style={{ color: theme.accent }}>{d.evidences.length}</strong></div>
@@ -3979,7 +3963,7 @@ export default function PerformanceEvidence() {
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.25rem', paddingBottom: '0.75rem', borderBottom: `3px solid ${theme.accent}` }}>
                       <div style={{ width: '36px', height: '36px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: '0.85rem', fontWeight: 700, backgroundColor: theme.accent, flexShrink: 0 }}>{i + 1}</div>
                       <div style={{ flex: 1 }}>
-                        <h3 style={{ fontWeight: 800, fontSize: '0.95rem', color: theme.accent, fontFamily: "'Tajawal', sans-serif" }}>{c.title}</h3>
+                        <h3 style={{ fontWeight: 800, fontSize: '0.95rem', color: theme.accent, fontFamily: "'Cairo', sans-serif" }}>{c.title}</h3>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginTop: '0.25rem' }}>
                           <span style={{ fontSize: '0.7rem', color: '#6B7280' }}>الدرجة: <strong style={{ color: d.score >= 4 ? '#16A34A' : d.score >= 2 ? '#CA8A04' : '#9CA3AF' }}>{d.score}/{c.maxScore}</strong></span>
                           <span style={{ fontSize: '0.7rem', color: '#9CA3AF' }}>•</span>
@@ -4104,7 +4088,7 @@ export default function PerformanceEvidence() {
                   </div>
 
                   {/* عنوان */}
-                  <h2 style={{ textAlign: 'center', fontSize: '1.2rem', fontWeight: 800, color: theme.accent, fontFamily: "'Tajawal', sans-serif", marginBottom: '3rem' }}>اعتماد التقرير</h2>
+                  <h2 style={{ textAlign: 'center', fontSize: '1.2rem', fontWeight: 800, color: theme.accent, fontFamily: "'Cairo', sans-serif", marginBottom: '3rem' }}>اعتماد التقرير</h2>
 
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '3rem', textAlign: 'center', padding: '0 2rem' }}>
                     <div style={{ padding: '2rem', border: `1px solid ${theme.accent}20`, borderRadius: '12px', background: `${theme.accent}05` }}>

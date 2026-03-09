@@ -8,6 +8,7 @@ import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
 import { seedDefaultTemplates } from "../db";
+import { renderHtmlToPdf, closeBrowser } from "../pdf-renderer";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -36,6 +37,29 @@ async function startServer() {
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
   // OAuth callback under /api/oauth/callback
   registerOAuthRoutes(app);
+
+  // Server-side PDF export endpoint using Puppeteer
+  app.post('/api/export-pdf', async (req, res) => {
+    try {
+      const { html, filename } = req.body;
+      if (!html) {
+        res.status(400).json({ error: 'Missing html content' });
+        return;
+      }
+      const pdfBuffer = await renderHtmlToPdf(html, {
+        format: 'A4',
+        printBackground: true,
+        margin: { top: '0', right: '0', bottom: '0', left: '0' },
+      });
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(filename || 'document.pdf')}`);
+      res.setHeader('Content-Length', pdfBuffer.length.toString());
+      res.send(pdfBuffer);
+    } catch (err) {
+      console.error('[export-pdf] Error:', err);
+      res.status(500).json({ error: 'PDF generation failed' });
+    }
+  });
 
   // Image proxy endpoint to bypass CORS for PDF export
   app.get('/api/image-proxy', async (req, res) => {
