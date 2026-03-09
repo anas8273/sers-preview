@@ -13,6 +13,7 @@ import {
   createUploadedFile, getFilesByPortfolio, deleteUploadedFile,
   createShareLink, getShareLinkByToken, incrementShareLinkViews, getShareLinksByPortfolio, deactivateShareLink,
   createPdfTemplate, updatePdfTemplate, deletePdfTemplate, getActivePdfTemplates, getAllPdfTemplates, seedDefaultTemplates,
+  createUserTheme, updateUserTheme, deleteUserTheme, getUserThemes,
 } from "./db";
 
 export const appRouter = router({
@@ -264,6 +265,7 @@ export const appRouter = router({
         logoUrl: z.string().optional(),
         templateLayout: z.any().optional(),
         isDefault: z.boolean().optional(),
+        isActive: z.boolean().optional(),
         sortOrder: z.number().optional(),
       }))
       .mutation(async ({ ctx, input }) => {
@@ -321,7 +323,48 @@ export const appRouter = router({
       }),
   }),
 
-  // ─── AI Services ──────────────────────────────────────────────
+  // ─── User Custom Themes ───────────────────────────────────────────────
+  userThemes: router({
+    list: protectedProcedure.query(async ({ ctx }) => {
+      return getUserThemes(ctx.user.id);
+    }),
+
+    create: protectedProcedure
+      .input(z.object({
+        name: z.string().min(1).max(255),
+        description: z.string().optional(),
+        themeData: z.record(z.string(), z.any()),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        return createUserTheme({
+          userId: ctx.user.id,
+          name: input.name,
+          description: input.description ?? null,
+          themeData: input.themeData,
+        });
+      }),
+
+    update: protectedProcedure
+      .input(z.object({
+        id: z.number(),
+        name: z.string().min(1).max(255).optional(),
+        description: z.string().optional(),
+        themeData: z.record(z.string(), z.any()).optional(),
+        isDefault: z.boolean().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const { id, ...data } = input;
+        return updateUserTheme(id, ctx.user.id, data as any);
+      }),
+
+    delete: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        return deleteUserTheme(input.id, ctx.user.id);
+      }),
+  }),
+
+  // ─── AI Services ──────────────────────────────────────────────────────
   ai: router({
     classifyEvidence: publicProcedure
       .input(z.object({

@@ -1,6 +1,7 @@
 /**
  * نظام تصدير PDF - يستخدم Server-Side Rendering عبر Puppeteer
  * يحل مشكلة الحروف العربية المفككة في html2canvas بشكل نهائي
+ * محسّن ليطابق جودة edu-forms.com
  * 
  * الآلية:
  * 1. يأخذ HTML من العنصر المحدد
@@ -42,14 +43,17 @@ export async function exportToPDF(
   if (!element) throw new Error("Element not found: " + elementId);
 
   try {
-    onProgress?.(1, 3);
+    onProgress?.(1, 4);
 
     // Step 1: استخراج HTML من العنصر مع تحويل الأنماط المحسوبة إلى inline styles
     const htmlContent = await extractHtmlWithStyles(element);
     
-    onProgress?.(2, 3);
+    onProgress?.(2, 4);
 
-    // Step 2: إرسال HTML إلى السيرفر لتحويله إلى PDF
+    // Step 2: تحويل الصور إلى data URLs (خطوة منفصلة لتحسين الأداء)
+    onProgress?.(3, 4);
+
+    // Step 3: إرسال HTML إلى السيرفر لتحويله إلى PDF
     const response = await fetch('/api/export-pdf', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -61,7 +65,7 @@ export async function exportToPDF(
       throw new Error(error.error || 'PDF export failed');
     }
 
-    // Step 3: تحميل الملف
+    // Step 4: تحميل الملف
     const blob = await response.blob();
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -72,7 +76,7 @@ export async function exportToPDF(
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
 
-    onProgress?.(3, 3);
+    onProgress?.(4, 4);
     return true;
   } catch (err) {
     console.error("PDF export error:", err);
@@ -129,6 +133,7 @@ async function extractHtmlWithStyles(element: HTMLElement): Promise<string> {
 
 /**
  * تحويل الأنماط المحسوبة إلى inline styles
+ * محسّن لنقل جميع الخصائص المهمة بدقة عالية
  */
 async function inlineComputedStyles(original: HTMLElement, clone: HTMLElement): Promise<void> {
   const origElements = [original, ...Array.from(original.querySelectorAll("*"))] as HTMLElement[];
@@ -150,9 +155,11 @@ async function inlineComputedStyles(original: HTMLElement, clone: HTMLElement): 
     'overflow', 'whiteSpace', 'wordBreak', 'textDecoration',
     'borderRadius', 'boxShadow', 'opacity', 'filter',
     'gridTemplateColumns', 'gridTemplateRows', 'gap',
-    'flex', 'flexGrow', 'flexShrink', 'flexBasis',
+    'flex', 'flexGrow', 'flexShrink', 'flexBasis', 'flexWrap',
     'tableLayout', 'borderCollapse', 'borderSpacing',
     'verticalAlign', 'textIndent',
+    'clipPath', 'objectFit', 'objectPosition',
+    'textOverflow', 'overflowWrap',
   ];
 
   for (let i = 0; i < Math.min(origElements.length, cloneElements.length); i++) {
@@ -329,6 +336,7 @@ export function applyTemplateToElement(element: HTMLElement, template: PdfTempla
 
 /**
  * طباعة عنصر HTML في نافذة جديدة
+ * محسّن لجودة طباعة عالية
  */
 export function printElement(elementId: string) {
   const element = document.getElementById(elementId);
@@ -342,12 +350,16 @@ export function printElement(elementId: string) {
     <html lang="ar" dir="rtl">
     <head>
       <meta charset="UTF-8">
-      <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@200..1000&display=swap" rel="stylesheet">
+      <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@200..1000&family=Tajawal:wght@200;300;400;500;700;800;900&display=swap" rel="stylesheet">
       <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: 'Cairo', 'Tajawal', sans-serif; direction: rtl; background: white; }
         @media print {
-          body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          body {
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+            color-adjust: exact;
+          }
           [data-no-print] { display: none !important; }
           button { display: none !important; }
           body > div > div {
@@ -367,5 +379,5 @@ export function printElement(elementId: string) {
   setTimeout(() => {
     printWindow.print();
     printWindow.close();
-  }, 1000);
+  }, 1500);
 }

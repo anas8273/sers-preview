@@ -1,6 +1,6 @@
 import { eq, and, desc, sql, gt, lt } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, users, portfolios, uploadedFiles, shareLinks, pdfTemplates, type InsertPortfolio, type InsertUploadedFile, type InsertShareLink, type InsertPdfTemplate } from "../drizzle/schema";
+import { InsertUser, users, portfolios, uploadedFiles, shareLinks, pdfTemplates, userThemes, type InsertPortfolio, type InsertUploadedFile, type InsertShareLink, type InsertPdfTemplate, type InsertUserTheme } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -228,6 +228,41 @@ export async function getAllPdfTemplates() {
   const db = await getDb();
   if (!db) return [];
   return db.select().from(pdfTemplates).orderBy(pdfTemplates.sortOrder);
+}
+
+// ─── User Custom Themes ──────────────────────────────────────
+export async function createUserTheme(data: InsertUserTheme) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(userThemes).values(data);
+  return { id: Number(result[0].insertId) };
+}
+
+export async function updateUserTheme(id: number, userId: number, data: Partial<InsertUserTheme>) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(userThemes).set(data).where(and(eq(userThemes.id, id), eq(userThemes.userId, userId)));
+  return { success: true };
+}
+
+export async function deleteUserTheme(id: number, userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.delete(userThemes).where(and(eq(userThemes.id, id), eq(userThemes.userId, userId)));
+  return { success: true };
+}
+
+export async function getUserThemes(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(userThemes).where(eq(userThemes.userId, userId)).orderBy(desc(userThemes.updatedAt));
+}
+
+export async function getUserThemeById(id: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(userThemes).where(eq(userThemes.id, id)).limit(1);
+  return result.length > 0 ? result[0] : undefined;
 }
 
 export async function seedDefaultTemplates() {

@@ -3535,15 +3535,117 @@ export default function PerformanceEvidence() {
               <CardTitle className="text-sm">اختر ثيم التصدير</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="flex flex-wrap gap-2">
-                {allThemes.map((t) => (
-                  <Button key={t.id} variant={selectedTheme.id === t.id ? "default" : "outline"} size="sm"
-                    onClick={() => setSelectedTheme(t)}>
-                    {t.id.startsWith('db-') && <span className="inline-block w-2 h-2 rounded-full ml-1" style={{ backgroundColor: t.accent }} />}
-                    {t.name}
-                  </Button>
-                ))}
+              {/* القوالب الأساسية */}
+              <div>
+                <p className="text-[10px] text-muted-foreground mb-2 font-medium">القوالب المتاحة:</p>
+                <div className="flex flex-wrap gap-2">
+                  {allThemes.map((t) => (
+                    <Button key={t.id} variant={selectedTheme.id === t.id ? "default" : "outline"} size="sm"
+                      onClick={() => setSelectedTheme(t)}>
+                      {t.id.startsWith('db-') && <span className="inline-block w-2 h-2 rounded-full ml-1" style={{ backgroundColor: t.accent }} />}
+                      {t.name}
+                    </Button>
+                  ))}
+                </div>
               </div>
+
+              {/* حفظ الثيم المخصص */}
+              {isAuthenticated && (() => {
+                const userThemesQuery = trpc.userThemes.list.useQuery(undefined, { staleTime: 60000 });
+                const createUserThemeMut = trpc.userThemes.create.useMutation();
+                const deleteUserThemeMut = trpc.userThemes.delete.useMutation();
+                const utils = trpc.useUtils();
+                const [showSaveDialog, setShowSaveDialog] = useState(false);
+                const [newThemeName, setNewThemeName] = useState('');
+
+                const handleSaveCurrentTheme = async () => {
+                  if (!newThemeName.trim()) { toast.error('يرجى إدخال اسم للثيم'); return; }
+                  try {
+                    await createUserThemeMut.mutateAsync({
+                      name: newThemeName.trim(),
+                      themeData: { ...selectedTheme },
+                    });
+                    toast.success('تم حفظ الثيم بنجاح');
+                    setNewThemeName('');
+                    setShowSaveDialog(false);
+                    utils.userThemes.list.invalidate();
+                  } catch { toast.error('فشل حفظ الثيم'); }
+                };
+
+                const handleLoadUserTheme = (themeData: any) => {
+                  const loaded: ThemeConfig = {
+                    ...DEFAULT_THEME,
+                    ...themeData,
+                  };
+                  setSelectedTheme(loaded);
+                  toast.success('تم تحميل الثيم المحفوظ');
+                };
+
+                const handleDeleteUserTheme = async (id: number) => {
+                  try {
+                    await deleteUserThemeMut.mutateAsync({ id });
+                    toast.success('تم حذف الثيم');
+                    utils.userThemes.list.invalidate();
+                  } catch { toast.error('فشل حذف الثيم'); }
+                };
+
+                return (
+                  <div className="border-t border-border pt-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <h4 className="text-sm font-bold text-foreground flex items-center gap-2">
+                        <Save className="w-4 h-4 text-primary" />ثيماتي المحفوظة
+                      </h4>
+                      <Button variant="outline" size="sm" className="text-xs h-7 gap-1"
+                        onClick={() => setShowSaveDialog(!showSaveDialog)}>
+                        <Plus className="w-3 h-3" />حفظ الثيم الحالي
+                      </Button>
+                    </div>
+
+                    {showSaveDialog && (
+                      <div className="flex items-center gap-2 mb-3 p-2 bg-muted/50 rounded-lg">
+                        <input
+                          type="text"
+                          value={newThemeName}
+                          onChange={(e) => setNewThemeName(e.target.value)}
+                          placeholder="اسم الثيم المخصص..."
+                          className="flex-1 px-3 py-1.5 rounded-md border border-border text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/20"
+                          onKeyDown={(e) => { if (e.key === 'Enter') handleSaveCurrentTheme(); }}
+                        />
+                        <Button size="sm" className="h-8" onClick={handleSaveCurrentTheme}
+                          disabled={createUserThemeMut.isPending}>
+                          {createUserThemeMut.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
+                        </Button>
+                        <Button variant="ghost" size="sm" className="h-8" onClick={() => setShowSaveDialog(false)}>
+                          <X className="w-3 h-3" />
+                        </Button>
+                      </div>
+                    )}
+
+                    {userThemesQuery.data && userThemesQuery.data.length > 0 ? (
+                      <div className="flex flex-wrap gap-2">
+                        {userThemesQuery.data.map((ut: any) => {
+                          const td = ut.themeData || {};
+                          return (
+                            <div key={ut.id} className="flex items-center gap-1 bg-muted/50 rounded-lg px-2 py-1">
+                              <span className="inline-block w-2.5 h-2.5 rounded-full" style={{ backgroundColor: td.accent || '#0d7377' }} />
+                              <Button variant="ghost" size="sm" className="text-xs h-6 px-1.5"
+                                onClick={() => handleLoadUserTheme(td)}>
+                                {ut.name}
+                              </Button>
+                              <button type="button" className="text-muted-foreground hover:text-red-500 transition-colors p-0.5"
+                                onClick={() => handleDeleteUserTheme(ut.id)}>
+                                <Trash2 className="w-3 h-3" />
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <p className="text-[10px] text-muted-foreground">لم تحفظ أي ثيمات مخصصة بعد. اختر ثيم وعدّله ثم احفظه لاستخدامه لاحقاً.</p>
+                    )}
+                  </div>
+                );
+              })()}
               {/* خيارات الباركود */}
               <div className="border-t border-border pt-4">
                 <div className="flex items-center justify-between mb-3">

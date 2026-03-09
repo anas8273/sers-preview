@@ -152,3 +152,18 @@ export const pdfTemplates = mysqlTable("pdf_templates", {
 
 export type PdfTemplate = typeof pdfTemplates.$inferSelect;
 export type InsertPdfTemplate = typeof pdfTemplates.$inferInsert;
+
+// ─── User Custom Themes (حفظ الثيمات المخصصة للمستخدم) ────────────────────
+export const userThemes = mysqlTable("user_themes", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  name: varchar("name", { length: 255 }).notNull(),
+  description: text("description"),
+  themeData: json("themeData").$type<Record<string, any>>().notNull(),
+  isDefault: boolean("isDefault").default(false),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type UserTheme = typeof userThemes.$inferSelect;
+export type InsertUserTheme = typeof userThemes.$inferInsert;

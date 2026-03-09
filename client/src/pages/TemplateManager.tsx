@@ -1,22 +1,27 @@
 /**
  * لوحة إدارة القوالب والثيمات - SERS
  * CRUD كامل للقوالب مع معاينة حية وتحميل خلفيات وشعارات
+ * + رفع صور مباشرة + أنماط الترويسة والحقول + نسخ القالب
  */
-import { useState, useEffect } from "react";
+import { useState, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useLocation } from "wouter";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
 import {
-  ArrowLeft, Plus, Trash2, Save, Edit3, Eye, Palette,
-  Upload, Image, Check, X, Loader2, ChevronDown, ChevronUp,
-  Copy, ToggleLeft, ToggleRight, Sparkles, FileText, Download,
-  GripVertical, Settings2
+  ArrowLeft, Plus, Trash2, Save, Edit3, Palette,
+  Upload, X, Loader2, Copy, ToggleLeft, ToggleRight,
+  Sparkles, FileText, Settings2, ImageIcon, Layout
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+
+interface TemplateLayoutConfig {
+  headerStyle: number;
+  fieldStyle: string;
+}
 
 interface TemplateData {
   id?: number;
@@ -30,6 +35,7 @@ interface TemplateData {
   fontFamily: string;
   coverImageUrl: string;
   logoUrl: string;
+  templateLayout: TemplateLayoutConfig | null;
   isDefault: boolean;
   isActive: boolean;
   sortOrder: number;
@@ -46,6 +52,7 @@ const EMPTY_TEMPLATE: TemplateData = {
   fontFamily: "Tajawal",
   coverImageUrl: "",
   logoUrl: "",
+  templateLayout: { headerStyle: 1, fieldStyle: "table" },
   isDefault: false,
   isActive: true,
   sortOrder: 0,
@@ -60,14 +67,27 @@ const FONT_OPTIONS = [
   { value: "Amiri", label: "أميري" },
 ];
 
+const HEADER_STYLES = [
+  { value: 1, label: "نمط 1: يمين - وسط - يسار", desc: "الكتابة يمين، الشعار وسط، الفصل يسار" },
+  { value: 2, label: "نمط 2: شعار يسار - كتابة يمين", desc: "الشعار يسار والكتابة يمين" },
+  { value: 3, label: "نمط 3: بانر ملون", desc: "بانر ملون مع شعار وسط" },
+  { value: 4, label: "نمط 4: أقسام كاملة", desc: "ترويسة بأقسام منفصلة" },
+];
+
+const FIELD_STYLES = [
+  { value: "table", label: "جدول", desc: "حقول في جدول منظم" },
+  { value: "cards", label: "بطاقات", desc: "بطاقات ملونة بالهوية" },
+  { value: "fieldset", label: "إطارات", desc: "حقول بإطار وعنوان" },
+  { value: "underlined", label: "مسطّر", desc: "حقول بخط سفلي" },
+  { value: "minimal", label: "بسيط", desc: "حقول بإطار بسيط" },
+];
+
 export default function TemplateManager() {
   const [, navigate] = useLocation();
   const { user, isAuthenticated } = useAuth();
   const [editingTemplate, setEditingTemplate] = useState<TemplateData | null>(null);
   const [isCreating, setIsCreating] = useState(false);
-  const [expandedId, setExpandedId] = useState<number | null>(null);
 
-  // tRPC queries
   const templatesQuery = trpc.templates.listAll.useQuery(undefined, {
     enabled: isAuthenticated && user?.role === "admin",
   });
@@ -75,9 +95,9 @@ export default function TemplateManager() {
   const updateMutation = trpc.templates.update.useMutation();
   const deleteMutation = trpc.templates.delete.useMutation();
   const seedMutation = trpc.templates.seed.useMutation();
+  const uploadMutation = trpc.templates.uploadImage.useMutation();
   const utils = trpc.useUtils();
 
-  // التحقق من صلاحيات الأدمن
   if (!isAuthenticated || user?.role !== "admin") {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center p-4" dir="rtl">
@@ -100,11 +120,39 @@ export default function TemplateManager() {
       if (template.id) {
         await updateMutation.mutateAsync({
           id: template.id,
-          ...template,
+          name: template.name,
+          description: template.description,
+          headerBg: template.headerBg,
+          headerText: template.headerText,
+          accent: template.accent,
+          borderColor: template.borderColor,
+          bodyBg: template.bodyBg,
+          fontFamily: template.fontFamily,
+          coverImageUrl: template.coverImageUrl,
+          logoUrl: template.logoUrl,
+          templateLayout: template.templateLayout,
+          isDefault: template.isDefault,
+          isActive: template.isActive,
+          sortOrder: template.sortOrder,
         });
         toast.success("تم تحديث القالب بنجاح");
       } else {
-        await createMutation.mutateAsync(template);
+        await createMutation.mutateAsync({
+          name: template.name,
+          description: template.description,
+          headerBg: template.headerBg,
+          headerText: template.headerText,
+          accent: template.accent,
+          borderColor: template.borderColor,
+          bodyBg: template.bodyBg,
+          fontFamily: template.fontFamily,
+          coverImageUrl: template.coverImageUrl,
+          logoUrl: template.logoUrl,
+          templateLayout: template.templateLayout,
+          isDefault: template.isDefault,
+          isActive: template.isActive,
+          sortOrder: template.sortOrder,
+        });
         toast.success("تم إنشاء القالب بنجاح");
       }
       setEditingTemplate(null);
@@ -152,11 +200,54 @@ export default function TemplateManager() {
     }
   };
 
+  const handleDuplicate = (template: any) => {
+    const copy: TemplateData = {
+      name: `${template.name} (نسخة)`,
+      description: template.description || "",
+      headerBg: template.headerBg,
+      headerText: template.headerText,
+      accent: template.accent,
+      borderColor: template.borderColor,
+      bodyBg: template.bodyBg || "#FFFFFF",
+      fontFamily: template.fontFamily || "Tajawal",
+      coverImageUrl: template.coverImageUrl || "",
+      logoUrl: template.logoUrl || "",
+      templateLayout: template.templateLayout || { headerStyle: 1, fieldStyle: "table" },
+      isDefault: false,
+      isActive: true,
+      sortOrder: (template.sortOrder || 0) + 1,
+    };
+    setEditingTemplate(copy);
+    setIsCreating(true);
+  };
+
+  const handleUploadImage = async (file: File, imageType: 'cover' | 'logo' | 'background'): Promise<string> => {
+    const reader = new FileReader();
+    return new Promise((resolve, reject) => {
+      reader.onload = async () => {
+        try {
+          const base64 = (reader.result as string).split(',')[1];
+          const result = await uploadMutation.mutateAsync({
+            fileName: file.name,
+            mimeType: file.type,
+            base64Data: base64,
+            imageType,
+          });
+          resolve(result.url);
+        } catch (err) {
+          reject(err);
+        }
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-background to-muted/30 p-3 sm:p-4 md:p-8" dir="rtl">
-      <div className="max-w-5xl mx-auto">
+      <div className="max-w-6xl mx-auto">
         {/* Header */}
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
           <div className="flex items-center gap-3">
             <button type="button" onClick={() => navigate("/performance-evidence")}
               className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors group">
@@ -169,8 +260,8 @@ export default function TemplateManager() {
                 <Palette className="w-5 h-5 text-white" />
               </div>
               <div>
-                <h1 className="text-xl font-bold" style={{ fontFamily: "var(--font-heading)" }}>إدارة القوالب</h1>
-                <p className="text-xs text-muted-foreground">إنشاء وتعديل قوالب PDF والثيمات</p>
+                <h1 className="text-xl font-bold" style={{ fontFamily: "var(--font-heading)" }}>إدارة القوالب والثيمات</h1>
+                <p className="text-xs text-muted-foreground">إنشاء وتعديل وتخصيص قوالب PDF والثيمات</p>
               </div>
             </div>
           </div>
@@ -200,7 +291,7 @@ export default function TemplateManager() {
                 initial={{ scale: 0.95, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
                 exit={{ scale: 0.95, opacity: 0 }}
-                className="bg-background rounded-2xl shadow-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto"
+                className="bg-background rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto"
                 onClick={(e) => e.stopPropagation()}
               >
                 <TemplateEditor
@@ -208,6 +299,8 @@ export default function TemplateManager() {
                   onSave={handleSave}
                   onCancel={() => { setEditingTemplate(null); setIsCreating(false); }}
                   isSaving={createMutation.isPending || updateMutation.isPending}
+                  onUploadImage={handleUploadImage}
+                  isUploading={uploadMutation.isPending}
                 />
               </motion.div>
             </motion.div>
@@ -237,66 +330,158 @@ export default function TemplateManager() {
           </Card>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {templatesQuery.data.map((template: any) => (
-              <motion.div key={template.id} layout>
-                <Card className={`overflow-hidden transition-all hover:shadow-lg ${!template.isActive ? 'opacity-60' : ''}`}>
-                  {/* Preview Header */}
-                  <div className="h-24 relative" style={{ backgroundColor: template.headerBg }}>
-                    {template.coverImageUrl && (
-                      <img src={template.coverImageUrl} alt="" className="absolute inset-0 w-full h-full object-cover opacity-30" />
-                    )}
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      {template.logoUrl ? (
-                        <img src={template.logoUrl} alt="" className="w-12 h-12 rounded-lg object-contain bg-white/20 p-1" />
-                      ) : (
-                        <FileText className="w-10 h-10" style={{ color: template.headerText }} />
+            {templatesQuery.data.map((template: any) => {
+              const layout = template.templateLayout as TemplateLayoutConfig | null;
+              return (
+                <motion.div key={template.id} layout>
+                  <Card className={`overflow-hidden transition-all hover:shadow-lg ${!template.isActive ? 'opacity-60' : ''}`}>
+                    {/* Preview Header */}
+                    <div className="h-24 relative" style={{ backgroundColor: template.headerBg }}>
+                      {template.coverImageUrl && (
+                        <img src={template.coverImageUrl} alt="" className="absolute inset-0 w-full h-full object-cover opacity-30" />
                       )}
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        {template.logoUrl ? (
+                          <img src={template.logoUrl} alt="" className="w-12 h-12 rounded-lg object-contain bg-white/20 p-1" />
+                        ) : (
+                          <FileText className="w-10 h-10" style={{ color: template.headerText }} />
+                        )}
+                      </div>
+                      <div className="absolute top-2 left-2 flex items-center gap-1">
+                        {template.isDefault && (
+                          <Badge className="text-[9px] bg-yellow-500/90 text-white border-0">افتراضي</Badge>
+                        )}
+                        <Badge className={`text-[9px] border-0 ${template.isActive ? 'bg-green-500/90 text-white' : 'bg-gray-500/90 text-white'}`}>
+                          {template.isActive ? 'مفعّل' : 'معطّل'}
+                        </Badge>
+                      </div>
                     </div>
-                    <div className="absolute top-2 left-2 flex items-center gap-1">
-                      {template.isDefault && (
-                        <Badge className="text-[9px] bg-yellow-500/90 text-white border-0">افتراضي</Badge>
+
+                    <CardContent className="p-4">
+                      <h3 className="font-bold text-sm mb-1">{template.name}</h3>
+                      <p className="text-xs text-muted-foreground mb-2 line-clamp-2">{template.description || "بدون وصف"}</p>
+
+                      {/* Layout Info */}
+                      {layout && (
+                        <div className="flex items-center gap-2 mb-2 text-[10px] text-muted-foreground">
+                          <span className="bg-muted px-1.5 py-0.5 rounded">ترويسة: نمط {layout.headerStyle}</span>
+                          <span className="bg-muted px-1.5 py-0.5 rounded">حقول: {FIELD_STYLES.find(f => f.value === layout.fieldStyle)?.label || layout.fieldStyle}</span>
+                        </div>
                       )}
-                      <Badge className={`text-[9px] border-0 ${template.isActive ? 'bg-green-500/90 text-white' : 'bg-gray-500/90 text-white'}`}>
-                        {template.isActive ? 'مفعّل' : 'معطّل'}
-                      </Badge>
-                    </div>
-                  </div>
 
-                  <CardContent className="p-4">
-                    <h3 className="font-bold text-sm mb-1">{template.name}</h3>
-                    <p className="text-xs text-muted-foreground mb-3 line-clamp-2">{template.description || "بدون وصف"}</p>
+                      {/* Color Preview */}
+                      <div className="flex items-center gap-1.5 mb-3">
+                        <div className="w-5 h-5 rounded-full border-2 border-white shadow-sm" style={{ backgroundColor: template.headerBg }} title="خلفية الرأس" />
+                        <div className="w-5 h-5 rounded-full border-2 border-white shadow-sm" style={{ backgroundColor: template.accent }} title="اللون المميز" />
+                        <div className="w-5 h-5 rounded-full border-2 border-white shadow-sm" style={{ backgroundColor: template.borderColor }} title="لون الحدود" />
+                        <div className="w-5 h-5 rounded-full border-2 border-white shadow-sm" style={{ backgroundColor: template.bodyBg || '#fff' }} title="خلفية المحتوى" />
+                        <span className="text-[10px] text-muted-foreground mr-auto" style={{ fontFamily: template.fontFamily }}>
+                          {template.fontFamily}
+                        </span>
+                      </div>
 
-                    {/* Color Preview */}
-                    <div className="flex items-center gap-1.5 mb-3">
-                      <div className="w-5 h-5 rounded-full border-2 border-white shadow-sm" style={{ backgroundColor: template.headerBg }} title="خلفية الرأس" />
-                      <div className="w-5 h-5 rounded-full border-2 border-white shadow-sm" style={{ backgroundColor: template.accent }} title="اللون المميز" />
-                      <div className="w-5 h-5 rounded-full border-2 border-white shadow-sm" style={{ backgroundColor: template.borderColor }} title="لون الحدود" />
-                      <div className="w-5 h-5 rounded-full border-2 border-white shadow-sm" style={{ backgroundColor: template.bodyBg }} title="خلفية المحتوى" />
-                      <span className="text-[10px] text-muted-foreground mr-auto" style={{ fontFamily: template.fontFamily }}>
-                        {template.fontFamily}
-                      </span>
-                    </div>
+                      {/* Actions */}
+                      <div className="flex items-center gap-1.5">
+                        <Button variant="outline" size="sm" className="flex-1 text-xs h-8"
+                          onClick={() => setEditingTemplate({
+                            ...template,
+                            bodyBg: template.bodyBg || "#FFFFFF",
+                            coverImageUrl: template.coverImageUrl || "",
+                            logoUrl: template.logoUrl || "",
+                            templateLayout: template.templateLayout || { headerStyle: 1, fieldStyle: "table" },
+                          })}>
+                          <Edit3 className="w-3 h-3 ml-1" />تعديل
+                        </Button>
+                        <Button variant="outline" size="sm" className="h-8 px-2" title="نسخ القالب"
+                          onClick={() => handleDuplicate(template)}>
+                          <Copy className="w-3.5 h-3.5" />
+                        </Button>
+                        <Button variant="outline" size="sm" className="h-8 px-2"
+                          onClick={() => handleToggleActive(template)}>
+                          {template.isActive ? <ToggleRight className="w-4 h-4 text-green-500" /> : <ToggleLeft className="w-4 h-4 text-gray-400" />}
+                        </Button>
+                        <Button variant="outline" size="sm" className="h-8 px-2 text-red-500 hover:text-red-700 hover:bg-red-50"
+                          onClick={() => handleDelete(template.id)}
+                          disabled={deleteMutation.isPending}>
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </motion.div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
-                    {/* Actions */}
-                    <div className="flex items-center gap-1.5">
-                      <Button variant="outline" size="sm" className="flex-1 text-xs h-8"
-                        onClick={() => setEditingTemplate(template)}>
-                        <Edit3 className="w-3 h-3 ml-1" />تعديل
-                      </Button>
-                      <Button variant="outline" size="sm" className="h-8 px-2"
-                        onClick={() => handleToggleActive(template)}>
-                        {template.isActive ? <ToggleRight className="w-4 h-4 text-green-500" /> : <ToggleLeft className="w-4 h-4 text-gray-400" />}
-                      </Button>
-                      <Button variant="outline" size="sm" className="h-8 px-2 text-red-500 hover:text-red-700 hover:bg-red-50"
-                        onClick={() => handleDelete(template.id)}
-                        disabled={deleteMutation.isPending}>
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              </motion.div>
-            ))}
+// ===== Image Upload Field =====
+function ImageUploadField({
+  label,
+  value,
+  onChange,
+  onUpload,
+  isUploading,
+  imageType,
+}: {
+  label: string;
+  value: string;
+  onChange: (url: string) => void;
+  onUpload: (file: File, type: 'cover' | 'logo' | 'background') => Promise<string>;
+  isUploading: boolean;
+  imageType: 'cover' | 'logo' | 'background';
+}) {
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const handleFileSelect = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      toast.error("يرجى اختيار ملف صورة");
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error("حجم الصورة يجب أن يكون أقل من 5MB");
+      return;
+    }
+    try {
+      const url = await onUpload(file, imageType);
+      onChange(url);
+      toast.success("تم رفع الصورة بنجاح");
+    } catch {
+      toast.error("فشل رفع الصورة");
+    }
+    if (fileRef.current) fileRef.current.value = '';
+  }, [onUpload, imageType, onChange]);
+
+  return (
+    <div>
+      <label className="text-xs font-medium text-muted-foreground mb-1 block">{label}</label>
+      <div className="flex items-center gap-2">
+        <input
+          type="url"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder="https://... أو ارفع صورة"
+          dir="ltr"
+          className="flex-1 px-3 py-2 rounded-lg border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 bg-background"
+        />
+        <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleFileSelect} />
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-9 px-3"
+          onClick={() => fileRef.current?.click()}
+          disabled={isUploading}
+        >
+          {isUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+        </Button>
+        {value && (
+          <div className="w-9 h-9 rounded-lg border border-border overflow-hidden shrink-0">
+            <img src={value} alt="" className="w-full h-full object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
           </div>
         )}
       </div>
@@ -310,17 +495,34 @@ function TemplateEditor({
   onSave,
   onCancel,
   isSaving,
+  onUploadImage,
+  isUploading,
 }: {
   template: TemplateData;
   onSave: (t: TemplateData) => void;
   onCancel: () => void;
   isSaving: boolean;
+  onUploadImage: (file: File, type: 'cover' | 'logo' | 'background') => Promise<string>;
+  isUploading: boolean;
 }) {
-  const [form, setForm] = useState<TemplateData>({ ...template });
+  const [form, setForm] = useState<TemplateData>({
+    ...template,
+    templateLayout: template.templateLayout || { headerStyle: 1, fieldStyle: "table" },
+  });
+  const [activeTab, setActiveTab] = useState<'colors' | 'layout' | 'images'>('colors');
 
   const updateField = (field: keyof TemplateData, value: any) => {
     setForm((prev) => ({ ...prev, [field]: value }));
   };
+
+  const updateLayout = (field: keyof TemplateLayoutConfig, value: any) => {
+    setForm((prev) => ({
+      ...prev,
+      templateLayout: { ...(prev.templateLayout || { headerStyle: 1, fieldStyle: "table" }), [field]: value },
+    }));
+  };
+
+  const layout = form.templateLayout || { headerStyle: 1, fieldStyle: "table" };
 
   return (
     <div className="p-6" dir="rtl">
@@ -334,96 +536,145 @@ function TemplateEditor({
         </button>
       </div>
 
+      {/* Basic Info */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+        <div>
+          <label className="text-xs font-medium text-muted-foreground mb-1 block">اسم القالب *</label>
+          <input type="text" value={form.name} onChange={(e) => updateField("name", e.target.value)}
+            placeholder="مثال: القالب الأخضر الرسمي"
+            className="w-full px-3 py-2 rounded-lg border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 bg-background" />
+        </div>
+        <div>
+          <label className="text-xs font-medium text-muted-foreground mb-1 block">الوصف</label>
+          <input type="text" value={form.description} onChange={(e) => updateField("description", e.target.value)}
+            placeholder="وصف مختصر للقالب..."
+            className="w-full px-3 py-2 rounded-lg border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 bg-background" />
+        </div>
+      </div>
+
+      {/* Tabs */}
+      <div className="flex items-center gap-1 mb-4 bg-muted/50 rounded-lg p-1">
+        {[
+          { id: 'colors' as const, label: 'الألوان والخطوط', icon: Palette },
+          { id: 'layout' as const, label: 'التخطيط والأنماط', icon: Layout },
+          { id: 'images' as const, label: 'الصور والشعارات', icon: ImageIcon },
+        ].map(tab => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id)}
+            className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-md text-xs font-medium transition-all ${
+              activeTab === tab.id ? 'bg-background shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            <tab.icon className="w-3.5 h-3.5" />
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Left: Form */}
         <div className="space-y-4">
-          <div>
-            <label className="text-xs font-medium text-muted-foreground mb-1 block">اسم القالب *</label>
-            <input type="text" value={form.name} onChange={(e) => updateField("name", e.target.value)}
-              placeholder="مثال: القالب الأخضر الرسمي"
-              className="w-full px-3 py-2 rounded-lg border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 bg-background" />
-          </div>
-
-          <div>
-            <label className="text-xs font-medium text-muted-foreground mb-1 block">الوصف</label>
-            <textarea value={form.description} onChange={(e) => updateField("description", e.target.value)}
-              placeholder="وصف مختصر للقالب..."
-              rows={2}
-              className="w-full px-3 py-2 rounded-lg border border-border text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/20 bg-background" />
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs font-medium text-muted-foreground mb-1 block">خلفية الرأس</label>
-              <div className="flex items-center gap-2">
-                <input type="color" value={form.headerBg} onChange={(e) => updateField("headerBg", e.target.value)}
-                  className="w-8 h-8 rounded-lg border border-border cursor-pointer" />
-                <input type="text" value={form.headerBg} onChange={(e) => updateField("headerBg", e.target.value)}
-                  className="flex-1 px-2 py-1.5 rounded-lg border border-border text-xs font-mono bg-background" dir="ltr" />
-              </div>
-            </div>
-            <div>
-              <label className="text-xs font-medium text-muted-foreground mb-1 block">نص الرأس</label>
-              <div className="flex items-center gap-2">
-                <input type="color" value={form.headerText} onChange={(e) => updateField("headerText", e.target.value)}
-                  className="w-8 h-8 rounded-lg border border-border cursor-pointer" />
-                <input type="text" value={form.headerText} onChange={(e) => updateField("headerText", e.target.value)}
-                  className="flex-1 px-2 py-1.5 rounded-lg border border-border text-xs font-mono bg-background" dir="ltr" />
-              </div>
-            </div>
-            <div>
-              <label className="text-xs font-medium text-muted-foreground mb-1 block">اللون المميز</label>
-              <div className="flex items-center gap-2">
-                <input type="color" value={form.accent} onChange={(e) => updateField("accent", e.target.value)}
-                  className="w-8 h-8 rounded-lg border border-border cursor-pointer" />
-                <input type="text" value={form.accent} onChange={(e) => updateField("accent", e.target.value)}
-                  className="flex-1 px-2 py-1.5 rounded-lg border border-border text-xs font-mono bg-background" dir="ltr" />
-              </div>
-            </div>
-            <div>
-              <label className="text-xs font-medium text-muted-foreground mb-1 block">لون الحدود</label>
-              <div className="flex items-center gap-2">
-                <input type="color" value={form.borderColor} onChange={(e) => updateField("borderColor", e.target.value)}
-                  className="w-8 h-8 rounded-lg border border-border cursor-pointer" />
-                <input type="text" value={form.borderColor} onChange={(e) => updateField("borderColor", e.target.value)}
-                  className="flex-1 px-2 py-1.5 rounded-lg border border-border text-xs font-mono bg-background" dir="ltr" />
-              </div>
-            </div>
-            <div>
-              <label className="text-xs font-medium text-muted-foreground mb-1 block">خلفية المحتوى</label>
-              <div className="flex items-center gap-2">
-                <input type="color" value={form.bodyBg} onChange={(e) => updateField("bodyBg", e.target.value)}
-                  className="w-8 h-8 rounded-lg border border-border cursor-pointer" />
-                <input type="text" value={form.bodyBg} onChange={(e) => updateField("bodyBg", e.target.value)}
-                  className="flex-1 px-2 py-1.5 rounded-lg border border-border text-xs font-mono bg-background" dir="ltr" />
-              </div>
-            </div>
-            <div>
-              <label className="text-xs font-medium text-muted-foreground mb-1 block">الخط</label>
-              <select value={form.fontFamily} onChange={(e) => updateField("fontFamily", e.target.value)}
-                className="w-full px-2 py-1.5 rounded-lg border border-border text-xs bg-background">
-                {FONT_OPTIONS.map((f) => (
-                  <option key={f.value} value={f.value}>{f.label}</option>
+          {activeTab === 'colors' && (
+            <>
+              <div className="grid grid-cols-2 gap-3">
+                {[
+                  { field: "headerBg" as const, label: "خلفية الرأس" },
+                  { field: "headerText" as const, label: "نص الرأس" },
+                  { field: "accent" as const, label: "اللون المميز" },
+                  { field: "borderColor" as const, label: "لون الحدود" },
+                  { field: "bodyBg" as const, label: "خلفية المحتوى" },
+                ].map(({ field, label }) => (
+                  <div key={field}>
+                    <label className="text-xs font-medium text-muted-foreground mb-1 block">{label}</label>
+                    <div className="flex items-center gap-2">
+                      <input type="color" value={form[field] as string} onChange={(e) => updateField(field, e.target.value)}
+                        className="w-8 h-8 rounded-lg border border-border cursor-pointer" />
+                      <input type="text" value={form[field] as string} onChange={(e) => updateField(field, e.target.value)}
+                        className="flex-1 px-2 py-1.5 rounded-lg border border-border text-xs font-mono bg-background" dir="ltr" />
+                    </div>
+                  </div>
                 ))}
-              </select>
-            </div>
-          </div>
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground mb-1 block">الخط</label>
+                  <select value={form.fontFamily} onChange={(e) => updateField("fontFamily", e.target.value)}
+                    className="w-full px-2 py-2 rounded-lg border border-border text-xs bg-background">
+                    {FONT_OPTIONS.map((f) => (
+                      <option key={f.value} value={f.value}>{f.label}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </>
+          )}
 
-          <div>
-            <label className="text-xs font-medium text-muted-foreground mb-1 block">رابط صورة الغلاف (اختياري)</label>
-            <input type="url" value={form.coverImageUrl} onChange={(e) => updateField("coverImageUrl", e.target.value)}
-              placeholder="https://example.com/cover.jpg" dir="ltr"
-              className="w-full px-3 py-2 rounded-lg border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 bg-background" />
-          </div>
+          {activeTab === 'layout' && (
+            <>
+              <div>
+                <label className="text-xs font-medium text-muted-foreground mb-2 block">نمط الترويسة</label>
+                <div className="space-y-2">
+                  {HEADER_STYLES.map(hs => (
+                    <button
+                      key={hs.value}
+                      onClick={() => updateLayout("headerStyle", hs.value)}
+                      className={`w-full text-right px-3 py-2.5 rounded-lg border text-sm transition-all ${
+                        layout.headerStyle === hs.value
+                          ? 'border-primary bg-primary/5 text-foreground'
+                          : 'border-border hover:border-primary/30 text-muted-foreground'
+                      }`}
+                    >
+                      <div className="font-medium text-xs">{hs.label}</div>
+                      <div className="text-[10px] mt-0.5 opacity-70">{hs.desc}</div>
+                    </button>
+                  ))}
+                </div>
+              </div>
 
-          <div>
-            <label className="text-xs font-medium text-muted-foreground mb-1 block">رابط الشعار (اختياري)</label>
-            <input type="url" value={form.logoUrl} onChange={(e) => updateField("logoUrl", e.target.value)}
-              placeholder="https://example.com/logo.png" dir="ltr"
-              className="w-full px-3 py-2 rounded-lg border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 bg-background" />
-          </div>
+              <div>
+                <label className="text-xs font-medium text-muted-foreground mb-2 block">نمط الحقول</label>
+                <div className="grid grid-cols-2 gap-2">
+                  {FIELD_STYLES.map(fs => (
+                    <button
+                      key={fs.value}
+                      onClick={() => updateLayout("fieldStyle", fs.value)}
+                      className={`text-right px-3 py-2.5 rounded-lg border text-sm transition-all ${
+                        layout.fieldStyle === fs.value
+                          ? 'border-primary bg-primary/5 text-foreground'
+                          : 'border-border hover:border-primary/30 text-muted-foreground'
+                      }`}
+                    >
+                      <div className="font-medium text-xs">{fs.label}</div>
+                      <div className="text-[10px] mt-0.5 opacity-70">{fs.desc}</div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </>
+          )}
 
-          <div className="flex items-center gap-4">
+          {activeTab === 'images' && (
+            <>
+              <ImageUploadField
+                label="صورة الغلاف / الخلفية (اختياري)"
+                value={form.coverImageUrl}
+                onChange={(url) => updateField("coverImageUrl", url)}
+                onUpload={onUploadImage}
+                isUploading={isUploading}
+                imageType="cover"
+              />
+              <ImageUploadField
+                label="شعار وزارة التعليم / المدرسة (اختياري)"
+                value={form.logoUrl}
+                onChange={(url) => updateField("logoUrl", url)}
+                onUpload={onUploadImage}
+                isUploading={isUploading}
+                imageType="logo"
+              />
+            </>
+          )}
+
+          {/* Options */}
+          <div className="flex items-center gap-4 pt-2 border-t border-border">
             <label className="flex items-center gap-2 text-sm cursor-pointer">
               <input type="checkbox" checked={form.isDefault} onChange={(e) => updateField("isDefault", e.target.checked)}
                 className="rounded border-border" />
@@ -446,52 +697,124 @@ function TemplateEditor({
         <div>
           <label className="text-xs font-medium text-muted-foreground mb-2 block">معاينة حية</label>
           <div className="border border-border rounded-xl overflow-hidden shadow-lg" style={{ fontFamily: form.fontFamily }}>
-            {/* Cover Preview */}
-            <div className="h-32 relative flex items-center justify-center" style={{ backgroundColor: form.headerBg }}>
+            {/* Header Preview based on headerStyle */}
+            <div className="relative" style={{ backgroundColor: form.headerBg }}>
               {form.coverImageUrl && (
                 <img src={form.coverImageUrl} alt="" className="absolute inset-0 w-full h-full object-cover opacity-20" />
               )}
-              <div className="relative text-center z-10">
-                {form.logoUrl && <img src={form.logoUrl} alt="" className="w-10 h-10 rounded-lg mx-auto mb-2 object-contain bg-white/20 p-0.5" />}
-                <h3 className="text-sm font-bold" style={{ color: form.headerText }}>شواهد الأداء الوظيفي</h3>
-                <p className="text-[10px] mt-0.5" style={{ color: form.headerText + 'CC' }}>العام الدراسي 1447هـ</p>
-              </div>
+              {layout.headerStyle === 1 && (
+                <div className="relative z-10 flex items-center justify-between px-4 py-3">
+                  <div className="text-right">
+                    <p className="text-[9px] font-bold" style={{ color: form.headerText }}>المملكة العربية السعودية</p>
+                    <p className="text-[8px]" style={{ color: form.headerText + 'CC' }}>وزارة التعليم</p>
+                    <p className="text-[8px]" style={{ color: form.headerText + 'CC' }}>الإدارة العامة للتعليم</p>
+                  </div>
+                  <div className="text-center">
+                    {form.logoUrl ? (
+                      <img src={form.logoUrl} alt="" className="w-10 h-10 rounded-lg mx-auto object-contain bg-white/20 p-0.5" />
+                    ) : (
+                      <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center mx-auto">
+                        <FileText className="w-5 h-5" style={{ color: form.headerText }} />
+                      </div>
+                    )}
+                  </div>
+                  <div className="text-left">
+                    <p className="text-[9px] font-bold" style={{ color: form.headerText }}>الفصل الدراسي: ...</p>
+                    <p className="text-[8px]" style={{ color: form.headerText + 'CC' }}>العام الدراسي: ...</p>
+                  </div>
+                </div>
+              )}
+              {layout.headerStyle === 2 && (
+                <div className="relative z-10 flex items-center justify-between px-4 py-3">
+                  <div className="text-right flex-1">
+                    <p className="text-[9px] font-bold" style={{ color: form.headerText }}>المملكة العربية السعودية</p>
+                    <p className="text-[8px]" style={{ color: form.headerText + 'CC' }}>وزارة التعليم</p>
+                  </div>
+                  <div>
+                    {form.logoUrl ? (
+                      <img src={form.logoUrl} alt="" className="w-10 h-10 rounded-lg object-contain bg-white/20 p-0.5" />
+                    ) : (
+                      <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center">
+                        <FileText className="w-5 h-5" style={{ color: form.headerText }} />
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+              {layout.headerStyle === 3 && (
+                <div className="relative z-10 text-center py-4">
+                  {form.logoUrl ? (
+                    <img src={form.logoUrl} alt="" className="w-10 h-10 rounded-lg mx-auto object-contain bg-white/20 p-0.5 mb-1" />
+                  ) : (
+                    <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center mx-auto mb-1">
+                      <FileText className="w-5 h-5" style={{ color: form.headerText }} />
+                    </div>
+                  )}
+                  <p className="text-[10px] font-bold" style={{ color: form.headerText }}>شواهد الأداء الوظيفي</p>
+                  <p className="text-[8px]" style={{ color: form.headerText + 'CC' }}>العام الدراسي 1447هـ</p>
+                </div>
+              )}
+              {layout.headerStyle === 4 && (
+                <div className="relative z-10 px-4 py-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-[9px] font-bold" style={{ color: form.headerText }}>المملكة العربية السعودية</p>
+                    <p className="text-[9px] font-bold" style={{ color: form.headerText }}>الفصل الدراسي: ...</p>
+                  </div>
+                  <div className="text-center">
+                    {form.logoUrl && <img src={form.logoUrl} alt="" className="w-8 h-8 rounded mx-auto object-contain bg-white/20 p-0.5" />}
+                    <p className="text-[8px] mt-1" style={{ color: form.headerText + 'CC' }}>وزارة التعليم</p>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Content Preview */}
             <div className="p-4 space-y-3" style={{ backgroundColor: form.bodyBg }}>
-              {/* Section Header */}
               <div className="rounded-lg p-2.5" style={{ backgroundColor: form.accent + '15', borderRight: `3px solid ${form.accent}` }}>
                 <h4 className="text-xs font-bold" style={{ color: form.accent }}>المعيار الأول: أداء الواجبات</h4>
               </div>
 
-              {/* Evidence Card */}
-              <div className="rounded-lg p-3 border" style={{ borderColor: form.borderColor, backgroundColor: form.bodyBg }}>
-                <div className="flex items-center gap-2 mb-2">
-                  <div className="w-5 h-5 rounded-full flex items-center justify-center text-[8px] font-bold text-white" style={{ backgroundColor: form.accent }}>1</div>
-                  <span className="text-xs font-medium">البند 1.1: الالتزام بالحضور</span>
+              {/* Field Style Preview */}
+              {layout.fieldStyle === 'table' && (
+                <div className="rounded-lg overflow-hidden border" style={{ borderColor: form.borderColor }}>
+                  <table className="w-full text-[9px]">
+                    <tbody>
+                      <tr>
+                        <td className="px-2 py-1.5 font-bold" style={{ backgroundColor: form.accent + '15', color: form.accent, width: '35%' }}>اسم المعلم</td>
+                        <td className="px-2 py-1.5 bg-white">أحمد محمد</td>
+                      </tr>
+                      <tr>
+                        <td className="px-2 py-1.5 font-bold border-t" style={{ backgroundColor: form.accent + '15', color: form.accent, borderColor: form.borderColor }}>المادة</td>
+                        <td className="px-2 py-1.5 bg-white border-t" style={{ borderColor: form.borderColor }}>الرياضيات</td>
+                      </tr>
+                    </tbody>
+                  </table>
                 </div>
-                <div className="bg-gray-50 rounded p-2">
-                  <p className="text-[10px] text-gray-600">نموذج شاهد - صورة أو نص أو رابط</p>
-                </div>
-              </div>
-
-              {/* Score Table Preview */}
-              <div className="rounded-lg overflow-hidden border" style={{ borderColor: form.borderColor }}>
-                <div className="px-3 py-1.5 text-[10px] font-bold" style={{ backgroundColor: form.headerBg, color: form.headerText }}>
-                  جدول التقييم
-                </div>
-                <div className="p-2 space-y-1">
-                  <div className="flex justify-between text-[9px]">
-                    <span>المعيار الأول</span>
-                    <span className="font-bold" style={{ color: form.accent }}>4/5</span>
+              )}
+              {layout.fieldStyle === 'cards' && (
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="rounded-lg p-2 border" style={{ borderColor: form.borderColor, background: `linear-gradient(135deg, ${form.accent}08, ${form.accent}15)` }}>
+                    <div className="text-[8px] font-bold mb-0.5" style={{ color: form.accent }}>اسم المعلم</div>
+                    <div className="text-[9px]">أحمد محمد</div>
                   </div>
-                  <div className="flex justify-between text-[9px]">
-                    <span>المعيار الثاني</span>
-                    <span className="font-bold" style={{ color: form.accent }}>5/5</span>
+                  <div className="rounded-lg p-2 border" style={{ borderColor: form.borderColor, background: `linear-gradient(135deg, ${form.accent}08, ${form.accent}15)` }}>
+                    <div className="text-[8px] font-bold mb-0.5" style={{ color: form.accent }}>المادة</div>
+                    <div className="text-[9px]">الرياضيات</div>
                   </div>
                 </div>
-              </div>
+              )}
+              {(layout.fieldStyle === 'fieldset' || layout.fieldStyle === 'underlined' || layout.fieldStyle === 'minimal') && (
+                <div className="grid grid-cols-2 gap-2">
+                  <div className={`p-2 ${layout.fieldStyle === 'underlined' ? 'border-b-2' : 'border rounded-lg'}`} style={{ borderColor: form.accent + '50' }}>
+                    <div className="text-[8px] font-bold mb-0.5" style={{ color: form.accent }}>اسم المعلم</div>
+                    <div className="text-[9px]">أحمد محمد</div>
+                  </div>
+                  <div className={`p-2 ${layout.fieldStyle === 'underlined' ? 'border-b-2' : 'border rounded-lg'}`} style={{ borderColor: form.accent + '50' }}>
+                    <div className="text-[8px] font-bold mb-0.5" style={{ color: form.accent }}>المادة</div>
+                    <div className="text-[9px]">الرياضيات</div>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Footer Preview */}
