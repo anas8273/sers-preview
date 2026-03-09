@@ -104,7 +104,7 @@ function EvidenceCard({ ev }: { ev: any }) {
         <div className="mt-3 bg-blue-50/50 rounded-lg p-3 border border-blue-100/50">
           <div className="grid grid-cols-1 gap-2">
             {Object.entries(ev.formData).filter(([, v]) => v).map(([key, val]) => {
-              const fieldLabel = key === 'evidence_desc' ? 'وصف الشاهد' : key === 'date' ? 'التاريخ' : key === 'notes' ? 'ملاحظات' : key;
+              const fieldLabel = key === 'report_title' ? 'عنوان التقرير' : key === 'evidence_desc' ? 'وصف الشاهد' : key === 'date' ? 'التاريخ' : key === 'notes' ? 'ملاحظات' : key === 'title' ? 'العنوان' : key === 'details' ? 'التفاصيل' : key === 'content' ? 'المحتوى' : key;
               return (
                 <div key={key} className="flex items-start gap-2">
                   <span className="text-gray-500 text-[10px] font-medium shrink-0 mt-0.5 min-w-[60px]">{fieldLabel}:</span>

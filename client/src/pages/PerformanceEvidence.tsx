@@ -76,6 +76,7 @@ function makeSimpleCriteria(prefix: string, items: { id: string; title: string; 
     subEvidences: [{
       id: `${prefix}_${item.id}_sub`, title: item.subTitle, description: item.desc, type: "both" as const,
       formFields: item.formFields || [
+        { id: "report_title", label: "عنوان التقرير / اسم البرنامج", type: "text" as const, placeholder: "أدخل عنوان التقرير أو اسم البرنامج..." },
         { id: "title", label: "العنوان", type: "text" as const, placeholder: "أدخل العنوان..." },
         { id: "date", label: "التاريخ", type: "date" as const },
         { id: "details", label: "التفاصيل", type: "textarea" as const, placeholder: "أدخل التفاصيل..." },
@@ -99,6 +100,7 @@ function buildStandardsCriteria(standards: Standard[]): Criterion[] {
         description: item.suggestedEvidence.join(" \u00B7 "),
         type: "both" as const,
         formFields: [
+          { id: "report_title", label: "\u0639\u0646\u0648\u0627\u0646 \u0627\u0644\u062A\u0642\u0631\u064A\u0631 / \u0627\u0633\u0645 \u0627\u0644\u0628\u0631\u0646\u0627\u0645\u062C", type: "text" as const, placeholder: "\u0623\u062F\u062E\u0644 \u0639\u0646\u0648\u0627\u0646 \u0627\u0644\u062A\u0642\u0631\u064A\u0631 \u0623\u0648 \u0627\u0633\u0645 \u0627\u0644\u0628\u0631\u0646\u0627\u0645\u062C..." },
           { id: "evidence_desc", label: "\u0648\u0635\u0641 \u0627\u0644\u0634\u0627\u0647\u062F", type: "textarea" as const, placeholder: "\u0627\u0643\u062A\u0628 \u0648\u0635\u0641\u0627\u064B \u0644\u0644\u0634\u0627\u0647\u062F \u0627\u0644\u0645\u0642\u062F\u0645..." },
           { id: "date", label: "\u0627\u0644\u062A\u0627\u0631\u064A\u062E", type: "date" as const },
           { id: "notes", label: "\u0645\u0644\u0627\u062D\u0638\u0627\u062A", type: "textarea" as const, placeholder: "\u0645\u0644\u0627\u062D\u0638\u0627\u062A \u0625\u0636\u0627\u0641\u064A\u0629..." },
@@ -112,6 +114,7 @@ function buildStandardsCriteria(standards: Standard[]): Criterion[] {
         isSubItem: true,
         parentTitle: item.text,
         formFields: [
+          { id: "report_title", label: "\u0639\u0646\u0648\u0627\u0646 \u0627\u0644\u062A\u0642\u0631\u064A\u0631 / \u0627\u0633\u0645 \u0627\u0644\u0628\u0631\u0646\u0627\u0645\u062C", type: "text" as const, placeholder: "\u0623\u062F\u062E\u0644 \u0639\u0646\u0648\u0627\u0646 \u0627\u0644\u062A\u0642\u0631\u064A\u0631 \u0623\u0648 \u0627\u0633\u0645 \u0627\u0644\u0628\u0631\u0646\u0627\u0645\u062C..." },
           { id: "evidence_desc", label: "\u0648\u0635\u0641 \u0627\u0644\u0634\u0627\u0647\u062F", type: "textarea" as const, placeholder: "\u0627\u0643\u062A\u0628 \u0648\u0635\u0641\u0627\u064B \u0644\u0644\u0634\u0627\u0647\u062F \u0627\u0644\u0645\u0642\u062F\u0645..." },
           { id: "date", label: "\u0627\u0644\u062A\u0627\u0631\u064A\u062E", type: "date" as const },
           { id: "notes", label: "\u0645\u0644\u0627\u062D\u0638\u0627\u062A", type: "textarea" as const, placeholder: "\u0645\u0644\u0627\u062D\u0638\u0627\u062A \u0625\u0636\u0627\u0641\u064A\u0629..." },
@@ -665,7 +668,10 @@ export default function PerformanceEvidence() {
     const newSub: SubEvidence = {
       id: `custom_${Date.now()}`, title: newSubTitle.trim(),
       description: "قسم فرعي مخصص", type: "both", isCustom: true,
-      formFields: [{ id: "content", label: "المحتوى", type: "textarea", placeholder: "أدخل المحتوى..." }],
+      formFields: [
+        { id: "report_title", label: "عنوان التقرير / اسم البرنامج", type: "text", placeholder: "أدخل عنوان التقرير أو اسم البرنامج..." },
+        { id: "content", label: "المحتوى", type: "textarea", placeholder: "أدخل المحتوى..." },
+      ],
     };
     setCriteriaData((prev) => ({
       ...prev,
@@ -680,7 +686,10 @@ export default function PerformanceEvidence() {
     const newCriterion: Criterion = {
       id: `custom_main_${Date.now()}`, title: newMainSectionTitle.trim(), maxScore: 5,
       description: newMainSectionDesc.trim() || "قسم رئيسي مخصص",
-      subEvidences: [{ id: `custom_main_${Date.now()}_sub1`, title: "شاهد عام", description: "شاهد عام", type: "both", formFields: [{ id: "content", label: "المحتوى", type: "textarea", placeholder: "أدخل التفاصيل..." }] }],
+      subEvidences: [{ id: `custom_main_${Date.now()}_sub1`, title: "شاهد عام", description: "شاهد عام", type: "both", formFields: [
+        { id: "report_title", label: "عنوان التقرير / اسم البرنامج", type: "text", placeholder: "أدخل عنوان التقرير أو اسم البرنامج..." },
+        { id: "content", label: "المحتوى", type: "textarea", placeholder: "أدخل التفاصيل..." },
+      ] }],
     };
     setCustomCriteria(prev => [...prev, newCriterion]);
     setCriteriaData(prev => ({ ...prev, [newCriterion.id]: { score: 0, notes: "", evidences: [], customSubEvidences: [] } }));
@@ -4094,7 +4103,7 @@ export default function PerformanceEvidence() {
                                       {Object.entries(ev.formData).filter(([, v]) => v).map(([key, val], fi, arr) => {
                                         // البحث عن اسم الحقل الفعلي من formFields
                                         const matchedField = formFields?.find(f => f.id === key);
-                                        const fieldLabel = matchedField?.label || (key === 'evidence_desc' ? 'وصف الشاهد' : key === 'date' ? 'التاريخ' : key === 'notes' ? 'ملاحظات' : key === 'title' ? 'العنوان' : key === 'details' ? 'التفاصيل' : key === 'content' ? 'المحتوى' : key);
+                                        const fieldLabel = matchedField?.label || (key === 'report_title' ? 'عنوان التقرير' : key === 'evidence_desc' ? 'وصف الشاهد' : key === 'date' ? 'التاريخ' : key === 'notes' ? 'ملاحظات' : key === 'title' ? 'العنوان' : key === 'details' ? 'التفاصيل' : key === 'content' ? 'المحتوى' : key);
                                         return (
                                           <tr key={key} style={{ borderBottom: fi < arr.length - 1 ? '1px solid #f0f0f0' : 'none' }}>
                                             <td style={{ padding: '6px 8px', fontSize: '0.7rem', fontWeight: 600, color: theme.accent, width: '110px', verticalAlign: 'top' }}>{fieldLabel}</td>
