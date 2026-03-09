@@ -14,6 +14,8 @@ async function getBrowser() {
       "--disable-dev-shm-usage",
       "--disable-gpu",
       "--font-render-hinting=none",
+      "--disable-lcd-text",
+      "--enable-font-antialiasing",
     ],
   });
   return browserInstance;
@@ -22,6 +24,7 @@ async function getBrowser() {
 /**
  * تحويل HTML إلى PDF باستخدام Puppeteer
  * يدعم اللغة العربية بشكل كامل لأن Chromium يعرض النص بشكل صحيح
+ * جودة عالية جداً مع خطوط واضحة وإطارات حادة
  */
 export async function renderHtmlToPdf(
   htmlContent: string,
@@ -37,19 +40,23 @@ export async function renderHtmlToPdf(
   const page = await browser.newPage();
 
   try {
-    // تعيين viewport بحجم A4
-    await page.setViewport({ width: 794, height: 1123 });
+    // تعيين viewport بحجم A4 بدقة عالية (2x)
+    await page.setViewport({ width: 794, height: 1123, deviceScaleFactor: 2 });
 
     // تحميل HTML مع الخطوط العربية
     const fullHtml = wrapWithFonts(htmlContent);
     await page.setContent(fullHtml, {
       waitUntil: ["networkidle0", "domcontentloaded"],
-      timeout: 30000,
+      timeout: 45000,
     });
 
     // انتظار تحميل الخطوط
     await page.evaluate(() => document.fonts.ready);
-    // انتظار إضافي لتحميل الصور
+    
+    // انتظار إضافي لضمان تحميل الخطوط العربية
+    await new Promise(resolve => setTimeout(resolve, 1500));
+    
+    // انتظار تحميل الصور
     await page.evaluate(() => {
       return new Promise<void>((resolve) => {
         const images = document.querySelectorAll("img");
@@ -66,11 +73,11 @@ export async function renderHtmlToPdf(
           }
         });
         // Timeout fallback
-        setTimeout(resolve, 5000);
+        setTimeout(resolve, 8000);
       });
     });
 
-    // إنشاء PDF
+    // إنشاء PDF بجودة عالية
     const pdfBuffer = await page.pdf({
       format: options?.format || "A4",
       landscape: options?.landscape || false,
@@ -88,6 +95,7 @@ export async function renderHtmlToPdf(
 
 /**
  * تغليف HTML بالخطوط العربية والأنماط الأساسية
+ * يستخدم خطوط Tajawal و Cairo مع أنماط طباعة عالية الجودة
  */
 function wrapWithFonts(html: string): string {
   return `<!DOCTYPE html>
@@ -97,7 +105,7 @@ function wrapWithFonts(html: string): string {
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@200..1000&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@200..1000&family=Tajawal:wght@200;300;400;500;700;800;900&display=swap" rel="stylesheet">
   <style>
     @page {
       size: A4;
@@ -109,13 +117,19 @@ function wrapWithFonts(html: string): string {
       box-sizing: border-box;
     }
     html, body {
-      font-family: 'Cairo', 'Tajawal', 'Arial', sans-serif;
+      font-family: 'Tajawal', 'Cairo', 'Arial', sans-serif;
       direction: rtl;
       text-align: right;
       -webkit-print-color-adjust: exact;
       print-color-adjust: exact;
       color-adjust: exact;
       background: white;
+      font-size: 14px;
+      line-height: 1.6;
+      color: #1a1a1a;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      text-rendering: optimizeLegibility;
     }
     body {
       width: 210mm;
@@ -131,7 +145,6 @@ function wrapWithFonts(html: string): string {
       position: relative;
       overflow: hidden;
       background: white;
-      /* لا نفرض display/flex-direction هنا لأن inline styles تحددها حسب القالب */
     }
     .pdf-page:last-child {
       page-break-after: auto;
@@ -140,14 +153,31 @@ function wrapWithFonts(html: string): string {
     button, [data-no-print] {
       display: none !important;
     }
-    /* ضمان عرض الصور */
+    /* ضمان عرض الصور بجودة عالية */
     img {
       max-width: 100%;
       display: inline-block;
+      image-rendering: -webkit-optimize-contrast;
     }
     /* ضمان عرض الجداول */
     table {
       border-collapse: collapse;
+    }
+    /* تحسين جودة الحدود والإطارات */
+    td, th {
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+    /* تحسين الخطوط في الطباعة */
+    h1, h2, h3, h4, h5, h6 {
+      font-family: 'Tajawal', 'Cairo', sans-serif;
+      font-weight: 700;
+    }
+    /* تحسين النقاط والخطوط */
+    hr, .separator {
+      border: none;
+      height: 2px;
+      background: currentColor;
     }
   </style>
 </head>
