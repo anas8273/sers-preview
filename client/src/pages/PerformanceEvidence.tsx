@@ -76,7 +76,7 @@ function makeSimpleCriteria(prefix: string, items: { id: string; title: string; 
     subEvidences: [{
       id: `${prefix}_${item.id}_sub`, title: item.subTitle, description: item.desc, type: "both" as const,
       formFields: item.formFields || [
-        { id: "report_title", label: "عنوان التقرير / اسم البرنامج", type: "text" as const, placeholder: "أدخل عنوان التقرير أو اسم البرنامج..." },
+        { id: "report_title", label: "الموضوع", type: "text" as const, placeholder: "أدخل موضوع الشاهد..." },
         { id: "title", label: "العنوان", type: "text" as const, placeholder: "أدخل العنوان..." },
         { id: "date", label: "التاريخ", type: "date" as const },
         { id: "details", label: "التفاصيل", type: "textarea" as const, placeholder: "أدخل التفاصيل..." },
@@ -100,7 +100,7 @@ function buildStandardsCriteria(standards: Standard[]): Criterion[] {
         description: item.suggestedEvidence.join(" \u00B7 "),
         type: "both" as const,
         formFields: [
-          { id: "report_title", label: "\u0639\u0646\u0648\u0627\u0646 \u0627\u0644\u062A\u0642\u0631\u064A\u0631 / \u0627\u0633\u0645 \u0627\u0644\u0628\u0631\u0646\u0627\u0645\u062C", type: "text" as const, placeholder: "\u0623\u062F\u062E\u0644 \u0639\u0646\u0648\u0627\u0646 \u0627\u0644\u062A\u0642\u0631\u064A\u0631 \u0623\u0648 \u0627\u0633\u0645 \u0627\u0644\u0628\u0631\u0646\u0627\u0645\u062C..." },
+          { id: "report_title", label: "الموضوع", type: "text" as const, placeholder: "أدخل موضوع الشاهد..." },
           { id: "evidence_desc", label: "\u0648\u0635\u0641 \u0627\u0644\u0634\u0627\u0647\u062F", type: "textarea" as const, placeholder: "\u0627\u0643\u062A\u0628 \u0648\u0635\u0641\u0627\u064B \u0644\u0644\u0634\u0627\u0647\u062F \u0627\u0644\u0645\u0642\u062F\u0645..." },
           { id: "date", label: "\u0627\u0644\u062A\u0627\u0631\u064A\u062E", type: "date" as const },
           { id: "notes", label: "\u0645\u0644\u0627\u062D\u0638\u0627\u062A", type: "textarea" as const, placeholder: "\u0645\u0644\u0627\u062D\u0638\u0627\u062A \u0625\u0636\u0627\u0641\u064A\u0629..." },
@@ -114,7 +114,7 @@ function buildStandardsCriteria(standards: Standard[]): Criterion[] {
         isSubItem: true,
         parentTitle: item.text,
         formFields: [
-          { id: "report_title", label: "\u0639\u0646\u0648\u0627\u0646 \u0627\u0644\u062A\u0642\u0631\u064A\u0631 / \u0627\u0633\u0645 \u0627\u0644\u0628\u0631\u0646\u0627\u0645\u062C", type: "text" as const, placeholder: "\u0623\u062F\u062E\u0644 \u0639\u0646\u0648\u0627\u0646 \u0627\u0644\u062A\u0642\u0631\u064A\u0631 \u0623\u0648 \u0627\u0633\u0645 \u0627\u0644\u0628\u0631\u0646\u0627\u0645\u062C..." },
+          { id: "report_title", label: "الموضوع", type: "text" as const, placeholder: "أدخل موضوع الشاهد..." },
           { id: "evidence_desc", label: "\u0648\u0635\u0641 \u0627\u0644\u0634\u0627\u0647\u062F", type: "textarea" as const, placeholder: "\u0627\u0643\u062A\u0628 \u0648\u0635\u0641\u0627\u064B \u0644\u0644\u0634\u0627\u0647\u062F \u0627\u0644\u0645\u0642\u062F\u0645..." },
           { id: "date", label: "\u0627\u0644\u062A\u0627\u0631\u064A\u062E", type: "date" as const },
           { id: "notes", label: "\u0645\u0644\u0627\u062D\u0638\u0627\u062A", type: "textarea" as const, placeholder: "\u0645\u0644\u0627\u062D\u0638\u0627\u062A \u0625\u0636\u0627\u0641\u064A\u0629..." },
@@ -207,79 +207,18 @@ interface ThemeConfig {
   coverAccent2?: string;     // لون ثانوي للغلاف
 }
 
-// ===== الثيمات - كل ثيم له تنسيق مختلف فعلياً (ترتيب + تخطيط + حقول + توقيعات) =====
-const THEMES: ThemeConfig[] = [
-  // === تصاميم الهوية البصرية لوزارة التعليم (من ملف PDF) ===
-  
-  // التصميم 1: رسمي - جدول (ترويسة داكنة + جدول حقول + غلاف متدرج مركزي)
-  { id: "identity-dark-table", name: "رسمي - جدول",
-    layoutType: 'dark-header-table',
-    headerBg: "linear-gradient(135deg, #1B3A5C, #1A4A6B, #1E5A7A)", headerText: "#fff",
-    accent: "#1A6B7A", borderColor: "#1B3A5C",
-    titleBg: "#1A6B7A", fieldLabelBg: "#1A6B7A",
-    footerBg: "linear-gradient(to left, #1B3A5C, #1A6B7A, #2E9E8B)",
-    tableStyle: true, titleStyle: 'rounded', showTopLine: true, showBottomBar: true,
-    fieldStyle: 'table', signatureStyle: 'boxed',
-    coverStyle: 'gradient-center', sectionCoverStyle: 'full-gradient', coverAccent2: '#2E9E8B' },
-
-  // التصميم 2: حديث - مجموعات (ترويسة داكنة + fieldset + غلاف مقسوم)
-  { id: "identity-dark-fieldset", name: "حديث - مجموعات",
-    layoutType: 'dark-header-simple',
-    headerBg: "linear-gradient(135deg, #1B3A5C, #1A4A6B, #1E5A7A)", headerText: "#fff",
-    accent: "#1A6B7A", borderColor: "#1B3A5C",
-    titleBg: "#1A6B7A", fieldLabelBg: "#1A6B7A",
-    footerBg: "linear-gradient(to left, #1B3A5C, #1A6B7A, #2E9E8B)",
-    tableStyle: false, titleStyle: 'full-width', showTopLine: true, showBottomBar: true,
-    fieldStyle: 'fieldset', signatureStyle: 'dotted',
-    coverStyle: 'split-left', sectionCoverStyle: 'left-stripe', coverAccent2: '#2E9E8B' },
-
-  // التصميم 3: مميز - شريط جانبي (غلاف قطري + شريط علوي)
-  { id: "identity-white-sidebar", name: "مميز - شريط جانبي",
-    layoutType: 'white-header-sidebar',
-    headerBg: "#ffffff", headerText: "#1B3A5C",
-    accent: "#1A6B7A", borderColor: "#1A6B7A",
-    titleBg: "#1A6B7A", fieldLabelBg: "#1A6B7A",
-    footerBg: "linear-gradient(to left, #1B3A5C, #1A6B7A, #2E9E8B)",
-    tableStyle: false, titleStyle: 'badge', showTopLine: false, showBottomBar: true,
-    sidebarBg: "linear-gradient(to bottom, #1B3A5C, #1A6B7A, #2E9E8B)",
-    fieldStyle: 'fieldset', signatureStyle: 'lined', headerSeparator: true,
-    coverStyle: 'diagonal', sectionCoverStyle: 'top-accent', coverAccent2: '#2E9E8B' },
-
-  // التصميم 4: بطاقات حديثة (غلاف إطار أنيق + بطاقة مركزية)
-  { id: "identity-cards", name: "بطاقات حديثة",
-    layoutType: 'white-header-classic',
-    headerBg: "#ffffff", headerText: "#1B3A5C",
-    accent: "#1A6B7A", borderColor: "#1A6B7A",
-    titleBg: "#1A6B7A", fieldLabelBg: "#1A6B7A",
-    footerBg: "linear-gradient(to left, #1B3A5C, #1A6B7A, #2E9E8B)",
-    tableStyle: false, titleStyle: 'rounded', showTopLine: false, showBottomBar: true,
-    fieldStyle: 'cards', signatureStyle: 'stamped', headerSeparator: false,
-    bodyBg: '#F8FAFB',
-    coverStyle: 'framed-elegant', sectionCoverStyle: 'card-center', coverAccent2: '#2E9E8B' },
-
-  // التصميم 5: كلاسيكي - خطوط (غلاف شريط علوي + شريط مرقم)
-  { id: "identity-white-classic", name: "كلاسيكي - خطوط",
-    layoutType: 'white-header-classic',
-    headerBg: "#ffffff", headerText: "#1B3A5C",
-    accent: "#1A6B7A", borderColor: "#1A6B7A",
-    titleBg: "#1A6B7A", fieldLabelBg: "#1A6B7A",
-    footerBg: "linear-gradient(to left, #1B3A5C, #1A6B7A, #2E9E8B)",
-    tableStyle: false, titleStyle: 'bordered', showTopLine: false, showBottomBar: false,
-    fieldStyle: 'underlined', signatureStyle: 'solid', headerSeparator: false,
-    coverStyle: 'top-bar', sectionCoverStyle: 'numbered-bar', coverAccent2: '#2E9E8B' },
-
-  // التصميم 6: بسيط ونظيف (غلاف خط بسيط + فاصل نظيف)
-  { id: "identity-minimal", name: "بسيط ونظيف",
-    layoutType: 'minimal-clean',
-    headerBg: "#ffffff", headerText: "#1B3A5C",
-    accent: "#1A6B7A", borderColor: "#E5E7EB",
-    titleBg: "#F0FAF5", fieldLabelBg: "#1A6B7A",
-    footerBg: "linear-gradient(to left, #1B3A5C, #1A6B7A, #2E9E8B)",
-    tableStyle: false, titleStyle: 'simple', showTopLine: false, showBottomBar: false,
-    fieldStyle: 'minimal', signatureStyle: 'dotted',
-    coverStyle: 'minimal-line', sectionCoverStyle: 'clean-divider', coverAccent2: '#2E9E8B' },
-
-];
+// ===== القالب الافتراضي (يُستخدم فقط إذا لم تتوفر قوالب من قاعدة البيانات) =====
+const DEFAULT_THEME: ThemeConfig = {
+  id: 'default', name: 'الهوية البصرية - رسمي',
+  layoutType: 'dark-header-table',
+  headerBg: 'linear-gradient(135deg, #1B3A5C, #1A8A6B)', headerText: '#fff',
+  accent: '#1A8A6B', borderColor: '#1B3A5C',
+  titleBg: '#1A6B5A', fieldLabelBg: '#1A6B5A',
+  footerBg: 'linear-gradient(to left, #1B3A5C, #1A8A6B, #3BB89C)',
+  tableStyle: true, titleStyle: 'rounded', showTopLine: true, showBottomBar: true,
+  fieldStyle: 'table', signatureStyle: 'boxed',
+  coverStyle: 'gradient-center', sectionCoverStyle: 'full-gradient', coverAccent2: '#3BB89C',
+};
 
 // ===== إعدادات الأولوية =====
 const PRIORITY_CONFIG: Record<EvidencePriority, { label: string; color: string; bgColor: string; borderColor: string; icon: string }> = {
@@ -366,12 +305,11 @@ export default function PerformanceEvidence() {
   const { isOnline, isSyncing, pendingCount, saveOfflineData, getOfflineData } = useOfflineSync();
   const [step, setStep] = useState<"select" | "dashboard" | "criterion-detail" | "final-review" | "preview">("select");
   const [selectedJob, setSelectedJob] = useState<typeof JOB_TYPES[0] | null>(null);
-  const [selectedTheme, setSelectedTheme] = useState(THEMES[0]);
+  const [selectedTheme, setSelectedTheme] = useState<ThemeConfig>(DEFAULT_THEME);
   // جلب القوالب من قاعدة البيانات
   const { data: dbTemplates } = trpc.templates.list.useQuery(undefined, { staleTime: 60000 });
-  // دمج القوالب المحلية مع قوالب DB
+  // تحويل قوالب DB إلى ThemeConfig (النظام يعتمد 100% على قاعدة البيانات - الإدارة تضيف القوالب)
   const allThemes = useMemo(() => {
-    const local = [...THEMES];
     if (dbTemplates && dbTemplates.length > 0) {
       const dbMapped: ThemeConfig[] = dbTemplates.map((t: any) => {
         const layout = t.templateLayout || {};
@@ -381,13 +319,13 @@ export default function PerformanceEvidence() {
           id: `db-${t.id}`,
           name: t.name,
           layoutType: lt as LayoutType,
-          headerBg: t.headerBg || (isDark ? 'linear-gradient(135deg, #1B3A5C, #1A4A6B, #1E5A7A)' : '#ffffff'),
+          headerBg: t.headerBg || (isDark ? 'linear-gradient(135deg, #1B3A5C, #1A8A6B)' : '#ffffff'),
           headerText: t.headerText || (isDark ? '#fff' : '#1B3A5C'),
-          accent: t.accent || '#1A6B7A',
+          accent: t.accent || '#1A8A6B',
           borderColor: t.borderColor || '#1B3A5C',
-          titleBg: t.accent || '#1A6B7A',
-          fieldLabelBg: t.accent || '#1A6B7A',
-          footerBg: `linear-gradient(to left, ${t.borderColor || '#1B3A5C'}, ${t.accent || '#1A6B7A'})`,
+          titleBg: t.accent || '#1A6B5A',
+          fieldLabelBg: t.accent || '#1A6B5A',
+          footerBg: `linear-gradient(to left, ${t.borderColor || '#1B3A5C'}, ${t.accent || '#1A8A6B'}, #3BB89C)`,
           tableStyle: (layout.fieldStyle === 'table'),
           titleStyle: (layout.titleStyle || 'rounded') as ThemeConfig['titleStyle'],
           showTopLine: isDark,
@@ -395,13 +333,17 @@ export default function PerformanceEvidence() {
           fieldStyle: (layout.fieldStyle || 'fieldset') as ThemeConfig['fieldStyle'],
           signatureStyle: (['dotted', 'solid', 'boxed', 'lined', 'stamped'].includes(layout.signatureStyle) ? layout.signatureStyle : 'dotted') as ThemeConfig['signatureStyle'],
           bodyBg: t.bodyBg || (lt === 'white-header-light' ? '#F0FAF5' : lt === 'white-header-sidebar' ? '#f8fafc' : undefined),
-          sidebarBg: lt === 'white-header-sidebar' ? `linear-gradient(to bottom, ${t.borderColor || '#1B3A5C'}, ${t.accent || '#1A6B7A'})` : undefined,
+          sidebarBg: lt === 'white-header-sidebar' ? `linear-gradient(to bottom, ${t.borderColor || '#1B3A5C'}, ${t.accent || '#1A8A6B'})` : undefined,
           headerSeparator: lt === 'white-header-sidebar',
+          coverStyle: (layout.coverStyle || 'gradient-center') as ThemeConfig['coverStyle'],
+          sectionCoverStyle: (layout.sectionCoverStyle || 'full-gradient') as ThemeConfig['sectionCoverStyle'],
+          coverAccent2: layout.coverAccent2 || '#3BB89C',
         };
       });
-      return [...local, ...dbMapped];
+      return dbMapped;
     }
-    return local;
+    // إذا لم تتوفر قوالب من DB، استخدم القالب الافتراضي
+    return [DEFAULT_THEME];
   }, [dbTemplates]);
   const [portfolioId, setPortfolioId] = useState<number | null>(null);
   const [currentCriterionIndex, setCurrentCriterionIndex] = useState(0);
@@ -495,8 +437,10 @@ export default function PerformanceEvidence() {
         if (saved.personalInfo) setPersonalInfo(saved.personalInfo);
         if (saved.customCriteria) setCustomCriteria(saved.customCriteria);
         if (saved.themeId) {
-          const theme = THEMES.find(t => t.id === saved.themeId);
+          // محاولة استعادة القالب من allThemes (قوالب DB) أو الافتراضي
+          const theme = allThemes.find(t => t.id === saved.themeId);
           if (theme) setSelectedTheme(theme);
+          else if (saved.themeId === DEFAULT_THEME.id) setSelectedTheme(DEFAULT_THEME);
         }
         // استعادة criteriaData - دمج مع البيانات الافتراضية
         if (saved.criteriaData) {
@@ -669,7 +613,7 @@ export default function PerformanceEvidence() {
       id: `custom_${Date.now()}`, title: newSubTitle.trim(),
       description: "قسم فرعي مخصص", type: "both", isCustom: true,
       formFields: [
-        { id: "report_title", label: "عنوان التقرير / اسم البرنامج", type: "text", placeholder: "أدخل عنوان التقرير أو اسم البرنامج..." },
+        { id: "report_title", label: "الموضوع", type: "text", placeholder: "أدخل موضوع الشاهد..." },
         { id: "content", label: "المحتوى", type: "textarea", placeholder: "أدخل المحتوى..." },
       ],
     };
@@ -687,7 +631,7 @@ export default function PerformanceEvidence() {
       id: `custom_main_${Date.now()}`, title: newMainSectionTitle.trim(), maxScore: 5,
       description: newMainSectionDesc.trim() || "قسم رئيسي مخصص",
       subEvidences: [{ id: `custom_main_${Date.now()}_sub1`, title: "شاهد عام", description: "شاهد عام", type: "both", formFields: [
-        { id: "report_title", label: "عنوان التقرير / اسم البرنامج", type: "text", placeholder: "أدخل عنوان التقرير أو اسم البرنامج..." },
+        { id: "report_title", label: "الموضوع", type: "text", placeholder: "أدخل موضوع الشاهد..." },
         { id: "content", label: "المحتوى", type: "textarea", placeholder: "أدخل التفاصيل..." },
       ] }],
     };
@@ -2203,9 +2147,9 @@ export default function PerformanceEvidence() {
                     ))}
                   </div>
 
-                  {/* حقل عنوان التقرير */}
+                  {/* حقل الموضوع */}
                   <div className="mt-4">
-                    <label className="block text-sm font-medium text-foreground mb-1.5">عنوان التقرير</label>
+                    <label className="block text-sm font-medium text-foreground mb-1.5">الموضوع</label>
                     <input type="text" value={personalInfo.reportTitle}
                       onChange={(e) => setPersonalInfo((prev) => ({ ...prev, reportTitle: e.target.value }))}
                       placeholder="شواهد الأداء الوظيفي"
@@ -2797,7 +2741,7 @@ export default function PerformanceEvidence() {
             const allFields = [...staticFields, ...dynamicFields];
             const shortFields = allFields.filter(f => (f.value?.length || 0) < 80);
             const longFields = allFields.filter(f => (f.value?.length || 0) >= 80);
-            const MOE_LOGO = 'https://d2xsxph8kpxj0f.cloudfront.net/310519663047121386/h34s4aPNVyHXdtjgZ7eNNf/UntiTtled-1-1568x1192_b349f06b.png';
+            const MOE_LOGO = 'https://d2xsxph8kpxj0f.cloudfront.net/310519663047121386/h34s4aPNVyHXdtjgZ7eNNf/UntiTtled-1-1568x1192_bfb97198.png';
             return (
               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 bg-black/60 z-50 flex items-start justify-center p-4 overflow-y-auto">
                 <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
@@ -4103,7 +4047,7 @@ export default function PerformanceEvidence() {
                                       {Object.entries(ev.formData).filter(([, v]) => v).map(([key, val], fi, arr) => {
                                         // البحث عن اسم الحقل الفعلي من formFields
                                         const matchedField = formFields?.find(f => f.id === key);
-                                        const fieldLabel = matchedField?.label || (key === 'report_title' ? 'عنوان التقرير' : key === 'evidence_desc' ? 'وصف الشاهد' : key === 'date' ? 'التاريخ' : key === 'notes' ? 'ملاحظات' : key === 'title' ? 'العنوان' : key === 'details' ? 'التفاصيل' : key === 'content' ? 'المحتوى' : key);
+                                        const fieldLabel = matchedField?.label || (key === 'report_title' ? 'الموضوع' : key === 'evidence_desc' ? 'وصف الشاهد' : key === 'date' ? 'التاريخ' : key === 'notes' ? 'ملاحظات' : key === 'title' ? 'العنوان' : key === 'details' ? 'التفاصيل' : key === 'content' ? 'المحتوى' : key);
                                         return (
                                           <tr key={key} style={{ borderBottom: fi < arr.length - 1 ? '1px solid #f0f0f0' : 'none' }}>
                                             <td style={{ padding: '6px 8px', fontSize: '0.7rem', fontWeight: 600, color: theme.accent, width: '110px', verticalAlign: 'top' }}>{fieldLabel}</td>

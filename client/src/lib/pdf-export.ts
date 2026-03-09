@@ -1,5 +1,5 @@
-import html2canvas from "html2canvas";
 import { jsPDF } from "jspdf";
+import html2canvas from "html2canvas";
 
 export interface PdfTemplate {
   headerBg: string;
@@ -21,69 +21,147 @@ export const DEFAULT_TEMPLATE: PdfTemplate = {
   fontFamily: "Tajawal",
 };
 
+// A4 dimensions in pixels at 96 DPI
+const A4_WIDTH_PX = 794;
+const A4_HEIGHT_PX = 1123;
+
+// Cache for converted images to avoid re-fetching
+const imageDataUrlCache = new Map<string, string>();
+
+/**
+ * تحويل صورة خارجية إلى data URL عبر server proxy
+ * يتجاوز مشاكل CORS بالكامل
+ */
+async function fetchImageAsDataUrl(url: string): Promise<string | null> {
+  // Check cache first
+  if (imageDataUrlCache.has(url)) {
+    return imageDataUrlCache.get(url)!;
+  }
+
+  // Skip data URLs and blob URLs
+  if (url.startsWith("data:") || url.startsWith("blob:")) {
+    return url;
+  }
+
+  try {
+    // Method 1: Try direct fetch first (same-origin images)
+    const directResponse = await fetch(url, { mode: "cors" }).catch(() => null);
+    if (directResponse && directResponse.ok) {
+      const blob = await directResponse.blob();
+      const dataUrl = await blobToDataUrl(blob);
+      imageDataUrlCache.set(url, dataUrl);
+      return dataUrl;
+    }
+  } catch {
+    // Fall through to proxy
+  }
+
+  try {
+    // Method 2: Use server-side proxy to bypass CORS
+    const proxyUrl = `/api/image-proxy?url=${encodeURIComponent(url)}`;
+    const proxyResponse = await fetch(proxyUrl);
+    if (proxyResponse.ok) {
+      const blob = await proxyResponse.blob();
+      const dataUrl = await blobToDataUrl(blob);
+      imageDataUrlCache.set(url, dataUrl);
+      return dataUrl;
+    }
+  } catch {
+    // Fall through to canvas method
+  }
+
+  try {
+    // Method 3: Canvas-based conversion (last resort)
+    const dataUrl = await canvasImageToDataUrl(url);
+    if (dataUrl) {
+      imageDataUrlCache.set(url, dataUrl);
+      return dataUrl;
+    }
+  } catch {
+    // All methods failed
+  }
+
+  return null;
+}
+
+function blobToDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
+
+function canvasImageToDataUrl(url: string): Promise<string | null> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => {
+      try {
+        const canvas = document.createElement("canvas");
+        canvas.width = img.naturalWidth;
+        canvas.height = img.naturalHeight;
+        const ctx = canvas.getContext("2d");
+        if (ctx) {
+          ctx.drawImage(img, 0, 0);
+          resolve(canvas.toDataURL("image/png"));
+        } else {
+          resolve(null);
+        }
+      } catch {
+        resolve(null);
+      }
+    };
+    img.onerror = () => resolve(null);
+    // Add cache-busting parameter
+    img.src = url + (url.includes("?") ? "&" : "?") + "_t=" + Date.now();
+  });
+}
+
 /**
  * تحويل جميع ألوان oklch في العنصر إلى RGB قبل التصدير
- * html2canvas لا يدعم oklch - يجب تحويلها إلى ألوان مدعومة
  */
-function convertOklchToRgb(element: HTMLElement): (() => void) {
+function convertOklchColors(element: HTMLElement): (() => void) {
   const originalStyles: { el: HTMLElement; prop: string; value: string }[] = [];
-
   const allElements = [element, ...Array.from(element.querySelectorAll("*"))] as HTMLElement[];
 
   const colorProps = [
-    "color",
-    "backgroundColor",
-    "borderColor",
-    "borderTopColor",
-    "borderRightColor",
-    "borderBottomColor",
-    "borderLeftColor",
-    "outlineColor",
-    "textDecorationColor",
-    "boxShadow",
-    "caretColor",
+    "color", "backgroundColor", "borderColor", "borderTopColor",
+    "borderRightColor", "borderBottomColor", "borderLeftColor",
+    "outlineColor", "textDecorationColor", "boxShadow",
+    "background",
   ];
 
   for (const el of allElements) {
     const computed = window.getComputedStyle(el);
     for (const prop of colorProps) {
-      const value = computed.getPropertyValue(
-        prop.replace(/([A-Z])/g, "-$1").toLowerCase()
-      );
+      const cssProp = prop.replace(/([A-Z])/g, "-$1").toLowerCase();
+      const value = computed.getPropertyValue(cssProp);
       if (value && value.includes("oklch")) {
-        originalStyles.push({
-          el,
-          prop: prop,
-          value: (el.style as any)[prop] || "",
-        });
-
-        const rgb = oklchToRgbString(value);
-        if (rgb) {
-          (el.style as any)[prop] = rgb;
-        }
+        originalStyles.push({ el, prop, value: (el.style as any)[prop] || "" });
+        const rgb = oklchToRgb(value);
+        if (rgb) (el.style as any)[prop] = rgb;
       }
     }
   }
 
+  // Convert CSS variables too
   const rootEl = document.documentElement;
   const rootComputed = window.getComputedStyle(rootEl);
   const cssVarOverrides: { name: string; original: string }[] = [];
-
   const cssVarNames = [
     "--background", "--foreground", "--card", "--card-foreground",
     "--popover", "--popover-foreground", "--primary", "--primary-foreground",
     "--secondary", "--secondary-foreground", "--muted", "--muted-foreground",
     "--accent", "--accent-foreground", "--destructive", "--destructive-foreground",
     "--border", "--input", "--ring",
-    "--sidebar", "--sidebar-foreground", "--sidebar-primary", "--sidebar-primary-foreground",
-    "--sidebar-accent", "--sidebar-accent-foreground", "--sidebar-border", "--sidebar-ring",
-    "--chart-1", "--chart-2", "--chart-3", "--chart-4", "--chart-5",
   ];
 
   for (const varName of cssVarNames) {
     const val = rootComputed.getPropertyValue(varName).trim();
     if (val && val.includes("oklch")) {
-      const rgb = oklchToRgbString(val);
+      const rgb = oklchToRgb(val);
       if (rgb) {
         cssVarOverrides.push({ name: varName, original: rootEl.style.getPropertyValue(varName) });
         rootEl.style.setProperty(varName, rgb);
@@ -96,144 +174,166 @@ function convertOklchToRgb(element: HTMLElement): (() => void) {
       (el.style as any)[prop] = value;
     }
     for (const { name, original } of cssVarOverrides) {
-      if (original) {
-        rootEl.style.setProperty(name, original);
-      } else {
-        rootEl.style.removeProperty(name);
-      }
+      if (original) rootEl.style.setProperty(name, original);
+      else rootEl.style.removeProperty(name);
     }
   };
 }
 
-function oklchToRgbString(oklchValue: string): string | null {
+function oklchToRgb(oklchValue: string): string | null {
   try {
     const canvas = document.createElement("canvas");
     canvas.width = 1;
     canvas.height = 1;
     const ctx = canvas.getContext("2d");
     if (!ctx) return null;
-
     ctx.fillStyle = oklchValue;
     ctx.fillRect(0, 0, 1, 1);
-
-    const imageData = ctx.getImageData(0, 0, 1, 1);
-    const r = imageData.data[0];
-    const g = imageData.data[1];
-    const b = imageData.data[2];
-    const a = imageData.data[3];
-
-    if (a < 255) {
-      return `rgba(${r}, ${g}, ${b}, ${(a / 255).toFixed(3)})`;
-    }
-    return `rgb(${r}, ${g}, ${b})`;
+    const d = ctx.getImageData(0, 0, 1, 1).data;
+    return d[3] < 255
+      ? `rgba(${d[0]},${d[1]},${d[2]},${(d[3] / 255).toFixed(3)})`
+      : `rgb(${d[0]},${d[1]},${d[2]})`;
   } catch {
     return null;
   }
 }
 
-// A4 dimensions at 96dpi
-const A4_WIDTH_PX = 794;
-const A4_HEIGHT_PX = 1123;
-
-// الخط العربي الموحد لضمان التطابق
-const ARABIC_FONT = "'Cairo', 'Tajawal', 'Noto Sans Arabic', sans-serif";
-
 /**
- * تثبيت جميع الأنماط المحسوبة على العنصر المستنسخ
- * هذا يضمن أن html2canvas يرى نفس الأنماط بالضبط كما في المعاينة
+ * تحويل جميع الصور الخارجية في العنصر إلى data URLs
+ * يستخدم server proxy لتجاوز CORS
  */
-function freezeComputedStyles(clonedEl: HTMLElement) {
-  clonedEl.style.width = A4_WIDTH_PX + 'px';
-  clonedEl.style.maxWidth = A4_WIDTH_PX + 'px';
-  clonedEl.style.minWidth = A4_WIDTH_PX + 'px';
-  clonedEl.style.minHeight = A4_HEIGHT_PX + 'px';
-  clonedEl.style.marginBottom = '0';
-  clonedEl.style.boxShadow = 'none';
-  clonedEl.style.border = 'none';
-  clonedEl.style.direction = 'rtl';
-  clonedEl.style.overflow = 'hidden';
-  clonedEl.classList.remove('shadow-lg', 'mb-6');
-  clonedEl.style.fontFamily = ARABIC_FONT;
+async function convertAllImagesToDataUrls(element: HTMLElement): Promise<(() => void)> {
+  const images = element.querySelectorAll("img");
+  const originals: { img: HTMLImageElement; src: string }[] = [];
 
-  const allInner = clonedEl.querySelectorAll('*');
-  allInner.forEach((el) => {
-    const htmlEl = el as HTMLElement;
-    const computed = window.getComputedStyle(htmlEl);
-
-    // ضمان الخطوط العربية
-    const ff = computed.fontFamily;
-    if (!ff || ff === 'serif' || ff === 'sans-serif' || ff === 'system-ui' || ff.includes('ui-')) {
-      htmlEl.style.fontFamily = ARABIC_FONT;
+  const promises = Array.from(images).map(async (img) => {
+    const src = img.src;
+    if (src && !src.startsWith("data:") && !src.startsWith("blob:")) {
+      const dataUrl = await fetchImageAsDataUrl(src);
+      if (dataUrl) {
+        originals.push({ img, src });
+        img.src = dataUrl;
+      }
     }
-
-    // تثبيت أحجام الخطوط
-    const fontSize = computed.fontSize;
-    if (fontSize) htmlEl.style.fontSize = fontSize;
-
-    // تثبيت الألوان - تحويل oklch
-    const bgColor = computed.backgroundColor;
-    if (bgColor && bgColor.includes('oklch')) {
-      const rgb = oklchToRgbString(bgColor);
-      if (rgb) htmlEl.style.backgroundColor = rgb;
-    }
-    const textColor = computed.color;
-    if (textColor && textColor.includes('oklch')) {
-      const rgb = oklchToRgbString(textColor);
-      if (rgb) htmlEl.style.color = rgb;
-    }
-    const borderColor = computed.borderColor;
-    if (borderColor && borderColor.includes('oklch')) {
-      const rgb = oklchToRgbString(borderColor);
-      if (rgb) htmlEl.style.borderColor = rgb;
-    }
-
-    // تثبيت line-height
-    const lineHeight = computed.lineHeight;
-    if (lineHeight && lineHeight !== 'normal') htmlEl.style.lineHeight = lineHeight;
-
-    // تثبيت font-weight
-    const fontWeight = computed.fontWeight;
-    if (fontWeight) htmlEl.style.fontWeight = fontWeight;
-
-    // تثبيت letter-spacing
-    const letterSpacing = computed.letterSpacing;
-    if (letterSpacing && letterSpacing !== 'normal') htmlEl.style.letterSpacing = letterSpacing;
-
-    // تثبيت text-align
-    const textAlign = computed.textAlign;
-    if (textAlign) htmlEl.style.textAlign = textAlign;
-
-    // تثبيت padding و margin
-    htmlEl.style.padding = computed.padding;
-    htmlEl.style.margin = computed.margin;
   });
+
+  await Promise.all(promises);
+
+  // Also convert background images in inline styles
+  const allElements = [element, ...Array.from(element.querySelectorAll("*"))] as HTMLElement[];
+  const bgOriginals: { el: HTMLElement; prop: string; value: string }[] = [];
+
+  for (const el of allElements) {
+    const bgImage = el.style.backgroundImage;
+    if (bgImage && bgImage.includes("url(")) {
+      const urlMatch = bgImage.match(/url\(['"]?(https?:\/\/[^'")\s]+)['"]?\)/);
+      if (urlMatch) {
+        const imgUrl = urlMatch[1];
+        const dataUrl = await fetchImageAsDataUrl(imgUrl);
+        if (dataUrl) {
+          bgOriginals.push({ el, prop: "backgroundImage", value: bgImage });
+          el.style.backgroundImage = `url(${dataUrl})`;
+        }
+      }
+    }
+  }
+
+  return () => {
+    for (const { img, src } of originals) {
+      img.src = src;
+    }
+    for (const { el, prop, value } of bgOriginals) {
+      (el.style as any)[prop] = value;
+    }
+  };
 }
 
 /**
- * تصدير PDF بنظام صفحات A4 منفصلة - جودة عالية
+ * إنشاء inline font styles لتضمين الخطوط العربية مباشرة
+ * يتجنب CSS SecurityError من Google Fonts
+ */
+function getInlineFontStyles(): string {
+  return `
+    @font-face {
+      font-family: 'Cairo';
+      font-style: normal;
+      font-weight: 300 800;
+      font-display: swap;
+      src: url(https://fonts.gstatic.com/s/cairo/v28/SLXgc1nY6HkvangtZmpcWmhzfH5lWWgcQyyS4J0.woff2) format('woff2');
+      unicode-range: U+0600-06FF, U+0750-077F, U+0870-088E, U+0890-0891, U+0898-08E1, U+08E3-08FF, U+200C-200E, U+2010-2011, U+204F, U+2E41, U+FB50-FDFF, U+FE70-FE9F, U+FE80-FEFC;
+    }
+    @font-face {
+      font-family: 'Cairo';
+      font-style: normal;
+      font-weight: 300 800;
+      font-display: swap;
+      src: url(https://fonts.gstatic.com/s/cairo/v28/SLXgc1nY6HkvangtZmpcWmhzfH5lWWgcQyyS4J0.woff2) format('woff2');
+      unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+    }
+    @font-face {
+      font-family: 'Tajawal';
+      font-style: normal;
+      font-weight: 400;
+      font-display: swap;
+      src: url(https://fonts.gstatic.com/s/tajawal/v9/Iura6YBj_oCad4k1nzSBC45I.woff2) format('woff2');
+      unicode-range: U+0600-06FF, U+0750-077F, U+0870-088E, U+0890-0891, U+0898-08E1, U+08E3-08FF, U+200C-200E, U+2010-2011, U+204F, U+2E41, U+FB50-FDFF, U+FE70-FE9F, U+FE80-FEFC;
+    }
+    @font-face {
+      font-family: 'Tajawal';
+      font-style: normal;
+      font-weight: 700;
+      font-display: swap;
+      src: url(https://fonts.gstatic.com/s/tajawal/v9/Iurf6YBj_oCad4k1l_6gHrRpiYlJ.woff2) format('woff2');
+      unicode-range: U+0600-06FF, U+0750-077F, U+0870-088E, U+0890-0891, U+0898-08E1, U+08E3-08FF, U+200C-200E, U+2010-2011, U+204F, U+2E41, U+FB50-FDFF, U+FE70-FE9F, U+FE80-FEFC;
+    }
+    @font-face {
+      font-family: 'Tajawal';
+      font-style: normal;
+      font-weight: 800;
+      font-display: swap;
+      src: url(https://fonts.gstatic.com/s/tajawal/v9/Iurf6YBj_oCad4k1l4KjHrRpiYlJ.woff2) format('woff2');
+      unicode-range: U+0600-06FF, U+0750-077F, U+0870-088E, U+0890-0891, U+0898-08E1, U+08E3-08FF, U+200C-200E, U+2010-2011, U+204F, U+2E41, U+FB50-FDFF, U+FE70-FE9F, U+FE80-FEFC;
+    }
+    @font-face {
+      font-family: 'Tajawal';
+      font-style: normal;
+      font-weight: 900;
+      font-display: swap;
+      src: url(https://fonts.gstatic.com/s/tajawal/v9/Iurf6YBj_oCad4k1l6ahHrRpiYlJ.woff2) format('woff2');
+      unicode-range: U+0600-06FF, U+0750-077F, U+0870-088E, U+0890-0891, U+0898-08E1, U+08E3-08FF, U+200C-200E, U+2010-2011, U+204F, U+2E41, U+FB50-FDFF, U+FE70-FE9F, U+FE80-FEFC;
+    }
+  `;
+}
+
+/**
+ * تصدير PDF بنظام صفحات A4 منفصلة - جودة عالية مع دعم كامل للعربية
+ * يستخدم html2canvas + jsPDF
  * كل div مباشر داخل preview-content = صفحة PDF واحدة
- * يحافظ على الخطوط والتنسيق والترتيب بالضبط كما في المعاينة
  */
 export async function exportToPDF(
   elementId: string,
   filename: string = "document.pdf",
   onProgress?: (current: number, total: number) => void
-) {
+): Promise<boolean> {
   const element = document.getElementById(elementId);
-  if (!element) throw new Error("Element not found");
+  if (!element) throw new Error("Element not found: " + elementId);
 
   try {
-    // إخفاء الأزرار والعناصر التفاعلية أثناء التصدير
-    const buttons = element.querySelectorAll('button, [data-no-print]');
-    buttons.forEach(btn => (btn as HTMLElement).style.display = 'none');
+    // Step 1: Hide buttons and interactive elements
+    const buttons = element.querySelectorAll("button, [data-no-print]");
+    buttons.forEach((btn) => ((btn as HTMLElement).style.display = "none"));
 
-    // تحويل ألوان oklch إلى RGB قبل html2canvas
-    const restoreColors = convertOklchToRgb(element);
+    // Step 2: Convert oklch colors to RGB
+    const restoreColors = convertOklchColors(element);
 
-    // انتظار تحميل الخطوط والصور
+    // Step 3: Convert all external images to data URLs (bypasses CORS)
+    const restoreImages = await convertAllImagesToDataUrls(element);
+
+    // Step 4: Wait for fonts to be ready
     await document.fonts.ready;
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    await new Promise((resolve) => setTimeout(resolve, 300));
 
+    // Step 5: Create PDF
     const pdf = new jsPDF({
       orientation: "portrait",
       unit: "mm",
@@ -243,120 +343,176 @@ export async function exportToPDF(
     const pdfWidth = pdf.internal.pageSize.getWidth(); // 210mm
     const pdfHeight = pdf.internal.pageSize.getHeight(); // 297mm
 
-    // البحث عن الصفحات المنفصلة (divs المباشرة داخل preview-content)
-    const pages = element.querySelectorAll(':scope > div');
+    // Find separate pages (direct child divs)
+    const pages = element.querySelectorAll(":scope > div");
     const totalPages = pages.length || 1;
-    
+
     if (pages.length > 0) {
       for (let i = 0; i < pages.length; i++) {
         const page = pages[i] as HTMLElement;
-        
         if (i > 0) pdf.addPage();
-        
-        // إبلاغ بالتقدم
         onProgress?.(i + 1, totalPages);
 
-        const canvas = await html2canvas(page, {
-          scale: 2.5, // جودة عالية جداً
-          useCORS: true,
-          allowTaint: true,
-          backgroundColor: "#ffffff",
-          logging: false,
-          imageTimeout: 30000,
-          width: A4_WIDTH_PX,
-          windowWidth: A4_WIDTH_PX,
-          onclone: (_clonedDoc, clonedEl) => {
-            freezeComputedStyles(clonedEl);
-          },
-        });
+        // Fix page dimensions for consistent rendering
+        const origStyles = {
+          width: page.style.width,
+          maxWidth: page.style.maxWidth,
+          minHeight: page.style.minHeight,
+          boxShadow: page.style.boxShadow,
+          marginBottom: page.style.marginBottom,
+          overflow: page.style.overflow,
+        };
 
-        const imgData = canvas.toDataURL("image/jpeg", 0.96);
-        const imgWidth = canvas.width;
-        const imgHeight = canvas.height;
-        const ratio = pdfWidth / imgWidth;
-        const scaledHeight = imgHeight * ratio;
+        page.style.width = A4_WIDTH_PX + "px";
+        page.style.maxWidth = A4_WIDTH_PX + "px";
+        page.style.minHeight = A4_HEIGHT_PX + "px";
+        page.style.boxShadow = "none";
+        page.style.marginBottom = "0";
+        page.style.overflow = "hidden";
 
-        if (scaledHeight <= pdfHeight + 2) {
-          // الصفحة تناسب صفحة PDF واحدة
-          pdf.addImage(imgData, "JPEG", 0, 0, pdfWidth, Math.min(scaledHeight, pdfHeight));
-        } else {
-          // الصفحة أطول من A4 - تقسيمها على عدة صفحات PDF
-          const pageCanvasHeight = pdfHeight / ratio;
-          let remainingHeight = imgHeight;
-          let sourceY = 0;
-          let subPage = 0;
+        try {
+          const canvas = await html2canvas(page, {
+            scale: 2.5,
+            useCORS: true,
+            allowTaint: true,
+            backgroundColor: "#ffffff",
+            logging: false,
+            width: A4_WIDTH_PX,
+            windowWidth: A4_WIDTH_PX,
+            // Remove external stylesheets to avoid CSS SecurityError
+            ignoreElements: (el: Element) => {
+              // Ignore link elements that load external CSS (Google Fonts etc.)
+              if (el.tagName === "LINK" && el.getAttribute("rel") === "stylesheet") {
+                const href = el.getAttribute("href") || "";
+                if (href.includes("fonts.googleapis.com")) {
+                  return true;
+                }
+              }
+              return false;
+            },
+            onclone: (clonedDoc: Document) => {
+              // Inject inline font definitions to replace Google Fonts link
+              const style = clonedDoc.createElement("style");
+              style.textContent = getInlineFontStyles() + `
+                * {
+                  font-family: 'Cairo', 'Tajawal', 'Arial', sans-serif !important;
+                }
+              `;
+              clonedDoc.head.appendChild(style);
 
-          while (remainingHeight > 20) {
-            if (subPage > 0) pdf.addPage();
+              // Remove Google Fonts link tags to prevent SecurityError
+              const links = clonedDoc.querySelectorAll('link[href*="fonts.googleapis.com"]');
+              links.forEach((link) => link.remove());
+            },
+          });
 
-            const sliceHeight = Math.min(pageCanvasHeight, remainingHeight);
-            
-            const pageCanvas = document.createElement('canvas');
-            pageCanvas.width = imgWidth;
-            pageCanvas.height = Math.ceil(sliceHeight);
-            const ctx = pageCanvas.getContext('2d');
-            if (ctx) {
-              ctx.fillStyle = '#ffffff';
-              ctx.fillRect(0, 0, pageCanvas.width, pageCanvas.height);
-              ctx.drawImage(canvas, 0, sourceY, imgWidth, sliceHeight, 0, 0, imgWidth, sliceHeight);
-              const pageImgData = pageCanvas.toDataURL("image/jpeg", 0.96);
-              pdf.addImage(pageImgData, "JPEG", 0, 0, pdfWidth, sliceHeight * ratio);
+          const imgData = canvas.toDataURL("image/jpeg", 0.92);
+          const ratio = pdfWidth / canvas.width;
+          const scaledHeight = canvas.height * ratio;
+
+          if (scaledHeight <= pdfHeight + 2) {
+            // Page fits in one PDF page
+            pdf.addImage(imgData, "JPEG", 0, 0, pdfWidth, Math.min(scaledHeight, pdfHeight));
+          } else {
+            // Page is taller than A4 - split it
+            const pageCanvasHeight = pdfHeight / ratio;
+            let remainingHeight = canvas.height;
+            let sourceY = 0;
+            let subPage = 0;
+
+            while (remainingHeight > 20) {
+              if (subPage > 0) pdf.addPage();
+              const sliceHeight = Math.min(pageCanvasHeight, remainingHeight);
+
+              const sliceCanvas = document.createElement("canvas");
+              sliceCanvas.width = canvas.width;
+              sliceCanvas.height = Math.ceil(sliceHeight);
+              const ctx = sliceCanvas.getContext("2d");
+              if (ctx) {
+                ctx.fillStyle = "#ffffff";
+                ctx.fillRect(0, 0, sliceCanvas.width, sliceCanvas.height);
+                ctx.drawImage(
+                  canvas,
+                  0, sourceY, canvas.width, sliceHeight,
+                  0, 0, canvas.width, sliceHeight
+                );
+                const sliceData = sliceCanvas.toDataURL("image/jpeg", 0.92);
+                pdf.addImage(sliceData, "JPEG", 0, 0, pdfWidth, sliceHeight * ratio);
+              }
+
+              sourceY += sliceHeight;
+              remainingHeight -= sliceHeight;
+              subPage++;
             }
-
-            sourceY += sliceHeight;
-            remainingHeight -= sliceHeight;
-            subPage++;
           }
+        } catch (pageError) {
+          console.warn(`Error exporting page ${i + 1}:`, pageError);
+          // Add blank page as fallback
         }
 
-        // إعطاء المتصفح فرصة للتنفس بين الصفحات
-        await new Promise(resolve => setTimeout(resolve, 150));
+        // Restore original styles
+        page.style.width = origStyles.width;
+        page.style.maxWidth = origStyles.maxWidth;
+        page.style.minHeight = origStyles.minHeight;
+        page.style.boxShadow = origStyles.boxShadow;
+        page.style.marginBottom = origStyles.marginBottom;
+        page.style.overflow = origStyles.overflow;
+
+        // Let browser breathe
+        await new Promise((resolve) => setTimeout(resolve, 150));
       }
     } else {
-      // Fallback: التقاط العنصر بالكامل كصورة واحدة
+      // Fallback: capture entire element
       onProgress?.(1, 1);
       const canvas = await html2canvas(element, {
-        scale: 2.5,
+        scale: 2,
         useCORS: true,
         allowTaint: true,
         backgroundColor: "#ffffff",
         logging: false,
         width: A4_WIDTH_PX,
         windowWidth: A4_WIDTH_PX,
-        onclone: (_clonedDoc, clonedEl) => {
-          freezeComputedStyles(clonedEl);
+        onclone: (clonedDoc: Document) => {
+          const style = clonedDoc.createElement("style");
+          style.textContent = getInlineFontStyles() + `
+            * { font-family: 'Cairo', 'Tajawal', 'Arial', sans-serif !important; }
+          `;
+          clonedDoc.head.appendChild(style);
+          const links = clonedDoc.querySelectorAll('link[href*="fonts.googleapis.com"]');
+          links.forEach((link) => link.remove());
         },
       });
 
-      const imgData = canvas.toDataURL("image/jpeg", 0.96);
-      const imgWidth = canvas.width;
-      const imgHeight = canvas.height;
-      const ratio = pdfWidth / imgWidth;
-      const scaledHeight = imgHeight * ratio;
+      const imgData = canvas.toDataURL("image/jpeg", 0.92);
+      const ratio = pdfWidth / canvas.width;
+      const scaledHeight = canvas.height * ratio;
 
       if (scaledHeight <= pdfHeight) {
         pdf.addImage(imgData, "JPEG", 0, 0, pdfWidth, scaledHeight);
       } else {
         const pageCanvasHeight = pdfHeight / ratio;
-        let remainingHeight = imgHeight;
+        let remainingHeight = canvas.height;
         let sourceY = 0;
         let pageNum = 0;
 
         while (remainingHeight > 20) {
           if (pageNum > 0) pdf.addPage();
-
           const sliceHeight = Math.min(pageCanvasHeight, remainingHeight);
-          
-          const pageCanvas = document.createElement('canvas');
-          pageCanvas.width = imgWidth;
-          pageCanvas.height = Math.ceil(sliceHeight);
-          const ctx = pageCanvas.getContext('2d');
+
+          const sliceCanvas = document.createElement("canvas");
+          sliceCanvas.width = canvas.width;
+          sliceCanvas.height = Math.ceil(sliceHeight);
+          const ctx = sliceCanvas.getContext("2d");
           if (ctx) {
-            ctx.fillStyle = '#ffffff';
-            ctx.fillRect(0, 0, pageCanvas.width, pageCanvas.height);
-            ctx.drawImage(canvas, 0, sourceY, imgWidth, sliceHeight, 0, 0, imgWidth, sliceHeight);
-            const pageImgData = pageCanvas.toDataURL("image/jpeg", 0.96);
-            pdf.addImage(pageImgData, "JPEG", 0, 0, pdfWidth, sliceHeight * ratio);
+            ctx.fillStyle = "#ffffff";
+            ctx.fillRect(0, 0, sliceCanvas.width, sliceCanvas.height);
+            ctx.drawImage(
+              canvas,
+              0, sourceY, canvas.width, sliceHeight,
+              0, 0, canvas.width, sliceHeight
+            );
+            const sliceData = sliceCanvas.toDataURL("image/jpeg", 0.92);
+            pdf.addImage(sliceData, "JPEG", 0, 0, pdfWidth, sliceHeight * ratio);
           }
 
           sourceY += sliceHeight;
@@ -366,12 +522,12 @@ export async function exportToPDF(
       }
     }
 
-    // استعادة الألوان الأصلية
+    // Step 6: Restore everything
     restoreColors();
+    restoreImages();
+    buttons.forEach((btn) => ((btn as HTMLElement).style.display = ""));
 
-    // إعادة إظهار الأزرار
-    buttons.forEach(btn => (btn as HTMLElement).style.display = '');
-
+    // Step 7: Save PDF
     pdf.save(filename);
     return true;
   } catch (err) {
@@ -381,39 +537,31 @@ export async function exportToPDF(
 }
 
 /**
- * تطبيق ثيم القالب على عنصر HTML قبل التصدير
+ * تطبيق ثيم القالب على عنصر HTML
  */
 export function applyTemplateToElement(element: HTMLElement, template: PdfTemplate) {
-  const headers = element.querySelectorAll('[data-pdf-header]');
-  headers.forEach(h => {
+  const headers = element.querySelectorAll("[data-pdf-header]");
+  headers.forEach((h) => {
     (h as HTMLElement).style.backgroundColor = template.headerBg;
     (h as HTMLElement).style.color = template.headerText;
   });
 
-  const accents = element.querySelectorAll('[data-pdf-accent]');
-  accents.forEach(a => {
+  const accents = element.querySelectorAll("[data-pdf-accent]");
+  accents.forEach((a) => {
     (a as HTMLElement).style.color = template.accent;
   });
 
-  const accentBgs = element.querySelectorAll('[data-pdf-accent-bg]');
-  accentBgs.forEach(a => {
-    (a as HTMLElement).style.backgroundColor = template.accent + '15';
-    (a as HTMLElement).style.borderColor = template.accent;
-  });
-
-  const borders = element.querySelectorAll('[data-pdf-border]');
-  borders.forEach(b => {
+  const borders = element.querySelectorAll("[data-pdf-border]");
+  borders.forEach((b) => {
     (b as HTMLElement).style.borderColor = template.borderColor;
-  });
-
-  const bodies = element.querySelectorAll('[data-pdf-body]');
-  bodies.forEach(b => {
-    (b as HTMLElement).style.backgroundColor = template.bodyBg;
   });
 
   element.style.fontFamily = `'${template.fontFamily}', sans-serif`;
 }
 
+/**
+ * طباعة عنصر HTML في نافذة جديدة
+ */
 export function printElement(elementId: string) {
   const element = document.getElementById(elementId);
   if (!element) return;
@@ -426,26 +574,22 @@ export function printElement(elementId: string) {
     <html lang="ar" dir="rtl">
     <head>
       <meta charset="UTF-8">
-      <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800;900&family=Cairo:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
       <style>
+        ${getInlineFontStyles()}
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: 'Cairo', 'Tajawal', sans-serif; direction: rtl; background: white; }
         @media print {
           body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
           [data-no-print] { display: none !important; }
-          body > div > div { 
-            page-break-after: always; 
+          button { display: none !important; }
+          body > div > div {
+            page-break-after: always;
             margin: 0 !important;
             box-shadow: none !important;
           }
-          body > div > div:last-child { 
-            page-break-after: avoid; 
-          }
+          body > div > div:last-child { page-break-after: avoid; }
         }
-        @page {
-          size: A4;
-          margin: 0;
-        }
+        @page { size: A4; margin: 0; }
       </style>
     </head>
     <body>${element.innerHTML}</body>
@@ -455,5 +599,5 @@ export function printElement(elementId: string) {
   setTimeout(() => {
     printWindow.print();
     printWindow.close();
-  }, 800);
+  }, 1000);
 }

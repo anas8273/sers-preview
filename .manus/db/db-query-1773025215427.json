@@ -1,0 +1,310 @@
+{
+  "query": "SELECT id, name, isActive, isDefault FROM pdf_templates ORDER BY sortOrder;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 6C7x6f29RX1BcFf.7325488fde9e --database h34s4aPNVyHXdtjgZ7eNNf --execute SELECT id, name, isActive, isDefault FROM pdf_templates ORDER BY sortOrder;",
+  "rows": [
+    {
+      "id": "1",
+      "name": "قالب اختبار",
+      "isActive": "1",
+      "isDefault": "0"
+    },
+    {
+      "id": "30001",
+      "name": "قالب اختبار",
+      "isActive": "1",
+      "isDefault": "0"
+    },
+    {
+      "id": "30002",
+      "name": "قالب معدّل",
+      "isActive": "1",
+      "isDefault": "0"
+    },
+    {
+      "id": "30004",
+      "name": "قالب اختبار",
+      "isActive": "1",
+      "isDefault": "0"
+    },
+    {
+      "id": "30005",
+      "name": "قالب معدّل",
+      "isActive": "1",
+      "isDefault": "0"
+    },
+    {
+      "id": "60001",
+      "name": "قالب اختبار",
+      "isActive": "1",
+      "isDefault": "0"
+    },
+    {
+      "id": "60002",
+      "name": "قالب معدّل",
+      "isActive": "1",
+      "isDefault": "0"
+    },
+    {
+      "id": "90001",
+      "name": "قالب اختبار",
+      "isActive": "1",
+      "isDefault": "0"
+    },
+    {
+      "id": "90002",
+      "name": "قالب معدّل",
+      "isActive": "1",
+      "isDefault": "0"
+    },
+    {
+      "id": "120001",
+      "name": "قالب اختبار",
+      "isActive": "1",
+      "isDefault": "0"
+    },
+    {
+      "id": "120002",
+      "name": "قالب معدّل",
+      "isActive": "1",
+      "isDefault": "0"
+    },
+    {
+      "id": "150001",
+      "name": "قالب اختبار",
+      "isActive": "1",
+      "isDefault": "0"
+    },
+    {
+      "id": "150002",
+      "name": "قالب معدّل",
+      "isActive": "1",
+      "isDefault": "0"
+    },
+    {
+      "id": "150004",
+      "name": "قالب اختبار",
+      "isActive": "1",
+      "isDefault": "0"
+    },
+    {
+      "id": "150005",
+      "name": "قالب معدّل",
+      "isActive": "1",
+      "isDefault": "0"
+    },
+    {
+      "id": "180001",
+      "name": "",
+      "isActive": "1",
+      "isDefault": "0"
+    },
+    {
+      "id": "180002",
+      "name": "قالب اختبار",
+      "isActive": "1",
+      "isDefault": "0"
+    },
+    {
+      "id": "180003",
+      "name": "قالب معدّل",
+      "isActive": "1",
+      "isDefault": "0"
+    },
+    {
+      "id": "180005",
+      "name": "قالب اختبار جديد",
+      "isActive": "1",
+      "isDefault": "0"
+    },
+    {
+      "id": "180006",
+      "name": "قالب اختبار",
+      "isActive": "1",
+      "isDefault": "0"
+    },
+    {
+      "id": "180007",
+      "name": "قالب معدّل",
+      "isActive": "1",
+      "isDefault": "0"
+    },
+    {
+      "id": "180009",
+      "name": "قالب اختبار جديد",
+      "isActive": "1",
+      "isDefault": "0"
+    },
+    {
+      "id": "180010",
+      "name": "قالب اختبار",
+      "isActive": "1",
+      "isDefault": "0"
+    },
+    {
+      "id": "180011",
+      "name": "قالب معدّل",
+      "isActive": "1",
+      "isDefault": "0"
+    },
+    {
+      "id": "180013",
+      "name": "قالب اختبار جديد",
+      "isActive": "1",
+      "isDefault": "0"
+    },
+    {
+      "id": "180014",
+      "name": "قالب اختبار",
+      "isActive": "1",
+      "isDefault": "0"
+    },
+    {
+      "id": "180015",
+      "name": "قالب معدّل",
+      "isActive": "1",
+      "isDefault": "0"
+    },
+    {
+      "id": "210001",
+      "name": "قالب اختبار جديد",
+      "isActive": "1",
+      "isDefault": "0"
+    },
+    {
+      "id": "210002",
+      "name": "قالب اختبار",
+      "isActive": "1",
+      "isDefault": "0"
+    },
+    {
+      "id": "210003",
+      "name": "قالب معدّل",
+      "isActive": "1",
+      "isDefault": "0"
+    },
+    {
+      "id": "240001",
+      "name": "قالب اختبار جديد",
+      "isActive": "1",
+      "isDefault": "0"
+    },
+    {
+      "id": "240002",
+      "name": "قالب اختبار",
+      "isActive": "1",
+      "isDefault": "0"
+    },
+    {
+      "id": "240003",
+      "name": "قالب معدّل",
+      "isActive": "1",
+      "isDefault": "0"
+    },
+    {
+      "id": "240005",
+      "name": "قالب اختبار جديد",
+      "isActive": "1",
+      "isDefault": "0"
+    },
+    {
+      "id": "240006",
+      "name": "قالب اختبار",
+      "isActive": "1",
+      "isDefault": "0"
+    },
+    {
+      "id": "240007",
+      "name": "قالب معدّل",
+      "isActive": "1",
+      "isDefault": "0"
+    },
+    {
+      "id": "240009",
+      "name": "قالب اختبار جديد",
+      "isActive": "1",
+      "isDefault": "0"
+    },
+    {
+      "id": "240010",
+      "name": "قالب اختبار",
+      "isActive": "1",
+      "isDefault": "0"
+    },
+    {
+      "id": "240011",
+      "name": "قالب معدّل",
+      "isActive": "1",
+      "isDefault": "0"
+    },
+    {
+      "id": "270001",
+      "name": "قالب اختبار",
+      "isActive": "1",
+      "isDefault": "0"
+    },
+    {
+      "id": "270002",
+      "name": "قالب معدّل",
+      "isActive": "1",
+      "isDefault": "0"
+    },
+    {
+      "id": "270004",
+      "name": "قالب اختبار جديد",
+      "isActive": "1",
+      "isDefault": "0"
+    },
+    {
+      "id": "270005",
+      "name": "قالب اختبار",
+      "isActive": "1",
+      "isDefault": "0"
+    },
+    {
+      "id": "270006",
+      "name": "قالب معدّل",
+      "isActive": "1",
+      "isDefault": "0"
+    },
+    {
+      "id": "300001",
+      "name": "قالب اختبار جديد",
+      "isActive": "1",
+      "isDefault": "0"
+    },
+    {
+      "id": "300002",
+      "name": "قالب اختبار",
+      "isActive": "1",
+      "isDefault": "0"
+    },
+    {
+      "id": "300003",
+      "name": "قالب معدّل",
+      "isActive": "1",
+      "isDefault": "0"
+    },
+    {
+      "id": "300005",
+      "name": "قالب اختبار جديد",
+      "isActive": "1",
+      "isDefault": "0"
+    },
+    {
+      "id": "300006",
+      "name": "قالب اختبار",
+      "isActive": "1",
+      "isDefault": "0"
+    },
+    {
+      "id": "300007",
+      "name": "قالب معدّل",
+      "isActive": "1",
+      "isDefault": "0"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tname\tisActive\tisDefault\n1\tقالب اختبار\t1\t0\n30001\tقالب اختبار\t1\t0\n30002\tقالب معدّل\t1\t0\n30004\tقالب اختبار\t1\t0\n30005\tقالب معدّل\t1\t0\n60001\tقالب اختبار\t1\t0\n60002\tقالب معدّل\t1\t0\n90001\tقالب اختبار\t1\t0\n90002\tقالب معدّل\t1\t0\n120001\tقالب اختبار\t1\t0\n120002\tقالب معدّل\t1\t0\n150001\tقالب اختبار\t1\t0\n150002\tقالب معدّل\t1\t0\n150004\tقالب اختبار\t1\t0\n150005\tقالب معدّل\t1\t0\n180001\t\t1\t0\n180002\tقالب اختبار\t1\t0\n180003\tقالب معدّل\t1\t0\n180005\tقالب اختبار جديد\t1\t0\n180006\tقالب اختبار\t1\t0\n180007\tقالب معدّل\t1\t0\n180009\tقالب اختبار جديد\t1\t0\n180010\tقالب اختبار\t1\t0\n180011\tقالب معدّل\t1\t0\n180013\tقالب اختبار جديد\t1\t0\n180014\tقالب اختبار\t1\t0\n180015\tقالب معدّل\t1\t0\n210001\tقالب اختبار جديد\t1\t0\n210002\tقالب اختبار\t1\t0\n210003\tقالب معدّل\t1\t0\n240001\tقالب اختبار جديد\t1\t0\n240002\tقالب اختبار\t1\t0\n240003\tقالب معدّل\t1\t0\n240005\tقالب اختبار جديد\t1\t0\n240006\tقالب اختبار\t1\t0\n240007\tقالب معدّل\t1\t0\n240009\tقالب اختبار جديد\t1\t0\n240010\tقالب اختبار\t1\t0\n240011\tقالب معدّل\t1\t0\n270001\tقالب اختبار\t1\t0\n270002\tقالب معدّل\t1\t0\n270004\tقالب اختبار جديد\t1\t0\n270005\tقالب اختبار\t1\t0\n270006\tقالب معدّل\t1\t0\n300001\tقالب اختبار جديد\t1\t0\n300002\tقالب اختبار\t1\t0\n300003\tقالب معدّل\t1\t0\n300005\tقالب اختبار جديد\t1\t0\n300006\tقالب اختبار\t1\t0\n300007\tقالب معدّل\t1\t0\n",
+  "stderr": "",
+  "execution_time_ms": 2205
+}

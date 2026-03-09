@@ -7,6 +7,7 @@ import { registerOAuthRoutes } from "./oauth";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
+import { seedDefaultTemplates } from "../db";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -35,6 +36,34 @@ async function startServer() {
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
   // OAuth callback under /api/oauth/callback
   registerOAuthRoutes(app);
+
+  // Image proxy endpoint to bypass CORS for PDF export
+  app.get('/api/image-proxy', async (req, res) => {
+    const url = req.query.url as string;
+    if (!url) {
+      res.status(400).json({ error: 'Missing url parameter' });
+      return;
+    }
+    try {
+      const response = await fetch(url, {
+        headers: { 'User-Agent': 'Mozilla/5.0' },
+      });
+      if (!response.ok) {
+        res.status(response.status).json({ error: 'Failed to fetch image' });
+        return;
+      }
+      const contentType = response.headers.get('content-type') || 'image/png';
+      const buffer = Buffer.from(await response.arrayBuffer());
+      res.setHeader('Content-Type', contentType);
+      res.setHeader('Cache-Control', 'public, max-age=86400');
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.send(buffer);
+    } catch (err) {
+      console.error('[image-proxy] Error:', err);
+      res.status(500).json({ error: 'Proxy error' });
+    }
+  });
+
   // tRPC API
   app.use(
     "/api/trpc",
@@ -57,8 +86,14 @@ async function startServer() {
     console.log(`Port ${preferredPort} is busy, using port ${port} instead`);
   }
 
-  server.listen(port, () => {
+  server.listen(port, async () => {
     console.log(`Server running on http://localhost:${port}/`);
+    // Seed default templates if none exist
+    try {
+      await seedDefaultTemplates();
+    } catch (e) {
+      console.error('[seed] Failed to seed default templates:', e);
+    }
   });
 }
 

@@ -233,6 +233,7 @@ export async function getAllPdfTemplates() {
 export async function seedDefaultTemplates() {
   const db = await getDb();
   if (!db) return;
+  // إعادة إنشاء القوالب إذا كانت فارغة
   const existing = await db.select().from(pdfTemplates).limit(1);
   if (existing.length > 0) return;
   
@@ -268,149 +269,47 @@ export async function seedDefaultTemplates() {
     ...overrides,
   });
 
+  // === 3 قوالب فقط بألوان الهوية البصرية لوزارة التعليم (#1B3A5C → #1A8A6B) ===
+  // الإدارة يمكنها إضافة قوالب إضافية من لوحة التحكم
   const defaults: InsertPdfTemplate[] = [
-    // 1. ترويسة داكنة + جدول (PDF صفحة 4-5)
+    // 1. رسمي - ترويسة داكنة + جدول
     {
-      name: "الهوية البصرية - ترويسة داكنة",
-      description: "ترويسة تدرج أزرق-أخضر داكنة مع حقول جدول",
-      headerBg: "linear-gradient(135deg, #0c4a6e, #065f46)",
+      name: "رسمي - ترويسة داكنة",
+      description: "ترويسة تدرج أزرق-أخضر مع حقول جدول - الهوية البصرية لوزارة التعليم",
+      headerBg: "linear-gradient(135deg, #1B3A5C, #1A8A6B)",
       headerText: "#ffffff",
-      accent: "#0d9488",
-      borderColor: "#0d9488",
+      accent: "#1A8A6B",
+      borderColor: "#1B3A5C",
       bodyBg: "#ffffff",
-      templateLayout: makeLayout({ layoutType: 'dark-header-table', fieldStyle: 'table', titleStyle: 'full-width', signatureStyle: 'boxed', footerStyle: 'gradient' }),
+      templateLayout: makeLayout({ layoutType: 'dark-header-table', fieldStyle: 'table', titleStyle: 'full-width', signatureStyle: 'boxed', footerStyle: 'gradient', coverStyle: 'gradient-center', sectionCoverStyle: 'full-gradient', coverAccent2: '#3BB89C' }),
       isDefault: true,
       sortOrder: 1,
     },
-    // 2. أبيض كلاسيكي + عنوان مستدير (PDF صفحة 2-3)
+    // 2. كلاسيكي - ترويسة بيضاء + حقول مسطرة
     {
-      name: "الهوية البصرية - أبيض كلاسيكي",
-      description: "ترويسة بيضاء مع عنوان مستدير وحقول تحتية",
+      name: "كلاسيكي - ترويسة بيضاء",
+      description: "ترويسة بيضاء مع حقول مسطرة وعنوان مستدير - الهوية البصرية",
       headerBg: "#ffffff",
-      headerText: "#0c4a6e",
-      accent: "#0d9488",
-      borderColor: "#0d9488",
+      headerText: "#1B3A5C",
+      accent: "#1A8A6B",
+      borderColor: "#1A8A6B",
       bodyBg: "#ffffff",
-      templateLayout: makeLayout({ layoutType: 'white-header-classic', fieldStyle: 'underlined', titleStyle: 'rounded', signatureStyle: 'lined', footerStyle: 'solid' }),
+      templateLayout: makeLayout({ layoutType: 'white-header-classic', fieldStyle: 'underlined', titleStyle: 'rounded', signatureStyle: 'lined', footerStyle: 'gradient', coverStyle: 'split-left', sectionCoverStyle: 'left-stripe', coverAccent2: '#3BB89C' }),
       isDefault: false,
       sortOrder: 2,
     },
-    // 3. شريط جانبي ملون (PDF صفحة 9-10)
+    // 3. بطاقات - شريط جانبي + بطاقات
     {
-      name: "الهوية البصرية - شريط جانبي",
-      description: "شريط جانبي ملون مع حقول بطاقات",
+      name: "بطاقات - شريط جانبي",
+      description: "شريط جانبي ملون مع حقول بطاقات - الهوية البصرية",
       headerBg: "#ffffff",
-      headerText: "#0c4a6e",
-      accent: "#0d9488",
-      borderColor: "#0d9488",
-      bodyBg: "#f8fafc",
-      templateLayout: makeLayout({ layoutType: 'white-header-sidebar', fieldStyle: 'cards', titleStyle: 'badge', signatureStyle: 'stamped', footerStyle: 'gradient' }),
+      headerText: "#1B3A5C",
+      accent: "#1A8A6B",
+      borderColor: "#1A8A6B",
+      bodyBg: "#f8fafb",
+      templateLayout: makeLayout({ layoutType: 'white-header-sidebar', fieldStyle: 'cards', titleStyle: 'badge', signatureStyle: 'stamped', footerStyle: 'gradient', coverStyle: 'diagonal', sectionCoverStyle: 'card-center', coverAccent2: '#3BB89C' }),
       isDefault: false,
       sortOrder: 3,
-    },
-    // 4. تدرج أزرق-أخضر (PDF صفحة 7-8)
-    {
-      name: "الهوية البصرية - تدرج",
-      description: "ترويسة تدرج مع حقول fieldset",
-      headerBg: "linear-gradient(135deg, #0c4a6e, #065f46)",
-      headerText: "#ffffff",
-      accent: "#0d9488",
-      borderColor: "#0d9488",
-      bodyBg: "#ffffff",
-      templateLayout: makeLayout({ layoutType: 'dark-header-simple', fieldStyle: 'fieldset', titleStyle: 'full-width', signatureStyle: 'lined', footerStyle: 'gradient' }),
-      isDefault: false,
-      sortOrder: 4,
-    },
-    // 5. أبيض خفيف (PDF صفحة 1)
-    {
-      name: "الهوية البصرية - خفيف",
-      description: "ترويسة بيضاء خفيفة مع شريط سفلي تدرج",
-      headerBg: "#ffffff",
-      headerText: "#0c4a6e",
-      accent: "#0d9488",
-      borderColor: "#d1d5db",
-      bodyBg: "#ffffff",
-      templateLayout: makeLayout({ layoutType: 'white-header-light', fieldStyle: 'fieldset', titleStyle: 'underlined', signatureStyle: 'simple', footerStyle: 'gradient' }),
-      isDefault: false,
-      sortOrder: 5,
-    },
-    // 6. أعمدة متعددة (PDF صفحة 6)
-    {
-      name: "الهوية البصرية - أعمدة",
-      description: "ترويسة داكنة مع حقول أعمدة متعددة",
-      headerBg: "linear-gradient(135deg, #0c4a6e, #065f46)",
-      headerText: "#ffffff",
-      accent: "#0d9488",
-      borderColor: "#0d9488",
-      bodyBg: "#f0fdfa",
-      templateLayout: makeLayout({ layoutType: 'white-header-multi', fieldStyle: 'table', titleStyle: 'bordered', signatureStyle: 'boxed', footerStyle: 'solid' }),
-      isDefault: false,
-      sortOrder: 6,
-    },
-    // 7. بسيط نظيف
-    {
-      name: "بسيط نظيف",
-      description: "تصميم بسيط بدون زخرفة",
-      headerBg: "#ffffff",
-      headerText: "#374151",
-      accent: "#6b7280",
-      borderColor: "#e5e7eb",
-      bodyBg: "#ffffff",
-      templateLayout: makeLayout({ layoutType: 'minimal-clean', fieldStyle: 'minimal', titleStyle: 'simple', signatureStyle: 'simple', footerStyle: 'line' }),
-      isDefault: false,
-      sortOrder: 7,
-    },
-    // 8. أزرق رسمي
-    {
-      name: "أزرق رسمي",
-      description: "تصميم أزرق رسمي للتقارير",
-      headerBg: "linear-gradient(135deg, #1e40af, #1e3a8a)",
-      headerText: "#ffffff",
-      accent: "#2563EB",
-      borderColor: "#dbeafe",
-      bodyBg: "#ffffff",
-      templateLayout: makeLayout({ layoutType: 'dark-header-table', fieldStyle: 'table', titleStyle: 'full-width', signatureStyle: 'boxed', footerStyle: 'gradient' }),
-      isDefault: false,
-      sortOrder: 8,
-    },
-    // 9. بنفسجي عصري
-    {
-      name: "بنفسجي عصري",
-      description: "تصميم بنفسجي عصري",
-      headerBg: "linear-gradient(135deg, #7c3aed, #6d28d9)",
-      headerText: "#ffffff",
-      accent: "#7C3AED",
-      borderColor: "#ede9fe",
-      bodyBg: "#ffffff",
-      templateLayout: makeLayout({ layoutType: 'white-header-classic', fieldStyle: 'cards', titleStyle: 'rounded', signatureStyle: 'stamped', footerStyle: 'solid' }),
-      isDefault: false,
-      sortOrder: 9,
-    },
-    // 10. ذهبي فاخر
-    {
-      name: "ذهبي فاخر",
-      description: "تصميم ذهبي فاخر",
-      headerBg: "linear-gradient(135deg, #92400e, #78350f)",
-      headerText: "#fef3c7",
-      accent: "#b45309",
-      borderColor: "#fde68a",
-      bodyBg: "#fffbeb",
-      templateLayout: makeLayout({ layoutType: 'dark-header-simple', fieldStyle: 'fieldset', titleStyle: 'bordered', signatureStyle: 'lined', footerStyle: 'gradient' }),
-      isDefault: false,
-      sortOrder: 10,
-    },
-    // 11. أحمر وطني
-    {
-      name: "أحمر وطني",
-      description: "تصميم بألوان العلم السعودي",
-      headerBg: "linear-gradient(135deg, #166534, #15803d)",
-      headerText: "#ffffff",
-      accent: "#166534",
-      borderColor: "#bbf7d0",
-      bodyBg: "#f0fdf4",
-      templateLayout: makeLayout({ layoutType: 'white-header-sidebar', fieldStyle: 'underlined', titleStyle: 'badge', signatureStyle: 'boxed', footerStyle: 'solid' }),
-      isDefault: false,
-      sortOrder: 11,
     },
   ];
   
