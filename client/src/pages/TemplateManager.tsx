@@ -12,7 +12,8 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import {
   ArrowLeft, Plus, Trash2, Save, Edit3, Palette,
   Upload, X, Loader2, Copy, ToggleLeft, ToggleRight,
-  Sparkles, FileText, Settings2, ImageIcon, Layout
+  Sparkles, FileText, Settings2, ImageIcon, Layout,
+  Share2, Link, Link2Off, Check
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -380,6 +381,23 @@ export default function TemplateManager() {
                         </span>
                       </div>
 
+                      {/* Share Badge */}
+                      {template.isShared && template.shareToken && (
+                        <div className="flex items-center gap-1.5 mb-2 p-2 bg-blue-50 rounded-lg border border-blue-200">
+                          <Link className="w-3 h-3 text-blue-600 shrink-0" />
+                          <span className="text-[10px] text-blue-700 truncate flex-1 font-mono" dir="ltr">
+                            {window.location.origin}/shared-template/{template.shareToken}
+                          </span>
+                          <Button variant="ghost" size="sm" className="h-5 px-1.5 text-blue-600"
+                            onClick={() => {
+                              navigator.clipboard.writeText(`${window.location.origin}/shared-template/${template.shareToken}`);
+                              toast.success('تم نسخ رابط المشاركة');
+                            }}>
+                            <Check className="w-3 h-3" />
+                          </Button>
+                        </div>
+                      )}
+
                       {/* Actions */}
                       <div className="flex items-center gap-1.5">
                         <Button variant="outline" size="sm" className="flex-1 text-xs h-8"
@@ -396,6 +414,7 @@ export default function TemplateManager() {
                           onClick={() => handleDuplicate(template)}>
                           <Copy className="w-3.5 h-3.5" />
                         </Button>
+                        <ShareButton template={template} />
                         <Button variant="outline" size="sm" className="h-8 px-2"
                           onClick={() => handleToggleActive(template)}>
                           {template.isActive ? <ToggleRight className="w-4 h-4 text-green-500" /> : <ToggleLeft className="w-4 h-4 text-gray-400" />}
@@ -693,133 +712,176 @@ function TemplateEditor({
           </div>
         </div>
 
-        {/* Right: Live Preview */}
+        {/* Right: Live Preview - معاينة A4 مصغرة كاملة */}
         <div>
-          <label className="text-xs font-medium text-muted-foreground mb-2 block">معاينة حية</label>
-          <div className="border border-border rounded-xl overflow-hidden shadow-lg" style={{ fontFamily: form.fontFamily }}>
-            {/* Header Preview based on headerStyle */}
-            <div className="relative" style={{ backgroundColor: form.headerBg }}>
-              {form.coverImageUrl && (
-                <img src={form.coverImageUrl} alt="" className="absolute inset-0 w-full h-full object-cover opacity-20" />
-              )}
-              {layout.headerStyle === 1 && (
-                <div className="relative z-10 flex items-center justify-between px-4 py-3">
-                  <div className="text-right">
-                    <p className="text-[9px] font-bold" style={{ color: form.headerText }}>المملكة العربية السعودية</p>
-                    <p className="text-[8px]" style={{ color: form.headerText + 'CC' }}>وزارة التعليم</p>
-                    <p className="text-[8px]" style={{ color: form.headerText + 'CC' }}>الإدارة العامة للتعليم</p>
-                  </div>
-                  <div className="text-center">
-                    {form.logoUrl ? (
-                      <img src={form.logoUrl} alt="" className="w-10 h-10 rounded-lg mx-auto object-contain bg-white/20 p-0.5" />
-                    ) : (
-                      <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center mx-auto">
-                        <FileText className="w-5 h-5" style={{ color: form.headerText }} />
-                      </div>
-                    )}
-                  </div>
-                  <div className="text-left">
-                    <p className="text-[9px] font-bold" style={{ color: form.headerText }}>الفصل الدراسي: ...</p>
-                    <p className="text-[8px]" style={{ color: form.headerText + 'CC' }}>العام الدراسي: ...</p>
-                  </div>
-                </div>
-              )}
-              {layout.headerStyle === 2 && (
-                <div className="relative z-10 flex items-center justify-between px-4 py-3">
-                  <div className="text-right flex-1">
-                    <p className="text-[9px] font-bold" style={{ color: form.headerText }}>المملكة العربية السعودية</p>
-                    <p className="text-[8px]" style={{ color: form.headerText + 'CC' }}>وزارة التعليم</p>
-                  </div>
-                  <div>
-                    {form.logoUrl ? (
-                      <img src={form.logoUrl} alt="" className="w-10 h-10 rounded-lg object-contain bg-white/20 p-0.5" />
-                    ) : (
-                      <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center">
-                        <FileText className="w-5 h-5" style={{ color: form.headerText }} />
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-              {layout.headerStyle === 3 && (
-                <div className="relative z-10 text-center py-4">
-                  {form.logoUrl ? (
-                    <img src={form.logoUrl} alt="" className="w-10 h-10 rounded-lg mx-auto object-contain bg-white/20 p-0.5 mb-1" />
-                  ) : (
-                    <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center mx-auto mb-1">
-                      <FileText className="w-5 h-5" style={{ color: form.headerText }} />
-                    </div>
-                  )}
-                  <p className="text-[10px] font-bold" style={{ color: form.headerText }}>شواهد الأداء الوظيفي</p>
-                  <p className="text-[8px]" style={{ color: form.headerText + 'CC' }}>العام الدراسي 1447هـ</p>
-                </div>
-              )}
-              {layout.headerStyle === 4 && (
-                <div className="relative z-10 px-4 py-3">
-                  <div className="flex items-center justify-between mb-2">
-                    <p className="text-[9px] font-bold" style={{ color: form.headerText }}>المملكة العربية السعودية</p>
-                    <p className="text-[9px] font-bold" style={{ color: form.headerText }}>الفصل الدراسي: ...</p>
-                  </div>
-                  <div className="text-center">
-                    {form.logoUrl && <img src={form.logoUrl} alt="" className="w-8 h-8 rounded mx-auto object-contain bg-white/20 p-0.5" />}
-                    <p className="text-[8px] mt-1" style={{ color: form.headerText + 'CC' }}>وزارة التعليم</p>
-                  </div>
-                </div>
-              )}
-            </div>
+          <label className="text-xs font-medium text-muted-foreground mb-2 block">معاينة حية - صفحة A4 مصغرة</label>
+          <div className="border border-border rounded-xl overflow-hidden shadow-lg bg-gray-100 p-3">
+            {/* A4 Page Miniature */}
+            <div style={{
+              width: '100%',
+              aspectRatio: '210/297',
+              backgroundColor: '#ffffff',
+              border: `2px solid ${form.borderColor || '#047857'}`,
+              borderRadius: '4px',
+              overflow: 'hidden',
+              fontFamily: form.fontFamily,
+              display: 'flex',
+              flexDirection: 'column',
+              fontSize: '0.55rem',
+              direction: 'rtl',
+              position: 'relative',
+            }}>
 
-            {/* Content Preview */}
-            <div className="p-4 space-y-3" style={{ backgroundColor: form.bodyBg }}>
-              <div className="rounded-lg p-2.5" style={{ backgroundColor: form.accent + '15', borderRight: `3px solid ${form.accent}` }}>
-                <h4 className="text-xs font-bold" style={{ color: form.accent }}>المعيار الأول: أداء الواجبات</h4>
+              {/* === الترويسة === */}
+              <div style={{ backgroundColor: form.headerBg, position: 'relative' }}>
+                {form.coverImageUrl && (
+                  <img src={form.coverImageUrl} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', opacity: 0.15 }} />
+                )}
+
+                {layout.headerStyle === 1 && (
+                  <div style={{ position: 'relative', zIndex: 1, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 10px' }}>
+                    <div style={{ textAlign: 'right' }}>
+                      <div style={{ fontSize: '6px', fontWeight: 700, color: form.headerText }}>المملكة العربية السعودية</div>
+                      <div style={{ fontSize: '5.5px', color: form.headerText + 'CC' }}>وزارة التعليم</div>
+                      <div style={{ fontSize: '5px', color: form.headerText + 'AA' }}>الإدارة العامة للتعليم بمنطقة ...</div>
+                      <div style={{ fontSize: '5px', color: form.headerText + 'AA' }}>مدرسة ...</div>
+                    </div>
+                    <div style={{ textAlign: 'center' }}>
+                      {form.logoUrl ? (
+                        <img src={form.logoUrl} alt="" style={{ width: '28px', height: '28px', objectFit: 'contain', borderRadius: '4px', background: 'rgba(255,255,255,0.2)', padding: '2px' }} />
+                      ) : (
+                        <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: 'rgba(255,255,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                          <FileText style={{ width: '14px', height: '14px', color: form.headerText }} />
+                        </div>
+                      )}
+                    </div>
+                    <div style={{ textAlign: 'left' }}>
+                      <div style={{ fontSize: '5.5px', fontWeight: 700, color: form.headerText }}>الفصل الدراسي: ...</div>
+                      <div style={{ fontSize: '5px', color: form.headerText + 'CC' }}>العام الدراسي: ...</div>
+                    </div>
+                  </div>
+                )}
+
+                {layout.headerStyle === 2 && (
+                  <div style={{ position: 'relative', zIndex: 1, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 10px' }}>
+                    <div style={{ textAlign: 'right', flex: 1 }}>
+                      <div style={{ fontSize: '6px', fontWeight: 700, color: form.headerText }}>المملكة العربية السعودية</div>
+                      <div style={{ fontSize: '5.5px', color: form.headerText + 'CC' }}>وزارة التعليم</div>
+                      <div style={{ fontSize: '5px', color: form.headerText + 'AA' }}>الإدارة العامة للتعليم</div>
+                    </div>
+                    <div>
+                      {form.logoUrl ? (
+                        <img src={form.logoUrl} alt="" style={{ width: '28px', height: '28px', objectFit: 'contain', borderRadius: '4px', background: 'rgba(255,255,255,0.2)', padding: '2px' }} />
+                      ) : (
+                        <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: 'rgba(255,255,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                          <FileText style={{ width: '14px', height: '14px', color: form.headerText }} />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {layout.headerStyle === 3 && (
+                  <div style={{ position: 'relative', zIndex: 1, textAlign: 'center', padding: '8px 10px' }}>
+                    {form.logoUrl ? (
+                      <img src={form.logoUrl} alt="" style={{ width: '28px', height: '28px', objectFit: 'contain', borderRadius: '4px', background: 'rgba(255,255,255,0.2)', padding: '2px', margin: '0 auto 3px' }} />
+                    ) : (
+                      <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: 'rgba(255,255,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 3px' }}>
+                        <FileText style={{ width: '14px', height: '14px', color: form.headerText }} />
+                      </div>
+                    )}
+                    <div style={{ fontSize: '6.5px', fontWeight: 700, color: form.headerText }}>شواهد الأداء الوظيفي</div>
+                    <div style={{ fontSize: '5px', color: form.headerText + 'CC', marginTop: '2px' }}>العام الدراسي 1447هـ</div>
+                  </div>
+                )}
+
+                {layout.headerStyle === 4 && (
+                  <div style={{ position: 'relative', zIndex: 1, padding: '6px 10px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '3px' }}>
+                      <div style={{ fontSize: '5.5px', fontWeight: 700, color: form.headerText }}>المملكة العربية السعودية</div>
+                      <div style={{ fontSize: '5.5px', fontWeight: 700, color: form.headerText }}>الفصل الدراسي: ...</div>
+                    </div>
+                    <div style={{ textAlign: 'center' }}>
+                      {form.logoUrl && <img src={form.logoUrl} alt="" style={{ width: '22px', height: '22px', objectFit: 'contain', borderRadius: '3px', background: 'rgba(255,255,255,0.2)', padding: '1px', margin: '0 auto' }} />}
+                      <div style={{ fontSize: '5px', color: form.headerText + 'CC', marginTop: '2px' }}>وزارة التعليم</div>
+                    </div>
+                  </div>
+                )}
               </div>
 
-              {/* Field Style Preview */}
-              {layout.fieldStyle === 'table' && (
-                <div className="rounded-lg overflow-hidden border" style={{ borderColor: form.borderColor }}>
-                  <table className="w-full text-[9px]">
-                    <tbody>
-                      <tr>
-                        <td className="px-2 py-1.5 font-bold" style={{ backgroundColor: form.accent + '15', color: form.accent, width: '35%' }}>اسم المعلم</td>
-                        <td className="px-2 py-1.5 bg-white">أحمد محمد</td>
-                      </tr>
-                      <tr>
-                        <td className="px-2 py-1.5 font-bold border-t" style={{ backgroundColor: form.accent + '15', color: form.accent, borderColor: form.borderColor }}>المادة</td>
-                        <td className="px-2 py-1.5 bg-white border-t" style={{ borderColor: form.borderColor }}>الرياضيات</td>
-                      </tr>
-                    </tbody>
-                  </table>
+              {/* === عنوان المعيار === */}
+              <div style={{ padding: '6px 10px', flex: 1, backgroundColor: form.bodyBg }}>
+                <div style={{ backgroundColor: form.accent + '15', borderRight: `2px solid ${form.accent}`, borderRadius: '3px', padding: '4px 6px', marginBottom: '6px' }}>
+                  <div style={{ fontSize: '6px', fontWeight: 700, color: form.accent }}>المعيار الأول: أداء الواجبات الوظيفية</div>
                 </div>
-              )}
-              {layout.fieldStyle === 'cards' && (
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="rounded-lg p-2 border" style={{ borderColor: form.borderColor, background: `linear-gradient(135deg, ${form.accent}08, ${form.accent}15)` }}>
-                    <div className="text-[8px] font-bold mb-0.5" style={{ color: form.accent }}>اسم المعلم</div>
-                    <div className="text-[9px]">أحمد محمد</div>
-                  </div>
-                  <div className="rounded-lg p-2 border" style={{ borderColor: form.borderColor, background: `linear-gradient(135deg, ${form.accent}08, ${form.accent}15)` }}>
-                    <div className="text-[8px] font-bold mb-0.5" style={{ color: form.accent }}>المادة</div>
-                    <div className="text-[9px]">الرياضيات</div>
-                  </div>
-                </div>
-              )}
-              {(layout.fieldStyle === 'fieldset' || layout.fieldStyle === 'underlined' || layout.fieldStyle === 'minimal') && (
-                <div className="grid grid-cols-2 gap-2">
-                  <div className={`p-2 ${layout.fieldStyle === 'underlined' ? 'border-b-2' : 'border rounded-lg'}`} style={{ borderColor: form.accent + '50' }}>
-                    <div className="text-[8px] font-bold mb-0.5" style={{ color: form.accent }}>اسم المعلم</div>
-                    <div className="text-[9px]">أحمد محمد</div>
-                  </div>
-                  <div className={`p-2 ${layout.fieldStyle === 'underlined' ? 'border-b-2' : 'border rounded-lg'}`} style={{ borderColor: form.accent + '50' }}>
-                    <div className="text-[8px] font-bold mb-0.5" style={{ color: form.accent }}>المادة</div>
-                    <div className="text-[9px]">الرياضيات</div>
-                  </div>
-                </div>
-              )}
-            </div>
 
-            {/* Footer Preview */}
-            <div className="px-4 py-2 text-center text-[8px]" style={{ backgroundColor: form.headerBg + '15', color: form.accent }}>
-              SERS - نظام السجلات التعليمية الذكي
+                {/* === أنماط الحقول === */}
+                {layout.fieldStyle === 'table' && (
+                  <div style={{ border: `1px solid ${form.borderColor}`, borderRadius: '3px', overflow: 'hidden', marginBottom: '6px' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '5.5px' }}>
+                      <tbody>
+                        <tr>
+                          <td style={{ padding: '3px 5px', fontWeight: 700, backgroundColor: form.accent + '15', color: form.accent, width: '35%', borderBottom: `1px solid ${form.borderColor}` }}>اسم المعلم</td>
+                          <td style={{ padding: '3px 5px', backgroundColor: '#fff', borderBottom: `1px solid ${form.borderColor}` }}>أحمد محمد العلي</td>
+                        </tr>
+                        <tr>
+                          <td style={{ padding: '3px 5px', fontWeight: 700, backgroundColor: form.accent + '15', color: form.accent, borderBottom: `1px solid ${form.borderColor}` }}>المادة</td>
+                          <td style={{ padding: '3px 5px', backgroundColor: '#fff', borderBottom: `1px solid ${form.borderColor}` }}>الرياضيات</td>
+                        </tr>
+                        <tr>
+                          <td style={{ padding: '3px 5px', fontWeight: 700, backgroundColor: form.accent + '15', color: form.accent }}>المدرسة</td>
+                          <td style={{ padding: '3px 5px', backgroundColor: '#fff' }}>متوسطة النموذجية</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+                {layout.fieldStyle === 'cards' && (
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px', marginBottom: '6px' }}>
+                    {['اسم المعلم', 'المادة', 'المدرسة', 'العام'].map((label, i) => (
+                      <div key={i} style={{ borderRadius: '3px', padding: '3px 5px', border: `1px solid ${form.borderColor}`, background: `linear-gradient(135deg, ${form.accent}08, ${form.accent}15)` }}>
+                        <div style={{ fontSize: '4.5px', fontWeight: 700, color: form.accent }}>{label}</div>
+                        <div style={{ fontSize: '5.5px', color: '#1F2937' }}>نموذج</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {(layout.fieldStyle === 'fieldset' || layout.fieldStyle === 'underlined' || layout.fieldStyle === 'minimal') && (
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px', marginBottom: '6px' }}>
+                    {['اسم المعلم', 'المادة', 'المدرسة', 'العام'].map((label, i) => (
+                      <div key={i} style={{ padding: '3px 5px', borderBottom: layout.fieldStyle === 'underlined' ? `1.5px solid ${form.accent}50` : undefined, border: layout.fieldStyle !== 'underlined' ? `1px solid ${form.accent}30` : undefined, borderRadius: layout.fieldStyle !== 'underlined' ? '3px' : undefined }}>
+                        <div style={{ fontSize: '4.5px', fontWeight: 700, color: form.accent }}>{label}</div>
+                        <div style={{ fontSize: '5.5px', color: '#1F2937' }}>نموذج</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* === شاهد نموذجي === */}
+                <div style={{ border: `1px solid ${form.accent}20`, borderRadius: '3px', padding: '4px 6px', marginBottom: '6px' }}>
+                  <div style={{ fontSize: '5.5px', fontWeight: 700, color: form.accent, marginBottom: '2px' }}>شاهد: خطة تحضير الدروس</div>
+                  <div style={{ width: '100%', height: '30px', backgroundColor: '#f3f4f6', borderRadius: '2px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <div style={{ fontSize: '5px', color: '#9CA3AF' }}>صورة الشاهد / باركود</div>
+                  </div>
+                </div>
+
+                {/* === توقيعات === */}
+                <div style={{ display: 'flex', gap: '8px', marginTop: 'auto' }}>
+                  <div style={{ flex: 1, textAlign: 'center', padding: '4px', border: `1px solid ${form.accent}20`, borderRadius: '3px' }}>
+                    <div style={{ fontSize: '5px', color: form.accent, fontWeight: 700 }}>توقيع المدير</div>
+                    <div style={{ borderBottom: `1px solid ${form.accent}30`, margin: '6px 8px 2px', paddingTop: '8px' }} />
+                  </div>
+                  <div style={{ flex: 1, textAlign: 'center', padding: '4px', border: `1px solid ${form.accent}20`, borderRadius: '3px' }}>
+                    <div style={{ fontSize: '5px', color: form.accent, fontWeight: 700 }}>توقيع الموظف</div>
+                    <div style={{ borderBottom: `1px solid ${form.accent}30`, margin: '6px 8px 2px', paddingTop: '8px' }} />
+                  </div>
+                </div>
+              </div>
+
+              {/* === التذييل === */}
+              <div style={{ padding: '3px 10px', textAlign: 'center', fontSize: '4.5px', backgroundColor: form.headerBg + '15', color: form.accent, borderTop: `1px solid ${form.borderColor}` }}>
+                SERS - نظام السجلات التعليمية الذكي
+              </div>
             </div>
           </div>
         </div>
@@ -834,5 +896,52 @@ function TemplateEditor({
         </Button>
       </div>
     </div>
+  );
+}
+
+// ===== Share Button Component =====
+function ShareButton({ template }: { template: any }) {
+  const utils = trpc.useUtils();
+  const generateMutation = trpc.templates.generateShareLink.useMutation({
+    onSuccess: () => {
+      utils.templates.listAll.invalidate();
+      toast.success('تم إنشاء رابط المشاركة');
+    },
+    onError: () => toast.error('فشل إنشاء رابط المشاركة'),
+  });
+  const revokeMutation = trpc.templates.revokeShareLink.useMutation({
+    onSuccess: () => {
+      utils.templates.listAll.invalidate();
+      toast.success('تم إلغاء المشاركة');
+    },
+    onError: () => toast.error('فشل إلغاء المشاركة'),
+  });
+
+  if (template.isShared && template.shareToken) {
+    return (
+      <Button
+        variant="outline"
+        size="sm"
+        className="h-8 px-2 text-blue-600 hover:text-red-600 hover:bg-red-50"
+        title="إلغاء المشاركة"
+        onClick={() => revokeMutation.mutate({ id: template.id })}
+        disabled={revokeMutation.isPending}
+      >
+        {revokeMutation.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Link2Off className="w-3.5 h-3.5" />}
+      </Button>
+    );
+  }
+
+  return (
+    <Button
+      variant="outline"
+      size="sm"
+      className="h-8 px-2 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+      title="مشاركة القالب"
+      onClick={() => generateMutation.mutate({ id: template.id })}
+      disabled={generateMutation.isPending}
+    >
+      {generateMutation.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Share2 className="w-3.5 h-3.5" />}
+    </Button>
   );
 }

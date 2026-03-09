@@ -1,0 +1,16 @@
+{
+  "query": "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'pdf_templates' AND COLUMN_NAME IN ('shareToken', 'isShared');",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 6C7x6f29RX1BcFf.7325488fde9e --database h34s4aPNVyHXdtjgZ7eNNf --execute SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'pdf_templates' AND COLUMN_NAME IN ('shareToken', 'isShared');",
+  "rows": [
+    {
+      "COLUMN_NAME": "shareToken"
+    },
+    {
+      "COLUMN_NAME": "isShared"
+    }
+  ],
+  "messages": [],
+  "stdout": "COLUMN_NAME\nshareToken\nisShared\n",
+  "stderr": "",
+  "execution_time_ms": 52
+}

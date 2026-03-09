@@ -321,6 +321,56 @@ export const appRouter = router({
         const { url } = await storagePut(fileKey, buffer, input.mimeType);
         return { url, fileKey };
       }),
+
+    // مشاركة القالب عبر رابط فريد
+    generateShareLink: adminProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input }) => {
+        const token = nanoid(24);
+        await updatePdfTemplate(input.id, { shareToken: token, isShared: true } as any);
+        return { token };
+      }),
+
+    revokeShareLink: adminProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input }) => {
+        await updatePdfTemplate(input.id, { shareToken: null, isShared: false } as any);
+        return { success: true };
+      }),
+
+    getByShareToken: publicProcedure
+      .input(z.object({ token: z.string() }))
+      .query(async ({ input }) => {
+        const all = await getAllPdfTemplates();
+        const template = all.find((t: any) => t.shareToken === input.token && t.isShared);
+        if (!template) return null;
+        return template;
+      }),
+
+    importFromShare: protectedProcedure
+      .input(z.object({ token: z.string() }))
+      .mutation(async ({ ctx, input }) => {
+        const all = await getAllPdfTemplates();
+        const source = all.find((t: any) => t.shareToken === input.token && t.isShared);
+        if (!source) throw new Error('القالب غير موجود أو تم إلغاء المشاركة');
+        // حفظ كثيم مخصص للمستخدم
+        return createUserTheme({
+          userId: ctx.user.id,
+          name: `${source.name} (مستورد)`,
+          description: source.description || '',
+          themeData: {
+            headerBg: source.headerBg,
+            headerText: source.headerText,
+            accent: source.accent,
+            borderColor: source.borderColor,
+            bodyBg: source.bodyBg,
+            fontFamily: source.fontFamily,
+            coverImageUrl: source.coverImageUrl,
+            logoUrl: source.logoUrl,
+            templateLayout: source.templateLayout,
+          },
+        });
+      }),
   }),
 
   // ─── User Custom Themes ───────────────────────────────────────────────

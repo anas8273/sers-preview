@@ -133,3 +133,65 @@
     }
   }
 }
+
+
+/* ===== أنماط المعاينة Responsive ===== */
+/* حاوية المعاينة - تصغير تلقائي على الشاشات الصغيرة */
+.preview-wrapper {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* صفحة A4 - تصغير تلقائي */
+.pdf-page {
+  transform-origin: top center;
+}
+
+/* شاشات صغيرة جداً (موبايل) */
+@media (max-width: 640px) {
+  .preview-wrapper .pdf-page,
+  #preview-content > div {
+    transform: scale(0.45);
+    transform-origin: top center;
+    margin-bottom: -55% !important;
+  }
+  #preview-content {
+    overflow: visible;
+  }
+}
+
+/* شاشات متوسطة (تابلت عمودي) */
+@media (min-width: 641px) and (max-width: 900px) {
+  .preview-wrapper .pdf-page,
+  #preview-content > div {
+    transform: scale(0.65);
+    transform-origin: top center;
+    margin-bottom: -35% !important;
+  }
+}
+
+/* شاشات تابلت أفقي */
+@media (min-width: 901px) and (max-width: 1100px) {
+  .preview-wrapper .pdf-page,
+  #preview-content > div {
+    transform: scale(0.8);
+    transform-origin: top center;
+    margin-bottom: -20% !important;
+  }
+}
+
+/* طباعة - إلغاء التصغير */
+@media print {
+  .preview-wrapper .pdf-page,
+  #preview-content > div {
+    transform: none !important;
+    margin-bottom: 0 !important;
+    width: 210mm !important;
+    min-height: 297mm !important;
+    page-break-after: always;
+  }
+  .no-print {
+    display: none !important;
+  }
+}

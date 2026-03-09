@@ -145,6 +145,8 @@ export const pdfTemplates = mysqlTable("pdf_templates", {
   isDefault: boolean("isDefault").default(false),
   isActive: boolean("isActive").default(true),
   sortOrder: int("sortOrder").default(0),
+  shareToken: varchar("shareToken", { length: 128 }).unique(),
+  isShared: boolean("isShared").default(false),
   createdBy: int("createdBy"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),

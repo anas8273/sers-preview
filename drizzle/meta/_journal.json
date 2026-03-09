@@ -43,6 +43,13 @@
       "when": 1773095769027,
       "tag": "0005_keen_gateway",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "5",
+      "when": 1773097633130,
+      "tag": "0006_sudden_sage",
+      "breakpoints": true
     }
   ]
 }

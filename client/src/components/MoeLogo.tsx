@@ -6,7 +6,7 @@
 import React from "react";
 
 // شعار وزارة التعليم الكامل (نقاط + نص عربي + نص إنجليزي) - 700x579
-const MOE_LOGO_FULL = "https://d2xsxph8kpxj0f.cloudfront.net/310519663047121386/h34s4aPNVyHXdtjgZ7eNNf/moe-logo-colored_7f7b0c26.png";
+const MOE_LOGO_FULL = "https://d2xsxph8kpxj0f.cloudfront.net/310519663047121386/h34s4aPNVyHXdtjgZ7eNNf/moe-logo_b9fec681.png";
 
 // شعار النقاط فقط (بدون نص) - 2000x2000
 const MOE_DOTS_ONLY = "https://d2xsxph8kpxj0f.cloudfront.net/310519663047121386/h34s4aPNVyHXdtjgZ7eNNf/moe-dots-only_25b62597.png";

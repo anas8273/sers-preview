@@ -211,73 +211,62 @@ interface ThemeConfig {
   headerVariant?: 'right-text-center-logo-left-info' | 'right-text-left-logo' | 'center-logo-banner' | 'full-header-sections';
 }
 
-// ===== القالب الافتراضي (يُستخدم فقط إذا لم تتوفر قوالب من قاعدة البيانات) =====
-// ألوان الهوية البصرية لوزارة التعليم: داكن #1a4d4e، متوسط #0d7377، فاتح #2ea87a
+// ===== القالب الافتراضي - مطابق للهوية البصرية الرسمية لوزارة التعليم =====
+// ألوان الهوية البصرية: أزرق داكن #1a3a5c، فيروزي #0d7377، أخضر #2ea87a
 const DEFAULT_THEME: ThemeConfig = {
-  id: 'default', name: 'رسمي - ترويسة داكنة',
-  layoutType: 'dark-header-table',
-  headerBg: 'linear-gradient(135deg, #1a4d4e 0%, #0d5f61 50%, #0d7377 100%)', headerText: '#fff',
-  accent: '#0d7377', borderColor: '#1a4d4e',
+  id: 'default', name: 'النمط 1 - ترويسة بيضاء مع شريط علوي',
+  layoutType: 'white-header-classic',
+  headerBg: '#ffffff', headerText: '#1a3a5c',
+  accent: '#0d7377', borderColor: '#1a3a5c',
   titleBg: '#0d7377', fieldLabelBg: '#0d7377',
-  footerBg: 'linear-gradient(to left, #1a4d4e, #0d7377, #2ea87a)',
+  footerBg: 'linear-gradient(to left, #1a3a5c, #0d7377, #2ea87a)',
   tableStyle: true, titleStyle: 'rounded', showTopLine: true, showBottomBar: true,
   fieldStyle: 'table', signatureStyle: 'boxed',
   coverStyle: 'gradient-center', sectionCoverStyle: 'full-gradient', coverAccent2: '#2ea87a',
   headerVariant: 'right-text-center-logo-left-info',
 };
 
-// قوالب مدمجة إضافية (fallback عند عدم توفر قوالب DB)
+// 4 قوالب مدمجة مطابقة للهوية البصرية الرسمية (من ملف التصاميم المرفق)
 const BUILTIN_THEMES: ThemeConfig[] = [
   DEFAULT_THEME,
   {
-    id: 'builtin-classic', name: 'كلاسيكي - ترويسة بيضاء',
+    // النمط 2 - ترويسة بيضاء مع فصل وعام دراسي (صفحة 2 من ملف الهوية)
+    id: 'builtin-with-semester', name: 'النمط 2 - ترويسة مع فصل وعام دراسي',
     layoutType: 'white-header-classic',
-    headerBg: '#ffffff', headerText: '#1a4d4e',
-    accent: '#0d7377', borderColor: '#1a4d4e',
+    headerBg: '#ffffff', headerText: '#1a3a5c',
+    accent: '#0d7377', borderColor: '#1a3a5c',
     titleBg: '#0d7377', fieldLabelBg: '#0d7377',
-    footerBg: 'linear-gradient(to left, #1a4d4e, #0d7377, #2ea87a)',
-    tableStyle: false, titleStyle: 'full-width', showTopLine: false, showBottomBar: true,
+    footerBg: 'linear-gradient(to left, #1a3a5c, #0d7377, #2ea87a)',
+    tableStyle: false, titleStyle: 'rounded', showTopLine: false, showBottomBar: false,
     fieldStyle: 'fieldset', signatureStyle: 'dotted',
     coverStyle: 'split-left', sectionCoverStyle: 'left-stripe', coverAccent2: '#2ea87a',
+    headerVariant: 'right-text-center-logo-left-info',
+  },
+  {
+    // النمط 3 - ترويسة بيضاء مع خطوط فاصلة (صفحة 3 من ملف الهوية)
+    id: 'builtin-lined-header', name: 'النمط 3 - ترويسة مع خطوط فاصلة',
+    layoutType: 'white-header-classic',
+    headerBg: '#ffffff', headerText: '#1a3a5c',
+    accent: '#0d7377', borderColor: '#1a3a5c',
+    titleBg: '#0d7377', fieldLabelBg: '#0d7377',
+    footerBg: 'linear-gradient(to left, #1a3a5c, #0d7377, #2ea87a)',
+    tableStyle: false, titleStyle: 'rounded', showTopLine: true, showBottomBar: true,
+    fieldStyle: 'underlined', signatureStyle: 'solid',
+    headerSeparator: true,
+    coverStyle: 'diagonal', sectionCoverStyle: 'top-accent', coverAccent2: '#2ea87a',
     headerVariant: 'right-text-left-logo',
   },
   {
-    id: 'builtin-cards', name: 'بطاقات ملونة',
-    layoutType: 'white-header-cards',
-    headerBg: '#ffffff', headerText: '#1a4d4e',
-    accent: '#0d7377', borderColor: '#1a4d4e',
+    // النمط 4 - ترويسة داكنة كاملة (صفحة 4 من ملف الهوية)
+    id: 'builtin-dark-header', name: 'النمط 4 - ترويسة داكنة رسمية',
+    layoutType: 'dark-header-table',
+    headerBg: 'linear-gradient(135deg, #1a3a5c 0%, #1a4d5e 50%, #0d7377 100%)', headerText: '#ffffff',
+    accent: '#0d7377', borderColor: '#1a3a5c',
     titleBg: '#0d7377', fieldLabelBg: '#0d7377',
-    footerBg: 'linear-gradient(to left, #1a4d4e, #0d7377, #2ea87a)',
-    tableStyle: false, titleStyle: 'badge', showTopLine: false, showBottomBar: true,
-    fieldStyle: 'cards', signatureStyle: 'lined',
-    bodyBg: '#f0faf8',
-    headerSeparator: true,
-    coverStyle: 'framed-elegant', sectionCoverStyle: 'card-center', coverAccent2: '#2ea87a',
-    headerVariant: 'center-logo-banner',
-  },
-  {
-    id: 'builtin-light', name: 'فاتح - خلفية فيروزية',
-    layoutType: 'white-header-light',
-    headerBg: '#ffffff', headerText: '#0d7377',
-    accent: '#2ea87a', borderColor: '#0d7377',
-    titleBg: '#2ea87a', fieldLabelBg: '#2ea87a',
-    footerBg: 'linear-gradient(to left, #0d7377, #2ea87a, #4ecdc4)',
-    tableStyle: false, titleStyle: 'underlined', showTopLine: false, showBottomBar: true,
-    fieldStyle: 'underlined', signatureStyle: 'solid',
-    bodyBg: '#e8f5f2',
-    coverStyle: 'diagonal', sectionCoverStyle: 'top-accent', coverAccent2: '#4ecdc4',
-    headerVariant: 'full-header-sections',
-  },
-  {
-    id: 'builtin-dark-simple', name: 'داكن - حقول بسيطة',
-    layoutType: 'dark-header-simple',
-    headerBg: 'linear-gradient(135deg, #0a3d3e 0%, #1a4d4e 50%, #0d7377 100%)', headerText: '#fff',
-    accent: '#1a4d4e', borderColor: '#0a3d3e',
-    titleBg: '#1a4d4e', fieldLabelBg: '#1a4d4e',
-    footerBg: 'linear-gradient(to left, #0a3d3e, #1a4d4e, #0d7377)',
-    tableStyle: false, titleStyle: 'bordered', showTopLine: true, showBottomBar: true,
-    fieldStyle: 'fieldset', signatureStyle: 'boxed',
-    coverStyle: 'top-bar', sectionCoverStyle: 'numbered-bar', coverAccent2: '#0d7377',
+    footerBg: 'linear-gradient(to left, #1a3a5c, #0d7377, #2ea87a)',
+    tableStyle: true, titleStyle: 'full-width', showTopLine: false, showBottomBar: true,
+    fieldStyle: 'table', signatureStyle: 'boxed',
+    coverStyle: 'top-bar', sectionCoverStyle: 'numbered-bar', coverAccent2: '#2ea87a',
     headerVariant: 'right-text-center-logo-left-info',
   },
 ];
@@ -3101,8 +3090,8 @@ export default function PerformanceEvidence() {
                       {/* ========== الترويسة الرسمية - 4 أنماط ========== */}
                       {(() => {
                         const hv = theme.headerVariant || 'right-text-center-logo-left-info';
-                        const hBg = isDarkHeader ? (theme.headerBg || 'linear-gradient(135deg, #1a4d4e 0%, #0d5f61 50%, #0d7377 100%)') : '#ffffff';
-                        const hTextColor = isDarkHeader ? '#ffffff' : (theme.borderColor || '#1a4d4e');
+                        const hBg = isDarkHeader ? (theme.headerBg || 'linear-gradient(135deg, #1a3a5c 0%, #1a4d5e 50%, #0d7377 100%)') : '#ffffff';
+                        const hTextColor = isDarkHeader ? '#ffffff' : (theme.borderColor || '#1a3a5c');
                         const allDeptLines = (personalInfo.department || '').split('\n').filter((l: string) => l.trim());
 
                         // نمط 1: كتابة يمين + شعار وسط + معلومات/شعار يسار
@@ -3148,10 +3137,10 @@ export default function PerformanceEvidence() {
                                   <tr>
                                     <td style={{ width: '55%', verticalAlign: 'middle', textAlign: 'right', padding: '0' }}>
                                       {allDeptLines.map((line: string, i: number) => (
-                                        <div key={i} style={{ fontSize: '14px', color: '#1a4d4e', fontWeight: 700, lineHeight: '2.2', letterSpacing: '0.3px' }}>{line}</div>
+                                        <div key={i} style={{ fontSize: '14px', color: '#1a3a5c', fontWeight: 700, lineHeight: '2.2', letterSpacing: '0.3px' }}>{line}</div>
                                       ))}
                                       {personalInfo.school && (
-                                        <div style={{ fontSize: '14px', color: '#1a4d4e', fontWeight: 700, lineHeight: '2.2' }}>{personalInfo.school}</div>
+                                        <div style={{ fontSize: '14px', color: '#1a3a5c', fontWeight: 700, lineHeight: '2.2' }}>{personalInfo.school}</div>
                                       )}
                                     </td>
                                     <td style={{ width: '45%', verticalAlign: 'middle', textAlign: 'left', padding: '0' }}>
@@ -3162,8 +3151,8 @@ export default function PerformanceEvidence() {
                                         )}
                                       </div>
                                       <div style={{ textAlign: 'left', marginTop: '4px' }}>
-                                        {personalInfo.semester && <div style={{ fontSize: '11px', color: '#1a4d4e', fontWeight: 600, lineHeight: '1.7' }}>الفصل الدراسي: {personalInfo.semester}</div>}
-                                        {personalInfo.year && <div style={{ fontSize: '11px', color: '#1a4d4e', fontWeight: 600, lineHeight: '1.7' }}>العام الدراسي: {personalInfo.year}</div>}
+                                        {personalInfo.semester && <div style={{ fontSize: '11px', color: '#1a3a5c', fontWeight: 600, lineHeight: '1.7' }}>الفصل الدراسي: {personalInfo.semester}</div>}
+                                        {personalInfo.year && <div style={{ fontSize: '11px', color: '#1a3a5c', fontWeight: 600, lineHeight: '1.7' }}>العام الدراسي: {personalInfo.year}</div>}
                                       </div>
                                     </td>
                                   </tr>
@@ -3182,12 +3171,12 @@ export default function PerformanceEvidence() {
                                   <tbody>
                                     <tr>
                                       <td style={{ width: '50%', verticalAlign: 'middle', textAlign: 'right', padding: '0' }}>
-                                        <div style={{ fontSize: '13px', color: '#1a4d4e', fontWeight: 700, lineHeight: '2.0' }}>وزارة التعليم</div>
+                                        <div style={{ fontSize: '13px', color: '#1a3a5c', fontWeight: 700, lineHeight: '2.0' }}>وزارة التعليم</div>
                                         {filteredDeptLines.map((line: string, i: number) => (
-                                          <div key={i} style={{ fontSize: '12px', color: '#1a4d4e', fontWeight: 600, lineHeight: '1.9' }}>{line}</div>
+                                          <div key={i} style={{ fontSize: '12px', color: '#1a3a5c', fontWeight: 600, lineHeight: '1.9' }}>{line}</div>
                                         ))}
                                         {personalInfo.school && (
-                                          <div style={{ fontSize: '12px', color: '#1a4d4e', fontWeight: 600, lineHeight: '1.9' }}>مدرسة: {personalInfo.school}</div>
+                                          <div style={{ fontSize: '12px', color: '#1a3a5c', fontWeight: 600, lineHeight: '1.9' }}>مدرسة: {personalInfo.school}</div>
                                         )}
                                       </td>
                                       <td style={{ width: '50%', verticalAlign: 'middle', textAlign: 'left', padding: '0' }}>
@@ -3198,8 +3187,8 @@ export default function PerformanceEvidence() {
                                           )}
                                         </div>
                                         <div style={{ textAlign: 'left', marginTop: '4px' }}>
-                                          {personalInfo.semester && <div style={{ fontSize: '11px', color: '#1a4d4e', fontWeight: 600, lineHeight: '1.7' }}>الفصل الدراسي: {personalInfo.semester}</div>}
-                                          {personalInfo.year && <div style={{ fontSize: '11px', color: '#1a4d4e', fontWeight: 600, lineHeight: '1.7' }}>العام الدراسي: {personalInfo.year}</div>}
+                                          {personalInfo.semester && <div style={{ fontSize: '11px', color: '#1a3a5c', fontWeight: 600, lineHeight: '1.7' }}>الفصل الدراسي: {personalInfo.semester}</div>}
+                                          {personalInfo.year && <div style={{ fontSize: '11px', color: '#1a3a5c', fontWeight: 600, lineHeight: '1.7' }}>العام الدراسي: {personalInfo.year}</div>}
                                         </div>
                                       </td>
                                     </tr>
@@ -3224,10 +3213,10 @@ export default function PerformanceEvidence() {
                                 <tr>
                                   <td style={{ width: '35%', verticalAlign: 'middle', textAlign: 'right', padding: '0' }}>
                                     {allDeptLines.map((line: string, i: number) => (
-                                      <div key={i} style={{ fontSize: '13px', color: '#1a4d4e', fontWeight: 700, lineHeight: '2.0' }}>{line}</div>
+                                      <div key={i} style={{ fontSize: '13px', color: '#1a3a5c', fontWeight: 700, lineHeight: '2.0' }}>{line}</div>
                                     ))}
                                     {personalInfo.school && (
-                                      <div style={{ fontSize: '13px', color: '#1a4d4e', fontWeight: 700, lineHeight: '2.0' }}>{personalInfo.school}</div>
+                                      <div style={{ fontSize: '13px', color: '#1a3a5c', fontWeight: 700, lineHeight: '2.0' }}>{personalInfo.school}</div>
                                     )}
                                   </td>
                                   <td style={{ width: '30%', verticalAlign: 'middle', textAlign: 'center', padding: '0' }}>
@@ -3744,23 +3733,24 @@ export default function PerformanceEvidence() {
       return true;
     });
     return (
-      <div className="min-h-screen bg-muted p-4" dir="rtl">
+      <div className="min-h-screen bg-muted p-2 sm:p-4" dir="rtl">
         <div className="max-w-4xl mx-auto">
-          <div className="flex items-center justify-between mb-4 bg-background rounded-xl p-4 shadow-sm border border-border sticky top-2 z-10">
-            <Button variant="outline" size="sm" onClick={() => setStep('final-review')}>
-              <ArrowRight className="w-4 h-4 ml-1" />العودة
+          <div className="flex items-center justify-between mb-3 sm:mb-4 bg-background rounded-xl p-2 sm:p-4 shadow-sm border border-border sticky top-2 z-10 gap-2">
+            <Button variant="outline" size="sm" className="text-xs sm:text-sm h-8 sm:h-9 shrink-0" onClick={() => setStep('final-review')}>
+              <ArrowRight className="w-3.5 h-3.5 sm:w-4 sm:h-4 ml-0.5 sm:ml-1" /><span className="hidden sm:inline">العودة</span><span className="sm:hidden">رجوع</span>
             </Button>
-            <div className="flex gap-2 flex-wrap">
-              <Button size="sm" onClick={handleExportPDF} disabled={isExporting} className="gap-1.5">
-                {isExporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-                {isExporting ? (pdfProgress.total > 0 ? `تصدير ${pdfProgress.current}/${pdfProgress.total}` : 'جاري التصدير...') : 'تحميل PDF'}
+            <div className="flex gap-1.5 sm:gap-2 flex-wrap justify-end">
+              <Button size="sm" onClick={handleExportPDF} disabled={isExporting} className="gap-1 sm:gap-1.5 text-xs sm:text-sm h-8 sm:h-9">
+                {isExporting ? <Loader2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 animate-spin" /> : <Download className="w-3.5 h-3.5 sm:w-4 sm:h-4" />}
+                <span className="hidden sm:inline">{isExporting ? (pdfProgress.total > 0 ? `تصدير ${pdfProgress.current}/${pdfProgress.total}` : 'جاري التصدير...') : 'تحميل PDF'}</span>
+                <span className="sm:hidden">PDF</span>
               </Button>
-              <Button size="sm" variant="outline" onClick={() => printElement('preview-content')} className="gap-1.5">
-                <Printer className="w-4 h-4" />طباعة
+              <Button size="sm" variant="outline" onClick={() => printElement('preview-content')} className="gap-1 sm:gap-1.5 text-xs sm:text-sm h-8 sm:h-9">
+                <Printer className="w-3.5 h-3.5 sm:w-4 sm:h-4" /><span className="hidden sm:inline">طباعة</span>
               </Button>
-              <Button size="sm" variant="outline" onClick={handleShareLink} disabled={isSharing} className="gap-1.5 text-blue-600 border-blue-200 hover:bg-blue-50">
-                {isSharing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Share2 className="w-4 h-4" />}
-                {isSharing ? 'جاري...' : 'مشاركة كرابط'}
+              <Button size="sm" variant="outline" onClick={handleShareLink} disabled={isSharing} className="gap-1 sm:gap-1.5 text-xs sm:text-sm h-8 sm:h-9 text-blue-600 border-blue-200 hover:bg-blue-50">
+                {isSharing ? <Loader2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 animate-spin" /> : <Share2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />}
+                <span className="hidden sm:inline">{isSharing ? 'جاري...' : 'مشاركة'}</span>
               </Button>
             </div>
           </div>
@@ -3788,6 +3778,7 @@ export default function PerformanceEvidence() {
             </div>
           )}
 
+          <div className="preview-wrapper">
           <div id="preview-content" style={{ fontFamily: "'Cairo', sans-serif" }}>
             {/* === صفحة الغلاف - تتغير حسب coverStyle === */}
             {(() => {
@@ -4536,6 +4527,7 @@ export default function PerformanceEvidence() {
               );
             })()}
           </div>
+          </div>{/* إغلاق preview-wrapper */}
         </div>
       </div>
     );
