@@ -22,8 +22,8 @@ export default function GapAnalysis({ evidences, onSelectStandard }: Props) {
             تحليل الفجوات
           </h2>
           <div className="flex items-center gap-2">
-            <TrendingUp className="w-5 h-5 text-emerald-600" />
-            <span className="text-2xl font-black text-emerald-600">{overall.percentage}%</span>
+            <TrendingUp className="w-5 h-5 text-teal-600" />
+            <span className="text-2xl font-black text-teal-600">{overall.percentage}%</span>
           </div>
         </div>
 
@@ -46,7 +46,7 @@ export default function GapAnalysis({ evidences, onSelectStandard }: Props) {
           <span>{overall.coveredIndicators} مؤشر مغطى من {overall.totalIndicators}</span>
           <div className="flex gap-3">
             <span className="flex items-center gap-1">
-              <span className="w-2 h-2 rounded-full bg-emerald-500" />
+              <span className="w-2 h-2 rounded-full bg-teal-500" />
               {overall.coveredStandards} مكتمل
             </span>
             <span className="flex items-center gap-1">
@@ -73,7 +73,7 @@ export default function GapAnalysis({ evidences, onSelectStandard }: Props) {
               onClick={() => onSelectStandard(std.id)}
               className={`bg-white rounded-xl border p-4 text-right transition-all hover:shadow-md ${
                 status === "complete"
-                  ? "border-emerald-200 hover:border-emerald-400"
+                  ? "border-teal-200 hover:border-teal-400"
                   : status === "partial"
                   ? "border-amber-200 hover:border-amber-400"
                   : "border-red-200 hover:border-red-400"
@@ -86,7 +86,7 @@ export default function GapAnalysis({ evidences, onSelectStandard }: Props) {
                     <h3 className="text-sm font-bold text-gray-800 truncate" style={{ fontFamily: "'Tajawal', sans-serif" }}>
                       {std.number}. {std.title}
                     </h3>
-                    {status === "complete" && <CheckCircle className="w-4 h-4 text-emerald-500 shrink-0" />}
+                    {status === "complete" && <CheckCircle className="w-4 h-4 text-teal-500 shrink-0" />}
                     {status === "partial" && <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0" />}
                     {status === "missing" && <XCircle className="w-4 h-4 text-red-400 shrink-0" />}
                   </div>
@@ -108,7 +108,7 @@ export default function GapAnalysis({ evidences, onSelectStandard }: Props) {
                     </span>
                     <span
                       className={`text-[10px] font-bold ${
-                        status === "complete" ? "text-emerald-600" : status === "partial" ? "text-amber-600" : "text-red-500"
+                        status === "complete" ? "text-teal-600" : status === "partial" ? "text-amber-600" : "text-red-500"
                       }`}
                     >
                       {progress.percentage}%

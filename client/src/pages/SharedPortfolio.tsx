@@ -145,7 +145,7 @@ function CriterionSection({ criterionId, data, index, jobId }: { criterionId: st
   const title = getStandardTitle(criterionId, jobId);
 
   const statusConfig = {
-    complete: { bg: "bg-emerald-50", text: "text-emerald-700", border: "border-emerald-200", icon: <CheckCircle className="w-4 h-4 text-emerald-500" />, label: "مكتمل" },
+    complete: { bg: "bg-teal-50", text: "text-teal-700", border: "border-teal-200", icon: <CheckCircle className="w-4 h-4 text-teal-500" />, label: "مكتمل" },
     partial: { bg: "bg-amber-50", text: "text-amber-700", border: "border-amber-200", icon: <AlertTriangle className="w-4 h-4 text-amber-500" />, label: "جزئي" },
     missing: { bg: "bg-red-50", text: "text-red-600", border: "border-red-200", icon: <XCircle className="w-4 h-4 text-red-400" />, label: "ناقص" },
   };
@@ -226,12 +226,12 @@ export default function SharedPortfolio() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-emerald-50/30" dir="rtl">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-teal-50/30" dir="rtl">
         <div className="text-center">
           <div className="relative w-20 h-20 mx-auto mb-6">
-            <div className="absolute inset-0 rounded-full border-4 border-emerald-100" />
-            <div className="absolute inset-0 rounded-full border-4 border-emerald-600 border-t-transparent animate-spin" />
-            <Sparkles className="absolute inset-0 m-auto w-8 h-8 text-emerald-600" />
+            <div className="absolute inset-0 rounded-full border-4 border-teal-100" />
+            <div className="absolute inset-0 rounded-full border-4 border-teal-600 border-t-transparent animate-spin" />
+            <Sparkles className="absolute inset-0 m-auto w-8 h-8 text-teal-600" />
           </div>
           <p className="text-sm text-gray-600 font-medium" style={{ fontFamily: "'Tajawal', sans-serif" }}>جاري تحميل ملف الإنجاز...</p>
           <p className="text-xs text-gray-400 mt-1">يرجى الانتظار</p>
@@ -242,14 +242,14 @@ export default function SharedPortfolio() {
 
   if (data?.requiresPassword && !submitted) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-emerald-50/30 p-4" dir="rtl">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-teal-50/30 p-4" dir="rtl">
         <Card className="w-full max-w-md shadow-2xl border-0 overflow-hidden">
-          <div className="bg-gradient-to-l from-emerald-700 to-emerald-800 p-6 text-center">
+          <div className="bg-gradient-to-l from-teal-700 to-teal-800 p-6 text-center">
             <div className="w-16 h-16 rounded-2xl bg-white/10 backdrop-blur-sm flex items-center justify-center mx-auto mb-4">
               <Lock className="w-8 h-8 text-white" />
             </div>
             <h1 className="text-xl font-bold text-white" style={{ fontFamily: "'Tajawal', sans-serif" }}>ملف إنجاز محمي</h1>
-            <p className="text-emerald-100 text-sm mt-1">أدخل كلمة المرور للمتابعة</p>
+            <p className="text-teal-100 text-sm mt-1">أدخل كلمة المرور للمتابعة</p>
           </div>
           <CardContent className="p-6">
             <div className="space-y-4">
@@ -259,9 +259,9 @@ export default function SharedPortfolio() {
                 onChange={(e) => setPassword(e.target.value)}
                 onKeyDown={(e) => { if (e.key === "Enter") setSubmitted(true); }}
                 placeholder="كلمة المرور"
-                className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-400 text-center"
+                className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-400 text-center"
               />
-              <Button onClick={() => setSubmitted(true)} className="w-full gap-2 bg-emerald-600 hover:bg-emerald-700 h-11">
+              <Button onClick={() => setSubmitted(true)} className="w-full gap-2 bg-teal-600 hover:bg-teal-700 h-11">
                 <ShieldCheck className="w-4 h-4" />
                 عرض الملف
               </Button>
@@ -321,12 +321,12 @@ export default function SharedPortfolio() {
   const missingItems = criteriaEntries.filter(([, d]) => ((d as any)?.score || 0) === 0 && ((d as any)?.evidences?.length || 0) === 0);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-emerald-50/20" dir="rtl" ref={contentRef}>
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-teal-50/20" dir="rtl" ref={contentRef}>
       {/* Header - شريط علوي ثابت */}
       <div className="bg-white/95 backdrop-blur-md border-b border-gray-100 sticky top-0 z-20 shadow-sm">
         <div className="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-600 to-emerald-700 flex items-center justify-center shadow-lg shadow-emerald-200">
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-teal-600 to-teal-700 flex items-center justify-center shadow-lg shadow-teal-200">
               <Sparkles className="w-5 h-5 text-white" />
             </div>
             <div>
@@ -355,7 +355,7 @@ export default function SharedPortfolio() {
       </div>
 
       {/* Hero Section - بطاقة المعلومات الرئيسية */}
-      <div className="bg-gradient-to-l from-emerald-700 via-emerald-800 to-emerald-900 relative overflow-hidden">
+      <div className="bg-gradient-to-l from-teal-700 via-teal-800 to-teal-900 relative overflow-hidden">
         <div className="absolute inset-0 opacity-10">
           <div className="absolute top-0 left-0 w-96 h-96 bg-white rounded-full -translate-x-1/2 -translate-y-1/2" />
           <div className="absolute bottom-0 right-0 w-64 h-64 bg-white rounded-full translate-x-1/3 translate-y-1/3" />
@@ -367,8 +367,8 @@ export default function SharedPortfolio() {
             <div className="flex-1">
               {personalInfo.department && (
                 <div className="flex items-center gap-2 mb-3">
-                  <GraduationCap className="w-5 h-5 text-emerald-300" />
-                  <p className="text-emerald-200 text-sm font-medium whitespace-pre-line leading-relaxed">{personalInfo.department}</p>
+                  <GraduationCap className="w-5 h-5 text-teal-300" />
+                  <p className="text-teal-200 text-sm font-medium whitespace-pre-line leading-relaxed">{personalInfo.department}</p>
                 </div>
               )}
               <h2 className="text-3xl font-black text-white mb-2" style={{ fontFamily: "'Tajawal', sans-serif" }}>
@@ -376,35 +376,35 @@ export default function SharedPortfolio() {
               </h2>
               <div className="flex items-center gap-3 flex-wrap mt-3">
                 <div className="flex items-center gap-2 bg-white/10 backdrop-blur-sm rounded-lg px-3 py-1.5">
-                  <User className="w-4 h-4 text-emerald-200" />
+                  <User className="w-4 h-4 text-teal-200" />
                   <span className="text-sm text-white font-medium">{personalInfo.name || "—"}</span>
                 </div>
                 <div className="flex items-center gap-2 bg-white/10 backdrop-blur-sm rounded-lg px-3 py-1.5">
-                  <Briefcase className="w-4 h-4 text-emerald-200" />
-                  <span className="text-sm text-emerald-100">{jobTitle}</span>
+                  <Briefcase className="w-4 h-4 text-teal-200" />
+                  <span className="text-sm text-teal-100">{jobTitle}</span>
                 </div>
                 {personalInfo.school && (
                   <div className="flex items-center gap-2 bg-white/10 backdrop-blur-sm rounded-lg px-3 py-1.5">
-                    <Building2 className="w-4 h-4 text-emerald-200" />
-                    <span className="text-sm text-emerald-100">{personalInfo.school}</span>
+                    <Building2 className="w-4 h-4 text-teal-200" />
+                    <span className="text-sm text-teal-100">{personalInfo.school}</span>
                   </div>
                 )}
               </div>
               {(personalInfo.year || personalInfo.semester) && (
-                <p className="text-emerald-200/80 text-xs mt-3">{personalInfo.year} {personalInfo.semester && `- ${personalInfo.semester}`}</p>
+                <p className="text-teal-200/80 text-xs mt-3">{personalInfo.year} {personalInfo.semester && `- ${personalInfo.semester}`}</p>
               )}
             </div>
 
             {/* بطاقة التقييم */}
             <div className="bg-white/10 backdrop-blur-md rounded-2xl p-6 text-center border border-white/20 min-w-[180px]">
               <div className="text-4xl font-black text-white mb-1">{percentage}%</div>
-              <div className="text-sm font-bold text-emerald-100 mb-2">{grade.label}</div>
+              <div className="text-sm font-bold text-teal-100 mb-2">{grade.label}</div>
               <div className="flex justify-center gap-0.5 mb-3">
                 {[1, 2, 3, 4, 5].map(s => (
                   <Star key={s} className={`w-4 h-4 ${s <= Math.round(percentage / 20) ? "text-amber-400 fill-amber-400" : "text-white/30"}`} />
                 ))}
               </div>
-              <div className="text-[10px] text-emerald-200/70">{totalScore} من {maxScore}</div>
+              <div className="text-[10px] text-teal-200/70">{totalScore} من {maxScore}</div>
             </div>
           </div>
         </div>
@@ -421,8 +421,8 @@ export default function SharedPortfolio() {
           ].map((item, i) => (
             <Card key={i} className="border-0 shadow-lg bg-white">
               <CardContent className="p-4 flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center shrink-0">
-                  <item.icon className="w-5 h-5 text-emerald-600" />
+                <div className="w-10 h-10 rounded-xl bg-teal-50 flex items-center justify-center shrink-0">
+                  <item.icon className="w-5 h-5 text-teal-600" />
                 </div>
                 <div className="min-w-0">
                   <p className="text-[10px] text-gray-500 font-medium">{item.label}</p>
@@ -436,17 +436,17 @@ export default function SharedPortfolio() {
         {/* تبويبات التنقل */}
         <Tabs value={activeSection} onValueChange={setActiveSection} className="mb-8">
           <TabsList className="w-full justify-start bg-white border shadow-sm rounded-xl p-1 h-auto flex-wrap gap-1">
-            <TabsTrigger value="overview" className="gap-1.5 text-xs data-[state=active]:bg-emerald-50 data-[state=active]:text-emerald-700">
+            <TabsTrigger value="overview" className="gap-1.5 text-xs data-[state=active]:bg-teal-50 data-[state=active]:text-teal-700">
               <BarChart3 className="w-3.5 h-3.5" />نظرة عامة
             </TabsTrigger>
-            <TabsTrigger value="criteria" className="gap-1.5 text-xs data-[state=active]:bg-emerald-50 data-[state=active]:text-emerald-700">
+            <TabsTrigger value="criteria" className="gap-1.5 text-xs data-[state=active]:bg-teal-50 data-[state=active]:text-teal-700">
               <Layers className="w-3.5 h-3.5" />البنود والشواهد
             </TabsTrigger>
-            <TabsTrigger value="info" className="gap-1.5 text-xs data-[state=active]:bg-emerald-50 data-[state=active]:text-emerald-700">
+            <TabsTrigger value="info" className="gap-1.5 text-xs data-[state=active]:bg-teal-50 data-[state=active]:text-teal-700">
               <User className="w-3.5 h-3.5" />البيانات الشخصية
             </TabsTrigger>
             {files.length > 0 && (
-              <TabsTrigger value="files" className="gap-1.5 text-xs data-[state=active]:bg-emerald-50 data-[state=active]:text-emerald-700">
+              <TabsTrigger value="files" className="gap-1.5 text-xs data-[state=active]:bg-teal-50 data-[state=active]:text-teal-700">
                 <Download className="w-3.5 h-3.5" />الملفات ({files.length})
               </TabsTrigger>
             )}
@@ -477,7 +477,7 @@ export default function SharedPortfolio() {
               <CardContent className="p-5">
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="text-sm font-bold text-gray-900 flex items-center gap-2" style={{ fontFamily: "'Tajawal', sans-serif" }}>
-                    <TrendingUp className="w-4 h-4 text-emerald-600" />
+                    <TrendingUp className="w-4 h-4 text-teal-600" />
                     نسبة الإنجاز الكلية
                   </h3>
                   <span className="text-sm font-bold" style={{ color: grade.color }}>{percentage}%</span>
@@ -499,18 +499,18 @@ export default function SharedPortfolio() {
             <Card className="border-0 shadow-sm">
               <CardHeader>
                 <CardTitle className="text-sm flex items-center gap-2">
-                  <Target className="w-4 h-4 text-emerald-600" />
+                  <Target className="w-4 h-4 text-teal-600" />
                   ملخص حالة البنود
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
-                <div className="flex items-center gap-3 p-3 rounded-lg bg-emerald-50 border border-emerald-100">
-                  <CheckCircle className="w-5 h-5 text-emerald-600" />
+                <div className="flex items-center gap-3 p-3 rounded-lg bg-teal-50 border border-teal-100">
+                  <CheckCircle className="w-5 h-5 text-teal-600" />
                   <div className="flex-1">
-                    <span className="text-sm font-bold text-emerald-800">مكتمل</span>
-                    <span className="text-xs text-emerald-600 mr-2">({completedItems.length} بند)</span>
+                    <span className="text-sm font-bold text-teal-800">مكتمل</span>
+                    <span className="text-xs text-teal-600 mr-2">({completedItems.length} بند)</span>
                   </div>
-                  <span className="text-lg font-black text-emerald-700">{criteriaEntries.length > 0 ? Math.round((completedItems.length / criteriaEntries.length) * 100) : 0}%</span>
+                  <span className="text-lg font-black text-teal-700">{criteriaEntries.length > 0 ? Math.round((completedItems.length / criteriaEntries.length) * 100) : 0}%</span>
                 </div>
                 <div className="flex items-center gap-3 p-3 rounded-lg bg-amber-50 border border-amber-100">
                   <AlertTriangle className="w-5 h-5 text-amber-600" />
@@ -536,7 +536,7 @@ export default function SharedPortfolio() {
               <Card className="border-0 shadow-sm">
                 <CardHeader>
                   <CardTitle className="text-sm flex items-center gap-2">
-                    <ClipboardCheck className="w-4 h-4 text-emerald-600" />
+                    <ClipboardCheck className="w-4 h-4 text-teal-600" />
                     معلومات التقييم
                   </CardTitle>
                 </CardHeader>
@@ -570,7 +570,7 @@ export default function SharedPortfolio() {
           <TabsContent value="criteria" className="mt-6">
             <div className="mb-4 flex items-center justify-between">
               <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2" style={{ fontFamily: "'Tajawal', sans-serif" }}>
-                <Layers className="w-5 h-5 text-emerald-600" />
+                <Layers className="w-5 h-5 text-teal-600" />
                 تفاصيل البنود والشواهد
               </h2>
               <Badge variant="outline" className="text-xs">{criteriaEntries.length} بند</Badge>
@@ -587,7 +587,7 @@ export default function SharedPortfolio() {
             <Card className="border-0 shadow-sm">
               <CardHeader>
                 <CardTitle className="text-sm flex items-center gap-2">
-                  <User className="w-4 h-4 text-emerald-600" />
+                  <User className="w-4 h-4 text-teal-600" />
                   البيانات الشخصية الكاملة
                 </CardTitle>
               </CardHeader>
@@ -604,8 +604,8 @@ export default function SharedPortfolio() {
                     { label: "تاريخ التقييم", value: personalInfo.date, icon: Calendar },
                   ].map((field, i) => (
                     <div key={i} className="bg-gray-50 rounded-lg p-4 border border-gray-100 flex items-center gap-3">
-                      <div className="w-9 h-9 rounded-lg bg-emerald-50 flex items-center justify-center shrink-0">
-                        <field.icon className="w-4 h-4 text-emerald-600" />
+                      <div className="w-9 h-9 rounded-lg bg-teal-50 flex items-center justify-center shrink-0">
+                        <field.icon className="w-4 h-4 text-teal-600" />
                       </div>
                       <div>
                         <span className="text-gray-500 text-[10px] block">{field.label}</span>
@@ -617,7 +617,7 @@ export default function SharedPortfolio() {
                 {personalInfo.department && (
                   <div className="mt-3 bg-gray-50 rounded-lg p-4 border border-gray-100">
                     <div className="flex items-center gap-2 mb-2">
-                      <GraduationCap className="w-4 h-4 text-emerald-600" />
+                      <GraduationCap className="w-4 h-4 text-teal-600" />
                       <span className="text-gray-500 text-[10px]">الجهة / الإدارة</span>
                     </div>
                     <strong className="text-gray-800 text-sm whitespace-pre-line">{personalInfo.department}</strong>
@@ -661,8 +661,8 @@ export default function SharedPortfolio() {
 
         {/* Footer */}
         <div className="text-center py-10 border-t border-gray-100">
-          <div className="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center mx-auto mb-3">
-            <Sparkles className="w-5 h-5 text-emerald-600" />
+          <div className="w-10 h-10 rounded-xl bg-teal-50 flex items-center justify-center mx-auto mb-3">
+            <Sparkles className="w-5 h-5 text-teal-600" />
           </div>
           <p className="text-xs text-gray-500 font-medium">نظام SERS - السجلات التعليمية الذكية</p>
           <p className="text-[10px] text-gray-400 mt-1">تم إنشاء هذا الملف إلكترونياً • {personalInfo.name} • {jobTitle}</p>
@@ -673,7 +673,7 @@ export default function SharedPortfolio() {
       {showScrollTop && (
         <button
           onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
-          className="fixed bottom-6 left-6 w-10 h-10 rounded-full bg-emerald-600 text-white shadow-lg hover:bg-emerald-700 transition-all flex items-center justify-center z-30"
+          className="fixed bottom-6 left-6 w-10 h-10 rounded-full bg-teal-600 text-white shadow-lg hover:bg-teal-700 transition-all flex items-center justify-center z-30"
           data-no-print
         >
           <ArrowUp className="w-5 h-5" />

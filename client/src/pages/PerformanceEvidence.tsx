@@ -155,7 +155,7 @@ const ADMIN_ASSISTANT_CRITERIA = makeSimpleCriteria("a", [
 
 // ===== أنواع الوظائف =====
 const JOB_TYPES = [
-  { id: "teacher", title: "معلم / معلمة", icon: GraduationCap, emoji: "👨‍🏫", criteria: TEACHER_CRITERIA, hasStandards: true, color: "#059669", desc: "نظام شامل يغطي 11 معيار و 45 مؤشر أداء وفق المعايير الرسمية" },
+  { id: "teacher", title: "معلم / معلمة", icon: GraduationCap, emoji: "👨‍🏫", criteria: TEACHER_CRITERIA, hasStandards: true, color: "#0097A7", desc: "نظام شامل يغطي 11 معيار و 45 مؤشر أداء وفق المعايير الرسمية" },
   { id: "principal", title: "مدير / مديرة مدرسة", icon: Building2, emoji: "👔", criteria: PRINCIPAL_CRITERIA, hasStandards: true, color: "#2563EB", desc: "معايير القيادة المدرسية والإدارة التعليمية والتطوير المهني" },
   { id: "vice_principal", title: "وكيل / وكيلة مدرسة", icon: ClipboardList, emoji: "📋", criteria: VICE_PRINCIPAL_CRITERIA, hasStandards: true, color: "#7C3AED", desc: "معايير الإشراف على الشؤون التعليمية والإدارية بالمدرسة" },
   { id: "counselor", title: "موجه/ة طلابي/ة", icon: Users, emoji: "🤝", criteria: COUNSELOR_CRITERIA, hasStandards: true, color: "#0891B2", desc: "معايير التوجيه والإرشاد الطلابي والدعم النفسي والاجتماعي" },
@@ -211,18 +211,18 @@ interface ThemeConfig {
 const DEFAULT_THEME: ThemeConfig = {
   id: 'default', name: 'الهوية البصرية - رسمي',
   layoutType: 'dark-header-table',
-  headerBg: 'linear-gradient(135deg, #1B3A5C, #1A8A6B)', headerText: '#fff',
-  accent: '#1A8A6B', borderColor: '#1B3A5C',
-  titleBg: '#1A6B5A', fieldLabelBg: '#1A6B5A',
-  footerBg: 'linear-gradient(to left, #1B3A5C, #1A8A6B, #3BB89C)',
+  headerBg: 'linear-gradient(135deg, #004D5A, #0097A7)', headerText: '#fff',
+  accent: '#0097A7', borderColor: '#004D5A',
+  titleBg: '#00838F', fieldLabelBg: '#00838F',
+  footerBg: 'linear-gradient(to left, #004D5A, #0097A7, #26C6DA)',
   tableStyle: true, titleStyle: 'rounded', showTopLine: true, showBottomBar: true,
   fieldStyle: 'table', signatureStyle: 'boxed',
-  coverStyle: 'gradient-center', sectionCoverStyle: 'full-gradient', coverAccent2: '#3BB89C',
+  coverStyle: 'gradient-center', sectionCoverStyle: 'full-gradient', coverAccent2: '#26C6DA',
 };
 
 // ===== إعدادات الأولوية =====
 const PRIORITY_CONFIG: Record<EvidencePriority, { label: string; color: string; bgColor: string; borderColor: string; icon: string }> = {
-  essential: { label: "أساسي", color: "#059669", bgColor: "bg-emerald-50 dark:bg-emerald-950/30", borderColor: "border-emerald-300", icon: "★" },
+  essential: { label: "أساسي", color: "#0097A7", bgColor: "bg-teal-50 dark:bg-teal-950/30", borderColor: "border-teal-300", icon: "★" },
   supporting: { label: "داعم", color: "#2563EB", bgColor: "bg-blue-50 dark:bg-blue-950/30", borderColor: "border-blue-300", icon: "◆" },
   additional: { label: "إضافي", color: "#9333EA", bgColor: "bg-violet-50 dark:bg-violet-950/30", borderColor: "border-violet-300", icon: "○" },
 };
@@ -319,25 +319,25 @@ export default function PerformanceEvidence() {
           id: `db-${t.id}`,
           name: t.name,
           layoutType: lt as LayoutType,
-          headerBg: t.headerBg || (isDark ? 'linear-gradient(135deg, #1B3A5C, #1A8A6B)' : '#ffffff'),
-          headerText: t.headerText || (isDark ? '#fff' : '#1B3A5C'),
-          accent: t.accent || '#1A8A6B',
-          borderColor: t.borderColor || '#1B3A5C',
-          titleBg: t.accent || '#1A6B5A',
-          fieldLabelBg: t.accent || '#1A6B5A',
-          footerBg: `linear-gradient(to left, ${t.borderColor || '#1B3A5C'}, ${t.accent || '#1A8A6B'}, #3BB89C)`,
+          headerBg: t.headerBg || (isDark ? 'linear-gradient(135deg, #004D5A, #0097A7)' : '#ffffff'),
+          headerText: t.headerText || (isDark ? '#fff' : '#004D5A'),
+          accent: t.accent || '#0097A7',
+          borderColor: t.borderColor || '#004D5A',
+          titleBg: t.accent || '#00838F',
+          fieldLabelBg: t.accent || '#00838F',
+          footerBg: `linear-gradient(to left, ${t.borderColor || '#004D5A'}, ${t.accent || '#0097A7'}, #26C6DA)`,
           tableStyle: (layout.fieldStyle === 'table'),
           titleStyle: (layout.titleStyle || 'rounded') as ThemeConfig['titleStyle'],
           showTopLine: isDark,
           showBottomBar: layout.footerStyle !== 'none',
           fieldStyle: (layout.fieldStyle || 'fieldset') as ThemeConfig['fieldStyle'],
           signatureStyle: (['dotted', 'solid', 'boxed', 'lined', 'stamped'].includes(layout.signatureStyle) ? layout.signatureStyle : 'dotted') as ThemeConfig['signatureStyle'],
-          bodyBg: t.bodyBg || (lt === 'white-header-light' ? '#F0FAF5' : lt === 'white-header-sidebar' ? '#f8fafc' : undefined),
-          sidebarBg: lt === 'white-header-sidebar' ? `linear-gradient(to bottom, ${t.borderColor || '#1B3A5C'}, ${t.accent || '#1A8A6B'})` : undefined,
+          bodyBg: t.bodyBg || (lt === 'white-header-light' ? '#E0F7FA' : lt === 'white-header-sidebar' ? '#f8fafb' : undefined),
+          sidebarBg: lt === 'white-header-sidebar' ? `linear-gradient(to bottom, ${t.borderColor || '#004D5A'}, ${t.accent || '#0097A7'})` : undefined,
           headerSeparator: lt === 'white-header-sidebar',
           coverStyle: (layout.coverStyle || 'gradient-center') as ThemeConfig['coverStyle'],
           sectionCoverStyle: (layout.sectionCoverStyle || 'full-gradient') as ThemeConfig['sectionCoverStyle'],
-          coverAccent2: layout.coverAccent2 || '#3BB89C',
+          coverAccent2: layout.coverAccent2 || '#26C6DA',
         };
       });
       return dbMapped;
@@ -1465,7 +1465,7 @@ export default function PerformanceEvidence() {
       {ev.type === 'text' && hasFormFields && ev.formData !== undefined && !isFormDataEmpty && (
         <div className="bg-primary/5 rounded-lg p-2 border border-primary/10">
           <div className="text-[10px] text-muted-foreground flex items-center gap-1">
-            <CheckCircle className="w-3 h-3 text-emerald-500" />
+            <CheckCircle className="w-3 h-3 text-teal-500" />
             <span>تم تعبئة بيانات النموذج ({Object.values(ev.formData || {}).filter(v => v && v.trim()).length} حقل)</span>
           </div>
         </div>
@@ -1555,7 +1555,7 @@ export default function PerformanceEvidence() {
 
           {/* Hero Section - Mobile Optimized */}
           <div className="text-center mb-6 sm:mb-10">
-            <div className="relative w-12 h-12 sm:w-16 sm:h-16 rounded-xl sm:rounded-2xl bg-gradient-to-br from-emerald-500 to-emerald-700 flex items-center justify-center mx-auto mb-3 sm:mb-5 shadow-lg shadow-emerald-500/20">
+            <div className="relative w-12 h-12 sm:w-16 sm:h-16 rounded-xl sm:rounded-2xl bg-gradient-to-br from-teal-500 to-teal-700 flex items-center justify-center mx-auto mb-3 sm:mb-5 shadow-lg shadow-teal-500/20">
               <BarChart3 className="w-6 h-6 sm:w-8 sm:h-8 text-white" />
             </div>
             <h1 className="text-xl sm:text-3xl md:text-4xl font-black text-foreground mb-2 sm:mb-3" style={{ fontFamily: "var(--font-heading)" }}>
@@ -1586,14 +1586,14 @@ export default function PerformanceEvidence() {
                 <motion.div key={job.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.04 }}
                   className={isTeacher ? "sm:col-span-2" : ""}>
                   <Card className={`cursor-pointer hover:shadow-xl transition-all duration-300 overflow-hidden relative group h-full ${
-                    isTeacher ? 'border-emerald-200 bg-gradient-to-l from-emerald-50/80 to-background hover:border-emerald-300' : 'border-border/60 hover:border-opacity-100'
+                    isTeacher ? 'border-teal-200 bg-gradient-to-l from-teal-50/80 to-background hover:border-teal-300' : 'border-border/60 hover:border-opacity-100'
                   }`}
                     style={!isTeacher ? { ['--hover-border' as string]: job.color } : {}}
                     onClick={() => handleSelectJob(job)}>
                     <CardContent className="p-4 sm:p-5 md:p-6">
                       <div className="flex items-center gap-3 sm:gap-4">
                         <div className={`w-11 h-11 sm:w-14 sm:h-14 rounded-xl sm:rounded-2xl flex items-center justify-center shrink-0 shadow-md group-hover:scale-105 transition-transform ${
-                          isTeacher ? 'bg-gradient-to-br from-emerald-500 to-emerald-700 shadow-emerald-500/20' : ''
+                          isTeacher ? 'bg-gradient-to-br from-teal-500 to-teal-700 shadow-teal-500/20' : ''
                         }`}
                           style={!isTeacher ? { background: `linear-gradient(135deg, ${job.color}dd, ${job.color})`, boxShadow: `0 4px 12px ${job.color}30` } : {}}>
                           <Icon className={`w-5 h-5 sm:w-7 sm:h-7 text-white`} />
@@ -1601,7 +1601,7 @@ export default function PerformanceEvidence() {
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-1.5 sm:gap-2 mb-0.5 sm:mb-1 flex-wrap">
                             <h3 className={`font-black text-foreground ${isTeacher ? 'text-base sm:text-xl' : 'text-sm sm:text-base'}`} style={{ fontFamily: "var(--font-heading)" }}>{job.title}</h3>
-                            {isTeacher && <Badge className="bg-emerald-600 text-white text-[9px] sm:text-[10px] hover:bg-emerald-700">الأكثر استخداماً</Badge>}
+                            {isTeacher && <Badge className="bg-teal-600 text-white text-[9px] sm:text-[10px] hover:bg-teal-700">الأكثر استخداماً</Badge>}
                           </div>
                           <p className="text-[10px] sm:text-xs text-muted-foreground mb-1.5 sm:mb-2 line-clamp-2">{job.desc}</p>
                           <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
@@ -1668,13 +1668,13 @@ export default function PerformanceEvidence() {
                     !isOnline ? 'bg-red-100 text-red-700 border border-red-200' :
                     isSyncing ? 'bg-yellow-100 text-yellow-700 border border-yellow-200' :
                     pendingCount > 0 ? 'bg-orange-100 text-orange-700 border border-orange-200' :
-                    'bg-emerald-100 text-emerald-700 border border-emerald-200'
+                    'bg-teal-100 text-teal-700 border border-teal-200'
                   }`}>
                     <div className={`w-1.5 h-1.5 rounded-full ${
                       !isOnline ? 'bg-red-500' :
                       isSyncing ? 'bg-yellow-500 animate-pulse' :
                       pendingCount > 0 ? 'bg-orange-500' :
-                      'bg-emerald-500'
+                      'bg-teal-500'
                     }`} />
                     <span className="hidden sm:inline">
                       {!isOnline ? 'غير متصل' : isSyncing ? 'جاري المزامنة' : pendingCount > 0 ? `${pendingCount} معلق` : 'متصل'}
@@ -1736,7 +1736,7 @@ export default function PerformanceEvidence() {
                     {isSmartUploading ? "جاري التصنيف..." : "رفع شواهد مع تصنيف ذكي"}
                   </Button>
                   <Button onClick={(e) => { e.preventDefault(); e.stopPropagation(); setShowCoverageReport(true); }}
-                    variant="outline" size="sm" className="gap-1.5 text-xs h-8 sm:h-9 w-full sm:w-auto border-emerald-300 text-emerald-700 hover:bg-emerald-50 dark:border-emerald-700 dark:text-emerald-400 dark:hover:bg-emerald-950/30">
+                    variant="outline" size="sm" className="gap-1.5 text-xs h-8 sm:h-9 w-full sm:w-auto border-teal-300 text-teal-700 hover:bg-teal-50 dark:border-teal-700 dark:text-teal-400 dark:hover:bg-teal-950/30">
                     <BarChart3 className="w-3.5 h-3.5" />
                     تقرير التغطية
                   </Button>
@@ -1792,13 +1792,13 @@ export default function PerformanceEvidence() {
                       transition={{ duration: 0.5, ease: 'easeOut' }}
                       className={`h-full rounded-full ${
                         uploadProgress.percent === 100
-                          ? 'bg-gradient-to-r from-emerald-500 to-emerald-400'
+                          ? 'bg-gradient-to-r from-teal-500 to-teal-400'
                           : 'bg-gradient-to-r from-violet-600 to-indigo-500'
                       }`}
                     />
                   </div>
                   {uploadProgress.percent === 100 && (
-                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex items-center gap-1.5 mt-2 text-emerald-600">
+                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex items-center gap-1.5 mt-2 text-teal-600">
                       <CheckCircle className="w-3.5 h-3.5" />
                       <span className="text-xs font-medium">تم بنجاح!</span>
                     </motion.div>
@@ -1817,13 +1817,13 @@ export default function PerformanceEvidence() {
 
               {/* إحصائيات سريعة - Mobile Grid */}
               <div className="grid grid-cols-3 gap-2 sm:gap-3">
-                <div className="flex flex-col sm:flex-row items-center sm:items-center gap-1.5 sm:gap-3 bg-emerald-50 dark:bg-emerald-950/30 rounded-lg sm:rounded-xl p-2 sm:p-3 border border-emerald-200/50 text-center sm:text-right">
-                  <div className="w-7 h-7 sm:w-9 sm:h-9 rounded-lg bg-emerald-100 dark:bg-emerald-900/50 flex items-center justify-center shrink-0">
-                    <CheckCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-600" />
+                <div className="flex flex-col sm:flex-row items-center sm:items-center gap-1.5 sm:gap-3 bg-teal-50 dark:bg-teal-950/30 rounded-lg sm:rounded-xl p-2 sm:p-3 border border-teal-200/50 text-center sm:text-right">
+                  <div className="w-7 h-7 sm:w-9 sm:h-9 rounded-lg bg-teal-100 dark:bg-teal-900/50 flex items-center justify-center shrink-0">
+                    <CheckCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-teal-600" />
                   </div>
                   <div>
-                    <p className="text-base sm:text-lg font-black text-emerald-700 dark:text-emerald-400 leading-none">{gapAnalysis.coveredCriteria}</p>
-                    <p className="text-[9px] sm:text-[10px] text-emerald-600 dark:text-emerald-500 mt-0.5">مكتمل</p>
+                    <p className="text-base sm:text-lg font-black text-teal-700 dark:text-teal-400 leading-none">{gapAnalysis.coveredCriteria}</p>
+                    <p className="text-[9px] sm:text-[10px] text-teal-600 dark:text-teal-500 mt-0.5">مكتمل</p>
                   </div>
                 </div>
                 <div className="flex flex-col sm:flex-row items-center sm:items-center gap-1.5 sm:gap-3 bg-amber-50 dark:bg-amber-950/30 rounded-lg sm:rounded-xl p-2 sm:p-3 border border-amber-200/50 text-center sm:text-right">
@@ -1970,7 +1970,7 @@ export default function PerformanceEvidence() {
                   return (
                     <Card key={criterion.id}
                       className={`cursor-pointer hover:shadow-md transition-all duration-200 group ${
-                        status === "complete" ? "border-emerald-300 bg-emerald-50/20 hover:border-emerald-400"
+                        status === "complete" ? "border-teal-300 bg-teal-50/20 hover:border-teal-400"
                         : status === "partial" ? "border-amber-300 bg-amber-50/20 hover:border-amber-400"
                         : "border-border/50 hover:border-primary/30"
                       }`}
@@ -2012,7 +2012,7 @@ export default function PerformanceEvidence() {
                                 {data.score}/{criterion.maxScore}
                               </span>
                               <span className="text-[10px] text-muted-foreground">{evidenceCount} شاهد</span>
-                              {status === "complete" && <CheckCircle className="w-3 h-3 text-emerald-500" />}
+                              {status === "complete" && <CheckCircle className="w-3 h-3 text-teal-500" />}
                               {status === "partial" && <AlertTriangle className="w-3 h-3 text-amber-500" />}
                               {status === "missing" && <XCircle className="w-3 h-3 text-red-400" />}
                             </div>
@@ -2069,7 +2069,7 @@ export default function PerformanceEvidence() {
                           {/* الإحصائيات - Desktop Only */}
                           <div className="hidden sm:flex items-center gap-4 shrink-0">
                             <div className="flex items-center gap-1.5">
-                              {status === "complete" && <CheckCircle className="w-4 h-4 text-emerald-500" />}
+                              {status === "complete" && <CheckCircle className="w-4 h-4 text-teal-500" />}
                               {status === "partial" && <AlertTriangle className="w-4 h-4 text-amber-500" />}
                               {status === "missing" && <XCircle className="w-4 h-4 text-red-400" />}
                               <div className="text-center">
@@ -2276,7 +2276,7 @@ export default function PerformanceEvidence() {
               <div className="flex flex-col gap-3">
                 <div className="flex items-start gap-2.5 sm:gap-3">
                   <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-lg sm:rounded-xl flex items-center justify-center text-base sm:text-lg shrink-0"
-                    style={{ backgroundColor: (standard?.color || selectedJob?.color || "#059669") + "15" }}>
+                    style={{ backgroundColor: (standard?.color || selectedJob?.color || "#0097A7") + "15" }}>
                     {standard ? (() => { const StdIcon = STANDARD_ICONS[standard.id]; return StdIcon ? <StdIcon className="w-5 h-5 sm:w-6 sm:h-6" style={{ color: standard.color }} /> : <span className="text-base sm:text-lg font-bold">{standard.number}</span>; })() : <span className="text-base sm:text-lg font-bold">{currentCriterionIndex + 1}</span>}
                   </div>
                   <div className="flex-1 min-w-0">
@@ -2332,7 +2332,7 @@ export default function PerformanceEvidence() {
                     className={`w-full flex items-center justify-between p-3 sm:p-4 hover:bg-muted/30 transition-colors text-right cursor-pointer ${sub.isSubItem ? 'bg-muted/20' : ''}`}>
                     <div className="flex items-center gap-2 sm:gap-3 min-w-0">
                       <div className={`w-7 h-7 sm:w-8 sm:h-8 rounded-lg flex items-center justify-center text-sm shrink-0 ${
-                        subEvidences.length > 0 ? 'bg-emerald-100 text-emerald-600' : sub.isSubItem ? 'bg-primary/10 text-primary/60' : 'bg-muted text-muted-foreground'
+                        subEvidences.length > 0 ? 'bg-teal-100 text-teal-600' : sub.isSubItem ? 'bg-primary/10 text-primary/60' : 'bg-muted text-muted-foreground'
                       }`}>
                         {subEvidences.length > 0 ? <CheckCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> : sub.isSubItem ? <span className="text-[10px]">◇</span> : <Layers className="w-3.5 h-3.5 sm:w-4 sm:h-4" />}
                       </div>
@@ -2366,7 +2366,7 @@ export default function PerformanceEvidence() {
                                     <FileText className="w-4 h-4 text-primary" />نموذج التقرير
                                   </h4>
                                   <div className="flex items-center gap-1.5 flex-wrap">
-                                    <Button variant="outline" size="sm" className="gap-1 text-[10px] sm:text-xs h-7 sm:h-8 px-2 sm:px-3 border-emerald-300 text-emerald-700 hover:bg-emerald-50"
+                                    <Button variant="outline" size="sm" className="gap-1 text-[10px] sm:text-xs h-7 sm:h-8 px-2 sm:px-3 border-teal-300 text-teal-700 hover:bg-teal-50"
                                       onClick={() => { setPreviewCriterionId(currentCriterion.id); setPreviewSubId(sub.id); }}>
                                       <Eye className="w-3 h-3 sm:w-3.5 sm:h-3.5" />معاينة
                                     </Button>
@@ -2567,8 +2567,8 @@ export default function PerformanceEvidence() {
                 className="bg-card rounded-2xl shadow-2xl border border-border max-w-2xl w-full max-h-[85vh] overflow-y-auto p-6" onClick={e => e.stopPropagation()}>
                 <div className="flex items-center justify-between mb-6">
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-emerald-100 dark:bg-emerald-900/40 flex items-center justify-center">
-                      <BarChart3 className="w-5 h-5 text-emerald-600" />
+                    <div className="w-10 h-10 rounded-xl bg-teal-100 dark:bg-teal-900/40 flex items-center justify-center">
+                      <BarChart3 className="w-5 h-5 text-teal-600" />
                     </div>
                     <div>
                       <h2 className="text-lg font-bold" style={{ fontFamily: "var(--font-heading)" }}>تقرير تغطية البنود بالشواهد</h2>
@@ -2596,11 +2596,11 @@ export default function PerformanceEvidence() {
 
                 <div id="coverage-report-content" className="space-y-6" dir="rtl">
                   {/* ملخص عام */}
-                  <div className="bg-gradient-to-r from-emerald-50 to-teal-50 dark:from-emerald-950/30 dark:to-teal-950/30 rounded-xl p-5 border border-emerald-200/50">
+                  <div className="bg-gradient-to-r from-teal-50 to-teal-50 dark:from-teal-950/30 dark:to-teal-950/30 rounded-xl p-5 border border-teal-200/50">
                     <h3 className="font-bold text-sm mb-3" style={{ fontFamily: "var(--font-heading)" }}>ملخص عام</h3>
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                       <div className="bg-white/80 dark:bg-card/80 rounded-lg p-3 text-center">
-                        <div className="text-2xl font-bold text-emerald-600">{gapAnalysis.coveredCriteria}</div>
+                        <div className="text-2xl font-bold text-teal-600">{gapAnalysis.coveredCriteria}</div>
                         <div className="text-[10px] text-muted-foreground">بند مكتمل</div>
                       </div>
                       <div className="bg-white/80 dark:bg-card/80 rounded-lg p-3 text-center">
@@ -2767,10 +2767,14 @@ export default function PerformanceEvidence() {
                   </div>
                   {/* محتوى المعاينة - تصميم ديناميكي حسب layoutType */}
                   <div id={`single-preview-${previewSubId}`} style={{ fontFamily: "'Cairo', 'Tajawal', sans-serif", direction: 'rtl' }}>
-                    <div style={{ background: theme.bodyBg || 'white', padding: '0', maxWidth: '210mm', margin: '0 auto', border: '1px solid #e5e7eb', overflow: 'hidden' }}>
+                    <div style={{ background: theme.bodyBg || 'white', padding: '0', maxWidth: '210mm', margin: '0 auto', border: '1px solid #e5e7eb', overflow: 'hidden', position: 'relative' as const }}>
+                      {/* === شريط جانبي ملون يمتد على كامل الصفحة (قالب البطاقات) === */}
+                      {theme.layoutType === 'white-header-sidebar' && (
+                        <div style={{ position: 'absolute' as const, top: 0, right: 0, bottom: 0, width: '14px', background: theme.sidebarBg || theme.footerBg, zIndex: 1 }} />
+                      )}
                       
                       {/* === خط علوي رفيع (حسب الثيم) === */}
-                      {theme.showTopLine !== false && (
+                      {theme.showTopLine !== false && theme.layoutType !== 'white-header-sidebar' && (
                         <div style={{ height: '4px', background: theme.footerBg || `linear-gradient(to left, ${theme.borderColor}, ${theme.accent})` }} />
                       )}
 
@@ -2794,30 +2798,26 @@ export default function PerformanceEvidence() {
                         // --- نمط الشريط الجانبي (white-header-sidebar) ---
                         if (theme.layoutType === 'white-header-sidebar') {
                           return (
-                            <div style={{ display: 'flex' }}>
-                              {/* شريط جانبي ملون */}
-                              <div style={{ width: '12px', background: theme.sidebarBg || theme.footerBg, flexShrink: 0 }} />
-                              <div style={{ flex: 1 }}>
-                                <div style={{ background: theme.headerBg, padding: '18px 24px', color: theme.headerText }}>
-                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                    <div style={{ textAlign: 'right', fontSize: '10px', lineHeight: '1.8', flex: '1' }}>
-                                      <div style={{ fontWeight: 'bold', fontSize: '11px' }}>المملكة العربية السعودية</div>
-                                      <div style={{ fontWeight: 'bold' }}>وزارة التعليم</div>
-                                      {filteredDeptLines.map((line: string, i: number) => <div key={i}>{line}</div>)}
-                                      {personalInfo.school && <div style={{ fontWeight: 'bold' }}>{personalInfo.school}</div>}
-                                    </div>
-                                    <div style={{ textAlign: 'center', padding: '0 16px' }}>
-                                      <img src={MOE_LOGO} alt="شعار وزارة التعليم" style={{ height: '60px', objectFit: 'contain', filter: logoFilter }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
-                                    </div>
-                                    <div style={{ textAlign: 'left', fontSize: '10px', lineHeight: '1.8', flex: '1' }}>
-                                      <div>العام: {personalInfo.year || '......'}</div>
-                                      <div>الفصل: {personalInfo.semester || '......'}</div>
-                                    </div>
+                            <>
+                              <div style={{ background: theme.headerBg, padding: '18px 24px', paddingRight: '38px', color: theme.headerText }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                  <div style={{ textAlign: 'right', fontSize: '10px', lineHeight: '1.8', flex: '1' }}>
+                                    <div style={{ fontWeight: 'bold', fontSize: '11px' }}>المملكة العربية السعودية</div>
+                                    <div style={{ fontWeight: 'bold' }}>وزارة التعليم</div>
+                                    {filteredDeptLines.map((line: string, i: number) => <div key={i}>{line}</div>)}
+                                    {personalInfo.school && <div style={{ fontWeight: 'bold' }}>{personalInfo.school}</div>}
+                                  </div>
+                                  <div style={{ textAlign: 'center', padding: '0 16px' }}>
+                                    <img src={MOE_LOGO} alt="شعار وزارة التعليم" style={{ height: '60px', objectFit: 'contain', filter: logoFilter }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                                  </div>
+                                  <div style={{ textAlign: 'left', fontSize: '10px', lineHeight: '1.8', flex: '1' }}>
+                                    <div>العام: {personalInfo.year || '......'}</div>
+                                    <div>الفصل: {personalInfo.semester || '......'}</div>
                                   </div>
                                 </div>
-                                {theme.headerSeparator && <div style={{ height: '3px', background: theme.footerBg || theme.accent }} />}
                               </div>
-                            </div>
+                              {theme.headerSeparator && <div style={{ height: '3px', background: theme.footerBg || theme.accent }} />}
+                            </>
                           );
                         }
 
@@ -3237,6 +3237,7 @@ export default function PerformanceEvidence() {
                           </div>
                         </>
                       )}
+
                     </div>
                   </div>
                 </motion.div>
@@ -3284,7 +3285,7 @@ export default function PerformanceEvidence() {
                 {isSaving ? "جاري الحفظ..." : "حفظ"}
               </Button>
               {isAuthenticated && portfolio.id && (
-                <Button variant="outline" size="sm" onClick={portfolio.submitForReview} className="gap-1.5 text-emerald-600 border-emerald-200 hover:bg-emerald-50">
+                <Button variant="outline" size="sm" onClick={portfolio.submitForReview} className="gap-1.5 text-teal-600 border-teal-200 hover:bg-teal-50">
                   <CheckCircle className="w-4 h-4" />تقديم للمراجعة
                 </Button>
               )}
@@ -3370,7 +3371,7 @@ export default function PerformanceEvidence() {
                       </td>
                       <td className="p-3 text-center text-sm text-muted-foreground">{evCount}</td>
                       <td className="p-3 text-center">
-                        {status === "complete" && <CheckCircle className="w-4 h-4 text-emerald-500 mx-auto" />}
+                        {status === "complete" && <CheckCircle className="w-4 h-4 text-teal-500 mx-auto" />}
                         {status === "partial" && <AlertTriangle className="w-4 h-4 text-amber-500 mx-auto" />}
                         {status === "missing" && <XCircle className="w-4 h-4 text-red-400 mx-auto" />}
                       </td>

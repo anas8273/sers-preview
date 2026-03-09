@@ -1,0 +1,100 @@
+{
+  "query": "SELECT id, name, description, headerBg, accent, isDefault, isActive, sortOrder FROM pdf_templates ORDER BY sortOrder;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 6C7x6f29RX1BcFf.7325488fde9e --database h34s4aPNVyHXdtjgZ7eNNf --execute SELECT id, name, description, headerBg, accent, isDefault, isActive, sortOrder FROM pdf_templates ORDER BY sortOrder;",
+  "rows": [
+    {
+      "id": "330004",
+      "name": "قالب اختبار جديد",
+      "description": "NULL",
+      "headerBg": "linear-gradient(135deg, #059669, #047857)",
+      "accent": "#059669",
+      "isDefault": "0",
+      "isActive": "1",
+      "sortOrder": "0"
+    },
+    {
+      "id": "330005",
+      "name": "قالب اختبار",
+      "description": "قالب للاختبار",
+      "headerBg": "#1B5E20",
+      "accent": "#2E7D32",
+      "isDefault": "0",
+      "isActive": "1",
+      "sortOrder": "0"
+    },
+    {
+      "id": "330006",
+      "name": "قالب معدّل",
+      "description": "NULL",
+      "headerBg": "#0D47A1",
+      "accent": "#2E7D32",
+      "isDefault": "0",
+      "isActive": "1",
+      "sortOrder": "0"
+    },
+    {
+      "id": "330008",
+      "name": "قالب اختبار جديد",
+      "description": "NULL",
+      "headerBg": "linear-gradient(135deg, #059669, #047857)",
+      "accent": "#059669",
+      "isDefault": "0",
+      "isActive": "1",
+      "sortOrder": "0"
+    },
+    {
+      "id": "330009",
+      "name": "قالب اختبار",
+      "description": "قالب للاختبار",
+      "headerBg": "#1B5E20",
+      "accent": "#2E7D32",
+      "isDefault": "0",
+      "isActive": "1",
+      "sortOrder": "0"
+    },
+    {
+      "id": "330010",
+      "name": "قالب معدّل",
+      "description": "NULL",
+      "headerBg": "#0D47A1",
+      "accent": "#2E7D32",
+      "isDefault": "0",
+      "isActive": "1",
+      "sortOrder": "0"
+    },
+    {
+      "id": "330001",
+      "name": "رسمي - ترويسة داكنة",
+      "description": "ترويسة تدرج أزرق-أخضر مع حقول جدول - الهوية البصرية لوزارة التعليم",
+      "headerBg": "linear-gradient(135deg, #1B3A5C, #1A8A6B)",
+      "accent": "#1A8A6B",
+      "isDefault": "1",
+      "isActive": "1",
+      "sortOrder": "1"
+    },
+    {
+      "id": "330002",
+      "name": "كلاسيكي - ترويسة بيضاء",
+      "description": "ترويسة بيضاء مع حقول مسطرة وعنوان مستدير - الهوية البصرية",
+      "headerBg": "#ffffff",
+      "accent": "#1A8A6B",
+      "isDefault": "0",
+      "isActive": "1",
+      "sortOrder": "2"
+    },
+    {
+      "id": "330003",
+      "name": "بطاقات - شريط جانبي",
+      "description": "شريط جانبي ملون مع حقول بطاقات - الهوية البصرية",
+      "headerBg": "#ffffff",
+      "accent": "#1A8A6B",
+      "isDefault": "0",
+      "isActive": "1",
+      "sortOrder": "3"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tname\tdescription\theaderBg\taccent\tisDefault\tisActive\tsortOrder\n330004\tقالب اختبار جديد\tNULL\tlinear-gradient(135deg, #059669, #047857)\t#059669\t0\t1\t0\n330005\tقالب اختبار\tقالب للاختبار\t#1B5E20\t#2E7D32\t0\t1\t0\n330006\tقالب معدّل\tNULL\t#0D47A1\t#2E7D32\t0\t1\t0\n330008\tقالب اختبار جديد\tNULL\tlinear-gradient(135deg, #059669, #047857)\t#059669\t0\t1\t0\n330009\tقالب اختبار\tقالب للاختبار\t#1B5E20\t#2E7D32\t0\t1\t0\n330010\tقالب معدّل\tNULL\t#0D47A1\t#2E7D32\t0\t1\t0\n330001\tرسمي - ترويسة داكنة\tترويسة تدرج أزرق-أخضر مع حقول جدول - الهوية البصرية لوزارة التعليم\tlinear-gradient(135deg, #1B3A5C, #1A8A6B)\t#1A8A6B\t1\t1\t1\n330002\tكلاسيكي - ترويسة بيضاء\tترويسة بيضاء مع حقول مسطرة وعنوان مستدير - الهوية البصرية\t#ffffff\t#1A8A6B\t0\t1\t2\n330003\tبطاقات - شريط جانبي\tشريط جانبي ملون مع حقول بطاقات - الهوية البصرية\t#ffffff\t#1A8A6B\t0\t1\t3\n",
+  "stderr": "",
+  "execution_time_ms": 1116
+}

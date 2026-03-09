@@ -68,7 +68,7 @@ export default function EvidenceUploader({ standardId, indicatorId, onAdd, isCla
         <button
           onClick={() => fileRef.current?.click()}
           disabled={isClassifying}
-          className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl border-2 border-dashed border-emerald-300 text-emerald-600 hover:bg-emerald-50 text-xs font-medium transition-colors disabled:opacity-50"
+          className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl border-2 border-dashed border-teal-300 text-teal-600 hover:bg-teal-50 text-xs font-medium transition-colors disabled:opacity-50"
         >
           {isClassifying ? (
             <Loader2 className="w-4 h-4 animate-spin" />

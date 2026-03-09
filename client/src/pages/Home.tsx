@@ -78,7 +78,7 @@ function ServiceCard({ service, sectionColor, sectionId, onNavigate }: { service
         </h4>
         <div className="flex gap-1 shrink-0">
           {(service.type === "interactive" || service.type === "both") && (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-teal-50 text-teal-700 border border-teal-200">
               <Globe className="w-3 h-3" />
               تفاعلي
             </span>
@@ -236,7 +236,7 @@ export default function Home() {
       }`}>
         <div className="p-5 border-b border-gray-100">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-emerald-600 flex items-center justify-center">
+            <div className="w-10 h-10 rounded-xl bg-teal-600 flex items-center justify-center">
               <Sparkles className="w-5 h-5 text-white" />
             </div>
             <div>
@@ -250,7 +250,7 @@ export default function Home() {
           <button
             onClick={() => { setSelectedSection(null); setSearchQuery(""); setSidebarOpen(false); }}
             className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all mb-1 ${
-              !selectedSection ? "bg-emerald-50 text-emerald-700" : "text-gray-600 hover:bg-gray-50"
+              !selectedSection ? "bg-teal-50 text-teal-700" : "text-gray-600 hover:bg-gray-50"
             }`}
           >
             <Sparkles className="w-4 h-4" />
@@ -282,7 +282,7 @@ export default function Home() {
                   <Icon className="w-4 h-4 shrink-0" style={{ color: section.color }} />
                   <span className="truncate flex-1 text-right">{section.title}</span>
                   <div className="flex items-center gap-1">
-                    {hasRoute && <Zap className="w-3 h-3 text-emerald-500" />}
+                    {hasRoute && <Zap className="w-3 h-3 text-teal-500" />}
                     <span className="text-[10px] text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded-full">{section.services.length}</span>
                   </div>
                 </button>
@@ -307,7 +307,7 @@ export default function Home() {
                 placeholder="ابحث في الخدمات..."
                 value={searchQuery}
                 onChange={(e) => { setSearchQuery(e.target.value); if (e.target.value) setSelectedSection(null); }}
-                className="w-full pr-10 pl-4 py-2.5 rounded-xl bg-gray-50 border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-400 transition-all"
+                className="w-full pr-10 pl-4 py-2.5 rounded-xl bg-gray-50 border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-400 transition-all"
               />
               {searchQuery && (
                 <button type="button" onClick={() => setSearchQuery("")} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
@@ -317,7 +317,7 @@ export default function Home() {
             </div>
 
             <div className="hidden md:flex items-center gap-2 text-xs text-gray-500">
-              <span className="bg-emerald-50 text-emerald-700 px-2 py-1 rounded-full font-medium">{totalServices} خدمة</span>
+              <span className="bg-teal-50 text-teal-700 px-2 py-1 rounded-full font-medium">{totalServices} خدمة</span>
               <span className="bg-gray-100 px-2 py-1 rounded-full">{sections.length} قسم</span>
             </div>
           </div>
@@ -368,7 +368,7 @@ export default function Home() {
                 style={{ minHeight: 280 }}
               >
                 <img src={HERO_BG} alt="" className="absolute inset-0 w-full h-full object-cover" />
-                <div className="absolute inset-0 bg-gradient-to-l from-emerald-900/80 via-emerald-800/60 to-transparent" />
+                <div className="absolute inset-0 bg-gradient-to-l from-teal-900/80 via-teal-800/60 to-transparent" />
                 <div className="relative z-10 p-8 md:p-12 flex flex-col justify-center h-full" style={{ minHeight: 280 }}>
                   <div className="max-w-xl">
                     <div className="inline-flex items-center gap-2 bg-white/20 backdrop-blur-sm rounded-full px-4 py-1.5 mb-4">
@@ -378,7 +378,7 @@ export default function Home() {
                     <h1 className="text-3xl md:text-4xl font-black text-white mb-3 leading-tight" style={{ fontFamily: "'Tajawal', sans-serif" }}>
                       جميع الخدمات التعليمية
                       <br />
-                      <span className="text-emerald-200">في مكان واحد</span>
+                      <span className="text-teal-200">في مكان واحد</span>
                     </h1>
                     <p className="text-white/80 text-sm md:text-base leading-relaxed max-w-md">
                       نماذج تفاعلية حية وقوالب قابلة للتحميل والشراء مع دعم الباركودات التفاعلية والذكاء الاصطناعي وثيمات متعددة للتصدير
@@ -390,7 +390,7 @@ export default function Home() {
               {/* Quick access to interactive services */}
               <div className="mb-8">
                 <h2 className="text-lg font-bold text-gray-900 mb-3" style={{ fontFamily: "'Tajawal', sans-serif" }}>
-                  <Zap className="w-5 h-5 inline ml-1 text-emerald-600" />
+                  <Zap className="w-5 h-5 inline ml-1 text-teal-600" />
                   الخدمات التفاعلية الجاهزة
                 </h2>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
@@ -443,7 +443,7 @@ export default function Home() {
                   <div className="p-5">
                     <h3 className="text-lg font-bold text-gray-900 mb-2" style={{ fontFamily: "'Tajawal', sans-serif" }}>نماذج تفاعلية حية</h3>
                     <p className="text-sm text-gray-500 leading-relaxed">أدخل بياناتك مباشرة → معاينة فورية → تصدير PDF بثيمات متعددة مع باركودات QR تلقائية</p>
-                    <div className="mt-3 flex items-center gap-1 text-sm font-bold text-emerald-600">
+                    <div className="mt-3 flex items-center gap-1 text-sm font-bold text-teal-600">
                       <Zap className="w-4 h-4" />
                       جرّب الآن
                     </div>
@@ -513,7 +513,7 @@ export default function Home() {
                       <p className="text-xs text-gray-500 leading-relaxed line-clamp-2">{section.description}</p>
                       <div className="mt-3 flex items-center gap-2 text-[10px] text-gray-400">
                         {hasRoute && (
-                          <span className="bg-emerald-50 text-emerald-600 px-1.5 py-0.5 rounded flex items-center gap-1">
+                          <span className="bg-teal-50 text-teal-600 px-1.5 py-0.5 rounded flex items-center gap-1">
                             <Zap className="w-2.5 h-2.5" />
                             تفاعلي
                           </span>
@@ -542,7 +542,7 @@ export default function Home() {
                 </p>
                 <div className="flex flex-wrap justify-center gap-2">
                   {["نماذج تفاعلية حية", "باركودات QR تلقائية", "ثيمات متعددة للتصدير", "ذكاء اصطناعي", "قابل للتعديل من الإدارة", "دعم الهوية الرسمية"].map((tag) => (
-                    <span key={tag} className="px-3 py-1 rounded-full text-xs bg-emerald-50 text-emerald-700 border border-emerald-200">{tag}</span>
+                    <span key={tag} className="px-3 py-1 rounded-full text-xs bg-teal-50 text-teal-700 border border-teal-200">{tag}</span>
                   ))}
                 </div>
               </div>

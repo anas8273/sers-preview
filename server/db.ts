@@ -238,7 +238,7 @@ export async function seedDefaultTemplates() {
   if (existing.length > 0) return;
   
   const baseFields = [
-    { id: 'programName', label: 'اسم البرنامج', type: 'text', required: true },
+    { id: 'subject', label: 'الموضوع', type: 'text', required: true },
     { id: 'executionDate', label: 'تاريخ التنفيذ', type: 'date' },
     { id: 'beneficiaries', label: 'المستفيدون', type: 'text' },
     { id: 'field', label: 'المجال', type: 'text' },
@@ -269,45 +269,45 @@ export async function seedDefaultTemplates() {
     ...overrides,
   });
 
-  // === 3 قوالب فقط بألوان الهوية البصرية لوزارة التعليم (#1B3A5C → #1A8A6B) ===
+  // === 3 قوالب بألوان الهوية البصرية الرسمية لوزارة التعليم (Teal #0097A7 + Dark Teal #004D5A) ===
   // الإدارة يمكنها إضافة قوالب إضافية من لوحة التحكم
   const defaults: InsertPdfTemplate[] = [
     // 1. رسمي - ترويسة داكنة + جدول
     {
       name: "رسمي - ترويسة داكنة",
-      description: "ترويسة تدرج أزرق-أخضر مع حقول جدول - الهوية البصرية لوزارة التعليم",
-      headerBg: "linear-gradient(135deg, #1B3A5C, #1A8A6B)",
+      description: "ترويسة تدرج Teal مع حقول جدول - الهوية البصرية الرسمية لوزارة التعليم",
+      headerBg: "linear-gradient(135deg, #004D5A, #0097A7)",
       headerText: "#ffffff",
-      accent: "#1A8A6B",
-      borderColor: "#1B3A5C",
+      accent: "#0097A7",
+      borderColor: "#004D5A",
       bodyBg: "#ffffff",
-      templateLayout: makeLayout({ layoutType: 'dark-header-table', fieldStyle: 'table', titleStyle: 'full-width', signatureStyle: 'boxed', footerStyle: 'gradient', coverStyle: 'gradient-center', sectionCoverStyle: 'full-gradient', coverAccent2: '#3BB89C' }),
+      templateLayout: makeLayout({ layoutType: 'dark-header-table', fieldStyle: 'table', titleStyle: 'full-width', signatureStyle: 'boxed', footerStyle: 'gradient', coverStyle: 'gradient-center', sectionCoverStyle: 'full-gradient', coverAccent2: '#26C6DA' }),
       isDefault: true,
       sortOrder: 1,
     },
     // 2. كلاسيكي - ترويسة بيضاء + حقول مسطرة
     {
       name: "كلاسيكي - ترويسة بيضاء",
-      description: "ترويسة بيضاء مع حقول مسطرة وعنوان مستدير - الهوية البصرية",
+      description: "ترويسة بيضاء مع حقول مسطرة وعنوان مستدير - الهوية البصرية الرسمية",
       headerBg: "#ffffff",
-      headerText: "#1B3A5C",
-      accent: "#1A8A6B",
-      borderColor: "#1A8A6B",
+      headerText: "#004D5A",
+      accent: "#0097A7",
+      borderColor: "#0097A7",
       bodyBg: "#ffffff",
-      templateLayout: makeLayout({ layoutType: 'white-header-classic', fieldStyle: 'underlined', titleStyle: 'rounded', signatureStyle: 'lined', footerStyle: 'gradient', coverStyle: 'split-left', sectionCoverStyle: 'left-stripe', coverAccent2: '#3BB89C' }),
+      templateLayout: makeLayout({ layoutType: 'white-header-classic', fieldStyle: 'underlined', titleStyle: 'rounded', signatureStyle: 'lined', footerStyle: 'gradient', coverStyle: 'split-left', sectionCoverStyle: 'left-stripe', coverAccent2: '#26C6DA' }),
       isDefault: false,
       sortOrder: 2,
     },
     // 3. بطاقات - شريط جانبي + بطاقات
     {
       name: "بطاقات - شريط جانبي",
-      description: "شريط جانبي ملون مع حقول بطاقات - الهوية البصرية",
+      description: "شريط جانبي ملون مع حقول بطاقات - الهوية البصرية الرسمية",
       headerBg: "#ffffff",
-      headerText: "#1B3A5C",
-      accent: "#1A8A6B",
-      borderColor: "#1A8A6B",
+      headerText: "#004D5A",
+      accent: "#0097A7",
+      borderColor: "#0097A7",
       bodyBg: "#f8fafb",
-      templateLayout: makeLayout({ layoutType: 'white-header-sidebar', fieldStyle: 'cards', titleStyle: 'badge', signatureStyle: 'stamped', footerStyle: 'gradient', coverStyle: 'diagonal', sectionCoverStyle: 'card-center', coverAccent2: '#3BB89C' }),
+      templateLayout: makeLayout({ layoutType: 'white-header-sidebar', fieldStyle: 'cards', titleStyle: 'badge', signatureStyle: 'stamped', footerStyle: 'gradient', coverStyle: 'diagonal', sectionCoverStyle: 'card-center', coverAccent2: '#26C6DA' }),
       isDefault: false,
       sortOrder: 3,
     },

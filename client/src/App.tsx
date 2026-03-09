@@ -22,7 +22,7 @@ function LoadingFallback() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-[#F8FAFC]" dir="rtl">
       <div className="text-center">
-        <div className="w-10 h-10 border-4 border-emerald-200 border-t-emerald-600 rounded-full animate-spin mx-auto mb-3" />
+        <div className="w-10 h-10 border-4 border-teal-200 border-t-teal-600 rounded-full animate-spin mx-auto mb-3" />
         <p className="text-sm text-gray-500" style={{ fontFamily: "'Tajawal', sans-serif" }}>جاري التحميل...</p>
       </div>
     </div>

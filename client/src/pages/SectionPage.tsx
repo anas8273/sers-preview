@@ -18,7 +18,7 @@ export default function SectionPage() {
       <div className="min-h-screen flex items-center justify-center bg-[#F8FAFC]" dir="rtl">
         <div className="text-center">
           <h1 className="text-2xl font-black text-gray-900 mb-2">القسم غير موجود</h1>
-          <button type="button" onClick={() => navigate("/")} className="text-emerald-600 hover:underline text-sm">
+          <button type="button" onClick={() => navigate("/")} className="text-teal-600 hover:underline text-sm">
             العودة للرئيسية
           </button>
         </div>
@@ -110,7 +110,7 @@ export default function SectionPage() {
                   </span>
                 </div>
 
-                <h3 className="font-bold text-gray-800 text-sm mb-1 group-hover:text-emerald-700 transition-colors" style={{ fontFamily: "'Tajawal', sans-serif" }}>
+                <h3 className="font-bold text-gray-800 text-sm mb-1 group-hover:text-teal-700 transition-colors" style={{ fontFamily: "'Tajawal', sans-serif" }}>
                   {service.title}
                 </h3>
                 <p className="text-xs text-gray-500 leading-relaxed">{service.description}</p>

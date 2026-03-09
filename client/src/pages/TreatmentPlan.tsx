@@ -209,7 +209,7 @@ export default function TreatmentPlan() {
                   value={(info as any)[field.key]}
                   onChange={(e) => setInfo((prev) => ({ ...prev, [field.key]: e.target.value }))}
                   placeholder={field.placeholder}
-                  className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                  className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20"
                 />
               </div>
             ))}
@@ -252,7 +252,7 @@ export default function TreatmentPlan() {
                         value={(student as any)[field.key]}
                         onChange={(e) => updateStudent(student.id, field.key as keyof PlanStudent, e.target.value)}
                         placeholder={field.placeholder}
-                        className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-400"
+                        className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-1 focus:ring-teal-400"
                       />
                     </div>
                   ))}

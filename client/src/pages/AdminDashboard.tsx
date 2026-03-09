@@ -26,7 +26,7 @@ const STATUS_MAP: Record<string, { label: string; color: string; icon: any; bg: 
   draft: { label: "مسودة", color: "#6B7280", icon: FileText, bg: "bg-gray-100 text-gray-600" },
   submitted: { label: "مقدّم للمراجعة", color: "#2563EB", icon: Clock, bg: "bg-blue-100 text-blue-700" },
   reviewed: { label: "تمت المراجعة", color: "#CA8A04", icon: Eye, bg: "bg-amber-100 text-amber-700" },
-  approved: { label: "معتمد", color: "#16A34A", icon: CheckCircle, bg: "bg-emerald-100 text-emerald-700" },
+  approved: { label: "معتمد", color: "#16A34A", icon: CheckCircle, bg: "bg-teal-100 text-teal-700" },
   rejected: { label: "مرفوض", color: "#DC2626", icon: XCircle, bg: "bg-red-100 text-red-600" },
 };
 
@@ -132,12 +132,12 @@ function TemplatesPanel() {
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">اسم القالب *</label>
           <input value={formData.name} onChange={(e) => setFormData(p => ({ ...p, name: e.target.value }))}
-            className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20" />
+            className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20" />
         </div>
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">الوصف</label>
           <input value={formData.description} onChange={(e) => setFormData(p => ({ ...p, description: e.target.value }))}
-            className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20" />
+            className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20" />
         </div>
       </div>
 
@@ -145,7 +145,7 @@ function TemplatesPanel() {
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">خلفية الرأس</label>
           <input value={formData.headerBg} onChange={(e) => setFormData(p => ({ ...p, headerBg: e.target.value }))}
-            className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20" />
+            className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20" />
         </div>
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">نص الرأس</label>
@@ -186,7 +186,7 @@ function TemplatesPanel() {
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">الخط</label>
           <input value={formData.fontFamily} onChange={(e) => setFormData(p => ({ ...p, fontFamily: e.target.value }))}
-            className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20" />
+            className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20" />
         </div>
       </div>
 
@@ -197,7 +197,7 @@ function TemplatesPanel() {
           <div className="flex gap-2 items-center">
             <input value={formData.coverImageUrl} onChange={(e) => setFormData(p => ({ ...p, coverImageUrl: e.target.value }))}
               placeholder="رابط الصورة أو ارفع ملف" className="flex-1 px-3 py-2 rounded-lg border border-gray-200 text-sm" />
-            <label className="cursor-pointer bg-emerald-50 hover:bg-emerald-100 text-emerald-700 px-3 py-2 rounded-lg border border-emerald-200 text-sm font-medium flex items-center gap-1 transition-colors">
+            <label className="cursor-pointer bg-teal-50 hover:bg-teal-100 text-teal-700 px-3 py-2 rounded-lg border border-teal-200 text-sm font-medium flex items-center gap-1 transition-colors">
               <Upload className="w-4 h-4" />رفع
               <input type="file" accept="image/*" className="hidden" onChange={async (e) => {
                 const file = e.target.files?.[0];
@@ -231,7 +231,7 @@ function TemplatesPanel() {
           <div className="flex gap-2 items-center">
             <input value={formData.logoUrl} onChange={(e) => setFormData(p => ({ ...p, logoUrl: e.target.value }))}
               placeholder="رابط الشعار أو ارفع ملف" className="flex-1 px-3 py-2 rounded-lg border border-gray-200 text-sm" />
-            <label className="cursor-pointer bg-emerald-50 hover:bg-emerald-100 text-emerald-700 px-3 py-2 rounded-lg border border-emerald-200 text-sm font-medium flex items-center gap-1 transition-colors">
+            <label className="cursor-pointer bg-teal-50 hover:bg-teal-100 text-teal-700 px-3 py-2 rounded-lg border border-teal-200 text-sm font-medium flex items-center gap-1 transition-colors">
               <Upload className="w-4 h-4" />رفع
               <input type="file" accept="image/*" className="hidden" onChange={async (e) => {
                 const file = e.target.files?.[0];
@@ -262,8 +262,8 @@ function TemplatesPanel() {
       </div>
 
       {/* === التنسيقات الديناميكية === */}
-      <div className="border border-emerald-200 rounded-xl p-4 bg-emerald-50/30">
-        <h4 className="text-sm font-bold text-emerald-800 mb-3 flex items-center gap-2">
+      <div className="border border-teal-200 rounded-xl p-4 bg-teal-50/30">
+        <h4 className="text-sm font-bold text-teal-800 mb-3 flex items-center gap-2">
           <Palette className="w-4 h-4" />تنسيق التقرير (الشكل والتخطيط)
         </h4>
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
@@ -452,7 +452,7 @@ function TemplatesPanel() {
 
       <div className="flex justify-end gap-2">
         <Button variant="outline" onClick={() => { setEditingTemplate(null); setShowCreateDialog(false); resetForm(); }}>إلغاء</Button>
-        <Button onClick={onSubmit} className="bg-emerald-600 hover:bg-emerald-700 gap-1.5">
+        <Button onClick={onSubmit} className="bg-teal-600 hover:bg-teal-700 gap-1.5">
           <Save className="w-4 h-4" />{submitLabel}
         </Button>
       </div>
@@ -462,7 +462,7 @@ function TemplatesPanel() {
   if (isLoading) {
     return (
       <div className="text-center py-16">
-        <Loader2 className="w-8 h-8 animate-spin text-emerald-600 mx-auto mb-3" />
+        <Loader2 className="w-8 h-8 animate-spin text-teal-600 mx-auto mb-3" />
         <p className="text-sm text-gray-500">جاري تحميل القوالب...</p>
       </div>
     );
@@ -481,7 +481,7 @@ function TemplatesPanel() {
             {seedMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Star className="w-4 h-4" />}
             <span className="mr-1">قوالب افتراضية</span>
           </Button>
-          <Button size="sm" onClick={() => { resetForm(); setShowCreateDialog(true); }} className="bg-emerald-600 hover:bg-emerald-700 gap-1.5">
+          <Button size="sm" onClick={() => { resetForm(); setShowCreateDialog(true); }} className="bg-teal-600 hover:bg-teal-700 gap-1.5">
             <Plus className="w-4 h-4" />إضافة قالب
           </Button>
         </div>
@@ -489,10 +489,10 @@ function TemplatesPanel() {
 
       {/* Create Dialog */}
       {showCreateDialog && (
-        <Card className="border-emerald-200 shadow-lg">
-          <CardHeader className="bg-emerald-50/50 border-b">
+        <Card className="border-teal-200 shadow-lg">
+          <CardHeader className="bg-teal-50/50 border-b">
             <CardTitle className="text-sm flex items-center gap-2">
-              <Plus className="w-4 h-4 text-emerald-600" />إنشاء قالب جديد
+              <Plus className="w-4 h-4 text-teal-600" />إنشاء قالب جديد
             </CardTitle>
           </CardHeader>
           <CardContent className="p-6">
@@ -538,7 +538,7 @@ function TemplatesPanel() {
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-2">
                     {t.isDefault && <Badge className="bg-amber-100 text-amber-700 text-[10px]">افتراضي</Badge>}
-                    <Badge className={t.isActive ? "bg-emerald-100 text-emerald-700 text-[10px]" : "bg-gray-100 text-gray-500 text-[10px]"}>
+                    <Badge className={t.isActive ? "bg-teal-100 text-teal-700 text-[10px]" : "bg-gray-100 text-gray-500 text-[10px]"}>
                       {t.isActive ? "نشط" : "معطل"}
                     </Badge>
                   </div>
@@ -563,7 +563,7 @@ function TemplatesPanel() {
                   </Button>
                   <Button variant="outline" size="sm" className="text-xs h-8"
                     onClick={() => updateMutation.mutate({ id: t.id, isActive: !t.isActive })}>
-                    {t.isActive ? <ToggleRight className="w-4 h-4 text-emerald-600" /> : <ToggleLeft className="w-4 h-4 text-gray-400" />}
+                    {t.isActive ? <ToggleRight className="w-4 h-4 text-teal-600" /> : <ToggleLeft className="w-4 h-4 text-gray-400" />}
                   </Button>
                   <Button variant="outline" size="sm" className="text-xs h-8 text-red-500 hover:text-red-700"
                     onClick={() => { if (confirm("هل أنت متأكد من حذف هذا القالب؟")) deleteMutation.mutate({ id: t.id }); }}>
@@ -732,7 +732,7 @@ function PortfoliosPanel() {
               <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
               <input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="بحث بالاسم أو الوظيفة..."
-                className="w-full pr-10 pl-4 py-2.5 rounded-xl bg-gray-50 border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20" />
+                className="w-full pr-10 pl-4 py-2.5 rounded-xl bg-gray-50 border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20" />
             </div>
             <div className="flex gap-2 flex-wrap">
               <Button variant={!statusFilter ? "default" : "outline"} size="sm" onClick={() => setStatusFilter(undefined)}>الكل</Button>
@@ -748,7 +748,7 @@ function PortfoliosPanel() {
       {/* قائمة الملفات */}
       {isLoading ? (
         <div className="text-center py-16">
-          <Loader2 className="w-8 h-8 animate-spin text-emerald-600 mx-auto mb-3" />
+          <Loader2 className="w-8 h-8 animate-spin text-teal-600 mx-auto mb-3" />
           <p className="text-sm text-gray-500">جاري التحميل...</p>
         </div>
       ) : filteredItems.length === 0 ? (
@@ -795,7 +795,7 @@ function PortfoliosPanel() {
                         </Button>
                         {item.status === "submitted" && (
                           <>
-                            <Button variant="ghost" size="icon" className="h-8 w-8 text-emerald-600"
+                            <Button variant="ghost" size="icon" className="h-8 w-8 text-teal-600"
                               onClick={(e) => { e.stopPropagation(); setReviewDialog({ id: item.id, action: "approved" }); }}>
                               <ThumbsUp className="w-4 h-4" />
                             </Button>
@@ -846,13 +846,13 @@ function PortfoliosPanel() {
             <label className="block text-sm font-medium text-gray-700 mb-2">ملاحظات المراجعة (اختياري)</label>
             <textarea value={reviewNotes} onChange={(e) => setReviewNotes(e.target.value)}
               placeholder="أضف ملاحظاتك هنا..." rows={3}
-              className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-emerald-500/20" />
+              className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-teal-500/20" />
           </div>
           <DialogFooter className="gap-2">
             <Button variant="outline" onClick={() => setReviewDialog(null)}>إلغاء</Button>
             <Button onClick={() => handleReview(reviewDialog?.action || "reviewed")}
               disabled={reviewMutation.isPending}
-              className={reviewDialog?.action === "approved" ? "bg-emerald-600 hover:bg-emerald-700" : "bg-red-600 hover:bg-red-700"}>
+              className={reviewDialog?.action === "approved" ? "bg-teal-600 hover:bg-teal-700" : "bg-red-600 hover:bg-red-700"}>
               {reviewMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin ml-2" /> : null}
               {reviewDialog?.action === "approved" ? "اعتماد" : "رفض"}
             </Button>
@@ -897,19 +897,19 @@ function SettingsPanel() {
             <div className="bg-gray-50 rounded-xl p-4">
               <h4 className="text-sm font-bold text-gray-900 mb-2">صلاحيات المستخدمين</h4>
               <ul className="space-y-2 text-xs text-gray-600">
-                <li className="flex items-center gap-2"><CheckCircle className="w-3 h-3 text-emerald-500" />رفع وإدارة الشواهد</li>
-                <li className="flex items-center gap-2"><CheckCircle className="w-3 h-3 text-emerald-500" />تصدير PDF بقوالب متعددة</li>
-                <li className="flex items-center gap-2"><CheckCircle className="w-3 h-3 text-emerald-500" />مشاركة الملف برابط</li>
-                <li className="flex items-center gap-2"><CheckCircle className="w-3 h-3 text-emerald-500" />التصنيف الذكي بالذكاء الاصطناعي</li>
+                <li className="flex items-center gap-2"><CheckCircle className="w-3 h-3 text-teal-500" />رفع وإدارة الشواهد</li>
+                <li className="flex items-center gap-2"><CheckCircle className="w-3 h-3 text-teal-500" />تصدير PDF بقوالب متعددة</li>
+                <li className="flex items-center gap-2"><CheckCircle className="w-3 h-3 text-teal-500" />مشاركة الملف برابط</li>
+                <li className="flex items-center gap-2"><CheckCircle className="w-3 h-3 text-teal-500" />التصنيف الذكي بالذكاء الاصطناعي</li>
               </ul>
             </div>
             <div className="bg-gray-50 rounded-xl p-4">
               <h4 className="text-sm font-bold text-gray-900 mb-2">صلاحيات المدير</h4>
               <ul className="space-y-2 text-xs text-gray-600">
-                <li className="flex items-center gap-2"><CheckCircle className="w-3 h-3 text-emerald-500" />مراجعة جميع الملفات</li>
-                <li className="flex items-center gap-2"><CheckCircle className="w-3 h-3 text-emerald-500" />اعتماد أو رفض الملفات</li>
-                <li className="flex items-center gap-2"><CheckCircle className="w-3 h-3 text-emerald-500" />إدارة القوالب والثيمات</li>
-                <li className="flex items-center gap-2"><CheckCircle className="w-3 h-3 text-emerald-500" />عرض إحصائيات النظام</li>
+                <li className="flex items-center gap-2"><CheckCircle className="w-3 h-3 text-teal-500" />مراجعة جميع الملفات</li>
+                <li className="flex items-center gap-2"><CheckCircle className="w-3 h-3 text-teal-500" />اعتماد أو رفض الملفات</li>
+                <li className="flex items-center gap-2"><CheckCircle className="w-3 h-3 text-teal-500" />إدارة القوالب والثيمات</li>
+                <li className="flex items-center gap-2"><CheckCircle className="w-3 h-3 text-teal-500" />عرض إحصائيات النظام</li>
               </ul>
             </div>
           </div>
@@ -930,7 +930,7 @@ export default function AdminDashboard() {
   if (authLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50" dir="rtl">
-        <Loader2 className="w-8 h-8 animate-spin text-emerald-600" />
+        <Loader2 className="w-8 h-8 animate-spin text-teal-600" />
       </div>
     );
   }
@@ -945,7 +945,7 @@ export default function AdminDashboard() {
               صلاحية غير كافية
             </h1>
             <p className="text-sm text-gray-500 mb-6">هذه الصفحة متاحة للمديرين فقط</p>
-            <Button onClick={() => navigate("/")} className="bg-emerald-600 hover:bg-emerald-700">العودة للرئيسية</Button>
+            <Button onClick={() => navigate("/")} className="bg-teal-600 hover:bg-teal-700">العودة للرئيسية</Button>
           </CardContent>
         </Card>
       </div>
@@ -974,7 +974,7 @@ export default function AdminDashboard() {
         <div className="p-4 border-b border-gray-100 flex items-center justify-between">
           {!sidebarCollapsed && (
             <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl bg-emerald-600 flex items-center justify-center">
+              <div className="w-9 h-9 rounded-xl bg-teal-600 flex items-center justify-center">
                 <ShieldCheck className="w-5 h-5 text-white" />
               </div>
               <div>
@@ -1001,10 +1001,10 @@ export default function AdminDashboard() {
               <button key={tab.id}
                 onClick={() => { setActiveTab(tab.id); setMobileSidebarOpen(false); }}
                 className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all
-                  ${isActive ? "bg-emerald-50 text-emerald-700 font-semibold" : "text-gray-600 hover:bg-gray-50"}
+                  ${isActive ? "bg-teal-50 text-teal-700 font-semibold" : "text-gray-600 hover:bg-gray-50"}
                   ${sidebarCollapsed ? "justify-center" : ""}`}
                 title={sidebarCollapsed ? tab.label : undefined}>
-                <Icon className={`w-5 h-5 shrink-0 ${isActive ? "text-emerald-600" : "text-gray-400"}`} />
+                <Icon className={`w-5 h-5 shrink-0 ${isActive ? "text-teal-600" : "text-gray-400"}`} />
                 {!sidebarCollapsed && (
                   <div className="text-right flex-1">
                     <span className="block">{tab.label}</span>

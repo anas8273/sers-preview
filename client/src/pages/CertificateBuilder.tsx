@@ -130,7 +130,7 @@ export default function CertificateBuilder() {
                   }}
                   className={`px-3 py-2 rounded-lg text-xs font-medium transition-all border ${
                     selectedType.id === type.id
-                      ? "border-emerald-500 bg-emerald-50 text-emerald-700"
+                      ? "border-teal-500 bg-teal-50 text-teal-700"
                       : "border-gray-200 text-gray-600 hover:bg-gray-50"
                   }`}
                 >
@@ -183,7 +183,7 @@ export default function CertificateBuilder() {
                     onChange={(e) => setFormData((prev) => ({ ...prev, [field.key]: e.target.value }))}
                     placeholder={field.placeholder}
                     rows={3}
-                    className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-400 resize-none"
+                    className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-400 resize-none"
                   />
                 ) : (
                   <input
@@ -191,7 +191,7 @@ export default function CertificateBuilder() {
                     value={(formData as any)[field.key]}
                     onChange={(e) => setFormData((prev) => ({ ...prev, [field.key]: e.target.value }))}
                     placeholder={field.placeholder}
-                    className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-400"
+                    className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-400"
                   />
                 )}
               </div>
@@ -203,7 +203,7 @@ export default function CertificateBuilder() {
             <button
               onClick={handleExportPDF}
               disabled={isExporting}
-              className="flex-1 flex items-center justify-center gap-2 bg-emerald-600 text-white px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-emerald-700 transition-colors disabled:opacity-50"
+              className="flex-1 flex items-center justify-center gap-2 bg-teal-600 text-white px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-teal-700 transition-colors disabled:opacity-50"
             >
               <Download className="w-4 h-4" />
               {isExporting ? "جاري..." : "تحميل PDF"}

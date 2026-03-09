@@ -1,0 +1,9 @@
+{
+  "query": "UPDATE pdf_templates SET templateLayout = JSON_REPLACE(templateLayout, '$.sections[0].fields[0].label', 'الموضوع', '$.sections[0].fields[0].id', 'subject') WHERE id IN (330001, 330002, 330003);",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 6C7x6f29RX1BcFf.7325488fde9e --database h34s4aPNVyHXdtjgZ7eNNf --execute UPDATE pdf_templates SET templateLayout = JSON_REPLACE(templateLayout, '$.sections[0].fields[0].label', 'الموضوع', '$.sections[0].fields[0].id', 'subject') WHERE id IN (330001, 330002, 330003);",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 480
+}

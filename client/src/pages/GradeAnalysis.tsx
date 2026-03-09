@@ -175,9 +175,9 @@ export default function GradeAnalysis() {
                 <div className="mt-5 pt-5 border-t border-gray-100">
                   <h3 className="font-bold text-gray-800 mb-3 text-sm">إحصائيات سريعة</h3>
                   <div className="grid grid-cols-2 gap-2">
-                    <div className="bg-emerald-50 rounded-lg p-3 text-center">
-                      <div className="text-lg font-black text-emerald-700">{stats.avgPct}%</div>
-                      <div className="text-[10px] text-emerald-600">المتوسط</div>
+                    <div className="bg-teal-50 rounded-lg p-3 text-center">
+                      <div className="text-lg font-black text-teal-700">{stats.avgPct}%</div>
+                      <div className="text-[10px] text-teal-600">المتوسط</div>
                     </div>
                     <div className="bg-blue-50 rounded-lg p-3 text-center">
                       <div className="text-lg font-black text-blue-700">{stats.passRate}%</div>
