@@ -198,72 +198,83 @@ interface ThemeConfig {
   fieldStyle?: 'table' | 'fieldset' | 'underlined' | 'cards' | 'minimal'; // نمط الحقول
   signatureStyle?: 'dotted' | 'solid' | 'boxed' | 'lined' | 'stamped';    // نمط التوقيعات
   bodyBg?: string;           // خلفية الجسم
+  // === خصائص الغلاف والفواصل ===
+  coverStyle?: 'gradient-center' | 'split-left' | 'diagonal' | 'framed-elegant' | 'top-bar' | 'minimal-line'; // نمط الغلاف الرئيسي
+  sectionCoverStyle?: 'full-gradient' | 'left-stripe' | 'top-accent' | 'card-center' | 'numbered-bar' | 'clean-divider'; // نمط غلاف القسم
+  coverAccent2?: string;     // لون ثانوي للغلاف
 }
 
-// ===== الثيمات - كل ثيم له تنسيق مختلف فعلياً =====
+// ===== الثيمات - كل ثيم له تنسيق مختلف فعلياً (ترتيب + تخطيط + حقول + توقيعات) =====
 const THEMES: ThemeConfig[] = [
   // === تصاميم الهوية البصرية لوزارة التعليم (من ملف PDF) ===
   
-  // التصميم 6 (PDF): ترويسة داكنة + جدول حقول كامل
-  { id: "identity-dark-table", name: "الهوية البصرية - جدول داكن",
+  // التصميم 1: رسمي - جدول (ترويسة داكنة + جدول حقول + غلاف متدرج مركزي)
+  { id: "identity-dark-table", name: "رسمي - جدول",
     layoutType: 'dark-header-table',
     headerBg: "linear-gradient(135deg, #1B3A5C, #1A4A6B, #1E5A7A)", headerText: "#fff",
     accent: "#1A6B7A", borderColor: "#1B3A5C",
     titleBg: "#1A6B7A", fieldLabelBg: "#1A6B7A",
     footerBg: "linear-gradient(to left, #1B3A5C, #1A6B7A, #2E9E8B)",
     tableStyle: true, titleStyle: 'rounded', showTopLine: true, showBottomBar: true,
-    fieldStyle: 'table', signatureStyle: 'dotted' },
+    fieldStyle: 'table', signatureStyle: 'boxed',
+    coverStyle: 'gradient-center', sectionCoverStyle: 'full-gradient', coverAccent2: '#2E9E8B' },
 
-  // التصميم 4-5 (PDF): ترويسة داكنة + حقول fieldset
-  { id: "identity-dark-fieldset", name: "الهوية البصرية - ترويسة داكنة",
+  // التصميم 2: حديث - مجموعات (ترويسة داكنة + fieldset + غلاف مقسوم)
+  { id: "identity-dark-fieldset", name: "حديث - مجموعات",
     layoutType: 'dark-header-simple',
     headerBg: "linear-gradient(135deg, #1B3A5C, #1A4A6B, #1E5A7A)", headerText: "#fff",
     accent: "#1A6B7A", borderColor: "#1B3A5C",
     titleBg: "#1A6B7A", fieldLabelBg: "#1A6B7A",
     footerBg: "linear-gradient(to left, #1B3A5C, #1A6B7A, #2E9E8B)",
-    tableStyle: false, titleStyle: 'rounded', showTopLine: true, showBottomBar: true,
-    fieldStyle: 'fieldset', signatureStyle: 'dotted' },
+    tableStyle: false, titleStyle: 'full-width', showTopLine: true, showBottomBar: true,
+    fieldStyle: 'fieldset', signatureStyle: 'dotted',
+    coverStyle: 'split-left', sectionCoverStyle: 'left-stripe', coverAccent2: '#2E9E8B' },
 
-  // التصميم 7 (PDF): نمط edu-forms.com الكلاسيكي
-  { id: "identity-white-classic", name: "الهوية البصرية - أبيض كلاسيكي",
+  // التصميم 3: مميز - شريط جانبي (غلاف قطري + شريط علوي)
+  { id: "identity-white-sidebar", name: "مميز - شريط جانبي",
+    layoutType: 'white-header-sidebar',
+    headerBg: "#ffffff", headerText: "#1B3A5C",
+    accent: "#1A6B7A", borderColor: "#1A6B7A",
+    titleBg: "#1A6B7A", fieldLabelBg: "#1A6B7A",
+    footerBg: "linear-gradient(to left, #1B3A5C, #1A6B7A, #2E9E8B)",
+    tableStyle: false, titleStyle: 'badge', showTopLine: false, showBottomBar: true,
+    sidebarBg: "linear-gradient(to bottom, #1B3A5C, #1A6B7A, #2E9E8B)",
+    fieldStyle: 'fieldset', signatureStyle: 'lined', headerSeparator: true,
+    coverStyle: 'diagonal', sectionCoverStyle: 'top-accent', coverAccent2: '#2E9E8B' },
+
+  // التصميم 4: بطاقات حديثة (غلاف إطار أنيق + بطاقة مركزية)
+  { id: "identity-cards", name: "بطاقات حديثة",
+    layoutType: 'white-header-classic',
+    headerBg: "#ffffff", headerText: "#1B3A5C",
+    accent: "#1A6B7A", borderColor: "#1A6B7A",
+    titleBg: "#1A6B7A", fieldLabelBg: "#1A6B7A",
+    footerBg: "linear-gradient(to left, #1B3A5C, #1A6B7A, #2E9E8B)",
+    tableStyle: false, titleStyle: 'rounded', showTopLine: false, showBottomBar: true,
+    fieldStyle: 'cards', signatureStyle: 'stamped', headerSeparator: false,
+    bodyBg: '#F8FAFB',
+    coverStyle: 'framed-elegant', sectionCoverStyle: 'card-center', coverAccent2: '#2E9E8B' },
+
+  // التصميم 5: كلاسيكي - خطوط (غلاف شريط علوي + شريط مرقم)
+  { id: "identity-white-classic", name: "كلاسيكي - خطوط",
     layoutType: 'white-header-classic',
     headerBg: "#ffffff", headerText: "#1B3A5C",
     accent: "#1A6B7A", borderColor: "#1A6B7A",
     titleBg: "#1A6B7A", fieldLabelBg: "#1A6B7A",
     footerBg: "linear-gradient(to left, #1B3A5C, #1A6B7A, #2E9E8B)",
     tableStyle: false, titleStyle: 'bordered', showTopLine: false, showBottomBar: false,
-    fieldStyle: 'underlined', signatureStyle: 'dotted', headerSeparator: false },
+    fieldStyle: 'underlined', signatureStyle: 'solid', headerSeparator: false,
+    coverStyle: 'top-bar', sectionCoverStyle: 'numbered-bar', coverAccent2: '#2E9E8B' },
 
-  // التصميم 3 (PDF): ترويسة بيضاء + شريط جانبي
-  { id: "identity-white-sidebar", name: "الهوية البصرية - شريط جانبي",
-    layoutType: 'white-header-sidebar',
+  // التصميم 6: بسيط ونظيف (غلاف خط بسيط + فاصل نظيف)
+  { id: "identity-minimal", name: "بسيط ونظيف",
+    layoutType: 'minimal-clean',
     headerBg: "#ffffff", headerText: "#1B3A5C",
-    accent: "#1A6B7A", borderColor: "#1A6B7A",
-    titleBg: "#1A6B7A", fieldLabelBg: "#1A6B7A",
+    accent: "#1A6B7A", borderColor: "#E5E7EB",
+    titleBg: "#F0FAF5", fieldLabelBg: "#1A6B7A",
     footerBg: "linear-gradient(to left, #1B3A5C, #1A6B7A, #2E9E8B)",
-    tableStyle: false, titleStyle: 'rounded', showTopLine: false, showBottomBar: true,
-    sidebarBg: "linear-gradient(to bottom, #1B3A5C, #1A6B7A, #2E9E8B)",
-    fieldStyle: 'fieldset', signatureStyle: 'dotted', headerSeparator: true },
-
-  // التصميم 9 (PDF): ترويسة بيضاء + خلفية فاتحة + شريط عنوان كامل
-  { id: "identity-white-light", name: "الهوية البصرية - خلفية فاتحة",
-    layoutType: 'white-header-light',
-    headerBg: "#ffffff", headerText: "#1B3A5C",
-    accent: "#1B3A5C", borderColor: "#1A6B7A",
-    titleBg: "#1B3A5C", fieldLabelBg: "#1A6B7A",
-    footerBg: "linear-gradient(to left, #1B3A5C, #1A6B7A, #2E9E8B)",
-    tableStyle: false, titleStyle: 'full-width', showTopLine: false, showBottomBar: true,
-    fieldStyle: 'underlined', signatureStyle: 'dotted', bodyBg: '#F0FAF5' },
-
-  // التصميم 10 (PDF): ترويسة بيضاء + أعمدة متعددة
-  { id: "identity-white-multi", name: "الهوية البصرية - أعمدة متعددة",
-    layoutType: 'white-header-multi',
-    headerBg: "#ffffff", headerText: "#1B3A5C",
-    accent: "#1A6B7A", borderColor: "#1A6B7A",
-    titleBg: "#E8F4F8", fieldLabelBg: "#1A6B7A",
-    footerBg: "linear-gradient(to left, #1B3A5C, #1A6B7A, #2E9E8B)",
-    tableStyle: false, titleStyle: 'bordered', showTopLine: false, showBottomBar: true,
-    fieldStyle: 'fieldset', signatureStyle: 'solid' },
+    tableStyle: false, titleStyle: 'simple', showTopLine: false, showBottomBar: false,
+    fieldStyle: 'minimal', signatureStyle: 'dotted',
+    coverStyle: 'minimal-line', sectionCoverStyle: 'clean-divider', coverAccent2: '#2E9E8B' },
 
 ];
 
@@ -3528,21 +3539,15 @@ export default function PerformanceEvidence() {
           )}
 
           <div id="preview-content" style={{ fontFamily: "'Cairo', 'Tajawal', sans-serif" }}>
-            {/* === صفحة الغلاف === */}
-            <div className="bg-white shadow-lg mx-auto mb-6" style={{ width: '210mm', minHeight: '297mm', maxWidth: '100%', position: 'relative', overflow: 'hidden', pageBreakAfter: 'always' }}>
-              {/* غلاف احترافي */}
-              <div style={{ background: theme.headerBg, color: theme.headerText, padding: '4rem 2.5rem', textAlign: 'center', position: 'relative', overflow: 'hidden', minHeight: '297mm', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                {/* زخارف الخلفية */}
-                <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, background: 'linear-gradient(135deg, rgba(255,255,255,0.12) 0%, transparent 40%, rgba(0,0,0,0.1) 100%)', pointerEvents: 'none' }} />
-                <div style={{ position: 'absolute', top: '-50px', right: '-50px', width: '200px', height: '200px', borderRadius: '50%', background: 'rgba(255,255,255,0.06)', pointerEvents: 'none' }} />
-                <div style={{ position: 'absolute', bottom: '-40px', left: '-40px', width: '150px', height: '150px', borderRadius: '50%', background: 'rgba(255,255,255,0.04)', pointerEvents: 'none' }} />
-                <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', width: '350px', height: '350px', borderRadius: '50%', background: 'rgba(255,255,255,0.03)', pointerEvents: 'none' }} />
-                {/* إطار زخرفي */}
-                <div style={{ position: 'absolute', top: '16px', left: '16px', right: '16px', bottom: '16px', border: '1.5px solid rgba(255,255,255,0.15)', borderRadius: '12px', pointerEvents: 'none' }} />
-                <div style={{ position: 'relative', zIndex: 1 }}>
+            {/* === صفحة الغلاف - تتغير حسب coverStyle === */}
+            {(() => {
+              const cs = theme.coverStyle || 'gradient-center';
+              const a2 = theme.coverAccent2 || theme.accent;
+              const coverContent = (
+                <>
                   <div style={{ fontSize: '0.8rem', opacity: 0.65, marginBottom: '0.3rem', letterSpacing: '0.2em' }}>المملكة العربية السعودية</div>
                   <div style={{ fontSize: '0.95rem', opacity: 0.8, marginBottom: '0.5rem', fontWeight: 600 }}>وزارة التعليم</div>
-                  {personalInfo.department && <p style={{ fontSize: '0.9rem', opacity: 0.85, marginBottom: '1rem', lineHeight: 1.7, whiteSpace: 'pre-line' }}>{personalInfo.department}</p>}
+                  {personalInfo.department && <p style={{ fontSize: '0.9rem', opacity: 0.85, marginBottom: '1rem', lineHeight: 1.7, whiteSpace: 'pre-line' as const }}>{personalInfo.department}</p>}
                   <div style={{ width: '80px', height: '2px', background: 'rgba(255,255,255,0.3)', margin: '0 auto 1.5rem' }} />
                   <h1 style={{ fontSize: '2.5rem', fontWeight: 900, marginBottom: '0.75rem', fontFamily: "'Tajawal', sans-serif", letterSpacing: '-0.01em' }}>{personalInfo.reportTitle || 'شواهد الأداء الوظيفي'}</h1>
                   <p style={{ fontSize: '1.4rem', fontWeight: 700, opacity: 0.95, marginBottom: '0.5rem' }}>{selectedJob?.title}</p>
@@ -3559,13 +3564,154 @@ export default function PerformanceEvidence() {
                       <div style={{ fontWeight: 700, fontSize: '1.1rem' }}>{personalInfo.school || '—'}</div>
                     </div>
                   </div>
-                  {/* تذييل الغلاف */}
-                  <div style={{ marginTop: '4rem', fontSize: '0.7rem', opacity: 0.5 }}>
-                    نظام SERS - السجلات التعليمية الذكية
+                  <div style={{ marginTop: '4rem', fontSize: '0.7rem', opacity: 0.5 }}>نظام SERS - السجلات التعليمية الذكية</div>
+                </>
+              );
+
+              // === غلاف 1: متدرج مركزي (الافتراضي) ===
+              if (cs === 'gradient-center') return (
+                <div className="bg-white shadow-lg mx-auto mb-6" style={{ width: '210mm', minHeight: '297mm', maxWidth: '100%', position: 'relative', overflow: 'hidden', pageBreakAfter: 'always' }}>
+                  <div style={{ background: theme.headerBg, color: theme.headerText, padding: '4rem 2.5rem', textAlign: 'center', position: 'relative', overflow: 'hidden', minHeight: '297mm', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                    <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, background: 'linear-gradient(135deg, rgba(255,255,255,0.12) 0%, transparent 40%, rgba(0,0,0,0.1) 100%)', pointerEvents: 'none' }} />
+                    <div style={{ position: 'absolute', top: '-50px', right: '-50px', width: '200px', height: '200px', borderRadius: '50%', background: 'rgba(255,255,255,0.06)', pointerEvents: 'none' }} />
+                    <div style={{ position: 'absolute', bottom: '-40px', left: '-40px', width: '150px', height: '150px', borderRadius: '50%', background: 'rgba(255,255,255,0.04)', pointerEvents: 'none' }} />
+                    <div style={{ position: 'absolute', top: '16px', left: '16px', right: '16px', bottom: '16px', border: '1.5px solid rgba(255,255,255,0.15)', borderRadius: '12px', pointerEvents: 'none' }} />
+                    <div style={{ position: 'relative', zIndex: 1 }}>{coverContent}</div>
                   </div>
                 </div>
-              </div>
-            </div>
+              );
+
+              // === غلاف 2: مقسوم يسار (شريط جانبي ملون + محتوى أبيض) ===
+              if (cs === 'split-left') return (
+                <div className="bg-white shadow-lg mx-auto mb-6" style={{ width: '210mm', minHeight: '297mm', maxWidth: '100%', position: 'relative', overflow: 'hidden', pageBreakAfter: 'always', display: 'flex' }}>
+                  <div style={{ width: '35%', background: theme.headerBg, minHeight: '297mm', position: 'relative', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', padding: '2rem', color: theme.headerText }}>
+                    <div style={{ position: 'absolute', top: 0, right: 0, width: '4px', background: `linear-gradient(to bottom, ${a2}, ${theme.accent})`, height: '100%' }} />
+                    <div style={{ fontSize: '4rem', fontWeight: 900, opacity: 0.15, position: 'absolute', top: '3rem', fontFamily: "'Tajawal'" }}>SERS</div>
+                    <div style={{ textAlign: 'center', position: 'relative', zIndex: 1 }}>
+                      <div style={{ fontSize: '0.75rem', opacity: 0.6, letterSpacing: '0.15em', marginBottom: '1rem' }}>المملكة العربية السعودية</div>
+                      <div style={{ fontSize: '0.85rem', opacity: 0.8, fontWeight: 600 }}>وزارة التعليم</div>
+                      {personalInfo.department && <p style={{ fontSize: '0.75rem', opacity: 0.7, marginTop: '0.5rem', lineHeight: 1.7, whiteSpace: 'pre-line' as const }}>{personalInfo.department}</p>}
+                      <div style={{ width: '40px', height: '2px', background: 'rgba(255,255,255,0.3)', margin: '1.5rem auto' }} />
+                      <div style={{ fontSize: '0.7rem', opacity: 0.5 }}>{personalInfo.year}</div>
+                    </div>
+                  </div>
+                  <div style={{ width: '65%', display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '4rem 3rem', color: theme.borderColor }}>
+                    <h1 style={{ fontSize: '2.2rem', fontWeight: 900, marginBottom: '1rem', fontFamily: "'Tajawal', sans-serif", color: theme.accent }}>{personalInfo.reportTitle || 'شواهد الأداء الوظيفي'}</h1>
+                    <p style={{ fontSize: '1.2rem', fontWeight: 700, color: theme.borderColor, marginBottom: '2rem' }}>{selectedJob?.title}</p>
+                    <div style={{ width: '60px', height: '3px', background: theme.accent, marginBottom: '2rem' }} />
+                    <div style={{ display: 'flex', gap: '2rem' }}>
+                      <div><div style={{ fontSize: '0.7rem', color: '#9CA3AF', marginBottom: '0.2rem' }}>الاسم</div><div style={{ fontWeight: 700, fontSize: '1rem' }}>{personalInfo.name || '—'}</div></div>
+                      <div><div style={{ fontSize: '0.7rem', color: '#9CA3AF', marginBottom: '0.2rem' }}>المدرسة</div><div style={{ fontWeight: 700, fontSize: '1rem' }}>{personalInfo.school || '—'}</div></div>
+                    </div>
+                    <p style={{ fontSize: '0.9rem', color: '#9CA3AF', marginTop: '2rem' }}>{personalInfo.semester}</p>
+                    <div style={{ marginTop: '4rem', fontSize: '0.65rem', color: '#D1D5DB' }}>نظام SERS - السجلات التعليمية الذكية</div>
+                  </div>
+                </div>
+              );
+
+              // === غلاف 3: قطري (شريط علوي مائل + محتوى أبيض) ===
+              if (cs === 'diagonal') return (
+                <div className="bg-white shadow-lg mx-auto mb-6" style={{ width: '210mm', minHeight: '297mm', maxWidth: '100%', position: 'relative', overflow: 'hidden', pageBreakAfter: 'always' }}>
+                  <div style={{ background: theme.headerBg, height: '45%', position: 'absolute', top: 0, left: 0, right: 0, clipPath: 'polygon(0 0, 100% 0, 100% 75%, 0 100%)' }} />
+                  <div style={{ position: 'relative', zIndex: 1, minHeight: '297mm', display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '4rem 3rem', textAlign: 'center' }}>
+                    <div style={{ color: theme.headerText, marginBottom: '4rem' }}>
+                      <div style={{ fontSize: '0.8rem', opacity: 0.7, letterSpacing: '0.2em', marginBottom: '0.3rem' }}>المملكة العربية السعودية</div>
+                      <div style={{ fontSize: '0.95rem', opacity: 0.85, fontWeight: 600 }}>وزارة التعليم</div>
+                      {personalInfo.department && <p style={{ fontSize: '0.85rem', opacity: 0.8, marginTop: '0.5rem', lineHeight: 1.7, whiteSpace: 'pre-line' as const }}>{personalInfo.department}</p>}
+                    </div>
+                    <div style={{ background: 'white', borderRadius: '16px', padding: '3rem', boxShadow: '0 8px 32px rgba(0,0,0,0.1)', border: `2px solid ${theme.accent}20`, maxWidth: '500px', margin: '0 auto' }}>
+                      <div style={{ width: '60px', height: '4px', background: `linear-gradient(to left, ${theme.accent}, ${a2})`, margin: '0 auto 1.5rem', borderRadius: '2px' }} />
+                      <h1 style={{ fontSize: '1.8rem', fontWeight: 900, color: theme.accent, fontFamily: "'Tajawal', sans-serif", marginBottom: '0.75rem' }}>{personalInfo.reportTitle || 'شواهد الأداء الوظيفي'}</h1>
+                      <p style={{ fontSize: '1.1rem', fontWeight: 700, color: theme.borderColor, marginBottom: '1.5rem' }}>{selectedJob?.title}</p>
+                      <div style={{ display: 'flex', justifyContent: 'center', gap: '2rem', fontSize: '0.85rem', color: '#6B7280' }}>
+                        <div><strong style={{ color: theme.accent }}>{personalInfo.name || '—'}</strong></div>
+                        <div style={{ color: '#D1D5DB' }}>|</div>
+                        <div><strong style={{ color: theme.accent }}>{personalInfo.school || '—'}</strong></div>
+                      </div>
+                      <p style={{ fontSize: '0.85rem', color: '#9CA3AF', marginTop: '1rem' }}>{personalInfo.year} - {personalInfo.semester}</p>
+                    </div>
+                    <div style={{ marginTop: '3rem', fontSize: '0.65rem', color: '#9CA3AF' }}>نظام SERS - السجلات التعليمية الذكية</div>
+                  </div>
+                </div>
+              );
+
+              // === غلاف 4: إطار أنيق (خلفية فاتحة + إطار مزدوج) ===
+              if (cs === 'framed-elegant') return (
+                <div className="bg-white shadow-lg mx-auto mb-6" style={{ width: '210mm', minHeight: '297mm', maxWidth: '100%', position: 'relative', overflow: 'hidden', pageBreakAfter: 'always', background: `${theme.accent}08` }}>
+                  <div style={{ position: 'absolute', top: '20px', left: '20px', right: '20px', bottom: '20px', border: `2px solid ${theme.accent}`, borderRadius: '4px', pointerEvents: 'none' }} />
+                  <div style={{ position: 'absolute', top: '28px', left: '28px', right: '28px', bottom: '28px', border: `1px solid ${theme.accent}40`, borderRadius: '4px', pointerEvents: 'none' }} />
+                  <div style={{ position: 'relative', zIndex: 1, minHeight: '297mm', display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '5rem 4rem', textAlign: 'center', color: theme.accent }}>
+                    <div style={{ fontSize: '0.8rem', color: '#9CA3AF', letterSpacing: '0.2em', marginBottom: '0.3rem' }}>المملكة العربية السعودية</div>
+                    <div style={{ fontSize: '0.95rem', color: '#6B7280', fontWeight: 600, marginBottom: '0.5rem' }}>وزارة التعليم</div>
+                    {personalInfo.department && <p style={{ fontSize: '0.85rem', color: '#9CA3AF', marginBottom: '1.5rem', lineHeight: 1.7, whiteSpace: 'pre-line' as const }}>{personalInfo.department}</p>}
+                    <div style={{ width: '100px', height: '3px', background: `linear-gradient(to left, ${theme.accent}, ${a2})`, margin: '0 auto 2rem', borderRadius: '2px' }} />
+                    <h1 style={{ fontSize: '2.5rem', fontWeight: 900, marginBottom: '1rem', fontFamily: "'Tajawal', sans-serif" }}>{personalInfo.reportTitle || 'شواهد الأداء الوظيفي'}</h1>
+                    <p style={{ fontSize: '1.3rem', fontWeight: 700, color: theme.borderColor, marginBottom: '0.5rem' }}>{selectedJob?.title}</p>
+                    <div style={{ width: '100px', height: '3px', background: `linear-gradient(to left, ${a2}, ${theme.accent})`, margin: '2rem auto', borderRadius: '2px' }} />
+                    <div style={{ display: 'flex', justifyContent: 'center', gap: '3rem', marginTop: '1rem' }}>
+                      <div style={{ padding: '1rem 2rem', border: `1px solid ${theme.accent}30`, borderRadius: '8px' }}>
+                        <div style={{ fontSize: '0.65rem', color: '#9CA3AF', marginBottom: '0.2rem' }}>الاسم</div>
+                        <div style={{ fontWeight: 700, fontSize: '1rem' }}>{personalInfo.name || '—'}</div>
+                      </div>
+                      <div style={{ padding: '1rem 2rem', border: `1px solid ${theme.accent}30`, borderRadius: '8px' }}>
+                        <div style={{ fontSize: '0.65rem', color: '#9CA3AF', marginBottom: '0.2rem' }}>المدرسة</div>
+                        <div style={{ fontWeight: 700, fontSize: '1rem' }}>{personalInfo.school || '—'}</div>
+                      </div>
+                    </div>
+                    <p style={{ fontSize: '0.9rem', color: '#9CA3AF', marginTop: '2rem' }}>{personalInfo.year} - {personalInfo.semester}</p>
+                    <div style={{ position: 'absolute', bottom: '3rem', left: 0, right: 0, fontSize: '0.65rem', color: '#D1D5DB' }}>نظام SERS - السجلات التعليمية الذكية</div>
+                  </div>
+                </div>
+              );
+
+              // === غلاف 5: شريط علوي (شريط عريض أعلى + محتوى أبيض) ===
+              if (cs === 'top-bar') return (
+                <div className="bg-white shadow-lg mx-auto mb-6" style={{ width: '210mm', minHeight: '297mm', maxWidth: '100%', position: 'relative', overflow: 'hidden', pageBreakAfter: 'always' }}>
+                  <div style={{ background: theme.headerBg, padding: '2.5rem 3rem', color: theme.headerText, textAlign: 'center' }}>
+                    <div style={{ fontSize: '0.8rem', opacity: 0.7, letterSpacing: '0.15em' }}>المملكة العربية السعودية · وزارة التعليم</div>
+                    {personalInfo.department && <p style={{ fontSize: '0.8rem', opacity: 0.7, marginTop: '0.3rem', whiteSpace: 'pre-line' as const }}>{personalInfo.department}</p>}
+                  </div>
+                  <div style={{ height: '4px', background: `linear-gradient(to left, ${theme.accent}, ${a2})` }} />
+                  <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', padding: '5rem 3rem', minHeight: 'calc(297mm - 120px)', textAlign: 'center' }}>
+                    <div style={{ width: '80px', height: '3px', background: theme.accent, marginBottom: '2rem', borderRadius: '2px' }} />
+                    <h1 style={{ fontSize: '2.5rem', fontWeight: 900, color: theme.accent, fontFamily: "'Tajawal', sans-serif", marginBottom: '1rem' }}>{personalInfo.reportTitle || 'شواهد الأداء الوظيفي'}</h1>
+                    <p style={{ fontSize: '1.3rem', fontWeight: 700, color: theme.borderColor, marginBottom: '2rem' }}>{selectedJob?.title}</p>
+                    <div style={{ display: 'flex', gap: '2rem', marginTop: '1rem' }}>
+                      <div style={{ borderBottom: `2px solid ${theme.accent}`, paddingBottom: '0.5rem' }}>
+                        <div style={{ fontSize: '0.7rem', color: '#9CA3AF' }}>الاسم</div>
+                        <div style={{ fontWeight: 700, fontSize: '1rem', color: '#1F2937' }}>{personalInfo.name || '—'}</div>
+                      </div>
+                      <div style={{ borderBottom: `2px solid ${theme.accent}`, paddingBottom: '0.5rem' }}>
+                        <div style={{ fontSize: '0.7rem', color: '#9CA3AF' }}>المدرسة</div>
+                        <div style={{ fontWeight: 700, fontSize: '1rem', color: '#1F2937' }}>{personalInfo.school || '—'}</div>
+                      </div>
+                    </div>
+                    <p style={{ fontSize: '0.9rem', color: '#9CA3AF', marginTop: '2rem' }}>{personalInfo.year} - {personalInfo.semester}</p>
+                    <div style={{ marginTop: '4rem', fontSize: '0.65rem', color: '#D1D5DB' }}>نظام SERS - السجلات التعليمية الذكية</div>
+                  </div>
+                </div>
+              );
+
+              // === غلاف 6: خط بسيط (minimal) ===
+              return (
+                <div className="bg-white shadow-lg mx-auto mb-6" style={{ width: '210mm', minHeight: '297mm', maxWidth: '100%', position: 'relative', overflow: 'hidden', pageBreakAfter: 'always' }}>
+                  <div style={{ minHeight: '297mm', display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '5rem 4rem', textAlign: 'center' }}>
+                    <div style={{ fontSize: '0.8rem', color: '#9CA3AF', letterSpacing: '0.15em', marginBottom: '0.3rem' }}>المملكة العربية السعودية · وزارة التعليم</div>
+                    {personalInfo.department && <p style={{ fontSize: '0.8rem', color: '#9CA3AF', marginBottom: '1rem', whiteSpace: 'pre-line' as const }}>{personalInfo.department}</p>}
+                    <div style={{ width: '1px', height: '60px', background: theme.accent, margin: '1.5rem auto' }} />
+                    <h1 style={{ fontSize: '2rem', fontWeight: 900, color: theme.accent, fontFamily: "'Tajawal', sans-serif", marginBottom: '0.75rem' }}>{personalInfo.reportTitle || 'شواهد الأداء الوظيفي'}</h1>
+                    <p style={{ fontSize: '1.1rem', fontWeight: 600, color: '#6B7280', marginBottom: '1rem' }}>{selectedJob?.title}</p>
+                    <div style={{ width: '1px', height: '60px', background: theme.accent, margin: '1.5rem auto' }} />
+                    <div style={{ display: 'flex', justifyContent: 'center', gap: '3rem', color: '#4B5563' }}>
+                      <div><span style={{ fontSize: '0.7rem', color: '#9CA3AF' }}>الاسم: </span><strong>{personalInfo.name || '—'}</strong></div>
+                      <div><span style={{ fontSize: '0.7rem', color: '#9CA3AF' }}>المدرسة: </span><strong>{personalInfo.school || '—'}</strong></div>
+                    </div>
+                    <p style={{ fontSize: '0.85rem', color: '#9CA3AF', marginTop: '1.5rem' }}>{personalInfo.year} - {personalInfo.semester}</p>
+                    <div style={{ position: 'absolute', bottom: '3rem', left: 0, right: 0, fontSize: '0.65rem', color: '#D1D5DB' }}>نظام SERS - السجلات التعليمية الذكية</div>
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* === صفحة فهرس المحتويات + البيانات الشخصية === */}
             <div className="bg-white shadow-lg mx-auto mb-6" style={{ width: '210mm', minHeight: '297mm', maxWidth: '100%', padding: '2rem 2.5rem', position: 'relative', pageBreakAfter: 'always' }}>
@@ -3726,37 +3872,146 @@ export default function PerformanceEvidence() {
                 const allSubs = [...(c.subEvidences || []), ...(d.customSubEvidences || [])];
                 return (
                   <React.Fragment key={c.id}>
-                    {/* === غلاف القسم === */}
-                    <div className="bg-white shadow-lg mx-auto mb-6" style={{ width: '210mm', minHeight: '297mm', maxWidth: '100%', position: 'relative', overflow: 'hidden', pageBreakAfter: 'always' }}>
-                      <div style={{ background: theme.headerBg, color: theme.headerText, minHeight: '297mm', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', textAlign: 'center', padding: '4rem 3rem', position: 'relative' }}>
-                        {/* زخارف الخلفية */}
-                        <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, background: 'linear-gradient(135deg, rgba(255,255,255,0.08) 0%, transparent 40%, rgba(0,0,0,0.08) 100%)', pointerEvents: 'none' }} />
-                        <div style={{ position: 'absolute', top: '16px', left: '16px', right: '16px', bottom: '16px', border: '1.5px solid rgba(255,255,255,0.12)', borderRadius: '12px', pointerEvents: 'none' }} />
-                        <div style={{ position: 'relative', zIndex: 1 }}>
-                          <div style={{ width: '80px', height: '80px', borderRadius: '50%', background: 'rgba(255,255,255,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 2rem', fontSize: '2rem', fontWeight: 900 }}>
-                            {i + 1}
-                          </div>
-                          <div style={{ fontSize: '0.8rem', opacity: 0.6, marginBottom: '0.5rem', letterSpacing: '0.15em' }}>البند {i + 1} من {allCriteria.length}</div>
-                          <h2 style={{ fontSize: '2rem', fontWeight: 900, fontFamily: "'Tajawal', sans-serif", marginBottom: '1rem', lineHeight: 1.4 }}>{c.title}</h2>
-                          <div style={{ width: '60px', height: '2px', background: 'rgba(255,255,255,0.3)', margin: '1.5rem auto' }} />
-                          <div style={{ display: 'flex', justifyContent: 'center', gap: '3rem', fontSize: '0.9rem', opacity: 0.85 }}>
-                            <div style={{ textAlign: 'center' }}>
-                              <div style={{ fontSize: '2rem', fontWeight: 900 }}>{d.evidences.length}</div>
-                              <div style={{ fontSize: '0.75rem', opacity: 0.7 }}>شاهد</div>
+                    {/* === غلاف القسم - يتغير حسب sectionCoverStyle === */}
+                    {(() => {
+                      const scs = theme.sectionCoverStyle || 'full-gradient';
+                      const a2 = theme.coverAccent2 || theme.accent;
+                      const sectionStats = (
+                        <div style={{ display: 'flex', justifyContent: 'center', gap: '3rem', fontSize: '0.9rem' }}>
+                          <div style={{ textAlign: 'center' }}><div style={{ fontSize: '2rem', fontWeight: 900 }}>{d.evidences.length}</div><div style={{ fontSize: '0.75rem', opacity: 0.7 }}>شاهد</div></div>
+                          <div style={{ width: '1px', background: 'rgba(255,255,255,0.2)' }} />
+                          <div style={{ textAlign: 'center' }}><div style={{ fontSize: '2rem', fontWeight: 900 }}>{d.score}/{c.maxScore}</div><div style={{ fontSize: '0.75rem', opacity: 0.7 }}>الدرجة</div></div>
+                        </div>
+                      );
+                      const sectionFooter = <div style={{ position: 'absolute', bottom: '2rem', left: 0, right: 0, textAlign: 'center', fontSize: '0.7rem', opacity: 0.4 }}>{personalInfo.reportTitle || 'شواهد الأداء الوظيفي'} • {personalInfo.name} • صفحة {coverPage}</div>;
+
+                      // غلاف قسم 1: متدرج كامل
+                      if (scs === 'full-gradient') return (
+                        <div className="bg-white shadow-lg mx-auto mb-6" style={{ width: '210mm', minHeight: '297mm', maxWidth: '100%', position: 'relative', overflow: 'hidden', pageBreakAfter: 'always' }}>
+                          <div style={{ background: theme.headerBg, color: theme.headerText, minHeight: '297mm', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', textAlign: 'center', padding: '4rem 3rem', position: 'relative' }}>
+                            <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, background: 'linear-gradient(135deg, rgba(255,255,255,0.08) 0%, transparent 40%, rgba(0,0,0,0.08) 100%)', pointerEvents: 'none' }} />
+                            <div style={{ position: 'absolute', top: '16px', left: '16px', right: '16px', bottom: '16px', border: '1.5px solid rgba(255,255,255,0.12)', borderRadius: '12px', pointerEvents: 'none' }} />
+                            <div style={{ position: 'relative', zIndex: 1 }}>
+                              <div style={{ width: '80px', height: '80px', borderRadius: '50%', background: 'rgba(255,255,255,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 2rem', fontSize: '2rem', fontWeight: 900 }}>{i + 1}</div>
+                              <div style={{ fontSize: '0.8rem', opacity: 0.6, marginBottom: '0.5rem', letterSpacing: '0.15em' }}>البند {i + 1} من {allCriteria.length}</div>
+                              <h2 style={{ fontSize: '2rem', fontWeight: 900, fontFamily: "'Tajawal', sans-serif", marginBottom: '1rem', lineHeight: 1.4 }}>{c.title}</h2>
+                              <div style={{ width: '60px', height: '2px', background: 'rgba(255,255,255,0.3)', margin: '1.5rem auto' }} />
+                              {sectionStats}
                             </div>
-                            <div style={{ width: '1px', background: 'rgba(255,255,255,0.2)' }} />
-                            <div style={{ textAlign: 'center' }}>
-                              <div style={{ fontSize: '2rem', fontWeight: 900 }}>{d.score}/{c.maxScore}</div>
-                              <div style={{ fontSize: '0.75rem', opacity: 0.7 }}>الدرجة</div>
-                            </div>
+                            {sectionFooter}
                           </div>
                         </div>
-                        {/* تذييل الغلاف */}
-                        <div style={{ position: 'absolute', bottom: '2rem', fontSize: '0.7rem', opacity: 0.4 }}>
-                          {personalInfo.reportTitle || 'شواهد الأداء الوظيفي'} • {personalInfo.name} • صفحة {coverPage}
+                      );
+
+                      // غلاف قسم 2: شريط يسار
+                      if (scs === 'left-stripe') return (
+                        <div className="bg-white shadow-lg mx-auto mb-6" style={{ width: '210mm', minHeight: '297mm', maxWidth: '100%', position: 'relative', overflow: 'hidden', pageBreakAfter: 'always', display: 'flex' }}>
+                          <div style={{ width: '30%', background: theme.headerBg, minHeight: '297mm', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', color: theme.headerText, position: 'relative' }}>
+                            <div style={{ position: 'absolute', top: 0, right: 0, width: '4px', height: '100%', background: `linear-gradient(to bottom, ${a2}, ${theme.accent})` }} />
+                            <div style={{ fontSize: '5rem', fontWeight: 900, opacity: 0.2 }}>{i + 1}</div>
+                            <div style={{ fontSize: '0.7rem', opacity: 0.5, marginTop: '0.5rem' }}>بند {i + 1}</div>
+                          </div>
+                          <div style={{ width: '70%', display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '4rem 3rem' }}>
+                            <div style={{ fontSize: '0.8rem', color: '#9CA3AF', marginBottom: '0.5rem', letterSpacing: '0.1em' }}>البند {i + 1} من {allCriteria.length}</div>
+                            <h2 style={{ fontSize: '1.8rem', fontWeight: 900, color: theme.accent, fontFamily: "'Tajawal', sans-serif", marginBottom: '1rem', lineHeight: 1.4 }}>{c.title}</h2>
+                            <div style={{ width: '60px', height: '3px', background: theme.accent, marginBottom: '2rem' }} />
+                            <div style={{ display: 'flex', gap: '2rem' }}>
+                              <div style={{ padding: '1rem 1.5rem', border: `1px solid ${theme.accent}30`, borderRadius: '8px', textAlign: 'center' }}>
+                                <div style={{ fontSize: '1.8rem', fontWeight: 900, color: theme.accent }}>{d.evidences.length}</div>
+                                <div style={{ fontSize: '0.7rem', color: '#9CA3AF' }}>شاهد</div>
+                              </div>
+                              <div style={{ padding: '1rem 1.5rem', border: `1px solid ${theme.accent}30`, borderRadius: '8px', textAlign: 'center' }}>
+                                <div style={{ fontSize: '1.8rem', fontWeight: 900, color: theme.accent }}>{d.score}/{c.maxScore}</div>
+                                <div style={{ fontSize: '0.7rem', color: '#9CA3AF' }}>الدرجة</div>
+                              </div>
+                            </div>
+                          </div>
+                          <div style={{ position: 'absolute', bottom: '2rem', left: '2rem', right: '2rem', textAlign: 'center', fontSize: '0.65rem', color: '#D1D5DB' }}>{personalInfo.reportTitle || 'شواهد الأداء الوظيفي'} • {personalInfo.name} • صفحة {coverPage}</div>
                         </div>
-                      </div>
-                    </div>
+                      );
+
+                      // غلاف قسم 3: شريط علوي
+                      if (scs === 'top-accent') return (
+                        <div className="bg-white shadow-lg mx-auto mb-6" style={{ width: '210mm', minHeight: '297mm', maxWidth: '100%', position: 'relative', overflow: 'hidden', pageBreakAfter: 'always' }}>
+                          <div style={{ background: theme.headerBg, padding: '2rem 3rem', color: theme.headerText, textAlign: 'center' }}>
+                            <div style={{ fontSize: '0.8rem', opacity: 0.7 }}>البند {i + 1} من {allCriteria.length}</div>
+                          </div>
+                          <div style={{ height: '4px', background: `linear-gradient(to left, ${theme.accent}, ${a2})` }} />
+                          <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', textAlign: 'center', padding: '5rem 3rem', minHeight: 'calc(297mm - 100px)' }}>
+                            <div style={{ width: '70px', height: '70px', borderRadius: '50%', border: `3px solid ${theme.accent}`, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 2rem', fontSize: '1.8rem', fontWeight: 900, color: theme.accent }}>{i + 1}</div>
+                            <h2 style={{ fontSize: '1.8rem', fontWeight: 900, color: theme.accent, fontFamily: "'Tajawal', sans-serif", marginBottom: '1rem', lineHeight: 1.4 }}>{c.title}</h2>
+                            <div style={{ width: '60px', height: '3px', background: `linear-gradient(to left, ${theme.accent}, ${a2})`, margin: '1.5rem auto', borderRadius: '2px' }} />
+                            <div style={{ display: 'flex', gap: '3rem', marginTop: '1rem' }}>
+                              <div style={{ textAlign: 'center' }}><div style={{ fontSize: '2rem', fontWeight: 900, color: theme.accent }}>{d.evidences.length}</div><div style={{ fontSize: '0.75rem', color: '#9CA3AF' }}>شاهد</div></div>
+                              <div style={{ textAlign: 'center' }}><div style={{ fontSize: '2rem', fontWeight: 900, color: theme.accent }}>{d.score}/{c.maxScore}</div><div style={{ fontSize: '0.75rem', color: '#9CA3AF' }}>الدرجة</div></div>
+                            </div>
+                          </div>
+                          <div style={{ position: 'absolute', bottom: '2rem', left: 0, right: 0, textAlign: 'center', fontSize: '0.65rem', color: '#D1D5DB' }}>{personalInfo.reportTitle || 'شواهد الأداء الوظيفي'} • {personalInfo.name} • صفحة {coverPage}</div>
+                        </div>
+                      );
+
+                      // غلاف قسم 4: بطاقة مركزية
+                      if (scs === 'card-center') return (
+                        <div className="bg-white shadow-lg mx-auto mb-6" style={{ width: '210mm', minHeight: '297mm', maxWidth: '100%', position: 'relative', overflow: 'hidden', pageBreakAfter: 'always', background: `${theme.accent}08` }}>
+                          <div style={{ position: 'absolute', top: '20px', left: '20px', right: '20px', bottom: '20px', border: `1px solid ${theme.accent}25`, borderRadius: '4px', pointerEvents: 'none' }} />
+                          <div style={{ minHeight: '297mm', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', textAlign: 'center', padding: '4rem 3rem', position: 'relative' }}>
+                            <div style={{ background: 'white', borderRadius: '16px', padding: '3rem 4rem', boxShadow: '0 4px 20px rgba(0,0,0,0.08)', border: `1px solid ${theme.accent}20`, maxWidth: '480px', width: '100%' }}>
+                              <div style={{ width: '60px', height: '60px', borderRadius: '12px', background: `${theme.accent}15`, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1.5rem', fontSize: '1.5rem', fontWeight: 900, color: theme.accent }}>{i + 1}</div>
+                              <div style={{ fontSize: '0.75rem', color: '#9CA3AF', marginBottom: '0.5rem' }}>البند {i + 1} من {allCriteria.length}</div>
+                              <h2 style={{ fontSize: '1.5rem', fontWeight: 900, color: theme.accent, fontFamily: "'Tajawal', sans-serif", marginBottom: '1rem', lineHeight: 1.4 }}>{c.title}</h2>
+                              <div style={{ width: '50px', height: '3px', background: `linear-gradient(to left, ${theme.accent}, ${a2})`, margin: '1rem auto', borderRadius: '2px' }} />
+                              <div style={{ display: 'flex', justifyContent: 'center', gap: '2rem', marginTop: '1.5rem' }}>
+                                <div style={{ padding: '0.75rem 1.5rem', background: `${theme.accent}08`, borderRadius: '8px' }}>
+                                  <div style={{ fontSize: '1.5rem', fontWeight: 900, color: theme.accent }}>{d.evidences.length}</div>
+                                  <div style={{ fontSize: '0.65rem', color: '#9CA3AF' }}>شاهد</div>
+                                </div>
+                                <div style={{ padding: '0.75rem 1.5rem', background: `${theme.accent}08`, borderRadius: '8px' }}>
+                                  <div style={{ fontSize: '1.5rem', fontWeight: 900, color: theme.accent }}>{d.score}/{c.maxScore}</div>
+                                  <div style={{ fontSize: '0.65rem', color: '#9CA3AF' }}>الدرجة</div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                          <div style={{ position: 'absolute', bottom: '2rem', left: 0, right: 0, textAlign: 'center', fontSize: '0.65rem', color: '#D1D5DB' }}>{personalInfo.reportTitle || 'شواهد الأداء الوظيفي'} • {personalInfo.name} • صفحة {coverPage}</div>
+                        </div>
+                      );
+
+                      // غلاف قسم 5: شريط مرقم
+                      if (scs === 'numbered-bar') return (
+                        <div className="bg-white shadow-lg mx-auto mb-6" style={{ width: '210mm', minHeight: '297mm', maxWidth: '100%', position: 'relative', overflow: 'hidden', pageBreakAfter: 'always' }}>
+                          <div style={{ minHeight: '297mm', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', textAlign: 'center', padding: '4rem 3rem', position: 'relative' }}>
+                            <div style={{ width: '100%', maxWidth: '500px', borderTop: `4px solid ${theme.accent}`, borderBottom: `4px solid ${theme.accent}`, padding: '3rem 2rem' }}>
+                              <div style={{ fontSize: '4rem', fontWeight: 900, color: theme.accent, opacity: 0.15, marginBottom: '0.5rem' }}>{String(i + 1).padStart(2, '0')}</div>
+                              <div style={{ fontSize: '0.8rem', color: '#9CA3AF', marginBottom: '0.5rem', letterSpacing: '0.1em' }}>البند {i + 1} من {allCriteria.length}</div>
+                              <h2 style={{ fontSize: '1.8rem', fontWeight: 900, color: theme.accent, fontFamily: "'Tajawal', sans-serif", marginBottom: '1.5rem', lineHeight: 1.4 }}>{c.title}</h2>
+                              <div style={{ display: 'flex', justifyContent: 'center', gap: '2rem' }}>
+                                <div><span style={{ fontSize: '1.5rem', fontWeight: 900, color: theme.accent }}>{d.evidences.length}</span> <span style={{ fontSize: '0.75rem', color: '#9CA3AF' }}>شاهد</span></div>
+                                <div style={{ color: '#D1D5DB' }}>|</div>
+                                <div><span style={{ fontSize: '1.5rem', fontWeight: 900, color: theme.accent }}>{d.score}/{c.maxScore}</span> <span style={{ fontSize: '0.75rem', color: '#9CA3AF' }}>درجة</span></div>
+                              </div>
+                            </div>
+                          </div>
+                          <div style={{ position: 'absolute', bottom: '2rem', left: 0, right: 0, textAlign: 'center', fontSize: '0.65rem', color: '#D1D5DB' }}>{personalInfo.reportTitle || 'شواهد الأداء الوظيفي'} • {personalInfo.name} • صفحة {coverPage}</div>
+                        </div>
+                      );
+
+                      // غلاف قسم 6: فاصل نظيف (minimal)
+                      return (
+                        <div className="bg-white shadow-lg mx-auto mb-6" style={{ width: '210mm', minHeight: '297mm', maxWidth: '100%', position: 'relative', overflow: 'hidden', pageBreakAfter: 'always' }}>
+                          <div style={{ minHeight: '297mm', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', textAlign: 'center', padding: '4rem 3rem', position: 'relative' }}>
+                            <div style={{ width: '1px', height: '60px', background: theme.accent, marginBottom: '2rem' }} />
+                            <div style={{ fontSize: '0.8rem', color: '#9CA3AF', letterSpacing: '0.1em', marginBottom: '0.5rem' }}>البند {i + 1} من {allCriteria.length}</div>
+                            <h2 style={{ fontSize: '1.8rem', fontWeight: 900, color: theme.accent, fontFamily: "'Tajawal', sans-serif", marginBottom: '1rem', lineHeight: 1.4 }}>{c.title}</h2>
+                            <div style={{ width: '1px', height: '60px', background: theme.accent, margin: '1.5rem 0' }} />
+                            <div style={{ display: 'flex', gap: '3rem', color: '#4B5563' }}>
+                              <div><span style={{ fontSize: '0.7rem', color: '#9CA3AF' }}>الشواهد: </span><strong style={{ color: theme.accent }}>{d.evidences.length}</strong></div>
+                              <div><span style={{ fontSize: '0.7rem', color: '#9CA3AF' }}>الدرجة: </span><strong style={{ color: theme.accent }}>{d.score}/{c.maxScore}</strong></div>
+                            </div>
+                          </div>
+                          <div style={{ position: 'absolute', bottom: '2rem', left: 0, right: 0, textAlign: 'center', fontSize: '0.65rem', color: '#D1D5DB' }}>{personalInfo.reportTitle || 'شواهد الأداء الوظيفي'} • {personalInfo.name} • صفحة {coverPage}</div>
+                        </div>
+                      );
+                    })()}
 
                     {/* === صفحة الشواهد === */}
                   <div className="bg-white shadow-lg mx-auto mb-6" style={{ width: '210mm', minHeight: '297mm', maxWidth: '100%', padding: '2rem 2.5rem', position: 'relative', pageBreakAfter: 'always', pageBreakInside: 'avoid' }}>
@@ -3787,7 +4042,7 @@ export default function PerformanceEvidence() {
                         const linkedSub = allSubs.find(s => s.id === ev.subEvidenceId);
                         const formFields = linkedSub?.formFields;
                         return (
-                          <div key={ev.id} style={{ padding: '0.75rem', borderRadius: '8px', borderTop: `1px solid ${theme.borderColor}`, borderBottom: `1px solid ${theme.borderColor}`, borderLeft: `1px solid ${theme.borderColor}`, borderRight: `3px solid ${evPriorityConfig.color}`, pageBreakInside: 'avoid' }}>
+                          <div key={ev.id} style={{ padding: '0.75rem', borderRadius: '8px', border: `1.5px solid ${theme.borderColor}`, borderRight: `4px solid ${evPriorityConfig.color}`, pageBreakInside: 'avoid', backgroundColor: '#FAFBFC' }}>
                             {/* رأس الشاهد */}
                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
                               <span style={{ fontSize: '0.65rem', fontWeight: 700, color: '#9CA3AF' }}>شاهد {evIdx + 1}</span>
@@ -3882,33 +4137,52 @@ export default function PerformanceEvidence() {
               });
             })()}
 
-            {/* === صفحة التوقيعات === */}
-            <div className="bg-white shadow-lg mx-auto mb-6" style={{ width: '210mm', minHeight: '297mm', maxWidth: '100%', padding: '2rem 2.5rem', position: 'relative', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-              {/* ترويسة */}
-              <div style={{ position: 'absolute', top: '2rem', left: '2.5rem', right: '2.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: `2px solid ${theme.accent}`, paddingBottom: '0.75rem' }}>
-                <div style={{ fontSize: '0.7rem', color: '#9CA3AF' }}>{personalInfo.reportTitle || 'شواهد الأداء الوظيفي'} - {personalInfo.name}</div>
-                <div style={{ fontSize: '0.7rem', color: theme.accent, fontWeight: 700 }}>التوقيعات</div>
-              </div>
+            {/* === صفحة التوقيعات - تتبع signatureStyle === */}
+            {(() => {
+              const ss = theme.signatureStyle || 'dotted';
+              const sigLineStyle: React.CSSProperties = ss === 'dotted' ? { borderTop: `2px dotted ${theme.accent}` } : ss === 'solid' ? { borderTop: `2px solid ${theme.accent}` } : ss === 'boxed' ? { border: `1.5px solid ${theme.accent}`, borderRadius: '8px', padding: '0.5rem' } : ss === 'lined' ? { borderTop: `1px solid ${theme.borderColor}`, borderBottom: `1px solid ${theme.borderColor}`, padding: '0.25rem 0' } : { borderTop: `2px dashed ${theme.accent}` };
+              return (
+                <div className="bg-white shadow-lg mx-auto mb-6" style={{ width: '210mm', minHeight: '297mm', maxWidth: '100%', padding: '2rem 2.5rem', position: 'relative', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                  {/* ترويسة */}
+                  <div style={{ position: 'absolute', top: '2rem', left: '2.5rem', right: '2.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: `2px solid ${theme.accent}`, paddingBottom: '0.75rem' }}>
+                    <div style={{ fontSize: '0.7rem', color: '#9CA3AF' }}>{personalInfo.reportTitle || 'شواهد الأداء الوظيفي'} - {personalInfo.name}</div>
+                    <div style={{ fontSize: '0.7rem', color: theme.accent, fontWeight: 700 }}>التوقيعات</div>
+                  </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '3rem', textAlign: 'center', padding: '0 2rem' }}>
-                <div>
-                  <p style={{ color: '#6B7280', marginBottom: '5rem', fontSize: '0.9rem' }}>توقيع المقيّم</p>
-                  <div style={{ borderTop: '2px solid #D1D5DB', paddingTop: '0.75rem', fontWeight: 700, fontSize: '0.95rem' }}>{personalInfo.evaluator || '____________'}</div>
-                  <p style={{ fontSize: '0.75rem', color: '#9CA3AF', marginTop: '0.25rem' }}>{personalInfo.evaluatorRole}</p>
-                </div>
-                <div>
-                  <p style={{ color: '#6B7280', marginBottom: '5rem', fontSize: '0.9rem' }}>توقيع الموظف</p>
-                  <div style={{ borderTop: '2px solid #D1D5DB', paddingTop: '0.75rem', fontWeight: 700, fontSize: '0.95rem' }}>{personalInfo.name || '____________'}</div>
-                  <p style={{ fontSize: '0.75rem', color: '#9CA3AF', marginTop: '0.25rem' }}>{selectedJob?.title}</p>
-                </div>
-              </div>
+                  {/* عنوان */}
+                  <h2 style={{ textAlign: 'center', fontSize: '1.2rem', fontWeight: 800, color: theme.accent, fontFamily: "'Tajawal', sans-serif", marginBottom: '3rem' }}>اعتماد التقرير</h2>
 
-              {/* تذييل */}
-              <div style={{ position: 'absolute', bottom: '1.5rem', left: '2.5rem', right: '2.5rem', borderTop: `1px solid ${theme.borderColor}`, paddingTop: '0.5rem', display: 'flex', justifyContent: 'space-between', fontSize: '0.6rem', color: '#9CA3AF' }}>
-                <span>نظام SERS - السجلات التعليمية الذكية</span>
-                <span>{personalInfo.name} • {selectedJob?.title} • {personalInfo.year}</span>
-              </div>
-            </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '3rem', textAlign: 'center', padding: '0 2rem' }}>
+                    <div style={{ padding: '2rem', border: `1px solid ${theme.accent}20`, borderRadius: '12px', background: `${theme.accent}05` }}>
+                      <p style={{ color: theme.accent, marginBottom: '4rem', fontSize: '0.9rem', fontWeight: 700 }}>توقيع المقيّم</p>
+                      <div style={{ ...sigLineStyle, paddingTop: '0.75rem', marginBottom: '0.5rem' }} />
+                      <div style={{ fontWeight: 700, fontSize: '0.95rem', color: '#1F2937', marginTop: '0.75rem' }}>{personalInfo.evaluator || '____________'}</div>
+                      <p style={{ fontSize: '0.75rem', color: '#9CA3AF', marginTop: '0.25rem' }}>{personalInfo.evaluatorRole}</p>
+                    </div>
+                    <div style={{ padding: '2rem', border: `1px solid ${theme.accent}20`, borderRadius: '12px', background: `${theme.accent}05` }}>
+                      <p style={{ color: theme.accent, marginBottom: '4rem', fontSize: '0.9rem', fontWeight: 700 }}>توقيع الموظف</p>
+                      <div style={{ ...sigLineStyle, paddingTop: '0.75rem', marginBottom: '0.5rem' }} />
+                      <div style={{ fontWeight: 700, fontSize: '0.95rem', color: '#1F2937', marginTop: '0.75rem' }}>{personalInfo.name || '____________'}</div>
+                      <p style={{ fontSize: '0.75rem', color: '#9CA3AF', marginTop: '0.25rem' }}>{selectedJob?.title}</p>
+                    </div>
+                  </div>
+
+                  {/* ملاحظات */}
+                  <div style={{ marginTop: '3rem', padding: '1.5rem', border: `1px solid ${theme.accent}15`, borderRadius: '8px', background: `${theme.accent}05` }}>
+                    <p style={{ fontSize: '0.8rem', fontWeight: 700, color: theme.accent, marginBottom: '0.5rem' }}>ملاحظات:</p>
+                    <div style={{ borderBottom: `1px solid ${theme.accent}15`, height: '2rem' }} />
+                    <div style={{ borderBottom: `1px solid ${theme.accent}15`, height: '2rem' }} />
+                    <div style={{ borderBottom: `1px solid ${theme.accent}15`, height: '2rem' }} />
+                  </div>
+
+                  {/* تذييل */}
+                  <div style={{ position: 'absolute', bottom: '1.5rem', left: '2.5rem', right: '2.5rem', borderTop: `1px solid ${theme.borderColor}`, paddingTop: '0.5rem', display: 'flex', justifyContent: 'space-between', fontSize: '0.6rem', color: '#9CA3AF' }}>
+                    <span>نظام SERS - السجلات التعليمية الذكية</span>
+                    <span>{personalInfo.name} • {selectedJob?.title} • {personalInfo.year}</span>
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         </div>
       </div>

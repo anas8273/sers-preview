@@ -131,10 +131,88 @@ function oklchToRgbString(oklchValue: string): string | null {
   }
 }
 
+// A4 dimensions at 96dpi
+const A4_WIDTH_PX = 794;
+const A4_HEIGHT_PX = 1123;
+
+// الخط العربي الموحد لضمان التطابق
+const ARABIC_FONT = "'Cairo', 'Tajawal', 'Noto Sans Arabic', sans-serif";
+
+/**
+ * تثبيت جميع الأنماط المحسوبة على العنصر المستنسخ
+ * هذا يضمن أن html2canvas يرى نفس الأنماط بالضبط كما في المعاينة
+ */
+function freezeComputedStyles(clonedEl: HTMLElement) {
+  clonedEl.style.width = A4_WIDTH_PX + 'px';
+  clonedEl.style.maxWidth = A4_WIDTH_PX + 'px';
+  clonedEl.style.minWidth = A4_WIDTH_PX + 'px';
+  clonedEl.style.minHeight = A4_HEIGHT_PX + 'px';
+  clonedEl.style.marginBottom = '0';
+  clonedEl.style.boxShadow = 'none';
+  clonedEl.style.border = 'none';
+  clonedEl.style.direction = 'rtl';
+  clonedEl.style.overflow = 'hidden';
+  clonedEl.classList.remove('shadow-lg', 'mb-6');
+  clonedEl.style.fontFamily = ARABIC_FONT;
+
+  const allInner = clonedEl.querySelectorAll('*');
+  allInner.forEach((el) => {
+    const htmlEl = el as HTMLElement;
+    const computed = window.getComputedStyle(htmlEl);
+
+    // ضمان الخطوط العربية
+    const ff = computed.fontFamily;
+    if (!ff || ff === 'serif' || ff === 'sans-serif' || ff === 'system-ui' || ff.includes('ui-')) {
+      htmlEl.style.fontFamily = ARABIC_FONT;
+    }
+
+    // تثبيت أحجام الخطوط
+    const fontSize = computed.fontSize;
+    if (fontSize) htmlEl.style.fontSize = fontSize;
+
+    // تثبيت الألوان - تحويل oklch
+    const bgColor = computed.backgroundColor;
+    if (bgColor && bgColor.includes('oklch')) {
+      const rgb = oklchToRgbString(bgColor);
+      if (rgb) htmlEl.style.backgroundColor = rgb;
+    }
+    const textColor = computed.color;
+    if (textColor && textColor.includes('oklch')) {
+      const rgb = oklchToRgbString(textColor);
+      if (rgb) htmlEl.style.color = rgb;
+    }
+    const borderColor = computed.borderColor;
+    if (borderColor && borderColor.includes('oklch')) {
+      const rgb = oklchToRgbString(borderColor);
+      if (rgb) htmlEl.style.borderColor = rgb;
+    }
+
+    // تثبيت line-height
+    const lineHeight = computed.lineHeight;
+    if (lineHeight && lineHeight !== 'normal') htmlEl.style.lineHeight = lineHeight;
+
+    // تثبيت font-weight
+    const fontWeight = computed.fontWeight;
+    if (fontWeight) htmlEl.style.fontWeight = fontWeight;
+
+    // تثبيت letter-spacing
+    const letterSpacing = computed.letterSpacing;
+    if (letterSpacing && letterSpacing !== 'normal') htmlEl.style.letterSpacing = letterSpacing;
+
+    // تثبيت text-align
+    const textAlign = computed.textAlign;
+    if (textAlign) htmlEl.style.textAlign = textAlign;
+
+    // تثبيت padding و margin
+    htmlEl.style.padding = computed.padding;
+    htmlEl.style.margin = computed.margin;
+  });
+}
+
 /**
  * تصدير PDF بنظام صفحات A4 منفصلة - جودة عالية
- * يلتقط كل صفحة (div مباشر داخل preview-content) كصورة منفصلة ويضيفها كصفحة PDF
- * يدعم onProgress callback لإظهار مؤشر التحميل
+ * كل div مباشر داخل preview-content = صفحة PDF واحدة
+ * يحافظ على الخطوط والتنسيق والترتيب بالضبط كما في المعاينة
  */
 export async function exportToPDF(
   elementId: string,
@@ -152,7 +230,9 @@ export async function exportToPDF(
     // تحويل ألوان oklch إلى RGB قبل html2canvas
     const restoreColors = convertOklchToRgb(element);
 
-    await new Promise(resolve => setTimeout(resolve, 200));
+    // انتظار تحميل الخطوط والصور
+    await document.fonts.ready;
+    await new Promise(resolve => setTimeout(resolve, 1000));
 
     const pdf = new jsPDF({
       orientation: "portrait",
@@ -160,15 +240,14 @@ export async function exportToPDF(
       format: "a4",
     });
 
-    const pdfWidth = pdf.internal.pageSize.getWidth();
-    const pdfHeight = pdf.internal.pageSize.getHeight();
+    const pdfWidth = pdf.internal.pageSize.getWidth(); // 210mm
+    const pdfHeight = pdf.internal.pageSize.getHeight(); // 297mm
 
     // البحث عن الصفحات المنفصلة (divs المباشرة داخل preview-content)
     const pages = element.querySelectorAll(':scope > div');
     const totalPages = pages.length || 1;
     
     if (pages.length > 0) {
-      // نظام الصفحات المنفصلة - كل div هو صفحة A4
       for (let i = 0; i < pages.length; i++) {
         const page = pages[i] as HTMLElement;
         
@@ -178,32 +257,28 @@ export async function exportToPDF(
         onProgress?.(i + 1, totalPages);
 
         const canvas = await html2canvas(page, {
-          scale: 2.5, // جودة أعلى
+          scale: 2.5, // جودة عالية جداً
           useCORS: true,
           allowTaint: true,
           backgroundColor: "#ffffff",
           logging: false,
-          windowWidth: page.scrollWidth,
-          windowHeight: page.scrollHeight,
-          imageTimeout: 15000,
-          onclone: (clonedDoc) => {
-            // التأكد من أن الخطوط العربية محملة في النسخة المستنسخة
-            const clonedEl = clonedDoc.getElementById(page.id) || clonedDoc.querySelector(`[data-page-index="${i}"]`);
-            if (clonedEl) {
-              (clonedEl as HTMLElement).style.fontFamily = "'Cairo', 'Tajawal', sans-serif";
-            }
+          imageTimeout: 30000,
+          width: A4_WIDTH_PX,
+          windowWidth: A4_WIDTH_PX,
+          onclone: (_clonedDoc, clonedEl) => {
+            freezeComputedStyles(clonedEl);
           },
         });
 
-        const imgData = canvas.toDataURL("image/jpeg", 0.97);
+        const imgData = canvas.toDataURL("image/jpeg", 0.96);
         const imgWidth = canvas.width;
         const imgHeight = canvas.height;
         const ratio = pdfWidth / imgWidth;
         const scaledHeight = imgHeight * ratio;
 
-        if (scaledHeight <= pdfHeight) {
+        if (scaledHeight <= pdfHeight + 2) {
           // الصفحة تناسب صفحة PDF واحدة
-          pdf.addImage(imgData, "JPEG", 0, 0, pdfWidth, scaledHeight);
+          pdf.addImage(imgData, "JPEG", 0, 0, pdfWidth, Math.min(scaledHeight, pdfHeight));
         } else {
           // الصفحة أطول من A4 - تقسيمها على عدة صفحات PDF
           const pageCanvasHeight = pdfHeight / ratio;
@@ -211,18 +286,20 @@ export async function exportToPDF(
           let sourceY = 0;
           let subPage = 0;
 
-          while (remainingHeight > 0) {
+          while (remainingHeight > 20) {
             if (subPage > 0) pdf.addPage();
 
             const sliceHeight = Math.min(pageCanvasHeight, remainingHeight);
             
             const pageCanvas = document.createElement('canvas');
             pageCanvas.width = imgWidth;
-            pageCanvas.height = sliceHeight;
+            pageCanvas.height = Math.ceil(sliceHeight);
             const ctx = pageCanvas.getContext('2d');
             if (ctx) {
+              ctx.fillStyle = '#ffffff';
+              ctx.fillRect(0, 0, pageCanvas.width, pageCanvas.height);
               ctx.drawImage(canvas, 0, sourceY, imgWidth, sliceHeight, 0, 0, imgWidth, sliceHeight);
-              const pageImgData = pageCanvas.toDataURL("image/jpeg", 0.97);
+              const pageImgData = pageCanvas.toDataURL("image/jpeg", 0.96);
               pdf.addImage(pageImgData, "JPEG", 0, 0, pdfWidth, sliceHeight * ratio);
             }
 
@@ -233,7 +310,7 @@ export async function exportToPDF(
         }
 
         // إعطاء المتصفح فرصة للتنفس بين الصفحات
-        await new Promise(resolve => setTimeout(resolve, 50));
+        await new Promise(resolve => setTimeout(resolve, 150));
       }
     } else {
       // Fallback: التقاط العنصر بالكامل كصورة واحدة
@@ -244,40 +321,42 @@ export async function exportToPDF(
         allowTaint: true,
         backgroundColor: "#ffffff",
         logging: false,
-        windowWidth: element.scrollWidth,
-        windowHeight: element.scrollHeight,
+        width: A4_WIDTH_PX,
+        windowWidth: A4_WIDTH_PX,
+        onclone: (_clonedDoc, clonedEl) => {
+          freezeComputedStyles(clonedEl);
+        },
       });
 
-      const imgData = canvas.toDataURL("image/jpeg", 0.97);
-      const margin = 5;
-      const usableWidth = pdfWidth - margin * 2;
-      const usableHeight = pdfHeight - margin * 2;
+      const imgData = canvas.toDataURL("image/jpeg", 0.96);
       const imgWidth = canvas.width;
       const imgHeight = canvas.height;
-      const ratio = usableWidth / imgWidth;
+      const ratio = pdfWidth / imgWidth;
       const scaledHeight = imgHeight * ratio;
 
-      if (scaledHeight <= usableHeight) {
-        pdf.addImage(imgData, "JPEG", margin, margin, usableWidth, scaledHeight);
+      if (scaledHeight <= pdfHeight) {
+        pdf.addImage(imgData, "JPEG", 0, 0, pdfWidth, scaledHeight);
       } else {
-        const pageCanvasHeight = usableHeight / ratio;
+        const pageCanvasHeight = pdfHeight / ratio;
         let remainingHeight = imgHeight;
         let sourceY = 0;
         let pageNum = 0;
 
-        while (remainingHeight > 0) {
+        while (remainingHeight > 20) {
           if (pageNum > 0) pdf.addPage();
 
           const sliceHeight = Math.min(pageCanvasHeight, remainingHeight);
           
           const pageCanvas = document.createElement('canvas');
           pageCanvas.width = imgWidth;
-          pageCanvas.height = sliceHeight;
+          pageCanvas.height = Math.ceil(sliceHeight);
           const ctx = pageCanvas.getContext('2d');
           if (ctx) {
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, pageCanvas.width, pageCanvas.height);
             ctx.drawImage(canvas, 0, sourceY, imgWidth, sliceHeight, 0, 0, imgWidth, sliceHeight);
-            const pageImgData = pageCanvas.toDataURL("image/jpeg", 0.97);
-            pdf.addImage(pageImgData, "JPEG", margin, margin, usableWidth, sliceHeight * ratio);
+            const pageImgData = pageCanvas.toDataURL("image/jpeg", 0.96);
+            pdf.addImage(pageImgData, "JPEG", 0, 0, pdfWidth, sliceHeight * ratio);
           }
 
           sourceY += sliceHeight;
@@ -347,16 +426,13 @@ export function printElement(elementId: string) {
     <html lang="ar" dir="rtl">
     <head>
       <meta charset="UTF-8">
-      <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&family=Cairo:wght@300;400;500;600;700&family=Almarai:wght@300;400;700;800&family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+      <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800;900&family=Cairo:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
       <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: 'Cairo', 'Tajawal', sans-serif; direction: rtl; background: #f5f5f5; }
+        body { font-family: 'Cairo', 'Tajawal', sans-serif; direction: rtl; background: white; }
         @media print {
-          body { -webkit-print-color-adjust: exact; print-color-adjust: exact; background: white; }
+          body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
           [data-no-print] { display: none !important; }
-        }
-        /* تنسيق صفحات A4 للطباعة */
-        @media print {
           body > div > div { 
             page-break-after: always; 
             margin: 0 !important;
@@ -365,6 +441,10 @@ export function printElement(elementId: string) {
           body > div > div:last-child { 
             page-break-after: avoid; 
           }
+        }
+        @page {
+          size: A4;
+          margin: 0;
         }
       </style>
     </head>
@@ -375,5 +455,5 @@ export function printElement(elementId: string) {
   setTimeout(() => {
     printWindow.print();
     printWindow.close();
-  }, 500);
+  }, 800);
 }
