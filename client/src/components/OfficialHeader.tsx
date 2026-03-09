@@ -1,6 +1,6 @@
 /**
  * مكون الترويسة الرسمية - مطابق لتصميم edu-forms.com
- * يُستخدم في المعاينة المفردة وصفحات التقييم النهائي
+ * يدعم ألوان القالب المتغيرة (داكن/فاتح/تدرج)
  */
 import React from "react";
 
@@ -14,9 +14,31 @@ interface OfficialHeaderProps {
   pageTitle?: string;
   /** لون الشريط */
   accentColor?: string;
+  /** خلفية الترويسة - تدعم gradient و solid */
+  headerBg?: string;
+  /** لون نص الترويسة */
+  headerText?: string;
+  /** لون الحدود */
+  borderColor?: string;
 }
 
 const MOE_LOGO_DEFAULT = "https://d2xsxph8kpxj0f.cloudfront.net/310519663047121386/h34s4aPNVyHXdtjgZ7eNNf/UntiTtled-1-1568x1192_bfb97198.png";
+
+/** تحديد إذا كانت الخلفية داكنة */
+function isDarkBg(bg: string): boolean {
+  if (!bg) return true;
+  const lower = bg.toLowerCase();
+  if (lower.includes('#fff') || lower === '#ffffff' || lower === '#f8f9fa' || lower === '#fafafa' || lower === 'white') return false;
+  if (lower.includes('linear-gradient')) {
+    // تحقق من أول لون في التدرج
+    const colorMatch = lower.match(/#([0-9a-f]{3,8})/);
+    if (colorMatch) {
+      const hex = colorMatch[1];
+      if (hex.startsWith('fff') || hex.startsWith('faf') || hex.startsWith('f8f')) return false;
+    }
+  }
+  return true;
+}
 
 export function OfficialHeader({
   deptLines,
@@ -25,160 +47,52 @@ export function OfficialHeader({
   variant = "full",
   pageTitle,
   accentColor = "#0097A7",
+  headerBg = "linear-gradient(135deg, #1a4d4e 0%, #0d5f61 50%, #0d7377 100%)",
+  headerText = "#ffffff",
+  borderColor = "#004D5A",
 }: OfficialHeaderProps) {
-  if (variant === "compact") {
-    return (
-      <div style={{ marginBottom: "1rem" }}>
-        {/* ترويسة مصغرة للصفحات الداخلية */}
-        <div
-          style={{
-            background:
-              "linear-gradient(135deg, #1a4d4e 0%, #0d5f61 50%, #0d7377 100%)",
-            padding: "10px 20px 8px",
-            borderRadius: "0 0 8px 8px",
-          }}
-        >
-          <table
-            style={{ width: "100%", borderCollapse: "collapse" as const }}
-          >
-            <tbody>
-              <tr>
-                {/* بيانات الجهة */}
-                <td
-                  style={{
-                    width: "45%",
-                    verticalAlign: "middle",
-                    textAlign: "right",
-                    padding: "0",
-                  }}
-                >
-                  {deptLines.map((line, i) => (
-                    <div
-                      key={i}
-                      style={{
-                        fontSize: "10px",
-                        color: "#ffffff",
-                        fontWeight: 600,
-                        lineHeight: "1.8",
-                      }}
-                    >
-                      {line}
-                    </div>
-                  ))}
-                </td>
+  const dark = isDarkBg(headerBg);
+  const textColor = dark ? "#ffffff" : (headerText || "#004D5A");
+  const separatorColor = dark ? "rgba(255,255,255,0.4)" : "rgba(0,77,90,0.3)";
+  const logoFilter = dark ? "brightness(0) invert(1)" : "none";
+  const schoolBg = dark
+    ? "linear-gradient(to left, #0d7377, #0f8a6e, #2ea87a)"
+    : `linear-gradient(to left, ${accentColor}dd, ${accentColor})`;
 
-                {/* خط فاصل */}
-                <td
-                  style={{
-                    width: "2%",
-                    verticalAlign: "middle",
-                    textAlign: "center",
-                    padding: "0 6px",
-                  }}
-                >
-                  <div
-                    style={{
-                      width: "1px",
-                      height: "40px",
-                      background: "rgba(255,255,255,0.35)",
-                      margin: "0 auto",
-                    }}
-                  />
-                </td>
+  const isCompact = variant === "compact";
+  const headerPadding = isCompact ? "10px 20px 8px" : "16px 24px 14px";
+  const headerRadius = isCompact ? "0 0 8px 8px" : "0 0 12px 12px";
+  const logoHeight = isCompact ? "38px" : "65px";
+  const textSize = isCompact ? "10px" : "12px";
+  const lineH = isCompact ? "1.8" : "2";
+  const sepHeight = isCompact ? "40px" : "60px";
+  const schoolPadding = isCompact ? "5px 16px" : "8px 24px";
+  const schoolFontSize = isCompact ? "10px" : "13px";
+  const schoolMargin = isCompact ? "0 16px" : "0 20px";
+  const schoolRadius = isCompact ? "0 0 6px 6px" : "0 0 8px 8px";
+  const titlePadding = isCompact ? "5px 16px" : "8px 20px";
+  const titleFontSize = isCompact ? "11px" : "13px";
+  const titleMargin = isCompact ? "4px 0 0" : "8px 0 0";
 
-                {/* الشعار */}
-                <td
-                  style={{
-                    width: "53%",
-                    verticalAlign: "middle",
-                    textAlign: "center",
-                    padding: "0",
-                  }}
-                >
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      gap: "8px",
-                    }}
-                  >
-                    <img
-                      src={logoUrl}
-                      alt="شعار وزارة التعليم"
-                      style={{
-                        height: "38px",
-                        objectFit: "contain" as const,
-                        display: "inline-block",
-                        filter: "brightness(0) invert(1)",
-                      }}
-                      onError={(e) => {
-                        (e.target as HTMLImageElement).style.display = "none";
-                      }}
-                    />
+  // تحديد خلفية الترويسة (gradient أو solid)
+  const bgStyle: React.CSSProperties = headerBg.includes("gradient")
+    ? { background: headerBg }
+    : { backgroundColor: headerBg };
 
-                  </div>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-
-        {/* شريط اسم المدرسة */}
-        {schoolName && (
-          <div
-            style={{
-              background: "linear-gradient(to left, #0d7377, #0f8a6e, #2ea87a)",
-              color: "white",
-              padding: "5px 16px",
-              textAlign: "center",
-              fontWeight: 700,
-              fontSize: "10px",
-              letterSpacing: "0.3px",
-              borderRadius: "0 0 6px 6px",
-              margin: "0 16px",
-            }}
-          >
-            {schoolName}
-          </div>
-        )}
-
-        {/* شريط العنوان */}
-        {pageTitle && (
-          <div
-            style={{
-              background: `linear-gradient(135deg, ${accentColor}, ${accentColor}dd)`,
-              color: "white",
-              padding: "5px 16px",
-              textAlign: "center",
-              fontWeight: 700,
-              fontSize: "11px",
-              letterSpacing: "0.3px",
-              margin: "4px 0 0",
-            }}
-          >
-            {pageTitle}
-          </div>
-        )}
-      </div>
-    );
-  }
-
-  // variant === "full" - الترويسة الكاملة للمعاينة المفردة
   return (
-    <div>
+    <div style={{ marginBottom: isCompact ? "0.5rem" : undefined }}>
+      {/* الترويسة الرئيسية */}
       <div
         style={{
-          background:
-            "linear-gradient(135deg, #1a4d4e 0%, #0d5f61 50%, #0d7377 100%)",
-          padding: "16px 24px 14px",
-          borderRadius: "0 0 12px 12px",
+          ...bgStyle,
+          padding: headerPadding,
+          borderRadius: headerRadius,
         }}
       >
         <table style={{ width: "100%", borderCollapse: "collapse" as const }}>
           <tbody>
             <tr>
-              {/* بيانات الجهة */}
+              {/* الجانب الأيمن - بيانات الجهة */}
               <td
                 style={{
                   width: "45%",
@@ -191,10 +105,10 @@ export function OfficialHeader({
                   <div
                     key={i}
                     style={{
-                      fontSize: "12px",
-                      color: "#ffffff",
+                      fontSize: textSize,
+                      color: textColor,
                       fontWeight: 600,
-                      lineHeight: "2",
+                      lineHeight: lineH,
                     }}
                   >
                     {line}
@@ -204,9 +118,9 @@ export function OfficialHeader({
                   <div
                     style={{
                       fontWeight: 600,
-                      fontSize: "12px",
-                      color: "#ffffff",
-                      lineHeight: "2",
+                      fontSize: textSize,
+                      color: textColor,
+                      lineHeight: lineH,
                     }}
                   >
                     {schoolName}
@@ -214,26 +128,26 @@ export function OfficialHeader({
                 )}
               </td>
 
-              {/* خط فاصل */}
+              {/* خط فاصل عمودي */}
               <td
                 style={{
                   width: "2%",
                   verticalAlign: "middle",
                   textAlign: "center",
-                  padding: "0 8px",
+                  padding: isCompact ? "0 6px" : "0 8px",
                 }}
               >
                 <div
                   style={{
                     width: "1.5px",
-                    height: "60px",
-                    background: "rgba(255,255,255,0.4)",
+                    height: sepHeight,
+                    background: separatorColor,
                     margin: "0 auto",
                   }}
                 />
               </td>
 
-              {/* الشعار */}
+              {/* الجانب الأيسر - الشعار */}
               <td
                 style={{
                   width: "53%",
@@ -254,16 +168,15 @@ export function OfficialHeader({
                     src={logoUrl}
                     alt="شعار وزارة التعليم"
                     style={{
-                      height: "55px",
+                      height: logoHeight,
                       objectFit: "contain" as const,
                       display: "inline-block",
-                      filter: "brightness(0) invert(1)",
+                      filter: logoFilter,
                     }}
                     onError={(e) => {
                       (e.target as HTMLImageElement).style.display = "none";
                     }}
                   />
-
                 </div>
               </td>
             </tr>
@@ -275,15 +188,15 @@ export function OfficialHeader({
       {schoolName && (
         <div
           style={{
-            background: "linear-gradient(to left, #0d7377, #0f8a6e, #2ea87a)",
+            background: schoolBg,
             color: "white",
-            padding: "8px 24px",
+            padding: schoolPadding,
             textAlign: "center",
             fontWeight: 700,
-            fontSize: "13px",
+            fontSize: schoolFontSize,
             letterSpacing: "0.5px",
-            borderRadius: "0 0 8px 8px",
-            margin: "0 20px",
+            borderRadius: schoolRadius,
+            margin: schoolMargin,
           }}
         >
           {schoolName}
@@ -296,12 +209,12 @@ export function OfficialHeader({
           style={{
             background: `linear-gradient(135deg, ${accentColor}, ${accentColor}dd)`,
             color: "white",
-            padding: "8px 20px",
+            padding: titlePadding,
             textAlign: "center",
             fontWeight: 800,
-            fontSize: "13px",
+            fontSize: titleFontSize,
             letterSpacing: "0.5px",
-            margin: "8px 0 0",
+            margin: titleMargin,
           }}
         >
           {pageTitle}

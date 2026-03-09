@@ -16,6 +16,7 @@ import { saveFileToIDB, getFileFromIDB, deleteFileFromIDB, cleanOldFiles } from 
 import { getLoginUrl } from "@/const";
 import { generateQRDataURL } from "@/lib/qr-utils";
 import { exportToPDF, printElement } from "@/lib/pdf-export";
+import { getMoeLogoDataUrl, getMoeLogoUrl, getMoeDotsUrl, getMoeLogoFilter } from "@/components/MoeLogo";
 import { STANDARDS, type Standard, type Indicator } from "@/lib/standards-data";
 import {
   PRINCIPAL_STANDARDS, VICE_PRINCIPAL_STANDARDS, COUNSELOR_STANDARDS,
@@ -208,17 +209,71 @@ interface ThemeConfig {
 }
 
 // ===== القالب الافتراضي (يُستخدم فقط إذا لم تتوفر قوالب من قاعدة البيانات) =====
+// ألوان الهوية البصرية لوزارة التعليم: داكن #1a4d4e، متوسط #0d7377، فاتح #2ea87a
 const DEFAULT_THEME: ThemeConfig = {
-  id: 'default', name: 'الهوية البصرية - رسمي',
+  id: 'default', name: 'رسمي - ترويسة داكنة',
   layoutType: 'dark-header-table',
-  headerBg: 'linear-gradient(135deg, #004D5A, #0097A7)', headerText: '#fff',
-  accent: '#0097A7', borderColor: '#004D5A',
-  titleBg: '#00838F', fieldLabelBg: '#00838F',
-  footerBg: 'linear-gradient(to left, #004D5A, #0097A7, #26C6DA)',
+  headerBg: 'linear-gradient(135deg, #1a4d4e 0%, #0d5f61 50%, #0d7377 100%)', headerText: '#fff',
+  accent: '#0d7377', borderColor: '#1a4d4e',
+  titleBg: '#0d7377', fieldLabelBg: '#0d7377',
+  footerBg: 'linear-gradient(to left, #1a4d4e, #0d7377, #2ea87a)',
   tableStyle: true, titleStyle: 'rounded', showTopLine: true, showBottomBar: true,
   fieldStyle: 'table', signatureStyle: 'boxed',
-  coverStyle: 'gradient-center', sectionCoverStyle: 'full-gradient', coverAccent2: '#26C6DA',
+  coverStyle: 'gradient-center', sectionCoverStyle: 'full-gradient', coverAccent2: '#2ea87a',
 };
+
+// قوالب مدمجة إضافية (fallback عند عدم توفر قوالب DB)
+const BUILTIN_THEMES: ThemeConfig[] = [
+  DEFAULT_THEME,
+  {
+    id: 'builtin-classic', name: 'كلاسيكي - ترويسة بيضاء',
+    layoutType: 'white-header-classic',
+    headerBg: '#ffffff', headerText: '#1a4d4e',
+    accent: '#0d7377', borderColor: '#1a4d4e',
+    titleBg: '#0d7377', fieldLabelBg: '#0d7377',
+    footerBg: 'linear-gradient(to left, #1a4d4e, #0d7377, #2ea87a)',
+    tableStyle: false, titleStyle: 'full-width', showTopLine: false, showBottomBar: true,
+    fieldStyle: 'fieldset', signatureStyle: 'dotted',
+    coverStyle: 'split-left', sectionCoverStyle: 'left-stripe', coverAccent2: '#2ea87a',
+  },
+  {
+    id: 'builtin-cards', name: 'بطاقات ملونة',
+    layoutType: 'white-header-sidebar',
+    headerBg: '#ffffff', headerText: '#1a4d4e',
+    accent: '#0d7377', borderColor: '#1a4d4e',
+    titleBg: '#0d7377', fieldLabelBg: '#0d7377',
+    footerBg: 'linear-gradient(to left, #1a4d4e, #0d7377, #2ea87a)',
+    tableStyle: false, titleStyle: 'badge', showTopLine: false, showBottomBar: true,
+    fieldStyle: 'cards', signatureStyle: 'lined',
+    bodyBg: '#f0faf8',
+    sidebarBg: 'linear-gradient(to bottom, #1a4d4e, #0d7377)',
+    headerSeparator: true,
+    coverStyle: 'framed-elegant', sectionCoverStyle: 'card-center', coverAccent2: '#2ea87a',
+  },
+  {
+    id: 'builtin-light', name: 'فاتح - خلفية فيروزية',
+    layoutType: 'white-header-light',
+    headerBg: '#ffffff', headerText: '#0d7377',
+    accent: '#2ea87a', borderColor: '#0d7377',
+    titleBg: '#2ea87a', fieldLabelBg: '#2ea87a',
+    footerBg: 'linear-gradient(to left, #0d7377, #2ea87a, #4ecdc4)',
+    tableStyle: false, titleStyle: 'underlined', showTopLine: false, showBottomBar: true,
+    fieldStyle: 'underlined', signatureStyle: 'solid',
+    bodyBg: '#e8f5f2',
+    coverStyle: 'diagonal', sectionCoverStyle: 'top-accent', coverAccent2: '#4ecdc4',
+  },
+  {
+    id: 'builtin-dark-simple', name: 'داكن - حقول بسيطة',
+    layoutType: 'dark-header-simple',
+    headerBg: 'linear-gradient(135deg, #0a3d3e 0%, #1a4d4e 50%, #0d7377 100%)', headerText: '#fff',
+    accent: '#1a4d4e', borderColor: '#0a3d3e',
+    titleBg: '#1a4d4e', fieldLabelBg: '#1a4d4e',
+    footerBg: 'linear-gradient(to left, #0a3d3e, #1a4d4e, #0d7377)',
+    tableStyle: false, titleStyle: 'bordered', showTopLine: true, showBottomBar: true,
+    fieldStyle: 'fieldset', signatureStyle: 'boxed',
+    coverStyle: 'top-bar', sectionCoverStyle: 'numbered-bar', coverAccent2: '#0d7377',
+  },
+];
 
 // ===== إعدادات الأولوية =====
 const PRIORITY_CONFIG: Record<EvidencePriority, { label: string; color: string; bgColor: string; borderColor: string; icon: string }> = {
@@ -310,6 +365,7 @@ export default function PerformanceEvidence() {
   const { data: dbTemplates } = trpc.templates.list.useQuery(undefined, { staleTime: 60000 });
   // تحويل قوالب DB إلى ThemeConfig (النظام يعتمد 100% على قاعدة البيانات - الإدارة تضيف القوالب)
   const allThemes = useMemo(() => {
+    const themes: ThemeConfig[] = [...BUILTIN_THEMES];
     if (dbTemplates && dbTemplates.length > 0) {
       const dbMapped: ThemeConfig[] = dbTemplates.map((t: any) => {
         const layout = t.templateLayout || {};
@@ -319,13 +375,13 @@ export default function PerformanceEvidence() {
           id: `db-${t.id}`,
           name: t.name,
           layoutType: lt as LayoutType,
-          headerBg: t.headerBg || (isDark ? 'linear-gradient(135deg, #004D5A, #0097A7)' : '#ffffff'),
-          headerText: t.headerText || (isDark ? '#fff' : '#004D5A'),
-          accent: t.accent || '#0097A7',
-          borderColor: t.borderColor || '#004D5A',
-          titleBg: t.accent || '#00838F',
-          fieldLabelBg: t.accent || '#00838F',
-          footerBg: `linear-gradient(to left, ${t.borderColor || '#004D5A'}, ${t.accent || '#0097A7'}, #26C6DA)`,
+          headerBg: t.headerBg || (isDark ? 'linear-gradient(135deg, #1a4d4e, #0d7377)' : '#ffffff'),
+          headerText: t.headerText || (isDark ? '#fff' : '#1a4d4e'),
+          accent: t.accent || '#0d7377',
+          borderColor: t.borderColor || '#1a4d4e',
+          titleBg: t.accent || '#0d7377',
+          fieldLabelBg: t.accent || '#0d7377',
+          footerBg: `linear-gradient(to left, ${t.borderColor || '#1a4d4e'}, ${t.accent || '#0d7377'}, #2ea87a)`,
           tableStyle: (layout.fieldStyle === 'table'),
           titleStyle: (layout.titleStyle || 'rounded') as ThemeConfig['titleStyle'],
           showTopLine: isDark,
@@ -333,17 +389,16 @@ export default function PerformanceEvidence() {
           fieldStyle: (layout.fieldStyle || 'fieldset') as ThemeConfig['fieldStyle'],
           signatureStyle: (['dotted', 'solid', 'boxed', 'lined', 'stamped'].includes(layout.signatureStyle) ? layout.signatureStyle : 'dotted') as ThemeConfig['signatureStyle'],
           bodyBg: t.bodyBg || (lt === 'white-header-light' ? '#E0F7FA' : lt === 'white-header-sidebar' ? '#f8fafb' : undefined),
-          sidebarBg: lt === 'white-header-sidebar' ? `linear-gradient(to bottom, ${t.borderColor || '#004D5A'}, ${t.accent || '#0097A7'})` : undefined,
+          sidebarBg: lt === 'white-header-sidebar' ? `linear-gradient(to bottom, ${t.borderColor || '#1a4d4e'}, ${t.accent || '#0d7377'})` : undefined,
           headerSeparator: lt === 'white-header-sidebar',
           coverStyle: (layout.coverStyle || 'gradient-center') as ThemeConfig['coverStyle'],
           sectionCoverStyle: (layout.sectionCoverStyle || 'full-gradient') as ThemeConfig['sectionCoverStyle'],
-          coverAccent2: layout.coverAccent2 || '#26C6DA',
+          coverAccent2: layout.coverAccent2 || '#2ea87a',
         };
       });
-      return dbMapped;
+      themes.push(...dbMapped);
     }
-    // إذا لم تتوفر قوالب من DB، استخدم القالب الافتراضي
-    return [DEFAULT_THEME];
+    return themes;
   }, [dbTemplates]);
   const [portfolioId, setPortfolioId] = useState<number | null>(null);
   const [currentCriterionIndex, setCurrentCriterionIndex] = useState(0);
@@ -2735,8 +2790,6 @@ export default function PerformanceEvidence() {
             const allFields = [...staticFields, ...dynamicFields];
             const shortFields = allFields.filter(f => (f.value?.length || 0) < 80);
             const longFields = allFields.filter(f => (f.value?.length || 0) >= 80);
-            const MOE_LOGO = 'https://d2xsxph8kpxj0f.cloudfront.net/310519663047121386/h34s4aPNVyHXdtjgZ7eNNf/UntiTtled-1-1568x1192_bfb97198.png';
-
             // === استخراج بيانات الإدارة بدون تكرار ===
             const deptLines = (personalInfo.department || '').split('\n').filter((l: string) => l.trim());
             const filteredDeptLines = deptLines.filter((l: string) => {
@@ -2747,14 +2800,238 @@ export default function PerformanceEvidence() {
               return true;
             });
             const isDarkHeader = theme.headerBg !== '#ffffff' && theme.headerBg !== '#f8f9fa' && !theme.headerBg.includes('#fff');
-            const logoFilter = isDarkHeader ? 'brightness(0) invert(1)' : 'none';
+            const fStyle = theme.fieldStyle || 'table';
+            const bodyBg = theme.bodyBg || '#ffffff';
+
+            // === دالة رسم الحقول حسب نمط القالب ===
+            const renderFields = () => {
+              if (fStyle === 'cards') {
+                // نمط البطاقات
+                return (
+                  <div style={{ padding: '12px 20px' }}>
+                    <div style={{ display: 'flex', flexWrap: 'wrap' as const, gap: '10px' }}>
+                      {allFields.map((field) => (
+                        <div key={field.id} style={{
+                          flex: (field.value?.length || 0) >= 80 ? '1 1 100%' : '1 1 calc(50% - 5px)',
+                          background: '#fff',
+                          borderRadius: '8px',
+                          border: `1.5px solid ${theme.borderColor}22`,
+                          overflow: 'hidden',
+                          boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+                        }}>
+                          <div style={{
+                            background: theme.accent,
+                            color: '#fff',
+                            padding: '5px 12px',
+                            fontSize: '10px',
+                            fontWeight: 700,
+                            textAlign: 'center',
+                          }}>
+                            {field.label}
+                          </div>
+                          <div style={{
+                            padding: '8px 12px',
+                            fontSize: '10px',
+                            color: '#1a1a1a',
+                            lineHeight: '1.6',
+                            whiteSpace: 'pre-wrap' as const,
+                            minHeight: '28px',
+                          }}>
+                            {field.value || '....................'}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              } else if (fStyle === 'fieldset') {
+                // نمط الحقول بإطار
+                return (
+                  <div style={{ padding: '12px 20px' }}>
+                    {allFields.map((field) => (
+                      <div key={field.id} style={{
+                        border: `1.5px solid ${theme.accent}44`,
+                        borderRadius: '6px',
+                        marginBottom: '8px',
+                        overflow: 'hidden',
+                      }}>
+                        <div style={{
+                          background: `${theme.accent}15`,
+                          borderBottom: `1px solid ${theme.accent}33`,
+                          padding: '4px 12px',
+                          fontSize: '10px',
+                          fontWeight: 700,
+                          color: theme.accent,
+                        }}>
+                          {field.label}
+                        </div>
+                        <div style={{
+                          padding: '6px 12px',
+                          fontSize: '10px',
+                          color: '#1a1a1a',
+                          lineHeight: '1.6',
+                          whiteSpace: 'pre-wrap' as const,
+                          minHeight: '24px',
+                          background: '#fff',
+                        }}>
+                          {field.value || '....................'}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                );
+              } else if (fStyle === 'underlined') {
+                // نمط الخط السفلي
+                return (
+                  <div style={{ padding: '12px 20px' }}>
+                    {allFields.map((field) => (
+                      <div key={field.id} style={{
+                        borderBottom: `1px solid ${theme.accent}33`,
+                        padding: '8px 0',
+                        display: 'flex',
+                        gap: '12px',
+                        alignItems: (field.value?.length || 0) >= 80 ? 'flex-start' : 'center',
+                        flexDirection: (field.value?.length || 0) >= 80 ? 'column' as const : 'row' as const,
+                      }}>
+                        <div style={{
+                          fontSize: '10px',
+                          fontWeight: 700,
+                          color: theme.accent,
+                          minWidth: '80px',
+                          flexShrink: 0,
+                        }}>
+                          {field.label}:
+                        </div>
+                        <div style={{
+                          fontSize: '10px',
+                          color: '#1a1a1a',
+                          lineHeight: '1.6',
+                          whiteSpace: 'pre-wrap' as const,
+                          flex: 1,
+                        }}>
+                          {field.value || '....................'}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                );
+              } else if (fStyle === 'minimal') {
+                // نمط بسيط
+                return (
+                  <div style={{ padding: '12px 20px' }}>
+                    {allFields.map((field) => (
+                      <div key={field.id} style={{ marginBottom: '10px' }}>
+                        <div style={{
+                          fontSize: '9px',
+                          fontWeight: 700,
+                          color: theme.accent,
+                          textTransform: 'uppercase' as const,
+                          letterSpacing: '0.5px',
+                          marginBottom: '3px',
+                        }}>
+                          {field.label}
+                        </div>
+                        <div style={{
+                          fontSize: '10px',
+                          color: '#1a1a1a',
+                          lineHeight: '1.6',
+                          whiteSpace: 'pre-wrap' as const,
+                          padding: '4px 0',
+                          borderBottom: '1px dotted #ddd',
+                        }}>
+                          {field.value || '....................'}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                );
+              } else {
+                // نمط الجدول الافتراضي (table)
+                return (
+                  <div style={{ padding: '12px 20px' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse' as const, border: '1px solid #d1d5db' }}>
+                      <tbody>
+                        {shortFields.length > 0 && (() => {
+                          const rows: typeof shortFields[] = [];
+                          for (let i = 0; i < shortFields.length; i += 3) rows.push(shortFields.slice(i, i + 3));
+                          return rows.map((row, ri) => (
+                            <tr key={`short-${ri}`}>
+                              {row.map((field) => (
+                                <React.Fragment key={field.id}>
+                                  <td style={{
+                                    border: '1px solid #d1d5db',
+                                    padding: '6px 10px',
+                                    fontWeight: 700,
+                                    fontSize: '10px',
+                                    color: '#fff',
+                                    background: theme.accent,
+                                    width: '15%',
+                                    textAlign: 'center',
+                                  }}>
+                                    {field.label}
+                                  </td>
+                                  <td style={{
+                                    border: '1px solid #d1d5db',
+                                    padding: '6px 10px',
+                                    fontSize: '10px',
+                                    color: '#1a1a1a',
+                                    background: '#fff',
+                                    width: ri === 0 && row.length <= 3 ? `${(100 - 15 * row.length) / row.length}%` : undefined,
+                                  }}>
+                                    {field.value || '....................'}
+                                  </td>
+                                </React.Fragment>
+                              ))}
+                              {row.length < 3 && Array.from({ length: 3 - row.length }).map((_, i) => (
+                                <React.Fragment key={`empty-${i}`}>
+                                  <td style={{ border: '1px solid #d1d5db', padding: '6px 10px', background: theme.accent, width: '15%' }}></td>
+                                  <td style={{ border: '1px solid #d1d5db', padding: '6px 10px', background: '#fff' }}></td>
+                                </React.Fragment>
+                              ))}
+                            </tr>
+                          ));
+                        })()}
+                        {longFields.map((field) => (
+                          <tr key={field.id}>
+                            <td style={{
+                              border: '1px solid #d1d5db',
+                              padding: '6px 10px',
+                              fontWeight: 700,
+                              fontSize: '10px',
+                              color: '#fff',
+                              background: theme.accent,
+                              width: '15%',
+                              textAlign: 'center',
+                              verticalAlign: 'top',
+                            }}>
+                              {field.label}
+                            </td>
+                            <td colSpan={5} style={{
+                              border: '1px solid #d1d5db',
+                              padding: '8px 12px',
+                              fontSize: '10px',
+                              lineHeight: '1.6',
+                              color: '#1a1a1a',
+                              background: '#fff',
+                              whiteSpace: 'pre-wrap' as const,
+                            }}>
+                              {field.value || '....................'}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                );
+              }
+            };
 
             return (
-              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 bg-black/60 z-50 flex items-start justify-center p-4 overflow-y-auto">
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 bg-black/60 z-50 flex items-start justify-center overflow-y-auto" style={{ padding: '16px 8px' }}>
                 <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
-                  className="bg-white rounded-2xl shadow-2xl max-w-3xl w-full my-8 overflow-hidden">
+                  className="bg-white rounded-2xl shadow-2xl w-full overflow-hidden" style={{ maxWidth: '220mm' }}>
                   {/* شريط الأدوات */}
-                  <div className="flex items-center justify-between p-3 bg-gray-50 border-b flex-wrap gap-2">
+                  <div className="flex items-center justify-between p-3 bg-gray-50 border-b flex-wrap gap-2" data-no-print>
                     <div className="flex items-center gap-2 flex-wrap">
                       <Button size="sm" variant="outline" className="gap-1 text-xs h-7" onClick={() => exportSingleEvidence(previewCriterionId, previewSubId)}>
                         <Download className="w-3 h-3" />تصدير PDF
@@ -2773,53 +3050,78 @@ export default function PerformanceEvidence() {
                     </button>
                   </div>
 
-                  {/* ========== محتوى المعاينة - صفحة A4 واحدة مطابقة لنماذج تعليمية ========== */}
+                  {/* ========== محتوى المعاينة - صفحة A4 كاملة مطابقة لنماذج تعليمية ========== */}
                   <div id={`single-preview-${previewSubId}`} style={{ fontFamily: "'Cairo', sans-serif", direction: 'rtl' }}>
-                    <div style={{
-                      background: 'white',
+                    <div className="pdf-page" style={{
+                      background: bodyBg,
                       width: '210mm',
+                      minHeight: '297mm',
                       margin: '0 auto',
-                      border: '2px solid #0d7377',
+                      border: `2px solid ${theme.borderColor || '#0d7377'}`,
                       position: 'relative' as const,
                       boxSizing: 'border-box' as const,
+                      display: 'flex',
+                      flexDirection: theme.sidebarBg ? 'row' as const : 'column' as const,
                     }}>
 
-                      {/* ========== الترويسة الرسمية - مطابقة لـ edu-forms.com ========== */}
+                      {/* ========== الشريط الجانبي (لقالب البطاقات) ========== */}
+                      {theme.sidebarBg && (
+                        <div style={{
+                          width: '28mm',
+                          background: theme.sidebarBg,
+                          display: 'flex',
+                          flexDirection: 'column' as const,
+                          alignItems: 'center',
+                          padding: '20px 6px',
+                          flexShrink: 0,
+                        }}>
+                          <img
+                            src={getMoeDotsUrl()}
+                            alt="شعار وزارة التعليم"
+                            style={{ height: '55px', objectFit: 'contain' as const, filter: 'brightness(0) invert(1)', marginBottom: '16px' }}
+                          />
+                          <div style={{ width: '2px', flex: 1, background: 'rgba(255,255,255,0.2)', borderRadius: '1px' }} />
+                          <div style={{ writingMode: 'vertical-rl' as const, color: 'rgba(255,255,255,0.6)', fontSize: '8px', fontWeight: 600, marginTop: '16px', letterSpacing: '2px' }}>
+                            SERS
+                          </div>
+                        </div>
+                      )}
+
+                      {/* ========== المحتوى الرئيسي ========== */}
+                      <div style={{ flex: 1, display: 'flex', flexDirection: 'column' as const, minWidth: 0 }}>
+
+                      {/* ========== الترويسة الرسمية ========== */}
                       <div style={{
-                        background: 'linear-gradient(135deg, #1a4d4e 0%, #0d5f61 50%, #0d7377 100%)',
-                        padding: '16px 24px 14px',
-                        borderRadius: '0 0 12px 12px',
+                        background: isDarkHeader ? (theme.headerBg || 'linear-gradient(135deg, #1a4d4e 0%, #0d5f61 50%, #0d7377 100%)') : (theme.headerBg || '#ffffff'),
+                        padding: '18px 28px 16px',
+                        borderRadius: '0',
                       }}>
                         <table style={{ width: '100%', borderCollapse: 'collapse' as const }}>
                           <tbody>
                             <tr>
-                              {/* الجانب الأيمن - بيانات الجهة (نصوص بيضاء) */}
-                              <td style={{ width: '45%', verticalAlign: 'middle', textAlign: 'right', padding: '0' }}>
+                              {/* الجانب الأيمن - بيانات الجهة */}
+                              <td style={{ width: '48%', verticalAlign: 'middle', textAlign: 'right', padding: '0' }}>
                                 {filteredDeptLines.map((line: string, i: number) => (
-                                  <div key={i} style={{ fontSize: '12px', color: '#ffffff', fontWeight: 600, lineHeight: '2' }}>{line}</div>
+                                  <div key={i} style={{ fontSize: '13px', color: isDarkHeader ? '#ffffff' : (theme.borderColor || '#1a4d4e'), fontWeight: 700, lineHeight: '2.2', letterSpacing: '0.3px' }}>{line}</div>
                                 ))}
                                 {personalInfo.school && filteredDeptLines.length === 0 && (
-                                  <div style={{ fontWeight: 600, fontSize: '12px', color: '#ffffff', lineHeight: '2' }}>{personalInfo.school}</div>
+                                  <div style={{ fontWeight: 700, fontSize: '13px', color: isDarkHeader ? '#ffffff' : (theme.borderColor || '#1a4d4e'), lineHeight: '2.2' }}>{personalInfo.school}</div>
                                 )}
                               </td>
 
-                              {/* خط فاصل عمودي أبيض */}
-                              <td style={{ width: '2%', verticalAlign: 'middle', textAlign: 'center', padding: '0 8px' }}>
-                                <div style={{ width: '1.5px', height: '60px', background: 'rgba(255,255,255,0.4)', margin: '0 auto' }} />
+                              {/* خط فاصل عمودي */}
+                              <td style={{ width: '2%', verticalAlign: 'middle', textAlign: 'center', padding: '0 10px' }}>
+                                <div style={{ width: '2px', height: '70px', background: isDarkHeader ? 'rgba(255,255,255,0.5)' : 'rgba(0,77,90,0.25)', margin: '0 auto', borderRadius: '1px' }} />
                               </td>
 
-                              {/* الجانب الأيسر - الشعار */}
-                              <td style={{ width: '53%', verticalAlign: 'middle', textAlign: 'center', padding: '0' }}>
-                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}>
-                                  <div style={{ textAlign: 'center' }}>
-                                    <img
-                                      src={MOE_LOGO}
-                                      alt="شعار وزارة التعليم"
-                                      style={{ height: '55px', objectFit: 'contain' as const, display: 'inline-block', filter: 'brightness(0) invert(1)' }}
-                                      onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-                                    />
-                                  </div>
-
+                              {/* الجانب الأيسر - شعار وزارة التعليم SVG */}
+                              <td style={{ width: '50%', verticalAlign: 'middle', textAlign: 'center', padding: '0' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                  <img
+                                    src={getMoeLogoUrl()}
+                                    alt="شعار وزارة التعليم"
+                                    style={{ height: '80px', objectFit: 'contain' as const, display: 'inline-block', filter: getMoeLogoFilter(isDarkHeader) }}
+                                  />
                                 </div>
                               </td>
                             </tr>
@@ -2830,15 +3132,13 @@ export default function PerformanceEvidence() {
                       {/* ========== شريط اسم المدرسة ========== */}
                       {personalInfo.school && (
                         <div style={{
-                          background: 'linear-gradient(to left, #0d7377, #0f8a6e, #2ea87a)',
+                          background: isDarkHeader ? 'linear-gradient(to left, #0d7377, #0f8a6e, #2ea87a)' : `linear-gradient(to left, ${theme.accent}dd, ${theme.accent})`,
                           color: 'white',
-                          padding: '8px 24px',
+                          padding: '10px 28px',
                           textAlign: 'center',
                           fontWeight: 700,
-                          fontSize: '13px',
+                          fontSize: '14px',
                           letterSpacing: '0.5px',
-                          borderRadius: '0 0 8px 8px',
-                          margin: '0 20px',
                         }}>
                           {personalInfo.school}
                         </div>
@@ -2848,95 +3148,18 @@ export default function PerformanceEvidence() {
                       <div style={{
                         background: `linear-gradient(135deg, ${theme.titleBg || theme.accent}, ${theme.accent})`,
                         color: 'white',
-                        padding: '8px 20px',
+                        padding: '10px 24px',
                         textAlign: 'center',
                         fontWeight: 800,
-                        fontSize: '13px',
+                        fontSize: '14px',
                         letterSpacing: '0.5px',
-                        margin: '8px 0 0',
+                        margin: '0',
                       }}>
                         {prevSub.title}
                       </div>
 
-                      {/* ========== جدول البيانات الرئيسي ========== */}
-                      <div style={{ padding: '12px 20px' }}>
-                        <table style={{ width: '100%', borderCollapse: 'collapse' as const, border: '1px solid #d1d5db' }}>
-                          <tbody>
-                            {/* الحقول القصيرة - كل صف 3 حقول */}
-                            {shortFields.length > 0 && (() => {
-                              const rows: typeof shortFields[] = [];
-                              for (let i = 0; i < shortFields.length; i += 3) rows.push(shortFields.slice(i, i + 3));
-                              return rows.map((row, ri) => (
-                                <tr key={`short-${ri}`}>
-                                  {row.map((field) => (
-                                    <React.Fragment key={field.id}>
-                                      <td style={{
-                                        border: '1px solid #d1d5db',
-                                        padding: '6px 10px',
-                                        fontWeight: 700,
-                                        fontSize: '10px',
-                                        color: '#fff',
-                                        background: theme.accent,
-                                        width: '15%',
-                                        textAlign: 'center',
-                                      }}>
-                                        {field.label}
-                                      </td>
-                                      <td style={{
-                                        border: '1px solid #d1d5db',
-                                        padding: '6px 10px',
-                                        fontSize: '10px',
-                                        color: '#1a1a1a',
-                                        background: '#fff',
-                                        width: ri === 0 && row.length <= 3 ? `${(100 - 15 * row.length) / row.length}%` : undefined,
-                                      }}>
-                                        {field.value || '....................'}
-                                      </td>
-                                    </React.Fragment>
-                                  ))}
-                                  {/* خلايا فارغة لملء الصف */}
-                                  {row.length < 3 && Array.from({ length: 3 - row.length }).map((_, i) => (
-                                    <React.Fragment key={`empty-${i}`}>
-                                      <td style={{ border: '1px solid #d1d5db', padding: '6px 10px', background: theme.accent, width: '15%' }}></td>
-                                      <td style={{ border: '1px solid #d1d5db', padding: '6px 10px', background: '#fff' }}></td>
-                                    </React.Fragment>
-                                  ))}
-                                </tr>
-                              ));
-                            })()}
-
-                            {/* الحقول الطويلة - كل حقل صف كامل */}
-                            {longFields.map((field) => (
-                              <tr key={field.id}>
-                                <td style={{
-                                  border: '1px solid #d1d5db',
-                                  padding: '6px 10px',
-                                  fontWeight: 700,
-                                  fontSize: '10px',
-                                  color: '#fff',
-                                  background: theme.accent,
-                                  width: '15%',
-                                  textAlign: 'center',
-                                  verticalAlign: 'top',
-                                }}>
-                                  {field.label}
-                                </td>
-                                <td colSpan={5} style={{
-                                  border: '1px solid #d1d5db',
-                                  padding: '8px 12px',
-                                  fontSize: '10px',
-                                  lineHeight: '1.6',
-                                  color: '#1a1a1a',
-                                  background: '#fff',
-                                  whiteSpace: 'pre-wrap' as const,
-                                }}>
-                                  {field.value || '....................'}
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
+                      {/* ========== الحقول حسب نمط القالب ========== */}
+                      {renderFields()}
 
                       {/* ========== قسم الشواهد والأدلة ========== */}
                       {allMediaEvidences.length > 0 && (
@@ -2946,7 +3169,7 @@ export default function PerformanceEvidence() {
                             fontWeight: 700,
                             color: '#fff',
                             background: theme.accent,
-                            padding: '4px 12px',
+                            padding: '5px 14px',
                             display: 'inline-block',
                             borderRadius: '4px 4px 0 0',
                           }}>
@@ -2955,19 +3178,20 @@ export default function PerformanceEvidence() {
                           <div style={{
                             border: '1px solid #d1d5db',
                             borderTop: `2px solid ${theme.accent}`,
-                            padding: '10px',
+                            padding: '12px',
                             display: 'flex',
                             justifyContent: 'center',
-                            gap: '12px',
+                            gap: '14px',
                             flexWrap: 'wrap' as const,
+                            background: '#fff',
                           }}>
                             {allMediaEvidences.slice(0, 6).map(ev => {
                               const qrData = ev.type === 'link' ? ev.link :
                                 (ev.fileData?.startsWith('idb://') ? ev.fileName : (ev.fileData || ev.fileName || ''));
                               return (
                                 <div key={ev.id} style={{ textAlign: 'center' }}>
-                                  <img src={generateQRDataURL((qrData || '').substring(0, 200), 4)} alt="QR" style={{ width: '50px', height: '50px', border: '1px solid #e5e7eb' }} />
-                                  <div style={{ fontSize: '7px', color: '#666', maxWidth: '60px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const, marginTop: '3px' }}>
+                                  <img src={generateQRDataURL((qrData || '').substring(0, 200), 4)} alt="QR" style={{ width: '55px', height: '55px', border: '1px solid #e5e7eb' }} />
+                                  <div style={{ fontSize: '7px', color: '#666', maxWidth: '65px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const, marginTop: '3px' }}>
                                     {ev.type === 'link' ? (ev.link || '').substring(0, 30) : ev.fileName}
                                   </div>
                                 </div>
@@ -2983,42 +3207,47 @@ export default function PerformanceEvidence() {
                       )}
 
                       {/* ========== التوقيعات ========== */}
-                      <div style={{ padding: '8px 20px 12px', borderTop: '1px solid #d1d5db' }}>
+                      <div style={{ padding: '12px 24px 16px', borderTop: `1px solid ${theme.borderColor}33` }}>
                         <table style={{ width: '100%', borderCollapse: 'collapse' as const }}>
                           <tbody>
                             <tr>
-                              <td style={{ width: '50%', textAlign: 'center', padding: '8px 20px', verticalAlign: 'top' }}>
-                                <div style={{ fontSize: '11px', fontWeight: 700, color: '#1a1a1a', marginBottom: '4px' }}>المعلم / المعلمة</div>
-                                <div style={{ fontSize: '10px', color: '#333', marginBottom: '8px' }}>{personalInfo.name || '........................'}</div>
-                                <div style={{ width: '120px', borderBottom: '2px dotted #444', margin: '0 auto' }} />
-                                <div style={{ fontSize: '8px', color: '#888', marginTop: '3px' }}>التوقيع</div>
+                              <td style={{ width: '50%', textAlign: 'center', padding: '10px 24px', verticalAlign: 'top' }}>
+                                <div style={{ fontSize: '12px', fontWeight: 700, color: '#1a1a1a', marginBottom: '6px' }}>المعلم / المعلمة</div>
+                                <div style={{ fontSize: '11px', color: '#333', marginBottom: '10px' }}>{personalInfo.name || '........................'}</div>
+                                <div style={{ width: '140px', borderBottom: '2px dotted #444', margin: '0 auto' }} />
+                                <div style={{ fontSize: '9px', color: '#888', marginTop: '4px' }}>التوقيع</div>
                               </td>
-                              <td style={{ width: '50%', textAlign: 'center', padding: '8px 20px', verticalAlign: 'top', borderRight: '1px solid #d1d5db' }}>
-                                <div style={{ fontSize: '11px', fontWeight: 700, color: '#1a1a1a', marginBottom: '4px' }}>{personalInfo.evaluatorRole || 'مدير/ة المدرسة'}</div>
-                                <div style={{ fontSize: '10px', color: '#333', marginBottom: '8px' }}>{personalInfo.evaluator || '........................'}</div>
-                                <div style={{ width: '120px', borderBottom: '2px dotted #444', margin: '0 auto' }} />
-                                <div style={{ fontSize: '8px', color: '#888', marginTop: '3px' }}>التوقيع والختم</div>
+                              <td style={{ width: '50%', textAlign: 'center', padding: '10px 24px', verticalAlign: 'top', borderRight: `1px solid ${theme.borderColor}33` }}>
+                                <div style={{ fontSize: '12px', fontWeight: 700, color: '#1a1a1a', marginBottom: '6px' }}>{personalInfo.evaluatorRole || 'مدير/ة المدرسة'}</div>
+                                <div style={{ fontSize: '11px', color: '#333', marginBottom: '10px' }}>{personalInfo.evaluator || '........................'}</div>
+                                <div style={{ width: '140px', borderBottom: '2px dotted #444', margin: '0 auto' }} />
+                                <div style={{ fontSize: '9px', color: '#888', marginTop: '4px' }}>التوقيع والختم</div>
                               </td>
                             </tr>
                           </tbody>
                         </table>
                       </div>
 
+                      {/* ========== مساحة مرنة لملء الصفحة ========== */}
+                      <div style={{ flex: 1 }} />
+
                       {/* ========== الفوتر ========== */}
                       <div style={{
-                        background: `linear-gradient(135deg, ${theme.footerBg || theme.accent}, ${theme.accent})`,
-                        padding: '6px 20px',
+                        background: theme.footerBg || `linear-gradient(to left, ${theme.borderColor || '#004D5A'}, ${theme.accent}, #26C6DA)`,
+                        padding: '8px 24px',
                         fontSize: '9px',
                         color: '#fff',
                         display: 'flex',
                         justifyContent: 'space-between',
                         alignItems: 'center',
+                        marginTop: 'auto',
                       }}>
                         <span style={{ fontWeight: 700 }}>SERS - نظام السجلات التعليمية الذكي</span>
                         <span style={{ opacity: 0.9 }}>صفحة 1</span>
                       </div>
 
-                    </div>
+                      </div>{/* إغلاق المحتوى الرئيسي */}
+                    </div>{/* إغلاق pdf-page */}
                   </div>
 
                 </motion.div>

@@ -125,11 +125,13 @@ function wrapWithFonts(html: string): string {
     .pdf-page {
       width: 210mm;
       min-height: 297mm;
+      height: 297mm;
       page-break-after: always;
       page-break-inside: avoid;
       position: relative;
       overflow: hidden;
       background: white;
+      /* لا نفرض display/flex-direction هنا لأن inline styles تحددها حسب القالب */
     }
     .pdf-page:last-child {
       page-break-after: auto;
