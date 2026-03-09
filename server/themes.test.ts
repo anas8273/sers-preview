@@ -6,11 +6,9 @@ import { describe, expect, it } from "vitest";
 
 // الثيمات المدمجة
 const BUILTIN_THEME_IDS = [
-  'default',
-  'builtin-classic',
-  'builtin-cards',
-  'builtin-light',
-  'builtin-dark-simple',
+  'default',       // متدرج
+  'builtin-dark',  // داكن
+  'builtin-light', // خفيف حبر
 ];
 
 const VALID_HEADER_VARIANTS = [
@@ -31,10 +29,10 @@ const VALID_FIELD_STYLES = [
 const VALID_HEADER_STYLES = [1, 2, 3, 4];
 
 describe("Theme Configuration", () => {
-  it("should have 5 unique built-in themes", () => {
-    expect(BUILTIN_THEME_IDS.length).toBe(5);
+  it("should have 3 unique built-in themes (gradient/dark/light-ink)", () => {
+    expect(BUILTIN_THEME_IDS.length).toBe(3);
     const uniqueIds = new Set(BUILTIN_THEME_IDS);
-    expect(uniqueIds.size).toBe(5);
+    expect(uniqueIds.size).toBe(3);
   });
 
   it("should have no duplicate theme IDs", () => {

@@ -67,6 +67,7 @@ interface EvidenceItem {
   id: string; subEvidenceId: string; type: EvidenceType; text: string; link: string;
   fileData: string | null; fileName: string; displayAs: "image" | "qr"; formData?: Record<string, string>;
   comment?: string; priority?: EvidencePriority; keywords?: string[]; showBarcode?: boolean;
+  uploadedUrl?: string; // رابط S3 العام للملف المرفوع - يُستخدم في QR Code
 }
 interface CriterionData { score: number; notes: string; evidences: EvidenceItem[]; customSubEvidences: SubEvidence[]; }
 
@@ -211,10 +212,12 @@ interface ThemeConfig {
   headerVariant?: 'right-text-center-logo-left-info' | 'right-text-left-logo' | 'center-logo-banner' | 'full-header-sections';
 }
 
-// ===== القالب الافتراضي - مطابق للهوية البصرية الرسمية لوزارة التعليم =====
-// ألوان الهوية البصرية: أزرق داكن #1a3a5c، فيروزي #0d7377، أخضر #2ea87a
+// ===== 3 قوالب فقط مطابقة للهوية البصرية الرسمية =====
+// الألوان الرسمية: أزرق داكن #1a3a5c، فيروزي #0d7377، أخضر #2ea87a
+
+// القالب 1: متدرج (Gradient) - شريط علوي + ترويسة بيضاء + شريط سفلي gradient
 const DEFAULT_THEME: ThemeConfig = {
-  id: 'default', name: 'النمط 1 - ترويسة بيضاء مع شريط علوي',
+  id: 'default', name: 'متدرج',
   layoutType: 'white-header-classic',
   headerBg: '#ffffff', headerText: '#1a3a5c',
   accent: '#0d7377', borderColor: '#1a3a5c',
@@ -224,50 +227,39 @@ const DEFAULT_THEME: ThemeConfig = {
   fieldStyle: 'table', signatureStyle: 'boxed',
   coverStyle: 'gradient-center', sectionCoverStyle: 'full-gradient', coverAccent2: '#2ea87a',
   headerVariant: 'right-text-center-logo-left-info',
+  headerSeparator: true,
 };
 
-// 4 قوالب مدمجة مطابقة للهوية البصرية الرسمية (من ملف التصاميم المرفق)
+// 3 قوالب مدمجة فقط: متدرج / داكن / خفيف حبر
 const BUILTIN_THEMES: ThemeConfig[] = [
   DEFAULT_THEME,
   {
-    // النمط 2 - ترويسة بيضاء مع فصل وعام دراسي (صفحة 2 من ملف الهوية)
-    id: 'builtin-with-semester', name: 'النمط 2 - ترويسة مع فصل وعام دراسي',
-    layoutType: 'white-header-classic',
-    headerBg: '#ffffff', headerText: '#1a3a5c',
-    accent: '#0d7377', borderColor: '#1a3a5c',
-    titleBg: '#0d7377', fieldLabelBg: '#0d7377',
-    footerBg: 'linear-gradient(to left, #1a3a5c, #0d7377, #2ea87a)',
-    tableStyle: false, titleStyle: 'rounded', showTopLine: false, showBottomBar: false,
-    fieldStyle: 'fieldset', signatureStyle: 'dotted',
-    coverStyle: 'split-left', sectionCoverStyle: 'left-stripe', coverAccent2: '#2ea87a',
-    headerVariant: 'right-text-center-logo-left-info',
-  },
-  {
-    // النمط 3 - ترويسة بيضاء مع خطوط فاصلة (صفحة 3 من ملف الهوية)
-    id: 'builtin-lined-header', name: 'النمط 3 - ترويسة مع خطوط فاصلة',
-    layoutType: 'white-header-classic',
-    headerBg: '#ffffff', headerText: '#1a3a5c',
-    accent: '#0d7377', borderColor: '#1a3a5c',
-    titleBg: '#0d7377', fieldLabelBg: '#0d7377',
-    footerBg: 'linear-gradient(to left, #1a3a5c, #0d7377, #2ea87a)',
-    tableStyle: false, titleStyle: 'rounded', showTopLine: true, showBottomBar: true,
-    fieldStyle: 'underlined', signatureStyle: 'solid',
-    headerSeparator: true,
-    coverStyle: 'diagonal', sectionCoverStyle: 'top-accent', coverAccent2: '#2ea87a',
-    headerVariant: 'right-text-left-logo',
-  },
-  {
-    // النمط 4 - ترويسة داكنة كاملة (صفحة 4 من ملف الهوية)
-    id: 'builtin-dark-header', name: 'النمط 4 - ترويسة داكنة رسمية',
+    // القالب 2: داكن (Dark) - ترويسة كاملة بخلفية أزرق غامق
+    id: 'builtin-dark', name: 'داكن',
     layoutType: 'dark-header-table',
-    headerBg: 'linear-gradient(135deg, #1a3a5c 0%, #1a4d5e 50%, #0d7377 100%)', headerText: '#ffffff',
+    headerBg: '#1a3a5c', headerText: '#ffffff',
     accent: '#0d7377', borderColor: '#1a3a5c',
-    titleBg: '#0d7377', fieldLabelBg: '#0d7377',
+    titleBg: '#047857', fieldLabelBg: '#0d7377',
     footerBg: 'linear-gradient(to left, #1a3a5c, #0d7377, #2ea87a)',
     tableStyle: true, titleStyle: 'full-width', showTopLine: false, showBottomBar: true,
     fieldStyle: 'table', signatureStyle: 'boxed',
     coverStyle: 'top-bar', sectionCoverStyle: 'numbered-bar', coverAccent2: '#2ea87a',
     headerVariant: 'right-text-center-logo-left-info',
+    bodyBg: '#ffffff',
+  },
+  {
+    // القالب 3: خفيف حبر (Light Ink) - بدون شريط علوي، أقل حبر ممكن
+    id: 'builtin-light', name: 'خفيف حبر',
+    layoutType: 'white-header-classic',
+    headerBg: '#ffffff', headerText: '#1a3a5c',
+    accent: '#0d7377', borderColor: '#d1d5db',
+    titleBg: '#0d7377', fieldLabelBg: '#f3f4f6',
+    footerBg: '#f9fafb',
+    tableStyle: false, titleStyle: 'rounded', showTopLine: false, showBottomBar: false,
+    fieldStyle: 'underlined', signatureStyle: 'dotted',
+    coverStyle: 'minimal-line', sectionCoverStyle: 'clean-divider', coverAccent2: '#2ea87a',
+    headerVariant: 'right-text-center-logo-left-info',
+    bodyBg: '#ffffff',
   },
 ];
 
@@ -417,6 +409,9 @@ export default function PerformanceEvidence() {
 
   // tRPC share mutation
   const shareMutation = trpc.share.create.useMutation();
+
+  // tRPC file upload mutation - لرفع الملفات إلى S3 للحصول على رابط عام للباركود
+  const uploadFileMutation = trpc.file.upload.useMutation();
 
   // tRPC AI mutations
   const suggestMutation = trpc.ai.suggest.useMutation();
@@ -995,6 +990,21 @@ export default function PerformanceEvidence() {
               newEv.fileData = storageBase64;
             }
             
+            // رفع الملف إلى S3 للحصول على رابط عام للباركود
+            try {
+              const base64Only = storageBase64.split(',')[1] || storageBase64;
+              const uploadResult = await uploadFileMutation.mutateAsync({
+                fileName: file.name,
+                mimeType: file.type,
+                base64Data: base64Only,
+              });
+              if (uploadResult.url) {
+                newEv.uploadedUrl = uploadResult.url;
+              }
+            } catch (uploadErr) {
+              console.warn("S3 upload failed, QR will use filename:", uploadErr);
+            }
+            
             addEvidenceToCriterion(targetCriterionId, newEv);
             resolve({ success: classificationSuccess, criterion: criterionTitle, indicator: indicatorText });
           } else {
@@ -1008,7 +1018,7 @@ export default function PerformanceEvidence() {
       reader.onerror = () => resolve({ success: false });
       reader.readAsDataURL(file);
     });
-  }, [allCriteria, criteriaData, classifyMutation, compressImage, compressImageForStorage, addEvidenceToCriterion]);
+  }, [allCriteria, criteriaData, classifyMutation, compressImage, compressImageForStorage, addEvidenceToCriterion, uploadFileMutation]);
 
   const handleSmartUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     e.preventDefault();
@@ -1170,6 +1180,21 @@ export default function PerformanceEvidence() {
           newEv.fileData = processedData;
         }
         
+        // رفع الملف إلى S3 للحصول على رابط عام للباركود
+        try {
+          const base64Only = processedData.split(',')[1] || processedData;
+          const uploadResult = await uploadFileMutation.mutateAsync({
+            fileName: file.name,
+            mimeType: file.type,
+            base64Data: base64Only,
+          });
+          if (uploadResult.url) {
+            newEv.uploadedUrl = uploadResult.url;
+          }
+        } catch (uploadErr) {
+          console.warn("S3 upload failed, QR will use filename:", uploadErr);
+        }
+        
         addEvidenceToCriterion(criterionId, newEv);
         addedCount++;
       } catch {
@@ -1185,7 +1210,7 @@ export default function PerformanceEvidence() {
       );
     }
     try { localStorage.removeItem(STORAGE_PENDING_UPLOAD); } catch {}
-  }, [compressImageForStorage, addEvidenceToCriterion]);
+  }, [compressImageForStorage, addEvidenceToCriterion, uploadFileMutation]);
 
   const triggerFileUpload = (criterionId: string, subEvidenceId: string) => {
     activeUploadRef.current = { criterionId, subEvidenceId };
@@ -3279,7 +3304,7 @@ export default function PerformanceEvidence() {
                           }}>
                             {allMediaEvidences.map(ev => {
                               const qrData = ev.type === 'link' ? ev.link :
-                                (ev.fileData?.startsWith('idb://') ? ev.fileName : (ev.fileData || ev.fileName || ''));
+                                (ev.uploadedUrl || ev.fileName || '');
                               const isImageType = ev.type === 'image' && ev.fileData && !ev.fileData.startsWith('idb://');
                               const showAsImage = isImageType && ev.displayAs === 'image';
 
@@ -3301,7 +3326,7 @@ export default function PerformanceEvidence() {
                                     />
                                   ) : (
                                     <img
-                                      src={generateQRDataURL((qrData || '').substring(0, 200), 10)}
+                                      src={generateQRDataURL(qrData || 'no-data', 10)}
                                       alt="QR"
                                       style={{
                                         width: '240px',
@@ -4382,7 +4407,7 @@ export default function PerformanceEvidence() {
                               ev.displayAs === 'image'
                                 ? <img src={ev.fileData.startsWith('idb://') ? '' : ev.fileData} alt="" style={{ maxHeight: '200px', borderRadius: '8px', border: '1px solid #E5E7EB' }} />
                                 : <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                                    {ev.showBarcode !== false && <img src={generateQRDataURL((ev.fileData.startsWith('idb://') ? ev.fileName || '' : ev.fileData).substring(0, 200))} alt="QR" style={{ width: '80px', height: '80px', borderRadius: '4px' }} />}
+                                    {ev.showBarcode !== false && <img src={generateQRDataURL(ev.uploadedUrl || ev.fileName || 'file')} alt="QR" style={{ width: '80px', height: '80px', borderRadius: '4px' }} />}
                                     <div>
                                       <span style={{ fontSize: '0.7rem', color: '#6B7280', display: 'block' }}>صورة {ev.showBarcode !== false ? '(باركود)' : ''}</span>
                                       <span style={{ fontSize: '0.7rem', color: '#4B5563' }}>{ev.fileName}</span>
@@ -4391,7 +4416,7 @@ export default function PerformanceEvidence() {
                             )}
                             {(ev.type === 'video' || ev.type === 'file') && ev.fileData && (
                               <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                                {ev.showBarcode !== false && <img src={generateQRDataURL(ev.fileName || 'file')} alt="QR" style={{ width: '80px', height: '80px', borderRadius: '4px' }} />}
+                                {ev.showBarcode !== false && <img src={generateQRDataURL(ev.uploadedUrl || ev.fileName || 'file')} alt="QR" style={{ width: '80px', height: '80px', borderRadius: '4px' }} />}
                                 <div>
                                   <span style={{ fontSize: '0.7rem', color: '#6B7280', display: 'block' }}>{ev.type === 'video' ? 'فيديو' : 'ملف مرفق'}</span>
                                   <span style={{ fontSize: '0.7rem', color: '#4B5563' }}>{ev.fileName}</span>
