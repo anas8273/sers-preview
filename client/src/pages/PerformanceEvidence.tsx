@@ -16,6 +16,7 @@ import { saveFileToIDB, getFileFromIDB, deleteFileFromIDB, cleanOldFiles } from 
 import { getLoginUrl } from "@/const";
 import { generateQRDataURL } from "@/lib/qr-utils";
 import { exportToPDF, printElement } from "@/lib/pdf-export";
+import { exportToDocx } from "@/lib/docx-export";
 import { getMoeLogoDataUrl, getMoeLogoUrl, getMoeDotsUrl, getMoeLogoFilter } from "@/components/MoeLogo";
 import { STANDARDS, type Standard, type Indicator } from "@/lib/standards-data";
 import {
@@ -213,16 +214,17 @@ interface ThemeConfig {
 }
 
 // ===== 3 قوالب فقط مطابقة للهوية البصرية الرسمية =====
-// الألوان الرسمية: أزرق داكن #1a3a5c، فيروزي #0d7377، أخضر #2ea87a
+// الألوان الرسمية من الهوية البصرية: فيروزي #0d7377، أخضر #2ea87a
+// جميع القوالب بنفس الألوان - الفرق في التنسيق فقط
 
 // القالب 1: متدرج (Gradient) - شريط علوي + ترويسة بيضاء + شريط سفلي gradient
 const DEFAULT_THEME: ThemeConfig = {
   id: 'default', name: 'متدرج',
   layoutType: 'white-header-classic',
-  headerBg: '#ffffff', headerText: '#1a3a5c',
-  accent: '#0d7377', borderColor: '#1a3a5c',
+  headerBg: '#ffffff', headerText: '#0d7377',
+  accent: '#0d7377', borderColor: '#0d7377',
   titleBg: '#0d7377', fieldLabelBg: '#0d7377',
-  footerBg: 'linear-gradient(to left, #1a3a5c, #0d7377, #2ea87a)',
+  footerBg: 'linear-gradient(to left, #0d7377, #1a9a7a, #2ea87a)',
   tableStyle: true, titleStyle: 'rounded', showTopLine: true, showBottomBar: true,
   fieldStyle: 'table', signatureStyle: 'boxed',
   coverStyle: 'gradient-center', sectionCoverStyle: 'full-gradient', coverAccent2: '#2ea87a',
@@ -230,17 +232,17 @@ const DEFAULT_THEME: ThemeConfig = {
   headerSeparator: true,
 };
 
-// 3 قوالب مدمجة فقط: متدرج / داكن / خفيف حبر
+// 3 قوالب مدمجة فقط: متدرج / داكن / خفيف حبر - نفس الألوان، فرق التنسيق فقط
 const BUILTIN_THEMES: ThemeConfig[] = [
   DEFAULT_THEME,
   {
-    // القالب 2: داكن (Dark) - ترويسة كاملة بخلفية أزرق غامق
+    // القالب 2: داكن (Dark) - ترويسة كاملة بخلفية فيروزية داكنة
     id: 'builtin-dark', name: 'داكن',
     layoutType: 'dark-header-table',
-    headerBg: '#1a3a5c', headerText: '#ffffff',
-    accent: '#0d7377', borderColor: '#1a3a5c',
-    titleBg: '#047857', fieldLabelBg: '#0d7377',
-    footerBg: 'linear-gradient(to left, #1a3a5c, #0d7377, #2ea87a)',
+    headerBg: '#0d7377', headerText: '#ffffff',
+    accent: '#0d7377', borderColor: '#0d7377',
+    titleBg: '#0d7377', fieldLabelBg: '#0d7377',
+    footerBg: 'linear-gradient(to left, #0d7377, #1a9a7a, #2ea87a)',
     tableStyle: true, titleStyle: 'full-width', showTopLine: false, showBottomBar: true,
     fieldStyle: 'table', signatureStyle: 'boxed',
     coverStyle: 'top-bar', sectionCoverStyle: 'numbered-bar', coverAccent2: '#2ea87a',
@@ -248,12 +250,12 @@ const BUILTIN_THEMES: ThemeConfig[] = [
     bodyBg: '#ffffff',
   },
   {
-    // القالب 3: خفيف حبر (Light Ink) - بدون شريط علوي، أقل حبر ممكن
+    // القالب 3: خفيف حبر (Light Ink) - بدون شريط، أقل حبر ممكن
     id: 'builtin-light', name: 'خفيف حبر',
     layoutType: 'white-header-classic',
-    headerBg: '#ffffff', headerText: '#1a3a5c',
+    headerBg: '#ffffff', headerText: '#0d7377',
     accent: '#0d7377', borderColor: '#d1d5db',
-    titleBg: '#0d7377', fieldLabelBg: '#f3f4f6',
+    titleBg: '#0d7377', fieldLabelBg: '#f0fdfa',
     footerBg: '#f9fafb',
     tableStyle: false, titleStyle: 'rounded', showTopLine: false, showBottomBar: false,
     fieldStyle: 'underlined', signatureStyle: 'dotted',
@@ -1335,6 +1337,22 @@ export default function PerformanceEvidence() {
     } finally {
       setIsExporting(false);
       setPdfProgress({ current: 0, total: 0 });
+    }
+  };
+
+  const [isExportingDocx, setIsExportingDocx] = useState(false);
+  const handleExportDocx = async () => {
+    setIsExportingDocx(true);
+    try {
+      await exportToDocx(
+        "preview-content",
+        `${personalInfo.reportTitle || 'شواهد_الأداء'}_${personalInfo.name || 'مستند'}.docx`
+      );
+      toast.success('تم تصدير Word بنجاح');
+    } catch (err) {
+      toast.error('فشل تصدير Word - حاول مرة أخرى');
+    } finally {
+      setIsExportingDocx(false);
     }
   };
 
@@ -3080,6 +3098,14 @@ export default function PerformanceEvidence() {
                       <Button size="sm" variant="outline" className="gap-1 text-xs h-7" onClick={() => exportSingleEvidence(previewCriterionId, previewSubId)}>
                         <Download className="w-3 h-3" />تصدير PDF
                       </Button>
+                      <Button size="sm" variant="outline" className="gap-1 text-xs h-7" onClick={async () => {
+                        try {
+                          await exportToDocx(`single-preview-${previewSubId}`, `شاهد_${previewSubId}.docx`);
+                          toast.success('تم تصدير Word بنجاح');
+                        } catch { toast.error('فشل تصدير Word'); }
+                      }}>
+                        <FileText className="w-3 h-3" />تصدير Word
+                      </Button>
                       <Button size="sm" variant="outline" className="gap-1 text-xs h-7" onClick={() => { const el = document.getElementById(`single-preview-${previewSubId}`); if (el) printElement(`single-preview-${previewSubId}`); }}>
                         <Printer className="w-3 h-3" />طباعة
                       </Button>
@@ -3115,8 +3141,8 @@ export default function PerformanceEvidence() {
                       {/* ========== الترويسة الرسمية - 4 أنماط ========== */}
                       {(() => {
                         const hv = theme.headerVariant || 'right-text-center-logo-left-info';
-                        const hBg = isDarkHeader ? (theme.headerBg || 'linear-gradient(135deg, #1a3a5c 0%, #1a4d5e 50%, #0d7377 100%)') : '#ffffff';
-                        const hTextColor = isDarkHeader ? '#ffffff' : (theme.borderColor || '#1a3a5c');
+                        const hBg = isDarkHeader ? (theme.headerBg || 'linear-gradient(135deg, #0d7377 0%, #1a9a7a 50%, #2ea87a 100%)') : '#ffffff';
+                        const hTextColor = isDarkHeader ? '#ffffff' : (theme.headerText || theme.borderColor || '#0d7377');
                         const allDeptLines = (personalInfo.department || '').split('\n').filter((l: string) => l.trim());
 
                         // نمط 1: كتابة يمين + شعار وسط + معلومات/شعار يسار
@@ -3162,10 +3188,10 @@ export default function PerformanceEvidence() {
                                   <tr>
                                     <td style={{ width: '55%', verticalAlign: 'middle', textAlign: 'right', padding: '0' }}>
                                       {allDeptLines.map((line: string, i: number) => (
-                                        <div key={i} style={{ fontSize: '14px', color: '#1a3a5c', fontWeight: 700, lineHeight: '2.2', letterSpacing: '0.3px' }}>{line}</div>
+                                        <div key={i} style={{ fontSize: '14px', color: theme.headerText || '#0d7377', fontWeight: 700, lineHeight: '2.2', letterSpacing: '0.3px' }}>{line}</div>
                                       ))}
-                                      {personalInfo.school && (
-                                        <div style={{ fontSize: '14px', color: '#1a3a5c', fontWeight: 700, lineHeight: '2.2' }}>{personalInfo.school}</div>
+{personalInfo.school && (
+                                         <div style={{ fontSize: '14px', color: theme.headerText || '#0d7377', fontWeight: 700, lineHeight: '2.2' }}>{personalInfo.school}</div>
                                       )}
                                     </td>
                                     <td style={{ width: '45%', verticalAlign: 'middle', textAlign: 'left', padding: '0' }}>
@@ -3176,8 +3202,8 @@ export default function PerformanceEvidence() {
                                         )}
                                       </div>
                                       <div style={{ textAlign: 'left', marginTop: '4px' }}>
-                                        {personalInfo.semester && <div style={{ fontSize: '11px', color: '#1a3a5c', fontWeight: 600, lineHeight: '1.7' }}>الفصل الدراسي: {personalInfo.semester}</div>}
-                                        {personalInfo.year && <div style={{ fontSize: '11px', color: '#1a3a5c', fontWeight: 600, lineHeight: '1.7' }}>العام الدراسي: {personalInfo.year}</div>}
+{personalInfo.semester && <div style={{ fontSize: '11px', color: theme.headerText || '#0d7377', fontWeight: 600, lineHeight: '1.7' }}>الفصل الدراسي: {personalInfo.semester}</div>}
+                                         {personalInfo.year && <div style={{ fontSize: '11px', color: theme.headerText || '#0d7377', fontWeight: 600, lineHeight: '1.7' }}>العام الدراسي: {personalInfo.year}</div>}
                                       </div>
                                     </td>
                                   </tr>
@@ -3196,12 +3222,12 @@ export default function PerformanceEvidence() {
                                   <tbody>
                                     <tr>
                                       <td style={{ width: '50%', verticalAlign: 'middle', textAlign: 'right', padding: '0' }}>
-                                        <div style={{ fontSize: '13px', color: '#1a3a5c', fontWeight: 700, lineHeight: '2.0' }}>وزارة التعليم</div>
-                                        {filteredDeptLines.map((line: string, i: number) => (
-                                          <div key={i} style={{ fontSize: '12px', color: '#1a3a5c', fontWeight: 600, lineHeight: '1.9' }}>{line}</div>
-                                        ))}
-                                        {personalInfo.school && (
-                                          <div style={{ fontSize: '12px', color: '#1a3a5c', fontWeight: 600, lineHeight: '1.9' }}>مدرسة: {personalInfo.school}</div>
+<div style={{ fontSize: '13px', color: theme.headerText || '#0d7377', fontWeight: 700, lineHeight: '2.0' }}>وزارة التعليم</div>
+                                         {filteredDeptLines.map((line: string, i: number) => (
+                                           <div key={i} style={{ fontSize: '12px', color: theme.headerText || '#0d7377', fontWeight: 600, lineHeight: '1.9' }}>{line}</div>
+                                         ))}
+                                         {personalInfo.school && (
+                                           <div style={{ fontSize: '12px', color: theme.headerText || '#0d7377', fontWeight: 600, lineHeight: '1.9' }}>مدرسة: {personalInfo.school}</div>
                                         )}
                                       </td>
                                       <td style={{ width: '50%', verticalAlign: 'middle', textAlign: 'left', padding: '0' }}>
@@ -3212,8 +3238,8 @@ export default function PerformanceEvidence() {
                                           )}
                                         </div>
                                         <div style={{ textAlign: 'left', marginTop: '4px' }}>
-                                          {personalInfo.semester && <div style={{ fontSize: '11px', color: '#1a3a5c', fontWeight: 600, lineHeight: '1.7' }}>الفصل الدراسي: {personalInfo.semester}</div>}
-                                          {personalInfo.year && <div style={{ fontSize: '11px', color: '#1a3a5c', fontWeight: 600, lineHeight: '1.7' }}>العام الدراسي: {personalInfo.year}</div>}
+{personalInfo.semester && <div style={{ fontSize: '11px', color: theme.headerText || '#0d7377', fontWeight: 600, lineHeight: '1.7' }}>الفصل الدراسي: {personalInfo.semester}</div>}
+                                           {personalInfo.year && <div style={{ fontSize: '11px', color: theme.headerText || '#0d7377', fontWeight: 600, lineHeight: '1.7' }}>العام الدراسي: {personalInfo.year}</div>}
                                         </div>
                                       </td>
                                     </tr>
@@ -3238,10 +3264,10 @@ export default function PerformanceEvidence() {
                                 <tr>
                                   <td style={{ width: '35%', verticalAlign: 'middle', textAlign: 'right', padding: '0' }}>
                                     {allDeptLines.map((line: string, i: number) => (
-                                      <div key={i} style={{ fontSize: '13px', color: '#1a3a5c', fontWeight: 700, lineHeight: '2.0' }}>{line}</div>
-                                    ))}
-                                    {personalInfo.school && (
-                                      <div style={{ fontSize: '13px', color: '#1a3a5c', fontWeight: 700, lineHeight: '2.0' }}>{personalInfo.school}</div>
+<div key={i} style={{ fontSize: '13px', color: theme.headerText || '#0d7377', fontWeight: 700, lineHeight: '2.0' }}>{line}</div>
+                                     ))}
+                                     {personalInfo.school && (
+                                       <div style={{ fontSize: '13px', color: theme.headerText || '#0d7377', fontWeight: 700, lineHeight: '2.0' }}>{personalInfo.school}</div>
                                     )}
                                   </td>
                                   <td style={{ width: '30%', verticalAlign: 'middle', textAlign: 'center', padding: '0' }}>
@@ -3769,6 +3795,11 @@ export default function PerformanceEvidence() {
                 {isExporting ? <Loader2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 animate-spin" /> : <Download className="w-3.5 h-3.5 sm:w-4 sm:h-4" />}
                 <span className="hidden sm:inline">{isExporting ? (pdfProgress.total > 0 ? `تصدير ${pdfProgress.current}/${pdfProgress.total}` : 'جاري التصدير...') : 'تحميل PDF'}</span>
                 <span className="sm:hidden">PDF</span>
+              </Button>
+              <Button size="sm" variant="outline" onClick={handleExportDocx} disabled={isExportingDocx} className="gap-1 sm:gap-1.5 text-xs sm:text-sm h-8 sm:h-9">
+                {isExportingDocx ? <Loader2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 animate-spin" /> : <FileText className="w-3.5 h-3.5 sm:w-4 sm:h-4" />}
+                <span className="hidden sm:inline">{isExportingDocx ? 'جاري التصدير...' : 'تحميل Word'}</span>
+                <span className="sm:hidden">Word</span>
               </Button>
               <Button size="sm" variant="outline" onClick={() => printElement('preview-content')} className="gap-1 sm:gap-1.5 text-xs sm:text-sm h-8 sm:h-9">
                 <Printer className="w-3.5 h-3.5 sm:w-4 sm:h-4" /><span className="hidden sm:inline">طباعة</span>

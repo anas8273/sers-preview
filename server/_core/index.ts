@@ -9,6 +9,7 @@ import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
 import { seedDefaultTemplates } from "../db";
 import { renderHtmlToPdf, closeBrowser } from "../pdf-renderer";
+import { renderHtmlToDocx } from "../docx-renderer";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -58,6 +59,25 @@ async function startServer() {
     } catch (err) {
       console.error('[export-pdf] Error:', err);
       res.status(500).json({ error: 'PDF generation failed' });
+    }
+  });
+
+  // Server-side DOCX export endpoint
+  app.post('/api/export-docx', async (req, res) => {
+    try {
+      const { html, filename } = req.body;
+      if (!html) {
+        res.status(400).json({ error: 'Missing html content' });
+        return;
+      }
+      const docxBuffer = await renderHtmlToDocx(html);
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+      res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(filename || 'document.docx')}`);
+      res.setHeader('Content-Length', docxBuffer.length.toString());
+      res.send(docxBuffer);
+    } catch (err) {
+      console.error('[export-docx] Error:', err);
+      res.status(500).json({ error: 'DOCX generation failed' });
     }
   });
 
