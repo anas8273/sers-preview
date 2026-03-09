@@ -3055,7 +3055,8 @@ export default function PerformanceEvidence() {
                     <div className="pdf-page" style={{
                       background: bodyBg,
                       width: '210mm',
-                      minHeight: '297mm',
+                      height: '297mm',
+                      overflow: 'hidden' as const,
                       margin: '0 auto',
                       border: `2px solid ${theme.borderColor || '#0d7377'}`,
                       position: 'relative' as const,
@@ -3088,7 +3089,7 @@ export default function PerformanceEvidence() {
                       )}
 
                       {/* ========== المحتوى الرئيسي ========== */}
-                      <div style={{ flex: 1, display: 'flex', flexDirection: 'column' as const, minWidth: 0 }}>
+                      <div style={{ flex: 1, display: 'flex', flexDirection: 'column' as const, minWidth: 0, minHeight: 0 }}>
 
                       {/* ========== الترويسة الرسمية ========== */}
                       <div style={{
@@ -3228,8 +3229,7 @@ export default function PerformanceEvidence() {
                         </table>
                       </div>
 
-                      {/* ========== مساحة مرنة لملء الصفحة ========== */}
-                      <div style={{ flex: 1 }} />
+                      {/* ========== مساحة مرنة - الفوتر يستخدم marginTop: auto ========== */}
 
                       {/* ========== الفوتر ========== */}
                       <div style={{
