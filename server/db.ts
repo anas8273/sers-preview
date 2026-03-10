@@ -304,47 +304,22 @@ export async function seedDefaultTemplates() {
     ...overrides,
   });
 
-  // === 3 قوالب بألوان الهوية البصرية الرسمية لوزارة التعليم (Teal #0097A7 + Dark Teal #004D5A) ===
+  // === قالب واحد فقط في DB (بطاقات - شريط جانبي) ===
+  // القوالب الأساسية (ترويسة بيضاء، ترويسة داكنة، خفيف حبر) مدمجة في الكود BUILTIN_THEMES
   // الإدارة يمكنها إضافة قوالب إضافية من لوحة التحكم
   const defaults: InsertPdfTemplate[] = [
-    // 1. رسمي - ترويسة داكنة + جدول
-    {
-      name: "رسمي - ترويسة داكنة",
-      description: "ترويسة تدرج Teal مع حقول جدول - الهوية البصرية الرسمية لوزارة التعليم",
-      headerBg: "linear-gradient(135deg, #004D5A, #0097A7)",
-      headerText: "#ffffff",
-      accent: "#0097A7",
-      borderColor: "#004D5A",
-      bodyBg: "#ffffff",
-      templateLayout: makeLayout({ layoutType: 'dark-header-table', fieldStyle: 'table', titleStyle: 'full-width', signatureStyle: 'boxed', footerStyle: 'gradient', coverStyle: 'gradient-center', sectionCoverStyle: 'full-gradient', coverAccent2: '#26C6DA' }),
-      isDefault: true,
-      sortOrder: 1,
-    },
-    // 2. كلاسيكي - ترويسة بيضاء + حقول مسطرة
-    {
-      name: "كلاسيكي - ترويسة بيضاء",
-      description: "ترويسة بيضاء مع حقول مسطرة وعنوان مستدير - الهوية البصرية الرسمية",
-      headerBg: "#ffffff",
-      headerText: "#004D5A",
-      accent: "#0097A7",
-      borderColor: "#0097A7",
-      bodyBg: "#ffffff",
-      templateLayout: makeLayout({ layoutType: 'white-header-classic', fieldStyle: 'underlined', titleStyle: 'rounded', signatureStyle: 'lined', footerStyle: 'gradient', coverStyle: 'split-left', sectionCoverStyle: 'left-stripe', coverAccent2: '#26C6DA' }),
-      isDefault: false,
-      sortOrder: 2,
-    },
-    // 3. بطاقات - شريط جانبي + بطاقات
+    // بطاقات - شريط جانبي + بطاقات
     {
       name: "بطاقات - شريط جانبي",
       description: "شريط جانبي ملون مع حقول بطاقات - الهوية البصرية الرسمية",
       headerBg: "#ffffff",
-      headerText: "#004D5A",
-      accent: "#0097A7",
-      borderColor: "#0097A7",
+      headerText: "#0d7377",
+      accent: "#0d7377",
+      borderColor: "#0a5c5f",
       bodyBg: "#f8fafb",
-      templateLayout: makeLayout({ layoutType: 'white-header-sidebar', fieldStyle: 'cards', titleStyle: 'badge', signatureStyle: 'stamped', footerStyle: 'gradient', coverStyle: 'diagonal', sectionCoverStyle: 'card-center', coverAccent2: '#26C6DA' }),
+      templateLayout: makeLayout({ layoutType: 'white-header-sidebar', fieldStyle: 'cards', titleStyle: 'badge', signatureStyle: 'stamped', footerStyle: 'gradient', coverStyle: 'diagonal', sectionCoverStyle: 'card-center', coverAccent2: '#2ea87a' }),
       isDefault: false,
-      sortOrder: 3,
+      sortOrder: 1,
     },
   ];
   

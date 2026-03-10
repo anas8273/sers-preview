@@ -1,7 +1,8 @@
 /*
- * شهادات الشكر والتقدير - صفحة تفاعلية كاملة
- * المستخدم يختار الثيم → يدخل البيانات → معاينة حية فورية → تصدير PDF / طباعة
- * الهوية البصرية: تدرج أخضر/فيروزي + شريط علوي + فوتر منحني
+ * شهادات الشكر والتقدير - إعادة بناء كاملة
+ * الهوية البصرية: إطار مزخرف + شعار وزارة التعليم + فوتر منحني
+ * 3 ثيمات فقط مختلفة تماماً (بدون تكرار)
+ * كل نوع شهادة له تنسيق مختلف
  */
 import { useState, useMemo } from "react";
 import { motion } from "framer-motion";
@@ -11,6 +12,7 @@ import { exportToPDF, printElement } from "@/lib/pdf-export";
 import { generateQRDataURL } from "@/lib/qr-utils";
 import { MoeLogo } from "@/components/MoeLogo";
 
+/* ═══ 3 ثيمات مختلفة تماماً (بدون تكرار) ═══ */
 const CERT_THEMES = [
   {
     id: "green-official",
@@ -23,18 +25,6 @@ const CERT_THEMES = [
     gradientStart: "#1a4d5e",
     gradientMid: "#0d7377",
     gradientEnd: "#2ea87a",
-  },
-  {
-    id: "dark-teal",
-    name: "التيل الداكن",
-    bg: "#f8fffe",
-    borderColor: "#1a4d5e",
-    headerColor: "#1a4d5e",
-    textColor: "#1a1a1a",
-    accentColor: "#0d7377",
-    gradientStart: "#0a3a4a",
-    gradientMid: "#1a4d5e",
-    gradientEnd: "#0d7377",
   },
   {
     id: "gold-elegant",
@@ -58,19 +48,7 @@ const CERT_THEMES = [
     accentColor: "#2563eb",
     gradientStart: "#1e3a8a",
     gradientMid: "#1e40af",
-    gradientEnd: "#2563eb",
-  },
-  {
-    id: "purple-royal",
-    name: "البنفسجي الملكي",
-    bg: "linear-gradient(135deg, #faf5ff 0%, #f3e8ff 50%, #faf5ff 100%)",
-    borderColor: "#6b21a8",
-    headerColor: "#581c87",
-    textColor: "#1a1a1a",
-    accentColor: "#9333ea",
-    gradientStart: "#581c87",
-    gradientMid: "#6b21a8",
-    gradientEnd: "#9333ea",
+    gradientEnd: "#3b82f6",
   },
 ];
 
@@ -80,7 +58,6 @@ const CERT_TYPES = [
   { id: "participation", title: "شهادة مشاركة", defaultText: "نشهد بمشاركتكم الفاعلة في" },
   { id: "training", title: "شهادة حضور دورة", defaultText: "نشهد بحضوركم وإتمامكم للدورة التدريبية" },
   { id: "student_excellence", title: "شهادة تفوق طالب", defaultText: "تقديراً لتفوقكم الدراسي وتميزكم" },
-  { id: "national", title: "شهادة مناسبة وطنية", defaultText: "بمناسبة اليوم الوطني السعودي" },
 ];
 
 export default function CertificateBuilder() {
@@ -112,17 +89,16 @@ export default function CertificateBuilder() {
   };
 
   const t = selectedTheme;
-  const gradientId = `certGrad-${t.id}`;
   const footerGradId = `certFooterGrad-${t.id}`;
 
   return (
     <div className="min-h-screen bg-[#F8FAFC]" dir="rtl">
       <div className="flex flex-col lg:flex-row min-h-screen">
-        {/* الشريط الجانبي - الإعدادات */}
+        {/* ═══ الشريط الجانبي - الإعدادات ═══ */}
         <aside className="lg:w-96 bg-white border-l border-gray-200 p-5 overflow-y-auto">
           <button type="button" onClick={() => navigate("/")} className="flex items-center gap-2 text-gray-500 hover:text-gray-700 mb-5">
             <ArrowLeft className="w-4 h-4" />
-            <span className="text-sm">العودة</span>
+            <span className="text-sm">العودة للرئيسية</span>
           </button>
 
           <h1 className="text-xl font-black text-gray-900 mb-1" style={{ fontFamily: "'Tajawal', sans-serif" }}>
@@ -146,9 +122,10 @@ export default function CertificateBuilder() {
                   }}
                   className={`px-3 py-2 rounded-lg text-xs font-medium transition-all border ${
                     selectedType.id === type.id
-                      ? "border-teal-500 bg-teal-50 text-teal-700"
+                      ? "shadow-sm"
                       : "border-gray-200 text-gray-600 hover:bg-gray-50"
                   }`}
+                  style={selectedType.id === type.id ? { borderColor: t.borderColor, backgroundColor: t.borderColor + "10", color: t.borderColor } : {}}
                 >
                   {type.title}
                 </button>
@@ -219,7 +196,8 @@ export default function CertificateBuilder() {
             <button
               onClick={handleExportPDF}
               disabled={isExporting}
-              className="flex-1 flex items-center justify-center gap-2 bg-teal-600 text-white px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-teal-700 transition-colors disabled:opacity-50"
+              className="flex-1 flex items-center justify-center gap-2 text-white px-4 py-2.5 rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+              style={{ backgroundColor: t.headerColor }}
             >
               <Download className="w-4 h-4" />
               {isExporting ? "جاري..." : "تحميل PDF"}
@@ -234,7 +212,7 @@ export default function CertificateBuilder() {
           </div>
         </aside>
 
-        {/* المعاينة الحية */}
+        {/* ═══ المعاينة الحية ═══ */}
         <main className="flex-1 p-6 flex items-center justify-center bg-gray-100 overflow-auto">
           <div
             id="cert-preview"
@@ -256,6 +234,29 @@ export default function CertificateBuilder() {
               className="absolute rounded"
               style={{ inset: '24px', border: `1px solid ${t.borderColor}40` }}
             />
+
+            {/* زخرفة الزوايا */}
+            {['top-right', 'top-left', 'bottom-right', 'bottom-left'].map((corner) => {
+              const isTop = corner.includes('top');
+              const isRight = corner.includes('right');
+              return (
+                <div
+                  key={corner}
+                  style={{
+                    position: 'absolute',
+                    [isTop ? 'top' : 'bottom']: '28px',
+                    [isRight ? 'right' : 'left']: '28px',
+                    width: '20px',
+                    height: '20px',
+                    borderTop: isTop ? `3px solid ${t.borderColor}` : 'none',
+                    borderBottom: !isTop ? `3px solid ${t.borderColor}` : 'none',
+                    borderRight: isRight ? `3px solid ${t.borderColor}` : 'none',
+                    borderLeft: !isRight ? `3px solid ${t.borderColor}` : 'none',
+                    zIndex: 5,
+                  }}
+                />
+              );
+            })}
 
             {/* المحتوى */}
             <div className="relative z-10 h-full flex flex-col items-center justify-between p-12 text-center">
@@ -340,7 +341,7 @@ export default function CertificateBuilder() {
               </div>
             </div>
 
-            {/* الفوتر المنحني - مطابق للهوية البصرية */}
+            {/* الفوتر المنحني */}
             <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, zIndex: 15 }}>
               <svg viewBox="0 0 800 40" preserveAspectRatio="none" style={{ width: '100%', height: '25px', display: 'block' }}>
                 <defs>

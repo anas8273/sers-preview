@@ -1,0 +1,70 @@
+{
+  "query": "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'pdf_templates' ORDER BY ORDINAL_POSITION;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 6C7x6f29RX1BcFf.7325488fde9e --database h34s4aPNVyHXdtjgZ7eNNf --execute SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'pdf_templates' ORDER BY ORDINAL_POSITION;",
+  "rows": [
+    {
+      "COLUMN_NAME": "id"
+    },
+    {
+      "COLUMN_NAME": "name"
+    },
+    {
+      "COLUMN_NAME": "description"
+    },
+    {
+      "COLUMN_NAME": "headerBg"
+    },
+    {
+      "COLUMN_NAME": "headerText"
+    },
+    {
+      "COLUMN_NAME": "accent"
+    },
+    {
+      "COLUMN_NAME": "borderColor"
+    },
+    {
+      "COLUMN_NAME": "bodyBg"
+    },
+    {
+      "COLUMN_NAME": "fontFamily"
+    },
+    {
+      "COLUMN_NAME": "coverImageUrl"
+    },
+    {
+      "COLUMN_NAME": "logoUrl"
+    },
+    {
+      "COLUMN_NAME": "isDefault"
+    },
+    {
+      "COLUMN_NAME": "isActive"
+    },
+    {
+      "COLUMN_NAME": "sortOrder"
+    },
+    {
+      "COLUMN_NAME": "createdBy"
+    },
+    {
+      "COLUMN_NAME": "createdAt"
+    },
+    {
+      "COLUMN_NAME": "updatedAt"
+    },
+    {
+      "COLUMN_NAME": "templateLayout"
+    },
+    {
+      "COLUMN_NAME": "shareToken"
+    },
+    {
+      "COLUMN_NAME": "isShared"
+    }
+  ],
+  "messages": [],
+  "stdout": "COLUMN_NAME\nid\nname\ndescription\nheaderBg\nheaderText\naccent\nborderColor\nbodyBg\nfontFamily\ncoverImageUrl\nlogoUrl\nisDefault\nisActive\nsortOrder\ncreatedBy\ncreatedAt\nupdatedAt\ntemplateLayout\nshareToken\nisShared\n",
+  "stderr": "",
+  "execution_time_ms": 51
+}

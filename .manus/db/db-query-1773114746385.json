@@ -1,0 +1,9 @@
+{
+  "query": "UPDATE pdf_templates SET name = 'رسمي داكن - حقول جدول', headerBg = 'linear-gradient(135deg, #1E3A5F 0%, #134E4A 100%)', headerText = '#ffffff', accent = '#0D9488', borderColor = '#134E4A' WHERE id = 420001;\nUPDATE pdf_templates SET name = 'كلاسيكي أبيض - حقول مسطرة', headerBg = '#ffffff', headerText = '#134E4A', accent = '#0D9488', borderColor = '#0D9488' WHERE id = 420002;\nUPDATE pdf_templates SET name = 'بطاقات - شريط جانبي', headerBg = '#ffffff', headerText = '#134E4A', accent = '#0D9488', borderColor = '#0D9488' WHERE id = 420003;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 6C7x6f29RX1BcFf.7325488fde9e --database h34s4aPNVyHXdtjgZ7eNNf --execute UPDATE pdf_templates SET name = 'رسمي داكن - حقول جدول', headerBg = 'linear-gradient(135deg, #1E3A5F 0%, #134E4A 100%)', headerText = '#ffffff', accent = '#0D9488', borderColor = '#134E4A' WHERE id = 420001;\nUPDATE pdf_templates SET name = 'كلاسيكي أبيض - حقول مسطرة', headerBg = '#ffffff', headerText = '#134E4A', accent = '#0D9488', borderColor = '#0D9488' WHERE id = 420002;\nUPDATE pdf_templates SET name = 'بطاقات - شريط جانبي', headerBg = '#ffffff', headerText = '#134E4A', accent = '#0D9488', borderColor = '#0D9488' WHERE id = 420003;",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 134
+}

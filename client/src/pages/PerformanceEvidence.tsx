@@ -3037,9 +3037,8 @@ export default function PerformanceEvidence() {
                           flex: (field.value?.length || 0) >= 80 ? '1 1 100%' : '1 1 calc(50% - 5px)',
                           background: '#fff',
                           borderRadius: '8px',
-                          border: `2px solid ${theme.accent}30`,
+                          border: `2px solid #a8dcd8`,
                           overflow: 'hidden',
-                          boxShadow: `0 2px 8px ${theme.accent}12`,
                         }}>
                           <div style={{
                             background: `linear-gradient(135deg, ${theme.accent}, ${theme.borderColor || theme.accent})`,
@@ -3059,7 +3058,7 @@ export default function PerformanceEvidence() {
                             lineHeight: '1.9',
                             whiteSpace: 'pre-wrap' as const,
                             minHeight: '45px',
-                            background: `${theme.accent}05`,
+                            background: '#ffffff',
                           }}>
                             {field.value || '....................'}
                           </div>
@@ -3069,34 +3068,34 @@ export default function PerformanceEvidence() {
                   </div>
                 );
               } else if (fStyle === 'fieldset') {
-                // نمط الحقول بإطار
+                // نمط الحقول بإطار - مطابق لصفحات 8,11 من الهوية البصرية
                 return (
                   <div style={{ padding: '16px 24px', flex: 1 }}>
                     {allFields.map((field) => (
                       <div key={field.id} style={{
-                        border: `2.5px solid ${theme.accent}55`,
-                        borderRadius: '10px',
+                        border: `1.5px solid #a8dcd8`,
+                        borderRadius: '8px',
                         marginBottom: '12px',
                         overflow: 'hidden',
                       }}>
                         <div style={{
-                          background: `${theme.accent}18`,
-                          borderBottom: `2px solid ${theme.accent}44`,
+                          background: theme.accent,
                           padding: '10px 18px',
                           fontSize: '14px',
                           fontWeight: 700,
-                          color: theme.accent,
+                          color: '#ffffff',
+                          letterSpacing: '0.3px',
                         }}>
                           {field.label}
                         </div>
                         <div style={{
-                          padding: '12px 18px',
+                          padding: '14px 18px',
                           fontSize: '14px',
                           color: '#1a1a1a',
                           lineHeight: '1.9',
                           whiteSpace: 'pre-wrap' as const,
                           minHeight: '45px',
-                          background: '#fff',
+                          background: '#ffffff',
                         }}>
                           {field.value || '....................'}
                         </div>
@@ -3105,13 +3104,13 @@ export default function PerformanceEvidence() {
                   </div>
                 );
               } else if (fStyle === 'underlined') {
-                // نمط الخط السفلي
+                // نمط الخط السفلي - مطابق لصفحات 9,10 من الهوية البصرية
                 return (
                   <div style={{ padding: '16px 24px', flex: 1 }}>
                     {allFields.map((field) => (
                       <div key={field.id} style={{
-                        borderBottom: `2px solid ${theme.accent}44`,
-                        padding: '12px 0',
+                        borderBottom: `1.5px solid #a8dcd8`,
+                        padding: '14px 0',
                         display: 'flex',
                         gap: '16px',
                         alignItems: (field.value?.length || 0) >= 80 ? 'flex-start' : 'center',
@@ -3121,7 +3120,7 @@ export default function PerformanceEvidence() {
                           fontSize: '14px',
                           fontWeight: 700,
                           color: theme.accent,
-                          minWidth: '110px',
+                          minWidth: '120px',
                           flexShrink: 0,
                         }}>
                           {field.label}:
@@ -3160,7 +3159,7 @@ export default function PerformanceEvidence() {
                           lineHeight: '1.9',
                           whiteSpace: 'pre-wrap' as const,
                           padding: '8px 0',
-                          borderBottom: '2px dotted #ccc',
+                          borderBottom: '1.5px dotted #a8dcd8',
                         }}>
                           {field.value || '....................'}
                         </div>
@@ -3172,7 +3171,7 @@ export default function PerformanceEvidence() {
                 // نمط الجدول الافتراضي (table)
                 return (
                   <div style={{ padding: '16px 24px', flex: 1, display: 'flex', flexDirection: 'column' as const }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse' as const, border: '2.5px solid ' + theme.accent + '55', flex: 1 }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse' as const, border: '2px solid #a8dcd8', flex: 1 }}>
                       <tbody>
                         {shortFields.length > 0 && (() => {
                           const rows: typeof shortFields[] = [];
@@ -3182,7 +3181,7 @@ export default function PerformanceEvidence() {
                               {row.map((field) => (
                                 <React.Fragment key={field.id}>
                                   <td style={{
-                                    border: '2px solid ' + theme.accent + '44',
+                                    border: '1.5px solid #a8dcd8',
                                     padding: '12px 16px',
                                     fontWeight: 700,
                                     fontSize: '14px',
@@ -3194,7 +3193,7 @@ export default function PerformanceEvidence() {
                                     {field.label}
                                   </td>
                                   <td style={{
-                                    border: '2px solid ' + theme.accent + '44',
+                                    border: '1.5px solid #a8dcd8',
                                     padding: '12px 16px',
                                     fontSize: '15px',
                                     color: '#1a1a1a',
@@ -3207,8 +3206,8 @@ export default function PerformanceEvidence() {
                               ))}
                               {row.length < 3 && Array.from({ length: 3 - row.length }).map((_, i) => (
                                 <React.Fragment key={`empty-${i}`}>
-                                  <td style={{ border: '2px solid ' + theme.accent + '44', padding: '12px 16px', background: theme.accent, width: '17%' }}></td>
-                                  <td style={{ border: '2px solid ' + theme.accent + '44', padding: '12px 16px', background: '#fff' }}></td>
+                                  <td style={{ border: '1.5px solid #a8dcd8', padding: '12px 16px', background: theme.accent, width: '17%' }}></td>
+                                  <td style={{ border: '1.5px solid #a8dcd8', padding: '12px 16px', background: '#fff' }}></td>
                                 </React.Fragment>
                               ))}
                             </tr>
@@ -3217,7 +3216,7 @@ export default function PerformanceEvidence() {
                         {longFields.map((field) => (
                           <tr key={field.id} style={{ height: longFields.length <= 2 ? '120px' : undefined }}>
                             <td style={{
-                              border: '2px solid ' + theme.accent + '44',
+                              border: '1.5px solid #a8dcd8',
                               padding: '12px 16px',
                               fontWeight: 700,
                               fontSize: '14px',
@@ -3230,7 +3229,7 @@ export default function PerformanceEvidence() {
                               {field.label}
                             </td>
                             <td colSpan={5} style={{
-                              border: '2px solid ' + theme.accent + '44',
+                              border: '1.5px solid #a8dcd8',
                               padding: '14px 18px',
                               fontSize: '15px',
                               lineHeight: '2.0',
@@ -3320,7 +3319,7 @@ export default function PerformanceEvidence() {
                     <div className="pdf-page" style={{
                       background: '#ffffff',
                       margin: '0 auto',
-                      border: `2px solid ${theme.borderColor || '#0d7377'}`,
+                      border: `2px solid #0d7377`,
                       position: 'relative' as const,
                       boxSizing: 'border-box' as const,
                       display: 'flex',
@@ -3516,12 +3515,12 @@ export default function PerformanceEvidence() {
                       {/* ========== شريط العنوان - مطابق للهوية البصرية ========== */}
                       {(() => {
                         const tStyle = theme.titleStyle || 'rounded';
-                        if (tStyle === 'rounded' && !isDarkHeader) {
-                          // نمط الإطار المدور الأخضر الفاتح (مطابق لصفحات 2,3 من PDF)
+                          if (tStyle === 'rounded' && !isDarkHeader) {
+                          // نمط الإطار المدور التيل الفاتح (مطابق لصفحات 2,3,7,9,10,11 من PDF)
                           return (
                             <div style={{ padding: '10px 28px', margin: '4px 0' }}>
                               <div style={{
-                                border: '2.5px solid #7ECDC0',
+                                border: '2px solid #8dd4d4',
                                 borderRadius: '22px',
                                 padding: '11px 24px',
                                 textAlign: 'center',
@@ -3534,13 +3533,13 @@ export default function PerformanceEvidence() {
                               </div>
                             </div>
                           );
-                        } else if (tStyle === 'full-width' || isDarkHeader) {
-                          // نمط الشريط الكامل مع إطار أخضر (مطابق لصفحات 4,5 من PDF)
+                          } else if (tStyle === 'full-width' || isDarkHeader) {
+                          // نمط الشريط الكامل مع إطار أخضر (مطابق لصفحات 4,5,6,8 من PDF)
                           return (
                             <div style={{ padding: '6px 20px', margin: '4px 0' }}>
                               <div style={{
-                                background: `linear-gradient(135deg, ${theme.titleBg || theme.accent}, ${theme.accent})`,
-                                border: '2.5px solid #5bb784',
+                                background: '#1a5c5e',
+                                border: '2px solid #3cc68a',
                                 borderRadius: '8px',
                                 color: 'white',
                                 padding: '12px 24px',
@@ -3590,8 +3589,8 @@ export default function PerformanceEvidence() {
                             الشواهد والأدلة ({allMediaEvidences.length})
                           </div>
                           <div style={{
-                            border: '2.5px solid ' + theme.accent + '44',
-                            borderTop: `3px solid ${theme.accent}`,
+                            border: '2px solid #a8dcd8',
+                            borderTop: `2.5px solid ${theme.accent}`,
                             padding: '16px',
                             display: 'flex',
                             justifyContent: 'center',
@@ -3686,17 +3685,19 @@ export default function PerformanceEvidence() {
                       )}
 
                       {/* ========== التوقيعات - مطابق للهوية البصرية ========== */}
-                      <div style={{ padding: '20px 32px 24px', marginTop: '16px' }}>
+                      <div style={{ padding: '20px 32px 28px', marginTop: '16px' }}>
                         <table style={{ width: '100%', borderCollapse: 'collapse' as const }}>
                           <tbody>
                             <tr>
                               <td style={{ width: '50%', textAlign: 'right', padding: '0 20px', verticalAlign: 'bottom' }}>
-                                <div style={{ fontSize: '16px', fontWeight: 800, color: '#1a1a1a', marginBottom: '4px' }}>التنفيذ: أ/ {personalInfo.name || '...................'}</div>
-                                <div style={{ width: '180px', borderBottom: '3px dotted #333', marginTop: '20px' }} />
+                                <div style={{ fontSize: '15px', fontWeight: 800, color: '#1a1a1a', marginBottom: '6px' }}>التنفيذ: أ/ {personalInfo.name || '..............................'}</div>
+                                <div style={{ fontSize: '13px', color: '#666', marginBottom: '4px' }}>التوقيع:</div>
+                                <div style={{ width: '200px', borderBottom: `2.5px dotted ${theme.accent}`, marginTop: '18px' }} />
                               </td>
                               <td style={{ width: '50%', textAlign: 'left', padding: '0 20px', verticalAlign: 'bottom' }}>
-                                <div style={{ fontSize: '16px', fontWeight: 800, color: '#1a1a1a', marginBottom: '4px' }}>{personalInfo.evaluatorRole || 'مديرة المدرسة'}: أ/ {personalInfo.evaluator || '...................'}</div>
-                                <div style={{ width: '180px', borderBottom: '3px dotted #333', marginTop: '20px', marginLeft: 'auto' }} />
+                                <div style={{ fontSize: '15px', fontWeight: 800, color: '#1a1a1a', marginBottom: '6px' }}>{personalInfo.evaluatorRole || 'مديرة المدرسة'}: أ/ {personalInfo.evaluator || '..............................'}</div>
+                                <div style={{ fontSize: '13px', color: '#666', marginBottom: '4px' }}>التوقيع:</div>
+                                <div style={{ width: '200px', borderBottom: `2.5px dotted ${theme.accent}`, marginTop: '18px', marginLeft: 'auto' }} />
                               </td>
                             </tr>
                           </tbody>

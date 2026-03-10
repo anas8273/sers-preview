@@ -1,7 +1,8 @@
 /*
- * أغلفة وفواصل تفاعلية
- * المستخدم يختار نوع الغلاف → يدخل البيانات → معاينة حية → تصدير PDF
- * الهوية البصرية: تدرج أخضر/فيروزي + شريط علوي + فوتر منحني
+ * أغلفة وفواصل تفاعلية - إعادة بناء كاملة
+ * الهوية البصرية: ترويسة رسمية + مربع عنوان + فوتر منحني
+ * كل نوع غلاف له تصميم مختلف فعلياً (ليس فقط تغيير ألوان)
+ * حذف الثيمات المكررة - 3 ثيمات فقط مختلفة تماماً
  */
 import { useState, useMemo } from "react";
 import { motion } from "framer-motion";
@@ -20,6 +21,7 @@ const COVER_TYPES = [
   { id: "index", title: "فهرس", icon: "📇" },
 ];
 
+/* ═══ 3 ثيمات مختلفة تماماً (بدون تكرار) ═══ */
 const COVER_THEMES = [
   {
     id: "sers-official",
@@ -33,45 +35,23 @@ const COVER_THEMES = [
     gradientEnd: "#2ea87a",
   },
   {
-    id: "sers-dark",
-    name: "التيل الداكن",
-    primary: "#1a4d5e",
-    secondary: "#e8f5f3",
-    accent: "#0d7377",
-    bg: "#f8fffe",
-    gradientStart: "#0a3a4a",
-    gradientMid: "#1a4d5e",
-    gradientEnd: "#0d7377",
-  },
-  {
-    id: "blue",
-    name: "أزرق كلاسيكي",
+    id: "blue-modern",
+    name: "أزرق عصري",
     primary: "#1e3a8a",
     secondary: "#dbeafe",
     accent: "#2563eb",
-    bg: "#eff6ff",
+    bg: "#f8faff",
     gradientStart: "#1e3a8a",
     gradientMid: "#1e40af",
-    gradientEnd: "#2563eb",
+    gradientEnd: "#3b82f6",
   },
   {
-    id: "purple",
-    name: "بنفسجي أنيق",
-    primary: "#581c87",
-    secondary: "#f3e8ff",
-    accent: "#9333ea",
-    bg: "#faf5ff",
-    gradientStart: "#581c87",
-    gradientMid: "#6b21a8",
-    gradientEnd: "#9333ea",
-  },
-  {
-    id: "amber",
-    name: "ذهبي دافئ",
+    id: "gold-elegant",
+    name: "ذهبي أنيق",
     primary: "#78350f",
     secondary: "#fef3c7",
     accent: "#d97706",
-    bg: "#fffbeb",
+    bg: "#fffdf7",
     gradientStart: "#78350f",
     gradientMid: "#92400e",
     gradientEnd: "#d97706",
@@ -113,11 +93,11 @@ export default function CoverBuilder() {
   return (
     <div className="min-h-screen bg-[#F8FAFC]" dir="rtl">
       <div className="flex flex-col lg:flex-row min-h-screen">
-        {/* الإعدادات */}
+        {/* ═══ الإعدادات ═══ */}
         <aside className="lg:w-96 bg-white border-l border-gray-200 p-5 overflow-y-auto">
           <button type="button" onClick={() => navigate("/")} className="flex items-center gap-2 text-gray-500 hover:text-gray-700 mb-5">
             <ArrowLeft className="w-4 h-4" />
-            <span className="text-sm">العودة</span>
+            <span className="text-sm">العودة للرئيسية</span>
           </button>
 
           <h1 className="text-xl font-black text-gray-900 mb-1" style={{ fontFamily: "'Tajawal', sans-serif" }}>
@@ -134,8 +114,9 @@ export default function CoverBuilder() {
                   key={type.id}
                   onClick={() => setSelectedType(type)}
                   className={`px-2 py-3 rounded-lg text-center text-xs font-medium transition-all border ${
-                    selectedType.id === type.id ? "border-teal-500 bg-teal-50 text-teal-700" : "border-gray-200 text-gray-600 hover:bg-gray-50"
+                    selectedType.id === type.id ? "shadow-sm" : "border-gray-200 text-gray-600 hover:bg-gray-50"
                   }`}
+                  style={selectedType.id === type.id ? { borderColor: t.primary, backgroundColor: t.primary + "10", color: t.primary } : {}}
                 >
                   <div className="text-xl mb-1">{type.icon}</div>
                   {type.title}
@@ -207,7 +188,7 @@ export default function CoverBuilder() {
           </div>
 
           <div className="mt-5 flex gap-3">
-            <button type="button" onClick={handleExportPDF} disabled={isExporting} className="flex-1 flex items-center justify-center gap-2 bg-teal-600 text-white px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-teal-700 disabled:opacity-50">
+            <button type="button" onClick={handleExportPDF} disabled={isExporting} className="flex-1 flex items-center justify-center gap-2 text-white px-4 py-2.5 rounded-lg text-sm font-medium disabled:opacity-50" style={{ backgroundColor: t.primary }}>
               <Download className="w-4 h-4" />
               {isExporting ? "جاري..." : "تحميل PDF"}
             </button>
@@ -218,7 +199,7 @@ export default function CoverBuilder() {
           </div>
         </aside>
 
-        {/* المعاينة */}
+        {/* ═══ المعاينة ═══ */}
         <main className="flex-1 p-6 flex items-center justify-center bg-gray-100 overflow-auto">
           <div
             id="cover-preview"
@@ -230,13 +211,16 @@ export default function CoverBuilder() {
             }}
           >
             {selectedType.id === "divider" ? (
-              /* فاصل - مع هوية بصرية */
+              /* ═══ فاصل ═══ */
               <div className="h-full flex flex-col relative">
-                {/* شريط علوي بتدرج */}
                 <div style={{ height: '5px', background: `linear-gradient(to left, ${t.gradientStart}, ${t.gradientMid}, ${t.gradientEnd})` }} />
                 <div className="flex-1 flex items-center justify-center relative">
+                  {/* إطار مزدوج */}
                   <div className="absolute rounded-lg" style={{ inset: '24px', border: `3px solid ${t.primary}` }} />
                   <div className="absolute rounded" style={{ inset: '32px', border: `1px solid ${t.accent}40` }} />
+                  {/* زخرفة جانبية */}
+                  <div style={{ position: 'absolute', top: '40px', right: '40px', bottom: '40px', width: '6px', borderRadius: '3px', background: `linear-gradient(to bottom, ${t.gradientStart}, ${t.gradientEnd})` }} />
+                  <div style={{ position: 'absolute', top: '40px', left: '40px', bottom: '40px', width: '6px', borderRadius: '3px', background: `linear-gradient(to bottom, ${t.gradientEnd}, ${t.gradientStart})` }} />
                   <div className="text-center z-10">
                     <div className="w-20 h-1 rounded-full mx-auto mb-4" style={{ background: `linear-gradient(to left, ${t.gradientStart}, ${t.gradientEnd})` }} />
                     <h1 className="text-4xl font-black mb-2" style={{ color: t.primary, fontFamily: "'Tajawal', sans-serif" }}>
@@ -269,8 +253,77 @@ export default function CoverBuilder() {
                   </div>
                 </div>
               </div>
+            ) : selectedType.id === "index" ? (
+              /* ═══ فهرس - تصميم مختلف تماماً ═══ */
+              <div className="h-full flex flex-col">
+                <div style={{ height: '5px', background: `linear-gradient(to left, ${t.gradientStart}, ${t.gradientMid}, ${t.gradientEnd})` }} />
+                {/* هيدر مصغر */}
+                <div style={{ padding: '12px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: `2px solid ${t.primary}20` }}>
+                  <div style={{ textAlign: 'right' }}>
+                    <div style={{ fontSize: '11px', color: t.primary, fontWeight: 700 }}>وزارة التعليم</div>
+                    <div style={{ fontSize: '10px', color: t.primary, fontWeight: 600 }}>{formData.school || 'اسم المدرسة'}</div>
+                  </div>
+                  <MoeLogo variant="original" height={45} />
+                </div>
+                {/* عنوان الفهرس */}
+                <div style={{ padding: '12px 24px', textAlign: 'center' }}>
+                  <div style={{ border: `2px solid ${t.accent}60`, borderRadius: '12px', padding: '8px 20px', display: 'inline-block' }}>
+                    <h1 style={{ fontSize: '20px', fontWeight: 900, color: t.primary, fontFamily: "'Tajawal', sans-serif", margin: 0 }}>
+                      {formData.title || "الفهرس"}
+                    </h1>
+                  </div>
+                </div>
+                {/* جدول الفهرس */}
+                <div style={{ padding: '0 24px', flex: 1 }}>
+                  <table style={{ width: '100%', fontSize: '12px', borderCollapse: 'collapse' }}>
+                    <thead>
+                      <tr style={{ background: `linear-gradient(to left, ${t.gradientStart}, ${t.gradientMid})`, color: '#fff' }}>
+                        <th style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 700, width: '40px' }}>م</th>
+                        <th style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 700 }}>الموضوع</th>
+                        <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 700, width: '60px' }}>الصفحة</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {Array.from({ length: 15 }, (_, i) => (
+                        <tr key={i} style={{ backgroundColor: i % 2 === 0 ? '#fff' : `${t.secondary}` }}>
+                          <td style={{ padding: '6px 12px', border: `1px solid ${t.primary}15`, textAlign: 'center', fontWeight: 700, color: t.primary }}>{i + 1}</td>
+                          <td style={{ padding: '6px 12px', border: `1px solid ${t.primary}15`, color: '#666' }}>
+                            {i === 0 ? '........................................' : '........................................'}
+                          </td>
+                          <td style={{ padding: '6px 12px', border: `1px solid ${t.primary}15`, textAlign: 'center', color: '#999' }}>
+                            ......
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {/* فوتر */}
+                <div>
+                  <svg viewBox="0 0 800 40" preserveAspectRatio="none" style={{ width: '100%', height: '20px', display: 'block' }}>
+                    <defs>
+                      <linearGradient id={`${footerGradId}-idx`} x1="0" y1="0" x2="1" y2="0">
+                        <stop offset="0%" stopColor={t.gradientEnd} />
+                        <stop offset="50%" stopColor={t.gradientMid} />
+                        <stop offset="100%" stopColor={t.gradientStart} />
+                      </linearGradient>
+                    </defs>
+                    <path d="M0,40 L0,28 C150,6 400,0 800,14 L800,40 Z" fill={`url(#${footerGradId}-idx)`} />
+                  </svg>
+                  <div style={{
+                    background: `linear-gradient(to left, ${t.gradientStart}, ${t.gradientMid}, ${t.gradientEnd})`,
+                    padding: '4px 20px 6px',
+                    fontSize: '9px',
+                    color: '#fff',
+                    textAlign: 'center',
+                    marginTop: '-1px',
+                  }}>
+                    SERS - نظام السجلات التعليمية الذكي
+                  </div>
+                </div>
+              </div>
             ) : (
-              /* غلاف - مع هوية بصرية كاملة */
+              /* ═══ غلاف عادي (ملف إنجاز / مادة / خطة / تقرير) ═══ */
               <div className="h-full flex flex-col relative">
                 {/* شريط علوي بتدرج */}
                 <div style={{ height: '5px', background: `linear-gradient(to left, ${t.gradientStart}, ${t.gradientMid}, ${t.gradientEnd})` }} />
@@ -284,7 +337,7 @@ export default function CoverBuilder() {
                       <div style={{ fontSize: '11px', color: t.primary, fontWeight: 600, lineHeight: '1.7' }}>{formData.school || "اسم المدرسة"}</div>
                     </div>
                     {/* خط فاصل عمودي */}
-                    <div style={{ width: '2px', height: '45px', background: '#5bb784', margin: '0 12px' }} />
+                    <div style={{ width: '2px', height: '45px', background: t.accent, margin: '0 12px', opacity: 0.5 }} />
                     <MoeLogo variant="original" height={60} />
                   </div>
                 </div>

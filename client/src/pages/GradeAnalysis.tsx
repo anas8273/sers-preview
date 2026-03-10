@@ -1,12 +1,14 @@
 /*
  * تحليل النتائج والدرجات - صفحة تفاعلية كاملة
+ * الهوية البصرية الكاملة: ترويسة رسمية + مربع عنوان بإطار أخضر + جداول بترويسة متدرجة + فوتر منحني
  * المستخدم يدخل بيانات المادة والطلاب → رسوم بيانية تلقائية → تقرير → تصدير PDF
  */
 import { useState, useMemo } from "react";
 import { motion } from "framer-motion";
-import { ArrowLeft, Download, Printer, Plus, Trash2, BarChart3, PieChart, TrendingUp, Users } from "lucide-react";
+import { ArrowLeft, Download, Printer, Plus, Trash2, BarChart3, PieChart, TrendingUp, Users, Eye } from "lucide-react";
 import { useLocation } from "wouter";
 import { exportToPDF, printElement } from "@/lib/pdf-export";
+import { OfficialHeader } from "@/components/OfficialHeader";
 
 interface Student {
   id: string;
@@ -27,6 +29,8 @@ export default function GradeAnalysis() {
     semester: "الأول",
     year: "1446-1447",
     maxScore: 100,
+    school: "",
+    department: "",
   });
 
   const [students, setStudents] = useState<Student[]>([
@@ -84,11 +88,11 @@ export default function GradeAnalysis() {
 
   const getGradeColor = (score: number) => {
     const pct = (score / (subjectInfo.maxScore || 100)) * 100;
-    if (pct >= 90) return "#16A34A";
-    if (pct >= 80) return "#2563EB";
-    if (pct >= 70) return "#CA8A04";
-    if (pct >= 60) return "#EA580C";
-    return "#DC2626";
+    if (pct >= 90) return "#059669";
+    if (pct >= 80) return "#0d7377";
+    if (pct >= 70) return "#d97706";
+    if (pct >= 60) return "#ea580c";
+    return "#dc2626";
   };
 
   const getGradeLabel = (score: number) => {
@@ -104,6 +108,17 @@ export default function GradeAnalysis() {
     setIsExporting(true);
     await exportToPDF("analysis-report", `تحليل_نتائج_${subjectInfo.subject || "مادة"}.pdf`);
     setIsExporting(false);
+  };
+
+  // ألوان الهوية البصرية
+  const C = {
+    tealDark: "#1a4d5e",
+    teal: "#0d7377",
+    green: "#2ea87a",
+    greenLight: "#7ECDC0",
+    separator: "#5bb784",
+    bg: "#f0faf9",
+    border: "#0d737720",
   };
 
   return (
@@ -122,29 +137,33 @@ export default function GradeAnalysis() {
             <p className="text-sm text-gray-500">أدخل بيانات المادة والدرجات → تحليل تلقائي مع رسوم بيانية</p>
           </div>
           {stats && (
-            <div className="flex gap-2">
-              <button
-                onClick={() => setShowReport(!showReport)}
-                className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
-              >
-                <BarChart3 className="w-4 h-4" />
-                {showReport ? "إخفاء التقرير" : "عرض التقرير"}
-              </button>
-            </div>
+            <button
+              onClick={() => setShowReport(!showReport)}
+              className="flex items-center gap-2 text-white px-5 py-2.5 rounded-lg text-sm font-bold shadow-lg hover:shadow-xl transition-all"
+              style={{ backgroundColor: C.teal }}
+            >
+              {showReport ? <ArrowLeft className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              {showReport ? "العودة للإدخال" : "معاينة التقرير"}
+            </button>
           )}
         </div>
 
         {!showReport ? (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             {/* بيانات المادة */}
-            <div className="bg-white rounded-xl border border-gray-200 p-5">
-              <h2 className="font-bold text-gray-800 mb-4" style={{ fontFamily: "'Tajawal', sans-serif" }}>بيانات المادة</h2>
+            <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
+              <h2 className="font-bold text-gray-800 mb-4 flex items-center gap-2" style={{ fontFamily: "'Tajawal', sans-serif" }}>
+                <div className="w-1.5 h-5 rounded-full" style={{ backgroundColor: C.teal }} />
+                بيانات المادة
+              </h2>
               <div className="space-y-3">
                 {[
                   { key: "subject", label: "المادة", placeholder: "رياضيات / علوم / لغة عربية" },
                   { key: "teacher", label: "المعلم", placeholder: "اسم المعلم" },
                   { key: "grade", label: "الصف", placeholder: "الصف الأول المتوسط" },
                   { key: "section", label: "الشعبة", placeholder: "أ / ب / ج" },
+                  { key: "school", label: "المدرسة", placeholder: "اسم المدرسة" },
+                  { key: "department", label: "إدارة التعليم", placeholder: "إدارة تعليم الرياض" },
                   { key: "semester", label: "الفصل", placeholder: "الأول" },
                   { key: "year", label: "العام", placeholder: "1446-1447" },
                 ].map((field) => (
@@ -155,7 +174,8 @@ export default function GradeAnalysis() {
                       value={(subjectInfo as any)[field.key]}
                       onChange={(e) => setSubjectInfo((prev) => ({ ...prev, [field.key]: e.target.value }))}
                       placeholder={field.placeholder}
-                      className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
+                      className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:border-teal-400"
+                      style={{ "--tw-ring-color": C.teal + "30" } as any}
                     />
                   </div>
                 ))}
@@ -165,7 +185,7 @@ export default function GradeAnalysis() {
                     type="number"
                     value={subjectInfo.maxScore}
                     onChange={(e) => setSubjectInfo((prev) => ({ ...prev, maxScore: parseInt(e.target.value) || 100 }))}
-                    className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
+                    className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:border-teal-400"
                   />
                 </div>
               </div>
@@ -173,23 +193,26 @@ export default function GradeAnalysis() {
               {/* إحصائيات سريعة */}
               {stats && (
                 <div className="mt-5 pt-5 border-t border-gray-100">
-                  <h3 className="font-bold text-gray-800 mb-3 text-sm">إحصائيات سريعة</h3>
+                  <h3 className="font-bold text-gray-800 mb-3 text-sm flex items-center gap-2">
+                    <div className="w-1.5 h-4 rounded-full" style={{ backgroundColor: C.green }} />
+                    إحصائيات سريعة
+                  </h3>
                   <div className="grid grid-cols-2 gap-2">
-                    <div className="bg-teal-50 rounded-lg p-3 text-center">
-                      <div className="text-lg font-black text-teal-700">{stats.avgPct}%</div>
-                      <div className="text-[10px] text-teal-600">المتوسط</div>
+                    <div className="rounded-lg p-3 text-center" style={{ backgroundColor: C.teal + "10" }}>
+                      <div className="text-lg font-black" style={{ color: C.teal }}>{stats.avgPct}%</div>
+                      <div className="text-[10px]" style={{ color: C.tealDark }}>المتوسط</div>
                     </div>
-                    <div className="bg-blue-50 rounded-lg p-3 text-center">
-                      <div className="text-lg font-black text-blue-700">{stats.passRate}%</div>
-                      <div className="text-[10px] text-blue-600">نسبة النجاح</div>
+                    <div className="rounded-lg p-3 text-center" style={{ backgroundColor: C.green + "10" }}>
+                      <div className="text-lg font-black" style={{ color: C.green }}>{stats.passRate}%</div>
+                      <div className="text-[10px]" style={{ color: C.tealDark }}>نسبة النجاح</div>
                     </div>
-                    <div className="bg-green-50 rounded-lg p-3 text-center">
-                      <div className="text-lg font-black text-green-700">{stats.highest}</div>
-                      <div className="text-[10px] text-green-600">أعلى درجة</div>
+                    <div className="rounded-lg p-3 text-center" style={{ backgroundColor: "#05966910" }}>
+                      <div className="text-lg font-black" style={{ color: "#059669" }}>{stats.highest}</div>
+                      <div className="text-[10px] text-gray-600">أعلى درجة</div>
                     </div>
-                    <div className="bg-red-50 rounded-lg p-3 text-center">
-                      <div className="text-lg font-black text-red-700">{stats.lowest}</div>
-                      <div className="text-[10px] text-red-600">أدنى درجة</div>
+                    <div className="rounded-lg p-3 text-center" style={{ backgroundColor: "#dc262610" }}>
+                      <div className="text-lg font-black text-red-600">{stats.lowest}</div>
+                      <div className="text-[10px] text-gray-600">أدنى درجة</div>
                     </div>
                   </div>
 
@@ -197,11 +220,11 @@ export default function GradeAnalysis() {
                   <div className="mt-4">
                     <h4 className="text-xs font-bold text-gray-600 mb-2">توزيع التقديرات</h4>
                     {[
-                      { label: "ممتاز (90+)", count: stats.excellent, color: "#16A34A", total: stats.total },
-                      { label: "جيد جداً (80-89)", count: stats.veryGood, color: "#2563EB", total: stats.total },
-                      { label: "جيد (70-79)", count: stats.good, color: "#CA8A04", total: stats.total },
-                      { label: "مقبول (60-69)", count: stats.pass, color: "#EA580C", total: stats.total },
-                      { label: "راسب (<60)", count: stats.fail, color: "#DC2626", total: stats.total },
+                      { label: "ممتاز (90+)", count: stats.excellent, color: "#059669", total: stats.total },
+                      { label: "جيد جداً (80-89)", count: stats.veryGood, color: C.teal, total: stats.total },
+                      { label: "جيد (70-79)", count: stats.good, color: "#d97706", total: stats.total },
+                      { label: "مقبول (60-69)", count: stats.pass, color: "#ea580c", total: stats.total },
+                      { label: "راسب (<60)", count: stats.fail, color: "#dc2626", total: stats.total },
                     ].map((item) => (
                       <div key={item.label} className="flex items-center gap-2 mb-1.5">
                         <div className="w-3 h-3 rounded-sm shrink-0" style={{ backgroundColor: item.color }} />
@@ -218,27 +241,28 @@ export default function GradeAnalysis() {
             </div>
 
             {/* جدول الطلاب */}
-            <div className="lg:col-span-2 bg-white rounded-xl border border-gray-200 p-5">
+            <div className="lg:col-span-2 bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
               <div className="flex items-center justify-between mb-4">
-                <h2 className="font-bold text-gray-800" style={{ fontFamily: "'Tajawal', sans-serif" }}>
+                <h2 className="font-bold text-gray-800 flex items-center gap-2" style={{ fontFamily: "'Tajawal', sans-serif" }}>
+                  <div className="w-1.5 h-5 rounded-full" style={{ backgroundColor: C.teal }} />
                   درجات الطلاب ({students.length})
                 </h2>
-                <button type="button" onClick={addStudent} className="flex items-center gap-1 text-sm text-blue-600 hover:text-blue-700 font-medium">
+                <button type="button" onClick={addStudent} className="flex items-center gap-1 text-sm font-medium" style={{ color: C.teal }}>
                   <Plus className="w-4 h-4" />
                   إضافة طالب
                 </button>
               </div>
 
-              <div className="overflow-x-auto">
+              <div className="overflow-x-auto rounded-lg border border-gray-200">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="bg-gray-50">
-                      <th className="p-2 text-right text-xs font-bold text-gray-600 w-10">م</th>
-                      <th className="p-2 text-right text-xs font-bold text-gray-600">اسم الطالب</th>
-                      <th className="p-2 text-center text-xs font-bold text-gray-600 w-24">الدرجة</th>
-                      <th className="p-2 text-center text-xs font-bold text-gray-600 w-16">النسبة</th>
-                      <th className="p-2 text-center text-xs font-bold text-gray-600 w-20">التقدير</th>
-                      <th className="p-2 w-10"></th>
+                    <tr style={{ background: `linear-gradient(to left, ${C.tealDark}, ${C.teal})` }}>
+                      <th className="p-2.5 text-right text-xs font-bold text-white w-10">م</th>
+                      <th className="p-2.5 text-right text-xs font-bold text-white">اسم الطالب</th>
+                      <th className="p-2.5 text-center text-xs font-bold text-white w-24">الدرجة</th>
+                      <th className="p-2.5 text-center text-xs font-bold text-white w-16">النسبة</th>
+                      <th className="p-2.5 text-center text-xs font-bold text-white w-20">التقدير</th>
+                      <th className="p-2.5 w-10"></th>
                     </tr>
                   </thead>
                   <tbody>
@@ -249,7 +273,7 @@ export default function GradeAnalysis() {
                           key={student.id}
                           initial={{ opacity: 0 }}
                           animate={{ opacity: 1 }}
-                          className="border-b border-gray-100 hover:bg-gray-50"
+                          className={`border-b border-gray-100 hover:bg-gray-50 ${index % 2 === 1 ? "bg-gray-50/50" : ""}`}
                         >
                           <td className="p-2 text-center text-gray-500 font-medium">{index + 1}</td>
                           <td className="p-2">
@@ -258,7 +282,7 @@ export default function GradeAnalysis() {
                               value={student.name}
                               onChange={(e) => updateStudent(student.id, "name", e.target.value)}
                               placeholder="اسم الطالب..."
-                              className="w-full px-2 py-1.5 rounded border border-gray-200 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400"
+                              className="w-full px-2 py-1.5 rounded border border-gray-200 text-sm focus:outline-none focus:ring-1 focus:border-teal-400"
                             />
                           </td>
                           <td className="p-2">
@@ -269,7 +293,7 @@ export default function GradeAnalysis() {
                               placeholder="0"
                               min={0}
                               max={subjectInfo.maxScore}
-                              className="w-full px-2 py-1.5 rounded border border-gray-200 text-sm text-center focus:outline-none focus:ring-1 focus:ring-blue-400"
+                              className="w-full px-2 py-1.5 rounded border border-gray-200 text-sm text-center focus:outline-none focus:ring-1 focus:border-teal-400"
                             />
                           </td>
                           <td className="p-2 text-center">
@@ -304,7 +328,7 @@ export default function GradeAnalysis() {
               </div>
 
               <div className="mt-4 flex gap-3">
-                <button type="button" onClick={addStudent} className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700 bg-gray-50 px-4 py-2 rounded-lg">
+                <button type="button" onClick={addStudent} className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700 bg-gray-50 px-4 py-2 rounded-lg border border-gray-200">
                   <Plus className="w-4 h-4" />
                   إضافة 1 طالب
                 </button>
@@ -317,7 +341,7 @@ export default function GradeAnalysis() {
                     }));
                     setStudents((prev) => [...prev, ...newStudents]);
                   }}
-                  className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700 bg-gray-50 px-4 py-2 rounded-lg"
+                  className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700 bg-gray-50 px-4 py-2 rounded-lg border border-gray-200"
                 >
                   <Plus className="w-4 h-4" />
                   إضافة 5 طلاب
@@ -326,120 +350,233 @@ export default function GradeAnalysis() {
             </div>
           </div>
         ) : (
-          /* التقرير الكامل */
+          /* ═══════════ التقرير الكامل بالهوية البصرية ═══════════ */
           <div>
-            <div className="flex gap-3 mb-4">
-              <button type="button" onClick={() => setShowReport(false)} className="flex items-center gap-2 bg-gray-100 text-gray-700 px-4 py-2 rounded-lg text-sm">
+            <div className="flex gap-3 mb-4 flex-wrap">
+              <button type="button" onClick={() => setShowReport(false)} className="flex items-center gap-2 bg-white text-gray-700 px-4 py-2 rounded-lg text-sm border border-gray-200 shadow-sm">
                 <ArrowLeft className="w-4 h-4" />
                 العودة للإدخال
               </button>
-              <button type="button" onClick={handleExportPDF} disabled={isExporting} className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
+              <button type="button" onClick={handleExportPDF} disabled={isExporting} className="flex items-center gap-2 text-white px-5 py-2 rounded-lg text-sm font-bold shadow-lg disabled:opacity-50" style={{ backgroundColor: C.teal }}>
                 <Download className="w-4 h-4" />
-                {isExporting ? "جاري..." : "تحميل PDF"}
+                {isExporting ? "جاري التصدير..." : "تحميل PDF"}
               </button>
-              <button type="button" onClick={() => printElement("analysis-report")} className="flex items-center gap-2 bg-gray-100 text-gray-700 px-4 py-2 rounded-lg text-sm">
+              <button type="button" onClick={() => printElement("analysis-report")} className="flex items-center gap-2 bg-white text-gray-700 px-4 py-2 rounded-lg text-sm border border-gray-200 shadow-sm">
                 <Printer className="w-4 h-4" />
                 طباعة
               </button>
             </div>
 
             <div id="analysis-report" className="bg-white rounded-xl shadow-lg overflow-hidden" style={{ fontFamily: "'Cairo', 'Tajawal', sans-serif" }}>
-              {/* شريط علوي بتدرج */}
-              <div style={{ height: '5px', background: 'linear-gradient(to left, #1a4d5e, #0d7377, #2ea87a)' }} />
+              {/* ── شريط علوي بتدرج ── */}
+              <div style={{ height: '5px', background: `linear-gradient(to left, ${C.tealDark}, ${C.teal}, ${C.green})` }} />
 
-              {/* هيدر التقرير - مطابق للهوية البصرية */}
-              <div style={{ padding: '16px 28px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '2px solid #0d737720' }}>
-                <div style={{ textAlign: 'right' }}>
-                  <div style={{ fontSize: '11px', color: '#0d7377', fontWeight: 700 }}>وزارة التعليم</div>
-                  <div style={{ fontSize: '10px', color: '#1a4d5e', fontWeight: 600 }}>نظام السجلات التعليمية الذكي</div>
-                </div>
-                <div style={{ width: '2px', height: '35px', background: '#5bb784', margin: '0 12px' }} />
-                <div style={{ textAlign: 'left' }}>
-                  <div style={{ fontSize: '10px', color: '#666' }}>العام: {subjectInfo.year}</div>
-                  <div style={{ fontSize: '10px', color: '#666' }}>الفصل: {subjectInfo.semester}</div>
-                </div>
-              </div>
+              {/* ── الترويسة الرسمية ── */}
+              <OfficialHeader
+                deptLines={[
+                  "المملكة العربية السعودية",
+                  "وزارة التعليم",
+                  subjectInfo.department ? `الإدارة العامة للتعليم بـ ${subjectInfo.department}` : "الإدارة العامة للتعليم بـ ................",
+                ]}
+                schoolName={subjectInfo.school || undefined}
+                logoUrl="https://d2xsxph8kpxj0f.cloudfront.net/310519663047121386/h34s4aPNVyHXdtjgZ7eNNf/moe-logo_b9fec681.png"
+                variant="full"
+                accentColor={C.teal}
+                headerBg={`linear-gradient(135deg, ${C.tealDark} 0%, #0d5f61 50%, ${C.teal} 100%)`}
+                headerText="#ffffff"
+                borderColor={C.tealDark}
+              />
 
-              {/* مربع العنوان */}
-              <div style={{ padding: '12px 28px', textAlign: 'center' }}>
-                <div style={{ border: '2px solid #7ECDC0', borderRadius: '16px', padding: '10px 20px', display: 'inline-block' }}>
-                  <h1 className="text-xl font-black" style={{ color: '#1a4d5e' }}>تقرير تحليل نتائج الطلاب</h1>
+              {/* ── مربع العنوان بإطار أخضر ── */}
+              <div style={{ padding: '16px 28px 8px', textAlign: 'center' }}>
+                <div style={{
+                  border: `2px solid ${C.greenLight}`,
+                  borderRadius: '16px',
+                  padding: '10px 24px',
+                  display: 'inline-block',
+                  background: `${C.greenLight}08`,
+                }}>
+                  <h1 style={{ fontSize: '18px', fontWeight: 900, color: C.tealDark, fontFamily: "'Tajawal', sans-serif", margin: 0 }}>
+                    تقرير تحليل نتائج الطلاب
+                  </h1>
                 </div>
-                <p className="text-sm mt-2" style={{ color: '#666' }}>
+                <div style={{ marginTop: '6px', fontSize: '12px', color: '#666' }}>
                   {subjectInfo.subject || "المادة"} - {subjectInfo.grade || "الصف"} ({subjectInfo.section || "الشعبة"})
-                </p>
-                <p className="text-xs mt-1" style={{ color: '#999' }}>المعلم: {subjectInfo.teacher || "---"}</p>
+                </div>
               </div>
 
-              <div style={{ padding: '0 28px 28px' }}>
+              {/* ── بيانات المادة في حقول fieldset ── */}
+              <div style={{ padding: '0 28px 8px' }}>
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(4, 1fr)',
+                  gap: '8px',
+                }}>
+                  {[
+                    { label: "المعلم/ة", value: subjectInfo.teacher },
+                    { label: "المادة", value: subjectInfo.subject },
+                    { label: "الصف", value: subjectInfo.grade },
+                    { label: "الشعبة", value: subjectInfo.section },
+                    { label: "العام الدراسي", value: subjectInfo.year },
+                    { label: "الفصل الدراسي", value: subjectInfo.semester },
+                    { label: "الدرجة العظمى", value: String(subjectInfo.maxScore) },
+                    { label: "عدد الطلاب", value: stats ? String(stats.total) : "0" },
+                  ].map((item) => (
+                    <div key={item.label} style={{
+                      border: `1px solid ${C.teal}25`,
+                      borderRadius: '8px',
+                      overflow: 'hidden',
+                    }}>
+                      <div style={{
+                        backgroundColor: C.teal,
+                        color: '#fff',
+                        padding: '3px 8px',
+                        fontSize: '9px',
+                        fontWeight: 700,
+                      }}>
+                        {item.label}
+                      </div>
+                      <div style={{
+                        padding: '5px 8px',
+                        fontSize: '11px',
+                        fontWeight: 600,
+                        color: '#333',
+                        minHeight: '24px',
+                      }}>
+                        {item.value || "---"}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
 
               {stats && (
-                <>
-                  {/* الإحصائيات */}
-                  <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6">
+                <div style={{ padding: '0 28px 20px' }}>
+                  {/* ── الإحصائيات ── */}
+                  <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(5, 1fr)',
+                    gap: '8px',
+                    marginBottom: '16px',
+                    marginTop: '8px',
+                  }}>
                     {[
-                      { label: "عدد الطلاب", value: stats.total, icon: Users, color: "#6366F1" },
-                      { label: "المتوسط", value: `${stats.avg} (${stats.avgPct}%)`, icon: BarChart3, color: "#0EA5E9" },
-                      { label: "أعلى درجة", value: stats.highest, icon: TrendingUp, color: "#16A34A" },
-                      { label: "أدنى درجة", value: stats.lowest, icon: TrendingUp, color: "#DC2626" },
-                      { label: "نسبة النجاح", value: `${stats.passRate}%`, icon: PieChart, color: "#8B5CF6" },
+                      { label: "عدد الطلاب", value: stats.total, color: C.tealDark },
+                      { label: "المتوسط", value: `${stats.avg} (${stats.avgPct}%)`, color: C.teal },
+                      { label: "أعلى درجة", value: stats.highest, color: "#059669" },
+                      { label: "أدنى درجة", value: stats.lowest, color: "#dc2626" },
+                      { label: "نسبة النجاح", value: `${stats.passRate}%`, color: C.green },
                     ].map((item) => (
-                      <div key={item.label} className="bg-gray-50 rounded-lg p-4 text-center">
-                        <item.icon className="w-5 h-5 mx-auto mb-1" style={{ color: item.color }} />
-                        <div className="text-lg font-black" style={{ color: item.color }}>{item.value}</div>
-                        <div className="text-[10px] text-gray-500">{item.label}</div>
+                      <div key={item.label} style={{
+                        border: `1px solid ${item.color}20`,
+                        borderRadius: '10px',
+                        padding: '10px 8px',
+                        textAlign: 'center',
+                        backgroundColor: `${item.color}08`,
+                      }}>
+                        <div style={{ fontSize: '16px', fontWeight: 900, color: item.color }}>{item.value}</div>
+                        <div style={{ fontSize: '9px', color: '#666', marginTop: '2px' }}>{item.label}</div>
                       </div>
                     ))}
                   </div>
 
-                  {/* رسم بياني بسيط (شريطي) */}
-                  <div className="mb-6">
-                    <h3 className="font-bold text-gray-800 mb-3">توزيع التقديرات</h3>
-                    <div className="flex items-end gap-4 justify-center h-40">
+                  {/* ── رسم بياني شريطي ── */}
+                  <div style={{ marginBottom: '16px' }}>
+                    <div style={{
+                      fontSize: '12px',
+                      fontWeight: 800,
+                      color: C.tealDark,
+                      marginBottom: '8px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                    }}>
+                      <div style={{ width: '4px', height: '14px', borderRadius: '2px', backgroundColor: C.teal }} />
+                      توزيع التقديرات
+                    </div>
+                    <div style={{
+                      display: 'flex',
+                      alignItems: 'flex-end',
+                      gap: '16px',
+                      justifyContent: 'center',
+                      height: '140px',
+                      padding: '8px 0',
+                      backgroundColor: '#fafafa',
+                      borderRadius: '10px',
+                      border: '1px solid #f0f0f0',
+                    }}>
                       {[
-                        { label: "ممتاز", count: stats.excellent, color: "#16A34A" },
-                        { label: "جيد جداً", count: stats.veryGood, color: "#2563EB" },
-                        { label: "جيد", count: stats.good, color: "#CA8A04" },
-                        { label: "مقبول", count: stats.pass, color: "#EA580C" },
-                        { label: "راسب", count: stats.fail, color: "#DC2626" },
+                        { label: "ممتاز", count: stats.excellent, color: "#059669" },
+                        { label: "جيد جداً", count: stats.veryGood, color: C.teal },
+                        { label: "جيد", count: stats.good, color: "#d97706" },
+                        { label: "مقبول", count: stats.pass, color: "#ea580c" },
+                        { label: "راسب", count: stats.fail, color: "#dc2626" },
                       ].map((item) => {
                         const maxCount = Math.max(stats.excellent, stats.veryGood, stats.good, stats.pass, stats.fail, 1);
-                        const height = (item.count / maxCount) * 120;
+                        const height = (item.count / maxCount) * 100;
                         return (
-                          <div key={item.label} className="flex flex-col items-center gap-1">
-                            <span className="text-sm font-bold" style={{ color: item.color }}>{item.count}</span>
+                          <div key={item.label} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
+                            <span style={{ fontSize: '12px', fontWeight: 800, color: item.color }}>{item.count}</span>
                             <div
-                              className="w-14 rounded-t-lg transition-all"
-                              style={{ height: Math.max(height, 4), backgroundColor: item.color }}
+                              style={{
+                                width: '40px',
+                                height: `${Math.max(height, 4)}px`,
+                                borderRadius: '6px 6px 0 0',
+                                backgroundColor: item.color,
+                                transition: 'height 0.3s ease',
+                              }}
                             />
-                            <span className="text-[10px] text-gray-600">{item.label}</span>
+                            <span style={{ fontSize: '9px', color: '#666' }}>{item.label}</span>
                           </div>
                         );
                       })}
                     </div>
                   </div>
 
-                  {/* جدول النتائج */}
-                  <h3 className="font-bold text-gray-800 mb-3">تفاصيل الدرجات</h3>
-                  <table className="w-full text-sm border-collapse mb-4">
+                  {/* ── جدول النتائج التفصيلي ── */}
+                  <div style={{
+                    fontSize: '12px',
+                    fontWeight: 800,
+                    color: C.tealDark,
+                    marginBottom: '8px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                  }}>
+                    <div style={{ width: '4px', height: '14px', borderRadius: '2px', backgroundColor: C.teal }} />
+                    تفاصيل الدرجات
+                  </div>
+                  <table style={{ width: '100%', fontSize: '11px', borderCollapse: 'collapse', borderRadius: '8px', overflow: 'hidden' }}>
                     <thead>
-                      <tr style={{ background: 'linear-gradient(to left, #1a4d5e, #0d7377)', color: '#fff' }}>
-                        <th className="p-2 text-right text-xs">م</th>
-                        <th className="p-2 text-right text-xs">اسم الطالب</th>
-                        <th className="p-2 text-center text-xs">الدرجة</th>
-                        <th className="p-2 text-center text-xs">النسبة</th>
-                        <th className="p-2 text-center text-xs">التقدير</th>
+                      <tr style={{ background: `linear-gradient(to left, ${C.tealDark}, ${C.teal})`, color: '#fff' }}>
+                        <th style={{ padding: '8px 6px', textAlign: 'right', fontWeight: 700, fontSize: '10px' }}>م</th>
+                        <th style={{ padding: '8px 6px', textAlign: 'right', fontWeight: 700, fontSize: '10px' }}>اسم الطالب</th>
+                        <th style={{ padding: '8px 6px', textAlign: 'center', fontWeight: 700, fontSize: '10px' }}>الدرجة</th>
+                        <th style={{ padding: '8px 6px', textAlign: 'center', fontWeight: 700, fontSize: '10px' }}>من {subjectInfo.maxScore}</th>
+                        <th style={{ padding: '8px 6px', textAlign: 'center', fontWeight: 700, fontSize: '10px' }}>النسبة</th>
+                        <th style={{ padding: '8px 6px', textAlign: 'center', fontWeight: 700, fontSize: '10px' }}>التقدير</th>
                       </tr>
                     </thead>
                     <tbody>
                       {stats.students.sort((a, b) => b.score - a.score).map((student, index) => (
-                        <tr key={student.id} className={index % 2 === 0 ? "bg-white" : "bg-gray-50"}>
-                          <td className="p-2 border border-gray-200 text-center">{index + 1}</td>
-                          <td className="p-2 border border-gray-200 font-medium">{student.name}</td>
-                          <td className="p-2 border border-gray-200 text-center font-bold">{student.score}</td>
-                          <td className="p-2 border border-gray-200 text-center">{((student.score / subjectInfo.maxScore) * 100).toFixed(0)}%</td>
-                          <td className="p-2 border border-gray-200 text-center">
-                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold text-white" style={{ backgroundColor: getGradeColor(student.score) }}>
+                        <tr key={student.id} style={{ backgroundColor: index % 2 === 0 ? '#fff' : '#f8fffe' }}>
+                          <td style={{ padding: '6px', border: `1px solid ${C.teal}15`, textAlign: 'center', fontWeight: 700, color: C.teal }}>{index + 1}</td>
+                          <td style={{ padding: '6px', border: `1px solid ${C.teal}15`, fontWeight: 600 }}>{student.name}</td>
+                          <td style={{ padding: '6px', border: `1px solid ${C.teal}15`, textAlign: 'center', fontWeight: 800 }}>{student.score}</td>
+                          <td style={{ padding: '6px', border: `1px solid ${C.teal}15`, textAlign: 'center', color: '#999' }}>{subjectInfo.maxScore}</td>
+                          <td style={{ padding: '6px', border: `1px solid ${C.teal}15`, textAlign: 'center', fontWeight: 700, color: getGradeColor(student.score) }}>
+                            {((student.score / subjectInfo.maxScore) * 100).toFixed(0)}%
+                          </td>
+                          <td style={{ padding: '6px', border: `1px solid ${C.teal}15`, textAlign: 'center' }}>
+                            <span style={{
+                              display: 'inline-block',
+                              padding: '2px 10px',
+                              borderRadius: '20px',
+                              fontSize: '9px',
+                              fontWeight: 800,
+                              color: '#fff',
+                              backgroundColor: getGradeColor(student.score),
+                            }}>
                               {getGradeLabel(student.score)}
                             </span>
                           </td>
@@ -447,24 +584,48 @@ export default function GradeAnalysis() {
                       ))}
                     </tbody>
                   </table>
-                </>
-              )}
-              </div>
 
-              {/* الفوتر المنحني */}
-              <div style={{ marginTop: '24px' }}>
+                  {/* ── التوقيعات ── */}
+                  <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: '1fr 1fr',
+                    gap: '24px',
+                    paddingTop: '20px',
+                    marginTop: '16px',
+                    borderTop: `1px solid ${C.teal}15`,
+                  }}>
+                    <div style={{ textAlign: 'center' }}>
+                      <div style={{ fontSize: '11px', fontWeight: 700, color: '#333', marginBottom: '4px' }}>
+                        معلم المادة: {subjectInfo.teacher || '...............'}
+                      </div>
+                      <div style={{ borderTop: `2.5px dotted ${C.teal}60`, width: '160px', margin: '4px auto 0' }} />
+                      <div style={{ fontSize: '9px', color: '#999', marginTop: '4px' }}>التوقيع</div>
+                    </div>
+                    <div style={{ textAlign: 'center' }}>
+                      <div style={{ fontSize: '11px', fontWeight: 700, color: '#333', marginBottom: '4px' }}>
+                        مدير/ة المدرسة: ...............
+                      </div>
+                      <div style={{ borderTop: `2.5px dotted ${C.teal}60`, width: '160px', margin: '4px auto 0' }} />
+                      <div style={{ fontSize: '9px', color: '#999', marginTop: '4px' }}>التوقيع</div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* ── الفوتر المنحني ── */}
+              <div style={{ marginTop: '16px' }}>
                 <svg viewBox="0 0 800 40" preserveAspectRatio="none" style={{ width: '100%', height: '20px', display: 'block' }}>
                   <defs>
                     <linearGradient id="gradeFooterGrad" x1="0" y1="0" x2="1" y2="0">
-                      <stop offset="0%" stopColor="#2ea87a" />
-                      <stop offset="50%" stopColor="#0d7377" />
-                      <stop offset="100%" stopColor="#1a4d5e" />
+                      <stop offset="0%" stopColor={C.green} />
+                      <stop offset="50%" stopColor={C.teal} />
+                      <stop offset="100%" stopColor={C.tealDark} />
                     </linearGradient>
                   </defs>
                   <path d="M0,40 L0,28 C150,6 400,0 800,14 L800,40 Z" fill="url(#gradeFooterGrad)" />
                 </svg>
                 <div style={{
-                  background: 'linear-gradient(to left, #1a4d5e, #0d7377, #2ea87a)',
+                  background: `linear-gradient(to left, ${C.tealDark}, ${C.teal}, ${C.green})`,
                   padding: '4px 28px 8px',
                   fontSize: '10px',
                   color: '#fff',
