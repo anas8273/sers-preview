@@ -4966,7 +4966,7 @@ export default function PerformanceEvidence() {
                         const linkedSub = allSubs.find(s => s.id === ev.subEvidenceId);
                         const formFields = linkedSub?.formFields;
                         return (
-                          <div key={ev.id} style={{ padding: '0.75rem', borderRadius: '8px', border: `1.5px solid ${theme.borderColor}`, borderRight: `4px solid ${evPriorityConfig.color}`, pageBreakInside: 'avoid', backgroundColor: '#FAFBFC' }}>
+                          <div key={ev.id} style={{ padding: '0.75rem', borderRadius: '8px', borderTop: `1.5px solid ${theme.borderColor}`, borderBottom: `1.5px solid ${theme.borderColor}`, borderLeft: `1.5px solid ${theme.borderColor}`, borderRight: `4px solid ${evPriorityConfig.color}`, pageBreakInside: 'avoid', backgroundColor: '#FAFBFC' }}>
                             {/* رأس الشاهد */}
                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
                               <span style={{ fontSize: '0.65rem', fontWeight: 700, color: '#9CA3AF' }}>شاهد {evIdx + 1}</span>
@@ -5079,7 +5079,7 @@ export default function PerformanceEvidence() {
             {/* === صفحة التوقيعات - تتبع signatureStyle === */}
             {(() => {
               const ss = theme.signatureStyle || 'dotted';
-              const sigLineStyle: React.CSSProperties = ss === 'dotted' ? { borderTop: `2px dotted ${theme.accent}` } : ss === 'solid' ? { borderTop: `2px solid ${theme.accent}` } : ss === 'boxed' ? { border: `1.5px solid ${theme.accent}`, borderRadius: '8px', padding: '0.5rem' } : ss === 'lined' ? { borderTop: `1px solid ${theme.borderColor}`, borderBottom: `1px solid ${theme.borderColor}`, padding: '0.25rem 0' } : { borderTop: `2px dashed ${theme.accent}` };
+              const sigLineStyle: React.CSSProperties = ss === 'dotted' ? { borderTop: `2px dotted ${theme.accent}` } : ss === 'solid' ? { borderTop: `2px solid ${theme.accent}` } : ss === 'boxed' ? { borderTop: `1.5px solid ${theme.accent}`, borderBottom: `1.5px solid ${theme.accent}`, borderLeft: `1.5px solid ${theme.accent}`, borderRight: `1.5px solid ${theme.accent}`, borderRadius: '8px', padding: '0.5rem' } : ss === 'lined' ? { borderTop: `1px solid ${theme.borderColor}`, borderBottom: `1px solid ${theme.borderColor}`, padding: '0.25rem 0' } : { borderTop: `2px dashed ${theme.accent}` };
               return (
                 <div className="bg-white shadow-lg mx-auto mb-6" style={{ width: '210mm', minHeight: '297mm', maxWidth: '100%', position: 'relative', display: 'flex', flexDirection: 'column' as const, boxSizing: 'border-box' as const }}>
                   <div style={{ flex: 1, padding: '2rem 2.5rem', display: 'flex', flexDirection: 'column' as const, justifyContent: 'center' }}>
