@@ -328,21 +328,39 @@ export default function CoverBuilder() {
                 {/* شريط علوي بتدرج */}
                 <div style={{ height: '5px', background: `linear-gradient(to left, ${t.gradientStart}, ${t.gradientMid}, ${t.gradientEnd})` }} />
 
-                {/* الهيدر - شعار + معلومات */}
+                {/* الهيدر - مطابق لترويسة التقارير (3 أعمدة) */}
                 <div style={{ padding: '16px 24px 12px', background: '#fff' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <div style={{ textAlign: 'right' }}>
-                      <div style={{ fontSize: '12px', color: t.primary, fontWeight: 700, lineHeight: '1.8' }}>وزارة التعليم</div>
-                      <div style={{ fontSize: '11px', color: t.primary, fontWeight: 600, lineHeight: '1.7' }}>{formData.department || "إدارة التعليم"}</div>
-                      <div style={{ fontSize: '11px', color: t.primary, fontWeight: 600, lineHeight: '1.7' }}>{formData.school || "اسم المدرسة"}</div>
-                    </div>
-                    {/* خط فاصل عمودي */}
-                    <div style={{ width: '2px', height: '45px', background: t.accent, margin: '0 12px', opacity: 0.5 }} />
-                    <MoeLogo variant="original" height={60} />
-                  </div>
+                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                    <tbody>
+                      <tr>
+                        {/* العمود الأيمن: النصوص الرسمية */}
+                        <td style={{ width: '35%', verticalAlign: 'middle', textAlign: 'right', padding: '0' }}>
+                          {(formData.department || 'المملكة العربية السعودية\nوزارة التعليم\nالإدارة العامة للتعليم بمنطقة').split('\n').filter((l: string) => l.trim()).map((line: string, i: number) => (
+                            <div key={i} style={{ fontSize: '12px', color: t.primary, fontWeight: 700, lineHeight: '2.0', letterSpacing: '0.3px' }}>{line}</div>
+                          ))}
+                          {formData.school && (
+                            <div style={{ fontSize: '12px', color: t.primary, fontWeight: 700, lineHeight: '2.0' }}>{formData.school}</div>
+                          )}
+                        </td>
+                        {/* خط فاصل عمودي */}
+                        <td style={{ width: '2%', verticalAlign: 'middle', textAlign: 'center', padding: '0 4px' }}>
+                          <div style={{ width: '2px', height: '55px', background: t.accent, margin: '0 auto', opacity: 0.5 }} />
+                        </td>
+                        {/* العمود الأوسط: الشعار */}
+                        <td style={{ width: '28%', verticalAlign: 'middle', textAlign: 'center', padding: '0' }}>
+                          <MoeLogo variant="original" height={70} style={{ margin: '0 auto', display: 'block' }} />
+                        </td>
+                        {/* العمود الأيسر: معلومات إضافية */}
+                        <td style={{ width: '35%', verticalAlign: 'middle', textAlign: 'left', padding: '0' }}>
+                          {formData.semester && <div style={{ fontSize: '11px', color: t.primary, fontWeight: 600, lineHeight: '1.8' }}>الفصل الدراسي: {formData.semester}</div>}
+                          {formData.year && <div style={{ fontSize: '11px', color: t.primary, fontWeight: 600, lineHeight: '1.8' }}>العام الدراسي: {formData.year}</div>}
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
                 </div>
 
-                {/* خطوط فاصلة ملونة */}
+                {/* خطوط فاصلة ملونة (3 ألوان مطابقة للهوية البصرية) */}
                 <div style={{ display: 'flex', height: '4px' }}>
                   <div style={{ flex: 1, background: t.gradientEnd }} />
                   <div style={{ flex: 1, background: t.gradientMid }} />
