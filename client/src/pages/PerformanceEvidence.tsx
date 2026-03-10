@@ -13,6 +13,8 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { usePortfolio } from "@/hooks/usePortfolio";
 import { useOfflineSync } from "@/hooks/useOfflineSync";
 import { usePreviewScale } from "@/hooks/usePreviewScale";
+
+const A4_WIDTH_PX = 793.7; // 210mm in px
 import { saveFileToIDB, getFileFromIDB, deleteFileFromIDB, cleanOldFiles } from "@/hooks/useIndexedDB";
 import { getLoginUrl } from "@/const";
 import { generateQRDataURL } from "@/lib/qr-utils";
@@ -404,8 +406,8 @@ export default function PerformanceEvidence() {
   const [showShareSettings, setShowShareSettings] = useState(false);
   const [shareUrl, setShareUrl] = useState<string | null>(null);
 
-  // Preview scaling - responsive + image capture
-  const { containerRef: previewContainerRef, pageRef: previewPageRef, scale: previewScale, scaledHeight: previewScaledHeight, recalculate: recalcPreview, previewImageUrl, isCapturing, capturePreview, zoomLevel, zoomIn, zoomOut, resetZoom } = usePreviewScale();
+  // Preview scaling - responsive
+  const { containerRef: previewContainerRef, pageRef: previewPageRef, previewScale, wrapperWidth, wrapperHeight, recalculate: recalcPreview, zoomLevel, zoomIn, zoomOut, resetZoom } = usePreviewScale();
 
   // Lightbox state
   const [lightboxImage, setLightboxImage] = useState<string | null>(null);
@@ -780,7 +782,7 @@ export default function PerformanceEvidence() {
   useEffect(() => {
     if (previewSubId && previewCriterionId) {
       // تأخير لضمان render المحتوى المخفي
-      const timer = setTimeout(() => capturePreview(), 800);
+      const timer = setTimeout(() => recalcPreview(), 800);
       return () => clearTimeout(timer);
     }
   }, [previewSubId, previewCriterionId, selectedTheme.id]);
@@ -3249,14 +3251,13 @@ export default function PerformanceEvidence() {
             };
 
             return (
-              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 bg-black/60 z-50" style={{ overflowX: 'hidden', overflowY: 'auto', WebkitOverflowScrolling: 'touch' }}>
-                <div style={{ display: 'flex', justifyContent: 'center', padding: '16px 8px 80px 8px', minHeight: '100%' }}>
-                <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
-                  className="bg-white rounded-2xl shadow-2xl" style={{ width: '100%', maxWidth: '860px', overflow: 'hidden' }}
-                  ref={previewContainerRef}>
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 bg-black/60 z-50" style={{ overflowY: 'auto', WebkitOverflowScrolling: 'touch' }}>
+                <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'flex-start', padding: '8px 4px 60px 4px', minHeight: '100%' }}>
+                <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}
+                  className="bg-white rounded-xl sm:rounded-2xl shadow-2xl w-full" style={{ maxWidth: '860px' }}>
                   {/* شريط الأدوات العلوي */}
-                  <div className="flex items-center justify-between p-2 sm:p-3 bg-gray-50 border-b flex-wrap gap-1 sm:gap-2" data-no-print>
-                    <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+                  <div className="flex items-center justify-between p-2 sm:p-3 bg-gray-50 border-b flex-wrap gap-1 sm:gap-2 sticky top-0 z-10" data-no-print>
+                    <div className="flex items-center gap-1 sm:gap-2 flex-wrap">
                       <Button size="sm" variant="outline" className="gap-1 text-xs h-7" onClick={() => exportSingleEvidence(previewCriterionId, previewSubId)}>
                         <Download className="w-3 h-3" />PDF
                       </Button>
@@ -3294,22 +3295,22 @@ export default function PerformanceEvidence() {
                     </button>
                   </div>
 
-                  {/* ========== محتوى المعاينة - CSS transform: scale() responsive ========== */}
-                  <div ref={previewContainerRef} style={{ overflow: 'auto', maxHeight: 'calc(100vh - 120px)', background: '#e5e7eb', padding: '16px' }}>
+                  {/* ========== محتوى المعاينة - متوافق مع جميع الأجهزة ========== */}
+                  <div ref={previewContainerRef} style={{ background: '#e5e7eb', padding: '8px 4px', minHeight: '200px' }}>
                     {/* wrapper بارتفاع محسوب لاحتواء الصفحة المصغرة */}
                     <div style={{
-                      width: previewScaledHeight ? `${793.7 * previewScale}px` : '210mm',
-                      height: previewScaledHeight ? `${previewScaledHeight}px` : 'auto',
+                      width: `${wrapperWidth}px`,
+                      height: `${wrapperHeight}px`,
                       margin: '0 auto',
                       position: 'relative' as const,
                       overflow: 'hidden',
                     }}>
                     {/* الصفحة الفعلية - تُعرض مباشرة مع transform: scale() */}
                     <div style={{
-                      width: '210mm',
-                      transformOrigin: 'top left',
+                      width: `${A4_WIDTH_PX}px`,
+                      transformOrigin: 'top right',
                       transform: `scale(${previewScale})`,
-                      transition: 'transform 0.2s ease',
+                      transition: 'transform 0.15s ease-out',
                     }}>
                   <div id={`single-preview-${previewSubId}`} ref={previewPageRef} style={{
                     fontFamily: "'Cairo', sans-serif",

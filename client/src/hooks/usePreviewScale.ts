@@ -1,84 +1,125 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 
 /**
- * Hook للمعاينة المفردة - يستخدم CSS transform: scale() 
- * مع حساب ديناميكي للـ scale factor بناءً على عرض الحاوية
- * + أزرار تكبير/تصغير يدوية
+ * Hook للمعاينة - يحسب scale ديناميكياً بناءً على عرض الحاوية
+ * متوافق مع جميع الأجهزة: موبايل (320px+)، تابلت (768px+)، ديسكتوب
  * 
- * النهج: الصفحة A4 تُعرض بحجمها الأصلي (793.7px) ثم تُصغر بـ transform: scale()
- * الحاوية الخارجية تُعدل ارتفاعها لتتناسب مع الحجم المصغر
+ * النهج: 
+ * - يستخدم ResizeObserver + window resize + fallback timeouts
+ * - يحسب scale تلقائياً ليتسع A4 داخل الحاوية
+ * - يدعم تكبير/تصغير يدوي
  */
-export function usePreviewScale(a4Width = 793.7) {
+
+const A4_WIDTH_PX = 793.7; // 210mm in px
+const A4_MIN_HEIGHT_PX = 1122.5; // 297mm in px
+const PADDING = 16; // 8px each side
+const MAX_AUTO_SCALE = 0.85;
+const MIN_SCALE = 0.15;
+
+export function usePreviewScale() {
   const containerRef = useRef<HTMLDivElement>(null);
   const pageRef = useRef<HTMLDivElement>(null);
-  const [autoScale, setAutoScale] = useState(0.5);
+  
   const [manualZoom, setManualZoom] = useState(100);
-  const [scaledHeight, setScaledHeight] = useState<number | undefined>(undefined);
-  const manualZoomRef = useRef(manualZoom);
-  manualZoomRef.current = manualZoom;
+  const [dimensions, setDimensions] = useState(() => {
+    // حساب أولي فوري بناءً على عرض الشاشة
+    const screenW = typeof window !== 'undefined' ? window.innerWidth : 800;
+    const availW = Math.max(Math.min(screenW, 860) - PADDING * 2, 200);
+    const s = Math.min(availW / A4_WIDTH_PX, MAX_AUTO_SCALE);
+    return {
+      scale: s,
+      wrapperWidth: A4_WIDTH_PX * s,
+      wrapperHeight: A4_MIN_HEIGHT_PX * s,
+    };
+  });
 
-  // Scale النهائي = autoScale * (manualZoom / 100)
-  const scale = autoScale * (manualZoom / 100);
-
-  // حساب autoScale بناءً على عرض الحاوية - بدون dependencies على state
   const recalculate = useCallback(() => {
     const container = containerRef.current;
+    
+    // نحصل على العرض المتاح
+    let containerWidth = 0;
+    
+    if (container) {
+      // نحاول getBoundingClientRect أولاً (أدق)
+      const rect = container.getBoundingClientRect();
+      containerWidth = rect.width;
+      
+      // fallback إلى clientWidth
+      if (containerWidth <= 0) {
+        containerWidth = container.clientWidth;
+      }
+      
+      // fallback إلى offsetWidth
+      if (containerWidth <= 0) {
+        containerWidth = container.offsetWidth;
+      }
+    }
+    
+    // إذا لم نحصل على عرض من الحاوية، نستخدم عرض الشاشة
+    if (containerWidth <= 0) {
+      containerWidth = Math.min(window.innerWidth, 860);
+    }
+    
+    const availableWidth = Math.max(containerWidth - PADDING, 200);
+    const autoScale = Math.min(availableWidth / A4_WIDTH_PX, MAX_AUTO_SCALE);
+    const finalScale = Math.max(autoScale * (manualZoom / 100), MIN_SCALE);
+    
+    // ارتفاع الصفحة الفعلي
     const page = pageRef.current;
-    if (!container) return;
+    const pageHeight = page ? Math.max(page.scrollHeight, A4_MIN_HEIGHT_PX) : A4_MIN_HEIGHT_PX;
+    
+    setDimensions({
+      scale: finalScale,
+      wrapperWidth: A4_WIDTH_PX * finalScale,
+      wrapperHeight: pageHeight * finalScale,
+    });
+  }, [manualZoom]);
 
-    const containerWidth = container.clientWidth;
-    // نترك هامش 32px من كل جانب
-    const availableWidth = containerWidth - 32;
-    // نريد أن تتسع الصفحة بالكامل داخل الحاوية
-    // حد أقصى 0.85 لتبدو أنيقة حتى على الشاشات الكبيرة
-    const newAutoScale = Math.max(Math.min(availableWidth / a4Width, 0.85), 0.25);
-    setAutoScale(newAutoScale);
-
-    // حساب الارتفاع المصغر
-    const pageHeight = page?.scrollHeight || 1122.5;
-    const finalScale = newAutoScale * (manualZoomRef.current / 100);
-    setScaledHeight(pageHeight * finalScale);
-  }, [a4Width]); // لا نعتمد على manualZoom - نستخدم ref
-
-  // مراقبة تغيير حجم الحاوية
+  // مراقبة تغيير حجم الحاوية + النافذة
   useEffect(() => {
     const container = containerRef.current;
-    if (!container) return;
-
-    const observer = new ResizeObserver(() => {
-      recalculate();
-    });
-    observer.observe(container);
     
-    // حساب أولي + إعادة حساب بعد render
+    // حساب أولي فوري
     recalculate();
-    const t1 = setTimeout(recalculate, 100);
-    const t2 = setTimeout(recalculate, 500);
+
+    // ResizeObserver
+    let ro: ResizeObserver | null = null;
+    if (container) {
+      ro = new ResizeObserver(() => {
+        requestAnimationFrame(recalculate);
+      });
+      ro.observe(container);
+    }
+    
+    // مراقبة تغيير حجم النافذة (تدوير الشاشة + resize)
+    const handleResize = () => requestAnimationFrame(recalculate);
+    window.addEventListener('resize', handleResize);
+    window.addEventListener('orientationchange', handleResize);
+    
+    // تأخيرات متعددة لضمان اكتمال layout على جميع الأجهزة
+    const timers = [50, 150, 300, 600, 1200].map(ms => 
+      setTimeout(recalculate, ms)
+    );
 
     return () => {
-      observer.disconnect();
-      clearTimeout(t1);
-      clearTimeout(t2);
+      ro?.disconnect();
+      window.removeEventListener('resize', handleResize);
+      window.removeEventListener('orientationchange', handleResize);
+      timers.forEach(clearTimeout);
     };
   }, [recalculate]);
 
-  // مراقبة تغيير حجم الصفحة
+  // مراقبة تغيير حجم الصفحة (عند تحميل محتوى)
   useEffect(() => {
     const page = pageRef.current;
     if (!page) return;
 
-    const observer = new ResizeObserver(() => {
-      recalculate();
+    const ro = new ResizeObserver(() => {
+      requestAnimationFrame(recalculate);
     });
-    observer.observe(page);
-
-    return () => observer.disconnect();
+    ro.observe(page);
+    return () => ro.disconnect();
   }, [recalculate]);
-
-  // إعادة حساب عند تغيير manualZoom
-  useEffect(() => {
-    recalculate();
-  }, [manualZoom, recalculate]);
 
   // تكبير
   const zoomIn = useCallback(() => {
@@ -98,17 +139,13 @@ export function usePreviewScale(a4Width = 793.7) {
   return {
     containerRef,
     pageRef,
-    scale,
-    scaledHeight,
+    previewScale: dimensions.scale,
+    wrapperWidth: dimensions.wrapperWidth,
+    wrapperHeight: dimensions.wrapperHeight,
     recalculate,
-    // للتوافق مع الكود القديم
-    previewImageUrl: null as string | null,
-    isCapturing: false,
-    capturePreview: recalculate,
     zoomLevel: manualZoom,
     zoomIn,
     zoomOut,
     resetZoom,
-    setZoomLevel: setManualZoom,
   };
 }
