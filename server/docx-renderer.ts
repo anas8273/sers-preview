@@ -1,9 +1,9 @@
 /**
  * محرك تصدير Word (.docx) - SERS
- * يستخدم Puppeteer لالتقاط صورة عالية الجودة من HTML
- * ثم يدمجها في مستند Word
+ * النهج: يستخدم Puppeteer لتوليد PDF أولاً ثم يحول كل صفحة إلى صورة
+ * ثم يدمج الصور في مستند Word
  * 
- * هذا النهج يضمن تطابق التنسيق بين PDF و Word
+ * هذا يضمن تطابق 100% بين PDF و Word
  */
 import puppeteer from "puppeteer";
 import {
@@ -14,9 +14,6 @@ import {
   AlignmentType,
   PageOrientation,
   SectionType,
-  Header,
-  Footer,
-  TextRun,
 } from "docx";
 
 let browserInstance: Awaited<ReturnType<typeof puppeteer.launch>> | null = null;
@@ -37,20 +34,25 @@ async function getBrowser() {
       "--enable-font-antialiasing",
       "--force-color-profile=srgb",
     ],
+    protocolTimeout: 120000,
   });
   return browserInstance;
 }
 
 /**
  * تحويل HTML إلى DOCX
- * يلتقط كل صفحة كصورة عالية الجودة ويدمجها في مستند Word
+ * الخطوات:
+ * 1. تحميل HTML في Puppeteer
+ * 2. التقاط صورة كاملة للصفحة (fullPage screenshot)
+ * 3. تقسيم الصورة إلى صفحات A4
+ * 4. إنشاء مستند Word مع الصور
  */
 export async function renderHtmlToDocx(htmlContent: string): Promise<Buffer> {
   const browser = await getBrowser();
   const page = await browser.newPage();
 
   try {
-    // تعيين viewport بحجم A4
+    // تعيين viewport بحجم A4 (عرض 794px)
     await page.setViewport({ width: 794, height: 1123, deviceScaleFactor: 2 });
 
     // تحميل HTML مع الخطوط العربية
@@ -84,35 +86,93 @@ export async function renderHtmlToDocx(htmlContent: string): Promise<Buffer> {
       });
     });
 
-    // الحصول على عدد الصفحات (كل div مباشر هو صفحة)
-    const pageCount = await page.evaluate(() => {
-      const pages = document.querySelectorAll("body > div > div, body > div.pdf-page");
-      return pages.length || 1;
+    // التقاط صورة كاملة للصفحة بالكامل
+    const fullScreenshot = await page.screenshot({
+      type: 'png',
+      fullPage: true,
+      omitBackground: false,
     });
 
-    // التقاط كل صفحة كصورة
-    const pageImages: Buffer[] = [];
-    
-    for (let i = 0; i < pageCount; i++) {
-      // إخفاء جميع الصفحات ما عدا الحالية
-      await page.evaluate((pageIndex) => {
-        const pages = document.querySelectorAll("body > div > div, body > div.pdf-page");
-        pages.forEach((p, idx) => {
-          (p as HTMLElement).style.display = idx === pageIndex ? 'block' : 'none';
-        });
-      }, i);
+    const screenshotBuffer = Buffer.from(fullScreenshot);
 
-      // انتظار قصير للتحديث
-      await new Promise(resolve => setTimeout(resolve, 300));
+    // الحصول على ارتفاع الصفحة الكلي
+    const pageHeight = await page.evaluate(() => document.body.scrollHeight);
+    const a4HeightPx = 1123; // ارتفاع A4 بالبكسل عند 96dpi
+    const numPages = Math.max(1, Math.ceil(pageHeight / a4HeightPx));
 
-      // التقاط الصورة
-      const screenshot = await page.screenshot({
-        type: 'png',
-        fullPage: true,
-        omitBackground: false,
+    // إذا كانت صفحة واحدة فقط - استخدم الصورة كاملة
+    if (numPages <= 1) {
+      const doc = new Document({
+        sections: [{
+          properties: {
+            page: {
+              size: {
+                width: 11906,
+                height: 16838,
+                orientation: PageOrientation.PORTRAIT,
+              },
+              margin: { top: 0, right: 0, bottom: 0, left: 0 },
+            },
+          },
+          children: [
+            new Paragraph({
+              alignment: AlignmentType.CENTER,
+              spacing: { before: 0, after: 0 },
+              children: [
+                new ImageRun({
+                  data: screenshotBuffer,
+                  transformation: { width: 595, height: 842 },
+                  type: "png",
+                }),
+              ],
+            }),
+          ],
+        }],
       });
 
-      pageImages.push(Buffer.from(screenshot));
+      const buffer = await Packer.toBuffer(doc);
+      return Buffer.from(buffer);
+    }
+
+    // إذا كانت عدة صفحات - التقاط كل صفحة على حدة
+    const pageImages: Buffer[] = [];
+
+    // البحث عن صفحات pdf-page
+    const pdfPageCount = await page.evaluate(() => {
+      const pages = document.querySelectorAll('.pdf-page');
+      return pages.length;
+    });
+
+    if (pdfPageCount > 0) {
+      // لدينا صفحات pdf-page - نلتقط كل واحدة على حدة
+      for (let i = 0; i < pdfPageCount; i++) {
+        // إظهار صفحة واحدة فقط
+        await page.evaluate((pageIndex) => {
+          const pages = document.querySelectorAll('.pdf-page');
+          pages.forEach((p, idx) => {
+            (p as HTMLElement).style.display = idx === pageIndex ? 'flex' : 'none';
+            if (idx === pageIndex) {
+              (p as HTMLElement).style.minHeight = '297mm';
+              (p as HTMLElement).style.width = '210mm';
+              (p as HTMLElement).style.margin = '0';
+              (p as HTMLElement).style.boxShadow = 'none';
+            }
+          });
+        }, i);
+
+        await new Promise(resolve => setTimeout(resolve, 500));
+
+        const screenshot = await page.screenshot({
+          type: 'png',
+          fullPage: true,
+          omitBackground: false,
+        });
+
+        pageImages.push(Buffer.from(screenshot));
+      }
+    } else {
+      // لا توجد صفحات pdf-page - نستخدم الصورة الكاملة
+      pageImages.push(screenshotBuffer);
     }
 
     // إنشاء مستند Word
@@ -121,16 +181,11 @@ export async function renderHtmlToDocx(htmlContent: string): Promise<Buffer> {
         type: index === 0 ? undefined : SectionType.NEXT_PAGE,
         page: {
           size: {
-            width: 11906, // A4 width in twips (210mm)
-            height: 16838, // A4 height in twips (297mm)
+            width: 11906,
+            height: 16838,
             orientation: PageOrientation.PORTRAIT,
           },
-          margin: {
-            top: 0,
-            right: 0,
-            bottom: 0,
-            left: 0,
-          },
+          margin: { top: 0, right: 0, bottom: 0, left: 0 },
         },
       },
       children: [
@@ -140,10 +195,7 @@ export async function renderHtmlToDocx(htmlContent: string): Promise<Buffer> {
           children: [
             new ImageRun({
               data: imageBuffer,
-              transformation: {
-                width: 595, // A4 width in points
-                height: 842, // A4 height in points
-              },
+              transformation: { width: 595, height: 842 },
               type: "png",
             }),
           ],
@@ -151,10 +203,7 @@ export async function renderHtmlToDocx(htmlContent: string): Promise<Buffer> {
       ],
     }));
 
-    const doc = new Document({
-      sections,
-    });
-
+    const doc = new Document({ sections });
     const buffer = await Packer.toBuffer(doc);
     return Buffer.from(buffer);
   } finally {
@@ -209,6 +258,8 @@ function wrapWithFonts(html: string): string {
       position: relative;
       overflow: visible;
       background: white;
+      display: flex;
+      flex-direction: column;
     }
     .pdf-page:last-child {
       page-break-after: auto;

@@ -3089,11 +3089,11 @@ export default function PerformanceEvidence() {
             };
 
             return (
-              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 bg-black/60 z-50 flex items-start justify-center overflow-y-auto" style={{ padding: '16px 8px 80px 8px' }}>
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 bg-black/60 z-50 flex items-start justify-center" style={{ padding: '16px 4px 80px 4px', overflowX: 'auto', overflowY: 'auto' }}>
                 <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
-                  className="bg-white rounded-2xl shadow-2xl w-full" style={{ maxWidth: '220mm', overflow: 'visible' }}>
+                  className="bg-white rounded-2xl shadow-2xl" style={{ width: '100%', maxWidth: '220mm', overflow: 'visible' }}>
                   {/* شريط الأدوات */}
-                  <div className="flex items-center justify-between p-3 bg-gray-50 border-b flex-wrap gap-2" data-no-print>
+                  <div className="flex items-center justify-between p-2 sm:p-3 bg-gray-50 border-b flex-wrap gap-1 sm:gap-2" data-no-print>
                     <div className="flex items-center gap-2 flex-wrap">
                       <Button size="sm" variant="outline" className="gap-1 text-xs h-7" onClick={() => exportSingleEvidence(previewCriterionId, previewSubId)}>
                         <Download className="w-3 h-3" />تصدير PDF
@@ -3122,10 +3122,8 @@ export default function PerformanceEvidence() {
 
                   {/* ========== محتوى المعاينة - صفحة A4 كاملة مطابقة لنماذج تعليمية ========== */}
                   <div id={`single-preview-${previewSubId}`} style={{ fontFamily: "'Cairo', sans-serif", direction: 'rtl' }}>
-                    <div className="pdf-page" style={{
+                    <div className="pdf-page single-preview-page" style={{
                       background: '#ffffff',
-                      width: '210mm',
-                      minHeight: '297mm',
                       margin: '0 auto',
                       border: `2px solid ${theme.borderColor || '#0d7377'}`,
                       position: 'relative' as const,
@@ -3330,14 +3328,22 @@ export default function PerformanceEvidence() {
                             {allMediaEvidences.map(ev => {
                               const qrData = ev.type === 'link' ? ev.link :
                                 (ev.uploadedUrl || ev.fileName || '');
-                              const isImageType = ev.type === 'image' && ev.fileData && !ev.fileData.startsWith('idb://');
-                              const showAsImage = isImageType && ev.displayAs === 'image';
+                              // عرض الصورة مباشرة إذا كانت متاحة (سواء base64 أو uploadedUrl)
+                              const hasDirectImage = ev.type === 'image' && (
+                                (ev.fileData && !ev.fileData.startsWith('idb://')) || ev.uploadedUrl
+                              );
+                              const imageSrc = ev.uploadedUrl || (ev.fileData && !ev.fileData.startsWith('idb://') ? ev.fileData : '');
+                              // عرض كصورة إذا: displayAs === 'image' أو إذا لم يكن هناك uploadedUrl للباركود
+                              const showAsImage = hasDirectImage && (ev.displayAs === 'image' || !ev.uploadedUrl);
+                              // عرض باركود فقط إذا كان هناك رابط فعلي (uploadedUrl أو link)
+                              const hasValidQR = ev.type === 'link' ? !!ev.link : !!ev.uploadedUrl;
+                              const showAsQR = !showAsImage && hasValidQR;
 
                               return (
                                 <div key={ev.id} style={{ textAlign: 'center', flex: showAsImage ? '1 1 auto' : '0 0 auto' }}>
-                                  {showAsImage ? (
+                                  {showAsImage && imageSrc ? (
                                     <img
-                                      src={ev.fileData || ''}
+                                      src={imageSrc}
                                       alt={ev.fileName || 'شاهد'}
                                       style={{
                                         width: '100%',
@@ -3349,7 +3355,7 @@ export default function PerformanceEvidence() {
                                         background: '#fff',
                                       }}
                                     />
-                                  ) : (
+                                  ) : showAsQR ? (
                                     <img
                                       src={generateQRDataURL(qrData || 'no-data', 10)}
                                       alt="QR"
@@ -3362,6 +3368,29 @@ export default function PerformanceEvidence() {
                                         padding: '8px',
                                       }}
                                     />
+                                  ) : (
+                                    /* إذا لم يكن هناك صورة أو رابط صالح - عرض رسالة */
+                                    <div style={{
+                                      width: '240px',
+                                      height: '120px',
+                                      border: '2px dashed #d1d5db',
+                                      borderRadius: '6px',
+                                      background: '#f9fafb',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'center',
+                                      flexDirection: 'column' as const,
+                                      gap: '8px',
+                                      padding: '16px',
+                                    }}>
+                                      <span style={{ fontSize: '24px' }}>📎</span>
+                                      <span style={{ fontSize: '11px', color: '#6b7280', textAlign: 'center' }}>
+                                        {ev.fileName || 'ملف مرفق'}
+                                      </span>
+                                      <span style={{ fontSize: '9px', color: '#9ca3af' }}>
+                                        سجل الدخول لرفع الملف وتفعيل الباركود
+                                      </span>
+                                    </div>
                                   )}
                                   <div style={{
                                     fontSize: '11px',

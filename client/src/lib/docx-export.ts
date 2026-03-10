@@ -1,20 +1,18 @@
 /**
  * نظام تصدير Word (.docx) - SERS
  * يحول المعاينة HTML إلى ملف Word بتنسيق مطابق
- * يستخدم مكتبة docx لإنشاء مستند Word احترافي
  * 
  * الآلية:
- * 1. يأخذ HTML من العنصر المحدد
+ * 1. يأخذ HTML من العنصر المحدد (مع inline styles كاملة)
  * 2. يرسله إلى السيرفر عبر /api/export-docx
- * 3. السيرفر يحول HTML إلى DOCX باستخدام مكتبة docx
- * 4. النتيجة: ملف Word بتنسيق احترافي مع دعم RTL والعربية
+ * 3. السيرفر يستخدم Puppeteer لالتقاط صور عالية الجودة
+ * 4. يدمج الصور في مستند Word
  */
 
 import { saveAs } from 'file-saver';
 
 /**
  * تصدير Word عبر Server-Side Rendering
- * يرسل HTML إلى السيرفر الذي يحوله إلى DOCX
  */
 export async function exportToDocx(
   elementId: string,
@@ -27,12 +25,12 @@ export async function exportToDocx(
   try {
     onProgress?.(1, 4);
 
-    // Step 1: استخراج HTML من العنصر
-    const htmlContent = await extractHtmlForDocx(element);
+    // Step 1: استخراج HTML مع جميع الأنماط
+    const htmlContent = await extractHtmlWithFullStyles(element);
     
     onProgress?.(2, 4);
 
-    // Step 2: إرسال HTML إلى السيرفر لتحويله إلى DOCX
+    // Step 2: إرسال HTML إلى السيرفر
     onProgress?.(3, 4);
 
     const response = await fetch('/api/export-docx', {
@@ -59,9 +57,10 @@ export async function exportToDocx(
 }
 
 /**
- * استخراج HTML مع تنظيف للتحويل إلى DOCX
+ * استخراج HTML مع تحويل جميع الأنماط المحسوبة إلى inline styles
+ * مطابق تماماً لـ pdf-export.ts
  */
-async function extractHtmlForDocx(element: HTMLElement): Promise<string> {
+async function extractHtmlWithFullStyles(element: HTMLElement): Promise<string> {
   // إخفاء الأزرار مؤقتاً
   const buttons = element.querySelectorAll("button, [data-no-print]");
   const buttonDisplays: string[] = [];
@@ -81,30 +80,56 @@ async function extractHtmlForDocx(element: HTMLElement): Promise<string> {
   // حذف الأزرار من النسخة
   clone.querySelectorAll("button, [data-no-print]").forEach(el => el.remove());
 
-  // تحويل الأنماط المحسوبة إلى inline styles
-  await inlineComputedStylesForDocx(element, clone);
+  // تحويل الأنماط المحسوبة إلى inline styles (نفس القائمة الكاملة من pdf-export)
+  await inlineComputedStyles(element, clone);
 
   // تحويل الصور إلى data URLs
   await convertImagesToDataUrls(clone);
+
+  // تحويل oklch colors
+  convertOklchInClone(clone);
+
+  // إعداد الصفحات
+  const pages = clone.querySelectorAll(":scope > div");
+  if (pages.length > 0) {
+    pages.forEach(page => {
+      (page as HTMLElement).classList.add('pdf-page');
+      (page as HTMLElement).style.boxShadow = 'none';
+      (page as HTMLElement).style.marginBottom = '0';
+    });
+  }
 
   return clone.innerHTML;
 }
 
 /**
  * تحويل الأنماط المحسوبة إلى inline styles
+ * القائمة الكاملة من pdf-export.ts
  */
-async function inlineComputedStylesForDocx(original: HTMLElement, clone: HTMLElement): Promise<void> {
+async function inlineComputedStyles(original: HTMLElement, clone: HTMLElement): Promise<void> {
   const origElements = [original, ...Array.from(original.querySelectorAll("*"))] as HTMLElement[];
   const cloneElements = [clone, ...Array.from(clone.querySelectorAll("*"))] as HTMLElement[];
 
   const importantProps = [
-    'color', 'backgroundColor', 'background',
+    'color', 'backgroundColor', 'background', 'backgroundImage',
     'borderTop', 'borderRight', 'borderBottom', 'borderLeft',
-    'fontSize', 'fontWeight', 'fontFamily', 'lineHeight',
-    'textAlign', 'direction', 'display',
+    'borderTopColor', 'borderRightColor', 'borderBottomColor', 'borderLeftColor',
+    'borderTopWidth', 'borderRightWidth', 'borderBottomWidth', 'borderLeftWidth',
+    'borderTopStyle', 'borderRightStyle', 'borderBottomStyle', 'borderLeftStyle',
+    'fontSize', 'fontWeight', 'fontFamily', 'lineHeight', 'letterSpacing',
+    'textAlign', 'direction', 'display', 'flexDirection', 'justifyContent', 'alignItems',
     'padding', 'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft',
     'margin', 'marginTop', 'marginRight', 'marginBottom', 'marginLeft',
-    'width', 'maxWidth', 'minWidth', 'height', 'minHeight',
+    'width', 'maxWidth', 'minWidth', 'height', 'minHeight', 'maxHeight',
+    'position', 'top', 'right', 'bottom', 'left', 'zIndex',
+    'overflow', 'whiteSpace', 'wordBreak', 'textDecoration',
+    'borderRadius', 'boxShadow', 'opacity', 'filter',
+    'gridTemplateColumns', 'gridTemplateRows', 'gap',
+    'flex', 'flexGrow', 'flexShrink', 'flexBasis', 'flexWrap',
+    'tableLayout', 'borderCollapse', 'borderSpacing',
+    'verticalAlign', 'textIndent',
+    'clipPath', 'objectFit', 'objectPosition',
+    'textOverflow', 'overflowWrap',
   ];
 
   for (let i = 0; i < Math.min(origElements.length, cloneElements.length); i++) {
@@ -179,6 +204,50 @@ async function convertImagesToDataUrls(element: HTMLElement): Promise<void> {
   });
 
   await Promise.all(promises);
+
+  // تحويل background images أيضاً
+  const allElements = [element, ...Array.from(element.querySelectorAll("*"))] as HTMLElement[];
+  for (const el of allElements) {
+    const bgImage = el.style.backgroundImage;
+    if (bgImage && bgImage.includes("url(")) {
+      const urlMatch = bgImage.match(/url\(['"]?(https?:\/\/[^'")\s]+)['"]?\)/);
+      if (urlMatch) {
+        try {
+          const proxyUrl = `/api/image-proxy?url=${encodeURIComponent(urlMatch[1])}`;
+          const resp = await fetch(proxyUrl);
+          if (resp.ok) {
+            const blob = await resp.blob();
+            const dataUrl = await blobToDataUrl(blob);
+            el.style.backgroundImage = `url(${dataUrl})`;
+          }
+        } catch {
+          // skip
+        }
+      }
+    }
+  }
+}
+
+/**
+ * تحويل ألوان oklch إلى RGB في النسخة المستنسخة
+ */
+function convertOklchInClone(element: HTMLElement): void {
+  const allElements = [element, ...Array.from(element.querySelectorAll("*"))] as HTMLElement[];
+  const colorProps = [
+    "color", "background-color", "border-color", "border-top-color",
+    "border-right-color", "border-bottom-color", "border-left-color",
+    "background",
+  ];
+
+  for (const el of allElements) {
+    for (const prop of colorProps) {
+      const value = el.style.getPropertyValue(prop);
+      if (value && value.includes("oklch")) {
+        const rgb = oklchToRgb(value);
+        if (rgb) el.style.setProperty(prop, rgb);
+      }
+    }
+  }
 }
 
 function blobToDataUrl(blob: Blob): Promise<string> {
