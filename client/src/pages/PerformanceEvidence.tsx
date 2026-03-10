@@ -3780,20 +3780,22 @@ export default function PerformanceEvidence() {
                         </div>
                       )}
 
-                      {/* ========== التوقيعات - النقاط بجانب الاسم ========== */}
+                      {/* ========== التوقيعات - مطابق للهوية البصرية ========== */}
                       <div style={{ padding: '28px 32px 20px', marginTop: '20px' }}>
                         <table style={{ width: '100%', borderCollapse: 'collapse' as const }}>
                           <tbody>
                             <tr>
-                              <td style={{ width: '50%', textAlign: 'right', padding: '0 30px', verticalAlign: 'top' }}>
-                                <div style={{ fontSize: '14px', fontWeight: 800, color: theme.accent || '#1a3a5c', marginBottom: '12px' }}>التنفيذ:</div>
-                                <div style={{ fontSize: '13px', color: '#333', marginBottom: '8px' }}>أ/ {personalInfo.name ? personalInfo.name : '..........................................'}</div>
-                                <div style={{ fontSize: '13px', color: '#333' }}>التوقيع: ..........................................</div>
+                              <td style={{ width: '50%', textAlign: 'center', padding: '0 20px', verticalAlign: 'top' }}>
+                                <div style={{ fontSize: '14px', fontWeight: 800, color: theme.accent || '#1a3a5c', marginBottom: '10px', textAlign: 'center' }}>التنفيذ:</div>
+                                <div style={{ fontSize: '14px', fontWeight: 700, color: '#1a1a1a', marginBottom: '4px', textAlign: 'center' }}>أ/ {personalInfo.name || '..............................'}</div>
+                                <div style={{ fontSize: '13px', color: '#555', marginBottom: '4px', textAlign: 'center' }}>التوقيع:</div>
+                                <div style={{ width: '180px', borderBottom: `2px dotted ${theme.accent || '#1a3a5c'}`, margin: '4px auto 0' }} />
                               </td>
-                              <td style={{ width: '50%', textAlign: 'right', padding: '0 30px', verticalAlign: 'top' }}>
-                                <div style={{ fontSize: '14px', fontWeight: 800, color: theme.accent || '#1a3a5c', marginBottom: '12px' }}>{personalInfo.evaluatorRole || 'مدير المدرسة'}:</div>
-                                <div style={{ fontSize: '13px', color: '#333', marginBottom: '8px' }}>أ/ {personalInfo.evaluator ? personalInfo.evaluator : '..........................................'}</div>
-                                <div style={{ fontSize: '13px', color: '#333' }}>التوقيع: ..........................................</div>
+                              <td style={{ width: '50%', textAlign: 'center', padding: '0 20px', verticalAlign: 'top' }}>
+                                <div style={{ fontSize: '14px', fontWeight: 800, color: theme.accent || '#1a3a5c', marginBottom: '10px', textAlign: 'center' }}>{personalInfo.evaluatorRole || 'مدير المدرسة'}:</div>
+                                <div style={{ fontSize: '14px', fontWeight: 700, color: '#1a1a1a', marginBottom: '4px', textAlign: 'center' }}>أ/ {personalInfo.evaluator || '..............................'}</div>
+                                <div style={{ fontSize: '13px', color: '#555', marginBottom: '4px', textAlign: 'center' }}>التوقيع:</div>
+                                <div style={{ width: '180px', borderBottom: `2px dotted ${theme.accent || '#1a3a5c'}`, margin: '4px auto 0' }} />
                               </td>
                             </tr>
                           </tbody>
