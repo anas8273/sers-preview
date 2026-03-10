@@ -223,16 +223,17 @@ interface ThemeConfig {
 // كل قالب يختلف في التنسيق (إطارات/بطاقات/خطوط) وليس فقط الألوان
 
 // القالب 1: إطارات مستديرة (PDF صفحة 1) - ترويسة بيضاء + حقول بإطارات مستديرة
+// التدرج الافتراضي: أزرق مخضر داكن #1a6b6a → أخضر زمردي #2ea87a → أخضر فاتح #5bb784
 const DEFAULT_THEME: ThemeConfig = {
   id: 'default', name: 'الهوية البصرية تدرج',
   layoutType: 'white-header-classic',
-  headerBg: '#ffffff', headerText: '#1a5f3f',
-  accent: '#1a5f3f', borderColor: '#1a5f3f',
-  titleBg: '#1a5f3f', fieldLabelBg: '#1a5f3f',
-  footerBg: '#1a5f3f',
+  headerBg: '#ffffff', headerText: '#1a6b6a',
+  accent: '#1a6b6a', borderColor: '#2ea87a',
+  titleBg: '#1a6b6a', fieldLabelBg: '#1a6b6a',
+  footerBg: '#1a6b6a',
   tableStyle: false, titleStyle: 'rounded', showTopLine: false, showBottomBar: true,
   fieldStyle: 'fieldset', signatureStyle: 'dotted',
-  coverStyle: 'gradient-center', sectionCoverStyle: 'full-gradient', coverAccent2: '#1a5f3f',
+  coverStyle: 'gradient-center', sectionCoverStyle: 'full-gradient', coverAccent2: '#5bb784',
   headerVariant: 'right-text-center-logo-left-info',
   headerSeparator: false,
 };
@@ -244,13 +245,13 @@ const BUILTIN_THEMES: ThemeConfig[] = [
     // القالب 2: ترويسة داكنة + بطاقات جدول (PDF صفحة 5+7) - عناوين بخلفية داكنة + حقول بيضاء
     id: 'builtin-dark-cards', name: 'بطاقات داكنة',
     layoutType: 'dark-header-table',
-    headerBg: '#1a5f3f', headerText: '#ffffff',
-    accent: '#1a5f3f', borderColor: '#1a5f3f',
-    titleBg: '#1a5f3f', fieldLabelBg: '#1a5f3f',
-    footerBg: '#1a5f3f',
+    headerBg: '#1a6b6a', headerText: '#ffffff',
+    accent: '#1a6b6a', borderColor: '#2ea87a',
+    titleBg: '#1a6b6a', fieldLabelBg: '#1a6b6a',
+    footerBg: '#1a6b6a',
     tableStyle: true, titleStyle: 'full-width', showTopLine: false, showBottomBar: true,
     fieldStyle: 'table', signatureStyle: 'boxed',
-    coverStyle: 'top-bar', sectionCoverStyle: 'numbered-bar', coverAccent2: '#1a5f3f',
+    coverStyle: 'top-bar', sectionCoverStyle: 'numbered-bar', coverAccent2: '#5bb784',
     headerVariant: 'right-text-center-logo-left-info',
     bodyBg: '#ffffff',
   },
@@ -258,13 +259,13 @@ const BUILTIN_THEMES: ThemeConfig[] = [
     // القالب 3: خط عمودي + خطوط أفقية (PDF صفحة 2+4) - ترويسة بخط عمودي فاصل + حقول بخط سفلي
     id: 'builtin-lined', name: 'خطوط أفقية',
     layoutType: 'white-header-classic',
-    headerBg: '#ffffff', headerText: '#1a5f3f',
-    accent: '#1a5f3f', borderColor: '#1a5f3f',
-    titleBg: '#1a5f3f', fieldLabelBg: '#f0f7f4',
-    footerBg: '#1a5f3f',
+    headerBg: '#ffffff', headerText: '#1a6b6a',
+    accent: '#1a6b6a', borderColor: '#2ea87a',
+    titleBg: '#1a6b6a', fieldLabelBg: '#e8f5f0',
+    footerBg: '#1a6b6a',
     tableStyle: false, titleStyle: 'underlined', showTopLine: true, showBottomBar: true,
     fieldStyle: 'underlined', signatureStyle: 'lined',
-    coverStyle: 'split-left', sectionCoverStyle: 'left-stripe', coverAccent2: '#1a5f3f',
+    coverStyle: 'split-left', sectionCoverStyle: 'left-stripe', coverAccent2: '#5bb784',
     headerVariant: 'right-text-center-logo-left-info',
     headerSeparator: true,
     bodyBg: '#ffffff',
@@ -4361,7 +4362,7 @@ export default function PerformanceEvidence() {
               const a2 = theme.coverAccent2 || theme.accent;
               // ترويسة رسمية للغلاف - مطابقة للتقارير
               const coverOfficialHeader = (
-                <div style={{ background: theme.accent, padding: '14px 24px 10px', borderRadius: '0 0 8px 8px' }}>
+                <div style={{ background: `linear-gradient(to left, ${theme.accent}, ${a2})`, padding: '14px 24px 10px', borderRadius: '0 0 8px 8px' }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse' as const }}>
                     <tbody>
                       <tr>
@@ -4571,9 +4572,9 @@ export default function PerformanceEvidence() {
             {/* === صفحة فهرس المحتويات + البيانات الشخصية === */}
             <div className="bg-white shadow-lg mx-auto mb-6" style={{ width: '210mm', minHeight: '297mm', maxWidth: '100%', position: 'relative', pageBreakAfter: 'always', display: 'flex', flexDirection: 'column' as const, boxSizing: 'border-box' as const, border: `2px solid ${theme.accent}` }}>
               <div style={{ flex: 1, padding: '2rem 2.5rem' }}>
-              {/* ترويسة الصفحة - مطابقة للتقارير (المملكة + وزارة التعليم + الإدارة + شعار) */}
-              <div style={{ marginBottom: '1rem' }}>
-                <div style={{ background: theme.accent, padding: '12px 24px 10px', borderRadius: '0 0 8px 8px' }}>
+{/* ترويسة الصفحة - مطابقة للتقارير (المملكة + وزارة التعليم + الإدارة + شعار) */}
+                <div style={{ marginBottom: '16px' }}>
+                <div style={{ background: `linear-gradient(to left, ${theme.accent}, ${theme.coverAccent2 || theme.accent})`, padding: '12px 24px 10px', borderRadius: '0 0 8px 8px' }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse' as const }}>
                     <tbody>
                       <tr>
@@ -4672,7 +4673,7 @@ export default function PerformanceEvidence() {
               {/* الشريط السفلي المتدرج */}
               {theme.showBottomBar !== false && (
                 <div style={{ marginTop: 'auto' }}>
-                  <div style={{ borderTop: `3px solid ${theme.accent}`, margin: '0 2.5rem' }} />
+                  <div style={{ height: '3px', background: `linear-gradient(to left, ${theme.accent}, ${theme.coverAccent2 || theme.accent})`, margin: '0 2.5rem' }} />
                   <div style={{ padding: '8px 2.5rem', fontSize: '10px', color: theme.accent, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <span style={{ fontWeight: 700 }}>SERS - نظام السجلات التعليمية الذكي</span>
                     <span style={{ opacity: 0.7 }}>صفحة 2</span>
@@ -4702,9 +4703,9 @@ export default function PerformanceEvidence() {
             {/* === صفحة جدول التقييم === */}
             <div className="bg-white shadow-lg mx-auto mb-6" style={{ width: '210mm', minHeight: '297mm', maxWidth: '100%', position: 'relative', pageBreakAfter: 'always', display: 'flex', flexDirection: 'column' as const, boxSizing: 'border-box' as const, border: `2px solid ${theme.accent}` }}>
               <div style={{ flex: 1, padding: '2rem 2.5rem' }}>
-              {/* ترويسة - مطابقة للتقارير (المملكة + وزارة التعليم + الإدارة + شعار) */}
-              <div style={{ marginBottom: '1rem' }}>
-                <div style={{ background: theme.accent, padding: '12px 24px 10px', borderRadius: '0 0 8px 8px' }}>
+{/* ترويسة - مطابقة للتقارير (المملكة + وزارة التعليم + الإدارة + شعار) */}
+                <div style={{ marginBottom: '16px' }}>
+                <div style={{ background: `linear-gradient(to left, ${theme.accent}, ${theme.coverAccent2 || theme.accent})`, padding: '12px 24px 10px', borderRadius: '0 0 8px 8px' }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse' as const }}>
                     <tbody>
                       <tr>
@@ -4795,7 +4796,7 @@ export default function PerformanceEvidence() {
               {/* الشريط السفلي المتدرج */}
               {theme.showBottomBar !== false && (
                 <div style={{ marginTop: 'auto' }}>
-                  <div style={{ borderTop: `3px solid ${theme.accent}`, margin: '0 2.5rem' }} />
+                  <div style={{ height: '3px', background: `linear-gradient(to left, ${theme.accent}, ${theme.coverAccent2 || theme.accent})`, margin: '0 2.5rem' }} />
                   <div style={{ padding: '8px 2.5rem', fontSize: '10px', color: theme.accent, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <span style={{ fontWeight: 700 }}>SERS - نظام السجلات التعليمية الذكي</span>
                     <span style={{ opacity: 0.7 }}>صفحة 3</span>
@@ -4985,7 +4986,7 @@ export default function PerformanceEvidence() {
                     <div style={{ flex: 1, padding: '2rem 2.5rem' }}>
                     {/* ترويسة - مطابقة للتقارير (المملكة + وزارة التعليم + الإدارة + شعار) */}
                     <div style={{ marginBottom: '1rem' }}>
-                      <div style={{ background: theme.accent, padding: '12px 24px 10px', borderRadius: '0 0 8px 8px' }}>
+                      <div style={{ background: `linear-gradient(to left, ${theme.accent}, ${theme.coverAccent2 || theme.accent})`, padding: '12px 24px 10px', borderRadius: '0 0 8px 8px' }}>
                         <table style={{ width: '100%', borderCollapse: 'collapse' as const }}>
                           <tbody>
                             <tr>
@@ -5129,7 +5130,7 @@ export default function PerformanceEvidence() {
                     {/* الشريط السفلي المتدرج */}
                     {theme.showBottomBar !== false && (
                       <div style={{ marginTop: 'auto' }}>
-                        <div style={{ borderTop: `3px solid ${theme.accent}`, margin: '0 2.5rem' }} />
+                        <div style={{ height: '3px', background: `linear-gradient(to left, ${theme.accent}, ${theme.coverAccent2 || theme.accent})`, margin: '0 2.5rem' }} />
                         <div style={{ padding: '8px 2.5rem', fontSize: '10px', color: theme.accent, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                           <span style={{ fontWeight: 700 }}>SERS - نظام السجلات التعليمية الذكي</span>
                           <span style={{ opacity: 0.7 }}>صفحة {contentPage}</span>
@@ -5170,7 +5171,7 @@ export default function PerformanceEvidence() {
                   {/* ترويسة - مطابقة لـ edu-forms.com */}
                   <div style={{ position: 'absolute', top: '2rem', left: '2.5rem', right: '2.5rem' }}>
                     <div style={{ marginBottom: '0.5rem' }}>
-                      <div style={{ background: theme.accent, padding: '12px 24px 10px', borderRadius: '0 0 8px 8px' }}>
+                      <div style={{ background: `linear-gradient(to left, ${theme.accent}, ${theme.coverAccent2 || theme.accent})`, padding: '12px 24px 10px', borderRadius: '0 0 8px 8px' }}>
                         <table style={{ width: '100%', borderCollapse: 'collapse' as const }}>
                           <tbody>
                             <tr>
@@ -5232,7 +5233,7 @@ export default function PerformanceEvidence() {
                   {/* الشريط السفلي المتدرج */}
                   {theme.showBottomBar !== false && (
                     <div style={{ marginTop: 'auto' }}>
-                      <div style={{ borderTop: `3px solid ${theme.accent}`, margin: '0 2.5rem' }} />
+                      <div style={{ height: '3px', background: `linear-gradient(to left, ${theme.accent}, ${theme.coverAccent2 || theme.accent})`, margin: '0 2.5rem' }} />
                       <div style={{ padding: '8px 2.5rem', fontSize: '10px', color: theme.accent, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <span style={{ fontWeight: 700 }}>SERS - نظام السجلات التعليمية الذكي</span>
                         <span style={{ opacity: 0.7 }}>{personalInfo.name} • {selectedJob?.title}</span>
