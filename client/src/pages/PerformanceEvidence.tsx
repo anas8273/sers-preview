@@ -1538,7 +1538,44 @@ export default function PerformanceEvidence() {
           {ev.type === 'image' && (
             <Tooltip>
               <TooltipTrigger asChild>
-                <button type="button" onClick={() => updateEvidence(criterionId, ev.id, { displayAs: ev.displayAs === 'image' ? 'qr' : 'image' })}
+                <button type="button" onClick={async () => {
+                  if (ev.displayAs === 'image') {
+                    // تحويل إلى QR - رفع إلى S3 إذا لم يكن هناك uploadedUrl
+                    if (!ev.uploadedUrl && ev.fileData) {
+                      try {
+                        toast.loading('جاري رفع الصورة لإنشاء الباركود...', { id: 'qr-upload-' + ev.id });
+                        let base64Data = ev.fileData;
+                        // إذا كان الملف في IndexedDB، نحتاج لاسترجاعه
+                        if (base64Data.startsWith('idb://')) {
+                          const { getFileFromIDB } = await import('@/hooks/useIndexedDB');
+                          const stored = await getFileFromIDB(base64Data.replace('idb://', ''));
+                          if (stored?.data) base64Data = stored.data;
+                          else { toast.error('لم يتم العثور على الملف', { id: 'qr-upload-' + ev.id }); return; }
+                        }
+                        const base64Only = base64Data.split(',')[1] || base64Data;
+                        const mimeType = base64Data.match(/data:([^;]+)/)?.[1] || 'image/png';
+                        const uploadResult = await uploadFileMutation.mutateAsync({
+                          fileName: ev.fileName || 'image.png',
+                          mimeType,
+                          base64Data: base64Only,
+                        });
+                        if (uploadResult.url) {
+                          updateEvidence(criterionId, ev.id, { displayAs: 'qr', uploadedUrl: uploadResult.url });
+                          toast.success('تم رفع الصورة وإنشاء الباركود', { id: 'qr-upload-' + ev.id });
+                        } else {
+                          toast.error('فشل رفع الصورة', { id: 'qr-upload-' + ev.id });
+                        }
+                      } catch (err) {
+                        console.error('QR upload error:', err);
+                        toast.error('فشل رفع الصورة للباركود', { id: 'qr-upload-' + ev.id });
+                      }
+                    } else {
+                      updateEvidence(criterionId, ev.id, { displayAs: 'qr' });
+                    }
+                  } else {
+                    updateEvidence(criterionId, ev.id, { displayAs: 'image' });
+                  }
+                }}
                   className={`p-1.5 rounded-lg text-xs ${ev.displayAs === 'qr' ? 'bg-violet-100 text-violet-600' : 'bg-blue-100 text-blue-600'}`}>
                   {ev.displayAs === 'image' ? <QrCode className="w-3.5 h-3.5" /> : <Image className="w-3.5 h-3.5" />}
                 </button>
@@ -2504,14 +2541,22 @@ export default function PerformanceEvidence() {
                                         <label className="block text-xs font-medium text-foreground">
                                           {field.label} {field.required && <span className="text-destructive">*</span>}
                                         </label>
-                                        {field.type === 'textarea' && formEv.formData?.[field.id] && (
-                                          <button type="button" onClick={() => improveFieldText(currentCriterion.id, formEv.id, field.id, formEv.formData?.[field.id] || '')}
-                                            disabled={aiLoading === `improve_${formEv.id}_${field.id}`}
-                                            className="text-[10px] text-violet-600 hover:text-violet-700 flex items-center gap-1">
-                                            {aiLoading === `improve_${formEv.id}_${field.id}` ? <Loader2 className="w-3 h-3 animate-spin" /> : <Wand2 className="w-3 h-3" />}
-                                            تحسين
-                                          </button>
-                                        )}
+                                        <div className="flex items-center gap-2">
+                                          {formEv.formData?.[field.id] && (
+                                            <button type="button" onClick={() => { navigator.clipboard.writeText(formEv.formData?.[field.id] || ''); toast.success('تم النسخ'); }}
+                                              className="text-[10px] text-gray-500 hover:text-gray-700 flex items-center gap-0.5" title="نسخ">
+                                              <Copy className="w-3 h-3" />نسخ
+                                            </button>
+                                          )}
+                                          {field.type === 'textarea' && formEv.formData?.[field.id] && (
+                                            <button type="button" onClick={() => improveFieldText(currentCriterion.id, formEv.id, field.id, formEv.formData?.[field.id] || '')}
+                                              disabled={aiLoading === `improve_${formEv.id}_${field.id}`}
+                                              className="text-[10px] text-violet-600 hover:text-violet-700 flex items-center gap-1">
+                                              {aiLoading === `improve_${formEv.id}_${field.id}` ? <Loader2 className="w-3 h-3 animate-spin" /> : <Wand2 className="w-3 h-3" />}
+                                              تحسين
+                                            </button>
+                                          )}
+                                        </div>
                                       </div>
                                       {field.type === 'textarea' ? (
                                         <textarea value={formEv.formData?.[field.id] || ''} onChange={(e) => updateFormField(currentCriterion.id, formEv.id, field.id, e.target.value)}
@@ -2541,6 +2586,12 @@ export default function PerformanceEvidence() {
                                           <label className="block text-xs font-medium text-foreground flex items-center gap-1">
                                             <span className="text-primary">◇</span> {label}
                                           </label>
+                                          {formEv.formData?.[fieldId] && (
+                                            <button type="button" onClick={() => { navigator.clipboard.writeText(formEv.formData?.[fieldId] || ''); toast.success('تم النسخ'); }}
+                                              className="text-[10px] text-gray-500 hover:text-gray-700 flex items-center gap-0.5" title="نسخ">
+                                              <Copy className="w-3 h-3" />نسخ
+                                            </button>
+                                          )}
                                         </div>
                                         <textarea value={formEv.formData?.[fieldId] || ''} onChange={(e) => updateFormField(currentCriterion.id, formEv.id, fieldId, e.target.value)}
                                           placeholder={`أدخل ${label}...`} rows={2}
@@ -3089,9 +3140,10 @@ export default function PerformanceEvidence() {
             };
 
             return (
-              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 bg-black/60 z-50 flex items-start justify-center" style={{ padding: '16px 4px 80px 4px', overflowX: 'auto', overflowY: 'auto' }}>
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 bg-black/60 z-50" style={{ overflowX: 'hidden', overflowY: 'auto', WebkitOverflowScrolling: 'touch' }}>
+                <div style={{ display: 'flex', justifyContent: 'center', padding: '16px 8px 80px 8px', minHeight: '100%' }}>
                 <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
-                  className="bg-white rounded-2xl shadow-2xl" style={{ width: '100%', maxWidth: '220mm', overflow: 'visible' }}>
+                  className="bg-white rounded-2xl shadow-2xl preview-scale-container" style={{ width: '100%', maxWidth: '860px', overflow: 'visible' }}>
                   {/* شريط الأدوات */}
                   <div className="flex items-center justify-between p-2 sm:p-3 bg-gray-50 border-b flex-wrap gap-1 sm:gap-2" data-no-print>
                     <div className="flex items-center gap-2 flex-wrap">
@@ -3459,6 +3511,7 @@ export default function PerformanceEvidence() {
                   </div>
 
                 </motion.div>
+                </div>{/* إغلاق div المركزي */}
               </motion.div>
             );
           })()}
@@ -3777,7 +3830,39 @@ export default function PerformanceEvidence() {
                       <Image className="w-3 h-3" />عرض كصور
                     </Button>
                     <Button variant="outline" size="sm" className="text-xs h-7 gap-1"
-                      onClick={() => {
+                      onClick={async () => {
+                        // جمع كل الصور التي ليس لها uploadedUrl ورفعها أولاً
+                        const allImageEvs: { criterionId: string; ev: EvidenceItem }[] = [];
+                        Object.entries(criteriaData).forEach(([cId, cData]) => {
+                          cData.evidences.filter(e => e.type === 'image' && !e.uploadedUrl && e.fileData).forEach(ev => {
+                            allImageEvs.push({ criterionId: cId, ev });
+                          });
+                        });
+                        if (allImageEvs.length > 0) {
+                          toast.loading(`جاري رفع ${allImageEvs.length} صورة لإنشاء الباركود...`, { id: 'bulk-qr-upload' });
+                          for (const { criterionId: cId, ev } of allImageEvs) {
+                            try {
+                              let base64Data = ev.fileData!;
+                              if (base64Data.startsWith('idb://')) {
+                                const { getFileFromIDB } = await import('@/hooks/useIndexedDB');
+                                const stored = await getFileFromIDB(base64Data.replace('idb://', ''));
+                                if (stored?.data) base64Data = stored.data;
+                                else continue;
+                              }
+                              const base64Only = base64Data.split(',')[1] || base64Data;
+                              const mimeType = base64Data.match(/data:([^;]+)/)?.[1] || 'image/png';
+                              const result = await uploadFileMutation.mutateAsync({
+                                fileName: ev.fileName || 'image.png',
+                                mimeType,
+                                base64Data: base64Only,
+                              });
+                              if (result.url) {
+                                updateEvidence(cId, ev.id, { uploadedUrl: result.url });
+                              }
+                            } catch { /* skip */ }
+                          }
+                          toast.success(`تم رفع ${allImageEvs.length} صورة بنجاح`, { id: 'bulk-qr-upload' });
+                        }
                         setCriteriaData(prev => {
                           const updated = { ...prev };
                           Object.keys(updated).forEach(k => {

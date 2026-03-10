@@ -153,35 +153,33 @@
 }
 
 /* === تصغير responsive للمعاينة على الشاشات الصغيرة === */
-/* المعاينة المفردة - تصغير صفحة A4 لتناسب الشاشة */
 .single-preview-page {
   width: 210mm;
   min-height: 297mm;
-  transform-origin: top center;
 }
 
+/* استخدام container query لتصغير المعاينة */
+.preview-scale-container {
+  container-type: inline-size;
+  width: 100%;
+}
+
+/* تصغير المعاينة المفردة باستخدام zoom (أبسط وأكثر توافقاً) */
 @media screen and (max-width: 850px) {
   .single-preview-page {
-    transform: scale(calc((100vw - 24px) / 793.7));
-    margin-bottom: calc(-297mm * (1 - (100vw - 24px) / 793.7));
+    zoom: calc((100vw - 32px) / 793.7);
   }
   #preview-content {
-    width: 210mm;
-    min-width: 210mm;
-    transform: scale(calc((100vw - 24px) / 793.7));
-    transform-origin: top center;
-    margin-bottom: calc(-297mm * (1 - (100vw - 24px) / 793.7));
+    zoom: calc((100vw - 32px) / 793.7);
   }
 }
 
 @media screen and (max-width: 500px) {
   .single-preview-page {
-    transform: scale(calc((100vw - 16px) / 793.7));
-    margin-bottom: calc(-297mm * (1 - (100vw - 16px) / 793.7));
+    zoom: calc((100vw - 20px) / 793.7);
   }
   #preview-content {
-    transform: scale(calc((100vw - 16px) / 793.7));
-    margin-bottom: calc(-297mm * (1 - (100vw - 16px) / 793.7));
+    zoom: calc((100vw - 20px) / 793.7);
   }
 }
 
@@ -203,6 +201,7 @@
     page-break-after: always;
   }
   .single-preview-page {
+    zoom: 1 !important;
     transform: none !important;
     margin-bottom: 0 !important;
   }
