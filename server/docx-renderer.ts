@@ -104,10 +104,9 @@ function noBorder() {
   };
 }
 
-/** إنشاء ترويسة رسمية - شريط ملون + جهات + مدرسة */
+/** إنشاء ترويسة رسمية - المملكة + وزارة التعليم + الإدارة + المدرسة */
 function buildOfficialHeader(pi: DocxExportData['personalInfo'], color: string): (Paragraph | Table)[] {
   const elements: (Paragraph | Table)[] = [];
-  const lightColor = lightenHex(color, 0.92);
   const deptLines = (pi.department || '').split('\n').filter(l => l.trim());
 
   // شريط علوي ملون
@@ -117,7 +116,32 @@ function buildOfficialHeader(pi: DocxExportData['personalInfo'], color: string):
     children: [new TextRun({ text: ' ', font: 'Cairo', size: 6 })],
   }));
 
-  // جدول الترويسة: جهات يمين | شعار وسط | معلومات يسار
+  // جدول الترويسة: (المملكة + وزارة + إدارة + مدرسة) يمين | شعار وسط | معلومات يسار
+  const rightCellChildren: Paragraph[] = [
+    new Paragraph({
+      alignment: AlignmentType.RIGHT,
+      spacing: { before: 80, after: 20 },
+      children: [new TextRun({ text: 'المملكة العربية السعودية', font: 'Cairo', size: 20, bold: true, color: hexToRgb(color) })],
+    }),
+    new Paragraph({
+      alignment: AlignmentType.RIGHT,
+      spacing: { before: 20, after: 20 },
+      children: [new TextRun({ text: 'وزارة التعليم', font: 'Cairo', size: 20, bold: true, color: hexToRgb(color) })],
+    }),
+    ...deptLines.map(line => new Paragraph({
+      alignment: AlignmentType.RIGHT,
+      spacing: { before: 20, after: 20 },
+      children: [new TextRun({ text: line.trim(), font: 'Cairo', size: 18, bold: true, color: hexToRgb(color) })],
+    })),
+  ];
+  if (pi.school) {
+    rightCellChildren.push(new Paragraph({
+      alignment: AlignmentType.RIGHT,
+      spacing: { before: 20, after: 40 },
+      children: [new TextRun({ text: pi.school, font: 'Cairo', size: 18, bold: true, color: hexToRgb(color) })],
+    }));
+  }
+
   const headerRow = new TableRow({
     children: [
       // الجهات (يمين)
@@ -125,19 +149,9 @@ function buildOfficialHeader(pi: DocxExportData['personalInfo'], color: string):
         width: { size: 40, type: WidthType.PERCENTAGE },
         borders: noBorder(),
         verticalAlign: VerticalAlign.CENTER,
-        children: deptLines.map((line, i) => new Paragraph({
-          alignment: AlignmentType.RIGHT,
-          spacing: { before: i === 0 ? 80 : 20, after: 20 },
-          children: [new TextRun({
-            text: line.trim(),
-            font: 'Cairo',
-            size: 20,
-            bold: true,
-            color: hexToRgb(color),
-          })],
-        })),
+        children: rightCellChildren,
       }),
-      // وزارة التعليم (وسط)
+      // شعار وزارة التعليم (وسط)
       new TableCell({
         width: { size: 20, type: WidthType.PERCENTAGE },
         borders: noBorder(),
@@ -179,22 +193,6 @@ function buildOfficialHeader(pi: DocxExportData['personalInfo'], color: string):
     width: { size: 100, type: WidthType.PERCENTAGE },
     rows: [headerRow],
   }));
-
-  // شريط المدرسة
-  if (pi.school) {
-    elements.push(new Paragraph({
-      alignment: AlignmentType.CENTER,
-      spacing: { before: 0, after: 0 },
-      shading: { type: ShadingType.SOLID, color },
-      children: [new TextRun({
-        text: pi.school,
-        font: 'Cairo',
-        size: 18,
-        bold: true,
-        color: 'ffffff',
-      })],
-    }));
-  }
 
   // خط فاصل
   elements.push(new Paragraph({

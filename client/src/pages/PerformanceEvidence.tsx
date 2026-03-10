@@ -218,32 +218,31 @@ interface ThemeConfig {
   headerVariant?: 'right-text-center-logo-left-info' | 'right-text-left-logo' | 'center-logo-banner' | 'full-header-sections';
 }
 
-// ===== 3 قوالب مطابقة لملف الهوية البصرية تماماً =====
-// الألوان: أزرق داكن #1a3a5c | أخضر داكن #1a5f3f | أخضر #2ea87a | ذهبي #D4AF37
-// مطابقة للتصميم المرجعي من وزارة التعليم
+// ===== قوالب مطابقة لملف الهوية البصرية =====
+// اللون الافتراضي: تدرج أخضر #2ea87a → أزرق #1a5f7a (الهوية البصرية الرسمية)
+// كل قالب يختلف في التنسيق (إطارات/بطاقات/خطوط) وليس فقط الألوان
 
-// القالب 1: ترويسة بيضاء + حقول خط سفلي (التصميم المرجعي الأساسي)
-// ★ لون واحد موحد: accent = borderColor = titleBg = fieldLabelBg = footerBg = coverAccent2
+// القالب 1: إطارات مستديرة (PDF صفحة 1) - ترويسة بيضاء + حقول بإطارات مستديرة
 const DEFAULT_THEME: ThemeConfig = {
-  id: 'default', name: 'ترويسة بيضاء',
+  id: 'default', name: 'الهوية البصرية تدرج',
   layoutType: 'white-header-classic',
-  headerBg: '#ffffff', headerText: '#1a3a5c',
-  accent: '#1a3a5c', borderColor: '#1a3a5c',
-  titleBg: '#1a3a5c', fieldLabelBg: '#1a3a5c',
-  footerBg: '#1a3a5c',
+  headerBg: '#ffffff', headerText: '#1a5f3f',
+  accent: '#1a5f3f', borderColor: '#1a5f3f',
+  titleBg: '#1a5f3f', fieldLabelBg: '#1a5f3f',
+  footerBg: '#1a5f3f',
   tableStyle: false, titleStyle: 'rounded', showTopLine: false, showBottomBar: true,
-  fieldStyle: 'underlined', signatureStyle: 'dotted',
-  coverStyle: 'gradient-center', sectionCoverStyle: 'full-gradient', coverAccent2: '#1a3a5c',
+  fieldStyle: 'fieldset', signatureStyle: 'dotted',
+  coverStyle: 'gradient-center', sectionCoverStyle: 'full-gradient', coverAccent2: '#1a5f3f',
   headerVariant: 'right-text-center-logo-left-info',
   headerSeparator: false,
 };
 
-// 3 قوالب مدمجة مطابقة لملف الهوية البصرية
+// قوالب مدمجة - كل قالب بتنسيق مختلف فعلاً
 const BUILTIN_THEMES: ThemeConfig[] = [
   DEFAULT_THEME,
   {
-    // القالب 2: ترويسة داكنة - لون واحد موحد أخضر داكن
-    id: 'builtin-dark', name: 'ترويسة داكنة',
+    // القالب 2: ترويسة داكنة + بطاقات جدول (PDF صفحة 5+7) - عناوين بخلفية داكنة + حقول بيضاء
+    id: 'builtin-dark-cards', name: 'بطاقات داكنة',
     layoutType: 'dark-header-table',
     headerBg: '#1a5f3f', headerText: '#ffffff',
     accent: '#1a5f3f', borderColor: '#1a5f3f',
@@ -256,17 +255,18 @@ const BUILTIN_THEMES: ThemeConfig[] = [
     bodyBg: '#ffffff',
   },
   {
-    // القالب 3: خفيف حبر - لون واحد موحد مع حبر أقل
-    id: 'builtin-light', name: 'خفيف حبر',
+    // القالب 3: خط عمودي + خطوط أفقية (PDF صفحة 2+4) - ترويسة بخط عمودي فاصل + حقول بخط سفلي
+    id: 'builtin-lined', name: 'خطوط أفقية',
     layoutType: 'white-header-classic',
-    headerBg: '#ffffff', headerText: '#1a3a5c',
-    accent: '#1a3a5c', borderColor: '#1a3a5c',
-    titleBg: '#1a3a5c', fieldLabelBg: '#f0f4f8',
-    footerBg: '#1a3a5c',
-    tableStyle: false, titleStyle: 'rounded', showTopLine: false, showBottomBar: false,
-    fieldStyle: 'underlined', signatureStyle: 'dotted',
-    coverStyle: 'minimal-line', sectionCoverStyle: 'clean-divider', coverAccent2: '#1a3a5c',
+    headerBg: '#ffffff', headerText: '#1a5f3f',
+    accent: '#1a5f3f', borderColor: '#1a5f3f',
+    titleBg: '#1a5f3f', fieldLabelBg: '#f0f7f4',
+    footerBg: '#1a5f3f',
+    tableStyle: false, titleStyle: 'underlined', showTopLine: true, showBottomBar: true,
+    fieldStyle: 'underlined', signatureStyle: 'lined',
+    coverStyle: 'split-left', sectionCoverStyle: 'left-stripe', coverAccent2: '#1a5f3f',
     headerVariant: 'right-text-center-logo-left-info',
+    headerSeparator: true,
     bodyBg: '#ffffff',
   },
 ];
@@ -3386,32 +3386,31 @@ export default function PerformanceEvidence() {
                             </div>
                             <div className="space-y-3">
                               <div>
-                                <label className="text-xs font-medium text-gray-600 mb-1 block">لون الترويسة والعناوين</label>
-                                <div className="flex items-center gap-2">
-                                  <input type="color" value={selectedTheme.accent} onChange={(e) => setSelectedTheme(prev => ({ ...prev, accent: e.target.value, titleBg: e.target.value, fieldLabelBg: e.target.value }))} className="w-8 h-8 rounded cursor-pointer border-0" />
-                                  <span className="text-xs text-gray-500 font-mono">{selectedTheme.accent}</span>
+                                <label className="text-xs font-bold text-gray-700 mb-1.5 block">اختر لون موحد للقالب</label>
+                                <p className="text-[10px] text-gray-400 mb-2">اللون المختار يُطبق على جميع عناصر القالب (ترويسة، إطارات، عناوين، فوتر)</p>
+                                <div className="flex items-center gap-2 mb-2">
+                                  <input type="color" value={selectedTheme.accent} onChange={(e) => { const c = e.target.value; setSelectedTheme(prev => ({ ...prev, accent: c, borderColor: c, titleBg: c, fieldLabelBg: prev.fieldLabelBg === '#f0f4f8' || prev.fieldLabelBg === '#f0f7f4' ? prev.fieldLabelBg : c, footerBg: c, headerBg: prev.headerBg === '#ffffff' || prev.headerBg === '#f8f9fa' ? prev.headerBg : c, headerText: prev.headerBg === '#ffffff' || prev.headerBg === '#f8f9fa' ? c : '#ffffff', coverAccent2: c })); }} className="w-10 h-10 rounded-lg cursor-pointer border-2 border-gray-200" />
+                                  <div>
+                                    <span className="text-xs font-mono text-gray-600 block">{selectedTheme.accent}</span>
+                                    <span className="text-[10px] text-gray-400">اضغط لاختيار لون مخصص</span>
+                                  </div>
                                 </div>
                               </div>
                               <div>
-                                <label className="text-xs font-medium text-gray-600 mb-1 block">لون الإطارات والحدود</label>
-                                <div className="flex items-center gap-2">
-                                  <input type="color" value={selectedTheme.borderColor} onChange={(e) => setSelectedTheme(prev => ({ ...prev, borderColor: e.target.value }))} className="w-8 h-8 rounded cursor-pointer border-0" />
-                                  <span className="text-xs text-gray-500 font-mono">{selectedTheme.borderColor}</span>
-                                </div>
-                              </div>
-                              <div>
-                                <label className="text-xs font-medium text-gray-600 mb-1 block">ألوان سريعة</label>
-                                <div className="flex gap-1.5 flex-wrap">                                  {[
+                                <label className="text-xs font-medium text-gray-600 mb-1.5 block">ألوان سريعة</label>
+                                <div className="flex gap-1.5 flex-wrap">
+                                  {[
+                                    { name: 'الهوية البصرية', accent: '#1a5f3f' },
                                     { name: 'أزرق داكن', accent: '#1a3a5c' },
-                                    { name: 'أخضر داكن', accent: '#1a5f3f' },
                                     { name: 'تيل', accent: '#0d7377' },
                                     { name: 'كحلي', accent: '#1e3a5f' },
                                     { name: 'بنفسجي', accent: '#5b21b6' },
                                     { name: 'عنابي', accent: '#7f1d1d' },
+                                    { name: 'ذهبي', accent: '#8B6914' },
+                                    { name: 'برتقالي', accent: '#c2410c' },
                                   ].map(preset => (
-                                    <button key={preset.name} title={preset.name} onClick={() => setSelectedTheme(prev => ({ ...prev, accent: preset.accent, borderColor: preset.accent, titleBg: preset.accent, fieldLabelBg: preset.accent, footerBg: preset.accent, headerBg: prev.headerBg === '#ffffff' || prev.headerBg === '#f8f9fa' ? prev.headerBg : preset.accent, coverAccent2: preset.accent }))
-}
-                                      className="w-7 h-7 rounded-full border-2 border-white shadow-sm hover:scale-110 transition-transform" style={{ background: preset.accent }} />
+                                    <button key={preset.name} title={preset.name} onClick={() => { const c = preset.accent; setSelectedTheme(prev => ({ ...prev, accent: c, borderColor: c, titleBg: c, fieldLabelBg: prev.fieldLabelBg === '#f0f4f8' || prev.fieldLabelBg === '#f0f7f4' ? prev.fieldLabelBg : c, footerBg: c, headerBg: prev.headerBg === '#ffffff' || prev.headerBg === '#f8f9fa' ? prev.headerBg : c, headerText: prev.headerBg === '#ffffff' || prev.headerBg === '#f8f9fa' ? c : '#ffffff', coverAccent2: c })); }}
+                                      className={`w-7 h-7 rounded-full border-2 shadow-sm hover:scale-110 transition-transform ${selectedTheme.accent === preset.accent ? 'border-gray-800 ring-2 ring-offset-1 ring-gray-400' : 'border-white'}`} style={{ background: preset.accent }} />
                                   ))}
                                 </div>
                               </div>
@@ -4260,7 +4259,57 @@ export default function PerformanceEvidence() {
             <Button variant="outline" size="sm" className="text-xs sm:text-sm h-8 sm:h-9 shrink-0" onClick={() => setStep('final-review')}>
               <ArrowRight className="w-3.5 h-3.5 sm:w-4 sm:h-4 ml-0.5 sm:ml-1" /><span className="hidden sm:inline">العودة</span><span className="sm:hidden">رجوع</span>
             </Button>
-            <div className="flex gap-1.5 sm:gap-2 flex-wrap justify-end">
+            <div className="flex gap-1.5 sm:gap-2 flex-wrap justify-end items-center">
+              {/* قائمة القوالب */}
+              <select value={selectedTheme.id} onChange={(e) => { const t = allThemes.find(th => th.id === e.target.value); if (t) setSelectedTheme(t); }}
+                className="text-xs h-8 sm:h-9 px-2 rounded-lg border border-gray-300 bg-white focus:ring-1 focus:ring-[#1a5f3f] focus:border-[#1a5f3f] outline-none">
+                {allThemes.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+              </select>
+              {/* زر لوحة الألوان */}
+              <div className="relative">
+                <Button size="sm" variant="outline" className={`gap-1 text-xs h-8 sm:h-9 ${showColorPicker ? 'bg-[#1a5f3f] text-white' : ''}`} onClick={() => setShowColorPicker(!showColorPicker)}>
+                  <Palette className="w-3.5 h-3.5" /><span className="hidden sm:inline">الألوان</span>
+                </Button>
+                {showColorPicker && (
+                  <div className="absolute top-10 left-0 z-50 bg-white rounded-xl shadow-2xl border p-4 w-72" dir="rtl">
+                    <div className="flex items-center justify-between mb-3">
+                      <h4 className="text-sm font-bold text-gray-800">تخصيص الألوان</h4>
+                      <button onClick={() => setShowColorPicker(false)} className="p-1 hover:bg-gray-100 rounded"><X className="w-3.5 h-3.5" /></button>
+                    </div>
+                    <div className="space-y-3">
+                      <div>
+                        <label className="text-xs font-bold text-gray-700 mb-1.5 block">اختر لون موحد للقالب</label>
+                        <p className="text-[10px] text-gray-400 mb-2">اللون المختار يُطبق على جميع عناصر القالب</p>
+                        <div className="flex items-center gap-2 mb-2">
+                          <input type="color" value={selectedTheme.accent} onChange={(e) => { const c = e.target.value; setSelectedTheme(prev => ({ ...prev, accent: c, borderColor: c, titleBg: c, fieldLabelBg: prev.fieldLabelBg === '#f0f4f8' || prev.fieldLabelBg === '#f0f7f4' ? prev.fieldLabelBg : c, footerBg: c, headerBg: prev.headerBg === '#ffffff' || prev.headerBg === '#f8f9fa' ? prev.headerBg : c, headerText: prev.headerBg === '#ffffff' || prev.headerBg === '#f8f9fa' ? c : '#ffffff', coverAccent2: c })); }} className="w-10 h-10 rounded-lg cursor-pointer border-2 border-gray-200" />
+                          <div>
+                            <span className="text-xs font-mono text-gray-600 block">{selectedTheme.accent}</span>
+                            <span className="text-[10px] text-gray-400">اضغط لاختيار لون مخصص</span>
+                          </div>
+                        </div>
+                      </div>
+                      <div>
+                        <label className="text-xs font-medium text-gray-600 mb-1.5 block">ألوان سريعة</label>
+                        <div className="flex gap-1.5 flex-wrap">
+                          {[
+                            { name: 'الهوية البصرية', accent: '#1a5f3f' },
+                            { name: 'أزرق داكن', accent: '#1a3a5c' },
+                            { name: 'تيل', accent: '#0d7377' },
+                            { name: 'كحلي', accent: '#1e3a5f' },
+                            { name: 'بنفسجي', accent: '#5b21b6' },
+                            { name: 'عنابي', accent: '#7f1d1d' },
+                            { name: 'ذهبي', accent: '#8B6914' },
+                            { name: 'برتقالي', accent: '#c2410c' },
+                          ].map(preset => (
+                            <button key={preset.name} title={preset.name} onClick={() => { const c = preset.accent; setSelectedTheme(prev => ({ ...prev, accent: c, borderColor: c, titleBg: c, fieldLabelBg: prev.fieldLabelBg === '#f0f4f8' || prev.fieldLabelBg === '#f0f7f4' ? prev.fieldLabelBg : c, footerBg: c, headerBg: prev.headerBg === '#ffffff' || prev.headerBg === '#f8f9fa' ? prev.headerBg : c, headerText: prev.headerBg === '#ffffff' || prev.headerBg === '#f8f9fa' ? c : '#ffffff', coverAccent2: c })); }}
+                              className={`w-7 h-7 rounded-full border-2 shadow-sm hover:scale-110 transition-transform ${selectedTheme.accent === preset.accent ? 'border-gray-800 ring-2 ring-offset-1 ring-gray-400' : 'border-white'}`} style={{ background: preset.accent }} />
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
               <Button size="sm" onClick={handleExportPDF} disabled={isExporting} className="gap-1 sm:gap-1.5 text-xs sm:text-sm h-8 sm:h-9">
                 {isExporting ? <Loader2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 animate-spin" /> : <Download className="w-3.5 h-3.5 sm:w-4 sm:h-4" />}
                 <span className="hidden sm:inline">{isExporting ? (pdfProgress.total > 0 ? `تصدير ${pdfProgress.current}/${pdfProgress.total}` : 'جاري التصدير...') : 'تحميل PDF'}</span>
@@ -4522,35 +4571,41 @@ export default function PerformanceEvidence() {
             {/* === صفحة فهرس المحتويات + البيانات الشخصية === */}
             <div className="bg-white shadow-lg mx-auto mb-6" style={{ width: '210mm', minHeight: '297mm', maxWidth: '100%', position: 'relative', pageBreakAfter: 'always', display: 'flex', flexDirection: 'column' as const, boxSizing: 'border-box' as const, border: `2px solid ${theme.accent}` }}>
               <div style={{ flex: 1, padding: '2rem 2.5rem' }}>
-              {/* ترويسة الصفحة - مطابقة لـ edu-forms.com */}
+              {/* ترويسة الصفحة - مطابقة للتقارير (المملكة + وزارة التعليم + الإدارة + شعار) */}
               <div style={{ marginBottom: '1rem' }}>
-                <div style={{ background: theme.accent, padding: '10px 20px 8px', borderRadius: '0 0 8px 8px' }}>
+                <div style={{ background: theme.accent, padding: '12px 24px 10px', borderRadius: '0 0 8px 8px' }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse' as const }}>
                     <tbody>
                       <tr>
-                        <td style={{ width: '45%', verticalAlign: 'middle', textAlign: 'right', padding: '0' }}>
+                        <td style={{ width: '35%', verticalAlign: 'middle', textAlign: 'right', padding: '0' }}>
+                          <div style={{ fontSize: '10px', color: '#ffffff', fontWeight: 700, lineHeight: '2.0' }}>المملكة العربية السعودية</div>
+                          <div style={{ fontSize: '10px', color: '#ffffff', fontWeight: 700, lineHeight: '2.0' }}>وزارة التعليم</div>
                           {filteredDeptLines.map((line: string, li: number) => (
-                            <div key={li} style={{ fontSize: '10px', color: '#ffffff', fontWeight: 600, lineHeight: '1.8' }}>{line}</div>
+                            <div key={li} style={{ fontSize: '10px', color: '#ffffff', fontWeight: 600, lineHeight: '2.0' }}>{line}</div>
                           ))}
+                          {personalInfo.school && (
+                            <div style={{ fontSize: '10px', color: '#ffffff', fontWeight: 600, lineHeight: '2.0' }}>{personalInfo.school}</div>
+                          )}
                         </td>
-                        <td style={{ width: '2%', verticalAlign: 'middle', textAlign: 'center', padding: '0 6px' }}>
-                          <div style={{ width: '1px', height: '40px', background: 'rgba(255,255,255,0.35)', margin: '0 auto' }} />
+                        <td style={{ width: '2%', verticalAlign: 'middle', textAlign: 'center', padding: '0 4px' }}>
+                          <div style={{ width: '2px', height: '50px', background: 'rgba(255,255,255,0.35)', margin: '0 auto' }} />
                         </td>
-                        <td style={{ width: '53%', verticalAlign: 'middle', textAlign: 'center', padding: '0' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
-                            <img src={MOE_LOGO} alt="شعار وزارة التعليم" style={{ height: '38px', objectFit: 'contain' as const, display: 'inline-block', filter: 'brightness(0) invert(1)' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
-
+                        <td style={{ width: '28%', verticalAlign: 'middle', textAlign: 'center', padding: '0' }}>
+                          <img src={MOE_LOGO} alt="شعار وزارة التعليم" style={{ height: '55px', objectFit: 'contain' as const, margin: '0 auto', display: 'block', filter: 'brightness(0) invert(1)' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                        </td>
+                        <td style={{ width: '35%', verticalAlign: 'middle', textAlign: 'left', padding: '0' }}>
+                          {personalInfo.extraLogo && (
+                            <img src={personalInfo.extraLogo} alt="شعار إضافي" style={{ height: '45px', objectFit: 'contain' as const, display: 'block', marginBottom: '4px' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                          )}
+                          <div style={{ textAlign: 'left' }}>
+                            {personalInfo.semester && <div style={{ fontSize: '10px', color: '#ffffff', fontWeight: 600, lineHeight: '1.8' }}>{`الفصل الدراسي: ${personalInfo.semester}`}</div>}
+                            {personalInfo.year && <div style={{ fontSize: '10px', color: '#ffffff', fontWeight: 600, lineHeight: '1.8' }}>{`العام الدراسي: ${personalInfo.year}`}</div>}
                           </div>
                         </td>
                       </tr>
                     </tbody>
                   </table>
                 </div>
-                {personalInfo.school && (
-                  <div style={{ background: theme.accent, color: 'white', padding: '5px 16px', textAlign: 'center', fontWeight: 700, fontSize: '10px', letterSpacing: '0.3px', borderRadius: '0 0 6px 6px', margin: '0 16px' }}>
-                    {personalInfo.school}
-                  </div>
-                )}
               </div>
 
               {/* فهرس المحتويات */}
@@ -4632,38 +4687,56 @@ export default function PerformanceEvidence() {
               )}
             </div>
 
+            {/* === فاصل فني بين البيانات الشخصية وجدول التقييم === */}
+            <div className="mx-auto mb-6 print:hidden" style={{ width: '210mm', maxWidth: '100%', padding: '1.5rem 2rem', textAlign: 'center' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', justifyContent: 'center' }}>
+                <div style={{ flex: 1, height: '2px', background: `linear-gradient(to left, ${theme.accent}, transparent)` }} />
+                <div style={{ padding: '0.75rem 1.5rem', borderRadius: '12px', border: `2px solid ${theme.accent}20`, background: `${theme.accent}08` }}>
+                  <div style={{ fontSize: '0.75rem', color: theme.accent, fontWeight: 700, fontFamily: "'Cairo', sans-serif" }}>التعليم هو السلاح الأقوى لتغيير العالم</div>
+                  <div style={{ fontSize: '0.6rem', color: '#9CA3AF', marginTop: '2px' }}>نيلسون مانديلا</div>
+                </div>
+                <div style={{ flex: 1, height: '2px', background: `linear-gradient(to right, ${theme.accent}, transparent)` }} />
+              </div>
+            </div>
+
             {/* === صفحة جدول التقييم === */}
             <div className="bg-white shadow-lg mx-auto mb-6" style={{ width: '210mm', minHeight: '297mm', maxWidth: '100%', position: 'relative', pageBreakAfter: 'always', display: 'flex', flexDirection: 'column' as const, boxSizing: 'border-box' as const, border: `2px solid ${theme.accent}` }}>
               <div style={{ flex: 1, padding: '2rem 2.5rem' }}>
-              {/* ترويسة - مطابقة لـ edu-forms.com */}
+              {/* ترويسة - مطابقة للتقارير (المملكة + وزارة التعليم + الإدارة + شعار) */}
               <div style={{ marginBottom: '1rem' }}>
-                <div style={{ background: theme.accent, padding: '10px 20px 8px', borderRadius: '0 0 8px 8px' }}>
+                <div style={{ background: theme.accent, padding: '12px 24px 10px', borderRadius: '0 0 8px 8px' }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse' as const }}>
                     <tbody>
                       <tr>
-                        <td style={{ width: '45%', verticalAlign: 'middle', textAlign: 'right', padding: '0' }}>
+                        <td style={{ width: '35%', verticalAlign: 'middle', textAlign: 'right', padding: '0' }}>
+                          <div style={{ fontSize: '10px', color: '#ffffff', fontWeight: 700, lineHeight: '2.0' }}>المملكة العربية السعودية</div>
+                          <div style={{ fontSize: '10px', color: '#ffffff', fontWeight: 700, lineHeight: '2.0' }}>وزارة التعليم</div>
                           {filteredDeptLines.map((line: string, li: number) => (
-                            <div key={li} style={{ fontSize: '10px', color: '#ffffff', fontWeight: 600, lineHeight: '1.8' }}>{line}</div>
+                            <div key={li} style={{ fontSize: '10px', color: '#ffffff', fontWeight: 600, lineHeight: '2.0' }}>{line}</div>
                           ))}
+                          {personalInfo.school && (
+                            <div style={{ fontSize: '10px', color: '#ffffff', fontWeight: 600, lineHeight: '2.0' }}>{personalInfo.school}</div>
+                          )}
                         </td>
-                        <td style={{ width: '2%', verticalAlign: 'middle', textAlign: 'center', padding: '0 6px' }}>
-                          <div style={{ width: '1px', height: '40px', background: 'rgba(255,255,255,0.35)', margin: '0 auto' }} />
+                        <td style={{ width: '2%', verticalAlign: 'middle', textAlign: 'center', padding: '0 4px' }}>
+                          <div style={{ width: '2px', height: '50px', background: 'rgba(255,255,255,0.35)', margin: '0 auto' }} />
                         </td>
-                        <td style={{ width: '53%', verticalAlign: 'middle', textAlign: 'center', padding: '0' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
-                            <img src={MOE_LOGO} alt="شعار وزارة التعليم" style={{ height: '38px', objectFit: 'contain' as const, display: 'inline-block', filter: 'brightness(0) invert(1)' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
-
+                        <td style={{ width: '28%', verticalAlign: 'middle', textAlign: 'center', padding: '0' }}>
+                          <img src={MOE_LOGO} alt="شعار وزارة التعليم" style={{ height: '55px', objectFit: 'contain' as const, margin: '0 auto', display: 'block', filter: 'brightness(0) invert(1)' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                        </td>
+                        <td style={{ width: '35%', verticalAlign: 'middle', textAlign: 'left', padding: '0' }}>
+                          {personalInfo.extraLogo && (
+                            <img src={personalInfo.extraLogo} alt="شعار إضافي" style={{ height: '45px', objectFit: 'contain' as const, display: 'block', marginBottom: '4px' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                          )}
+                          <div style={{ textAlign: 'left' }}>
+                            {personalInfo.semester && <div style={{ fontSize: '10px', color: '#ffffff', fontWeight: 600, lineHeight: '1.8' }}>{`الفصل الدراسي: ${personalInfo.semester}`}</div>}
+                            {personalInfo.year && <div style={{ fontSize: '10px', color: '#ffffff', fontWeight: 600, lineHeight: '1.8' }}>{`العام الدراسي: ${personalInfo.year}`}</div>}
                           </div>
                         </td>
                       </tr>
                     </tbody>
                   </table>
                 </div>
-                {personalInfo.school && (
-                  <div style={{ background: theme.accent, color: 'white', padding: '5px 16px', textAlign: 'center', fontWeight: 700, fontSize: '10px', letterSpacing: '0.3px', borderRadius: '0 0 6px 6px', margin: '0 16px' }}>
-                    {personalInfo.school}
-                  </div>
-                )}
               </div>
 
               <h2 style={{ fontSize: '1rem', fontWeight: 800, color: theme.accent, fontFamily: "'Cairo', sans-serif", marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
@@ -4735,6 +4808,18 @@ export default function PerformanceEvidence() {
                   <span>صفحة 3</span>
                 </div>
               )}
+            </div>
+
+            {/* === فاصل فني بين جدول التقييم والشواهد === */}
+            <div className="mx-auto mb-6 print:hidden" style={{ width: '210mm', maxWidth: '100%', padding: '1.5rem 2rem', textAlign: 'center' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', justifyContent: 'center' }}>
+                <div style={{ flex: 1, height: '2px', background: `linear-gradient(to left, ${theme.accent}, transparent)` }} />
+                <div style={{ padding: '0.75rem 1.5rem', borderRadius: '12px', border: `2px solid ${theme.accent}20`, background: `${theme.accent}08` }}>
+                  <div style={{ fontSize: '0.75rem', color: theme.accent, fontWeight: 700, fontFamily: "'Cairo', sans-serif" }}>إن العقل الذي ينفتح لفكرة جديدة لا يعود أبداً إلى حجمه الأصلي</div>
+                  <div style={{ fontSize: '0.6rem', color: '#9CA3AF', marginTop: '2px' }}>ألبرت أينشتاين</div>
+                </div>
+                <div style={{ flex: 1, height: '2px', background: `linear-gradient(to right, ${theme.accent}, transparent)` }} />
+              </div>
             </div>
 
             {/* === صفحات الشواهد - كل بند في صفحة منفصلة === */}
@@ -4898,35 +4983,41 @@ export default function PerformanceEvidence() {
                     {/* === صفحة الشواهد === */}
                   <div className="bg-white shadow-lg mx-auto mb-6" style={{ width: '210mm', minHeight: '297mm', maxWidth: '100%', position: 'relative', pageBreakAfter: 'always', display: 'flex', flexDirection: 'column' as const, boxSizing: 'border-box' as const, border: `2px solid ${theme.accent}` }}>
                     <div style={{ flex: 1, padding: '2rem 2.5rem' }}>
-                    {/* ترويسة - مطابقة لـ edu-forms.com */}
+                    {/* ترويسة - مطابقة للتقارير (المملكة + وزارة التعليم + الإدارة + شعار) */}
                     <div style={{ marginBottom: '1rem' }}>
-                      <div style={{ background: theme.accent, padding: '10px 20px 8px', borderRadius: '0 0 8px 8px' }}>
+                      <div style={{ background: theme.accent, padding: '12px 24px 10px', borderRadius: '0 0 8px 8px' }}>
                         <table style={{ width: '100%', borderCollapse: 'collapse' as const }}>
                           <tbody>
                             <tr>
-                              <td style={{ width: '45%', verticalAlign: 'middle', textAlign: 'right', padding: '0' }}>
+                              <td style={{ width: '35%', verticalAlign: 'middle', textAlign: 'right', padding: '0' }}>
+                                <div style={{ fontSize: '10px', color: '#ffffff', fontWeight: 700, lineHeight: '2.0' }}>المملكة العربية السعودية</div>
+                                <div style={{ fontSize: '10px', color: '#ffffff', fontWeight: 700, lineHeight: '2.0' }}>وزارة التعليم</div>
                                 {filteredDeptLines.map((line: string, li: number) => (
-                                  <div key={li} style={{ fontSize: '10px', color: '#ffffff', fontWeight: 600, lineHeight: '1.8' }}>{line}</div>
+                                  <div key={li} style={{ fontSize: '10px', color: '#ffffff', fontWeight: 600, lineHeight: '2.0' }}>{line}</div>
                                 ))}
+                                {personalInfo.school && (
+                                  <div style={{ fontSize: '10px', color: '#ffffff', fontWeight: 600, lineHeight: '2.0' }}>{personalInfo.school}</div>
+                                )}
                               </td>
-                              <td style={{ width: '2%', verticalAlign: 'middle', textAlign: 'center', padding: '0 6px' }}>
-                                <div style={{ width: '1px', height: '40px', background: 'rgba(255,255,255,0.35)', margin: '0 auto' }} />
+                              <td style={{ width: '2%', verticalAlign: 'middle', textAlign: 'center', padding: '0 4px' }}>
+                                <div style={{ width: '2px', height: '50px', background: 'rgba(255,255,255,0.35)', margin: '0 auto' }} />
                               </td>
-                              <td style={{ width: '53%', verticalAlign: 'middle', textAlign: 'center', padding: '0' }}>
-                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
-                                  <img src={MOE_LOGO} alt="شعار وزارة التعليم" style={{ height: '38px', objectFit: 'contain' as const, display: 'inline-block', filter: 'brightness(0) invert(1)' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
-
+                              <td style={{ width: '28%', verticalAlign: 'middle', textAlign: 'center', padding: '0' }}>
+                                <img src={MOE_LOGO} alt="شعار وزارة التعليم" style={{ height: '55px', objectFit: 'contain' as const, margin: '0 auto', display: 'block', filter: 'brightness(0) invert(1)' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                              </td>
+                              <td style={{ width: '35%', verticalAlign: 'middle', textAlign: 'left', padding: '0' }}>
+                                {personalInfo.extraLogo && (
+                                  <img src={personalInfo.extraLogo} alt="شعار إضافي" style={{ height: '45px', objectFit: 'contain' as const, display: 'block', marginBottom: '4px' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                                )}
+                                <div style={{ textAlign: 'left' }}>
+                                  {personalInfo.semester && <div style={{ fontSize: '10px', color: '#ffffff', fontWeight: 600, lineHeight: '1.8' }}>{`الفصل الدراسي: ${personalInfo.semester}`}</div>}
+                                  {personalInfo.year && <div style={{ fontSize: '10px', color: '#ffffff', fontWeight: 600, lineHeight: '1.8' }}>{`العام الدراسي: ${personalInfo.year}`}</div>}
                                 </div>
                               </td>
                             </tr>
                           </tbody>
                         </table>
                       </div>
-                      {personalInfo.school && (
-                        <div style={{ background: theme.accent, color: 'white', padding: '5px 16px', textAlign: 'center', fontWeight: 700, fontSize: '10px', letterSpacing: '0.3px', borderRadius: '0 0 6px 6px', margin: '0 16px' }}>
-                          {personalInfo.school}
-                        </div>
-                      )}
                     </div>
 
                     {/* رأس البند */}
@@ -5057,6 +5148,18 @@ export default function PerformanceEvidence() {
               });
             })()}
 
+            {/* === فاصل فني قبل صفحة التوقيعات === */}
+            <div className="mx-auto mb-6 print:hidden" style={{ width: '210mm', maxWidth: '100%', padding: '1.5rem 2rem', textAlign: 'center' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', justifyContent: 'center' }}>
+                <div style={{ flex: 1, height: '2px', background: `linear-gradient(to left, ${theme.accent}, transparent)` }} />
+                <div style={{ padding: '0.75rem 1.5rem', borderRadius: '12px', border: `2px solid ${theme.accent}20`, background: `${theme.accent}08` }}>
+                  <div style={{ fontSize: '0.75rem', color: theme.accent, fontWeight: 700, fontFamily: "'Cairo', sans-serif" }}>المعلم المتميز يُلهم ويفتح العقول ويمس القلوب</div>
+                  <div style={{ fontSize: '0.6rem', color: '#9CA3AF', marginTop: '2px' }}>ويليام آرثر وورد</div>
+                </div>
+                <div style={{ flex: 1, height: '2px', background: `linear-gradient(to right, ${theme.accent}, transparent)` }} />
+              </div>
+            </div>
+
             {/* === صفحة التوقيعات - تتبع signatureStyle === */}
             {(() => {
               const ss = theme.signatureStyle || 'dotted';
@@ -5067,33 +5170,39 @@ export default function PerformanceEvidence() {
                   {/* ترويسة - مطابقة لـ edu-forms.com */}
                   <div style={{ position: 'absolute', top: '2rem', left: '2.5rem', right: '2.5rem' }}>
                     <div style={{ marginBottom: '0.5rem' }}>
-                      <div style={{ background: theme.accent, padding: '10px 20px 8px', borderRadius: '0 0 8px 8px' }}>
+                      <div style={{ background: theme.accent, padding: '12px 24px 10px', borderRadius: '0 0 8px 8px' }}>
                         <table style={{ width: '100%', borderCollapse: 'collapse' as const }}>
                           <tbody>
                             <tr>
-                              <td style={{ width: '45%', verticalAlign: 'middle', textAlign: 'right', padding: '0' }}>
+                              <td style={{ width: '35%', verticalAlign: 'middle', textAlign: 'right', padding: '0' }}>
+                                <div style={{ fontSize: '10px', color: '#ffffff', fontWeight: 700, lineHeight: '2.0' }}>المملكة العربية السعودية</div>
+                                <div style={{ fontSize: '10px', color: '#ffffff', fontWeight: 700, lineHeight: '2.0' }}>وزارة التعليم</div>
                                 {filteredDeptLines.map((line: string, li: number) => (
-                                  <div key={li} style={{ fontSize: '10px', color: '#ffffff', fontWeight: 600, lineHeight: '1.8' }}>{line}</div>
+                                  <div key={li} style={{ fontSize: '10px', color: '#ffffff', fontWeight: 600, lineHeight: '2.0' }}>{line}</div>
                                 ))}
+                                {personalInfo.school && (
+                                  <div style={{ fontSize: '10px', color: '#ffffff', fontWeight: 600, lineHeight: '2.0' }}>{personalInfo.school}</div>
+                                )}
                               </td>
-                              <td style={{ width: '2%', verticalAlign: 'middle', textAlign: 'center', padding: '0 6px' }}>
-                                <div style={{ width: '1px', height: '40px', background: 'rgba(255,255,255,0.35)', margin: '0 auto' }} />
+                              <td style={{ width: '2%', verticalAlign: 'middle', textAlign: 'center', padding: '0 4px' }}>
+                                <div style={{ width: '2px', height: '50px', background: 'rgba(255,255,255,0.35)', margin: '0 auto' }} />
                               </td>
-                              <td style={{ width: '53%', verticalAlign: 'middle', textAlign: 'center', padding: '0' }}>
-                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
-                                  <img src={MOE_LOGO} alt="شعار وزارة التعليم" style={{ height: '38px', objectFit: 'contain' as const, display: 'inline-block', filter: 'brightness(0) invert(1)' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
-
+                              <td style={{ width: '28%', verticalAlign: 'middle', textAlign: 'center', padding: '0' }}>
+                                <img src={MOE_LOGO} alt="شعار وزارة التعليم" style={{ height: '55px', objectFit: 'contain' as const, margin: '0 auto', display: 'block', filter: 'brightness(0) invert(1)' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                              </td>
+                              <td style={{ width: '35%', verticalAlign: 'middle', textAlign: 'left', padding: '0' }}>
+                                {personalInfo.extraLogo && (
+                                  <img src={personalInfo.extraLogo} alt="شعار إضافي" style={{ height: '45px', objectFit: 'contain' as const, display: 'block', marginBottom: '4px' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                                )}
+                                <div style={{ textAlign: 'left' }}>
+                                  {personalInfo.semester && <div style={{ fontSize: '10px', color: '#ffffff', fontWeight: 600, lineHeight: '1.8' }}>{`الفصل الدراسي: ${personalInfo.semester}`}</div>}
+                                  {personalInfo.year && <div style={{ fontSize: '10px', color: '#ffffff', fontWeight: 600, lineHeight: '1.8' }}>{`العام الدراسي: ${personalInfo.year}`}</div>}
                                 </div>
                               </td>
                             </tr>
                           </tbody>
                         </table>
                       </div>
-                      {personalInfo.school && (
-                        <div style={{ background: theme.accent, color: 'white', padding: '5px 16px', textAlign: 'center', fontWeight: 700, fontSize: '10px', letterSpacing: '0.3px', borderRadius: '0 0 6px 6px', margin: '0 16px' }}>
-                          {personalInfo.school}
-                        </div>
-                      )}
                     </div>
                   </div>
 
