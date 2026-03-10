@@ -1138,3 +1138,9 @@
 - [x] تطبيق الهوية البصرية بالكامل على كل قالب (هيدر + فوتر + إطارات + ألوان + خطوط + تنسيقات)
 - [x] التأكد من أن كل قالب مختلف ومميز وليس فيه تكرار
 - [x] اختبار شامل لجميع القوالب (400 اختبار ناجح - 20 ملف)
+
+## 78. إصلاح خطأ hooks المشروطة في PerformanceEvidence
+- [x] تحديد hooks المشروطة التي تسبب "Rendered more hooks than during the previous render" - وجدت في سطر 3908-3914 (IIFE مشروطة)
+- [x] نقل جميع hooks قبل أي return مشروط - نقل userThemesQuery, createUserThemeMut, deleteUserThemeMut, trpcUtils لأعلى المكون
+- [x] اختبار الصفحة والتحقق من عدم وجود أخطاء - 0 أخطاء TypeScript + 400 اختبار ناجح
+- [x] حفظ checkpoint

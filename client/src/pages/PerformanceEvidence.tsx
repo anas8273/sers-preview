@@ -429,6 +429,14 @@ export default function PerformanceEvidence() {
   const improveMutation = trpc.ai.improveText.useMutation();
   const classifyMutation = trpc.ai.classifyEvidence.useMutation();
 
+  // User themes (moved to top level to follow Rules of Hooks)
+  const userThemesQuery = trpc.userThemes.list.useQuery(undefined, { staleTime: 60000, enabled: isAuthenticated });
+  const createUserThemeMut = trpc.userThemes.create.useMutation();
+  const deleteUserThemeMut = trpc.userThemes.delete.useMutation();
+  const trpcUtils = trpc.useUtils();
+  const [showSaveThemeDialog, setShowSaveThemeDialog] = useState(false);
+  const [newThemeNameInput, setNewThemeNameInput] = useState('');
+
   // Search & Filter
   const [searchQuery, setSearchQuery] = useState("");
   const [filterPriority, setFilterPriority] = useState<EvidencePriority | "all">("all");
@@ -3905,72 +3913,57 @@ export default function PerformanceEvidence() {
               </div>
 
               {/* حفظ الثيم المخصص */}
-              {isAuthenticated && (() => {
-                const userThemesQuery = trpc.userThemes.list.useQuery(undefined, { staleTime: 60000 });
-                const createUserThemeMut = trpc.userThemes.create.useMutation();
-                const deleteUserThemeMut = trpc.userThemes.delete.useMutation();
-                const utils = trpc.useUtils();
-                const [showSaveDialog, setShowSaveDialog] = useState(false);
-                const [newThemeName, setNewThemeName] = useState('');
-
-                const handleSaveCurrentTheme = async () => {
-                  if (!newThemeName.trim()) { toast.error('يرجى إدخال اسم للثيم'); return; }
-                  try {
-                    await createUserThemeMut.mutateAsync({
-                      name: newThemeName.trim(),
-                      themeData: { ...selectedTheme },
-                    });
-                    toast.success('تم حفظ الثيم بنجاح');
-                    setNewThemeName('');
-                    setShowSaveDialog(false);
-                    utils.userThemes.list.invalidate();
-                  } catch { toast.error('فشل حفظ الثيم'); }
-                };
-
-                const handleLoadUserTheme = (themeData: any) => {
-                  const loaded: ThemeConfig = {
-                    ...DEFAULT_THEME,
-                    ...themeData,
-                  };
-                  setSelectedTheme(loaded);
-                  toast.success('تم تحميل الثيم المحفوظ');
-                };
-
-                const handleDeleteUserTheme = async (id: number) => {
-                  try {
-                    await deleteUserThemeMut.mutateAsync({ id });
-                    toast.success('تم حذف الثيم');
-                    utils.userThemes.list.invalidate();
-                  } catch { toast.error('فشل حذف الثيم'); }
-                };
-
-                return (
+              {isAuthenticated && (
                   <div className="border-t border-border pt-4">
                     <div className="flex items-center justify-between mb-3">
                       <h4 className="text-sm font-bold text-foreground flex items-center gap-2">
                         <Save className="w-4 h-4 text-primary" />ثيماتي المحفوظة
                       </h4>
                       <Button variant="outline" size="sm" className="text-xs h-7 gap-1"
-                        onClick={() => setShowSaveDialog(!showSaveDialog)}>
+                        onClick={() => setShowSaveThemeDialog(!showSaveThemeDialog)}>
                         <Plus className="w-3 h-3" />حفظ الثيم الحالي
                       </Button>
                     </div>
 
-                    {showSaveDialog && (
+                    {showSaveThemeDialog && (
                       <div className="flex items-center gap-2 mb-3 p-2 bg-muted/50 rounded-lg">
                         <input
                           type="text"
-                          value={newThemeName}
-                          onChange={(e) => setNewThemeName(e.target.value)}
+                          value={newThemeNameInput}
+                          onChange={(e) => setNewThemeNameInput(e.target.value)}
                           placeholder="اسم الثيم المخصص..."
                           className="flex-1 px-3 py-1.5 rounded-md border border-border text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/20"
-                          onKeyDown={(e) => { if (e.key === 'Enter') handleSaveCurrentTheme(); }}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              if (!newThemeNameInput.trim()) { toast.error('يرجى إدخال اسم للثيم'); return; }
+                              createUserThemeMut.mutateAsync({
+                                name: newThemeNameInput.trim(),
+                                themeData: { ...selectedTheme },
+                              }).then(() => {
+                                toast.success('تم حفظ الثيم بنجاح');
+                                setNewThemeNameInput('');
+                                setShowSaveThemeDialog(false);
+                                trpcUtils.userThemes.list.invalidate();
+                              }).catch(() => toast.error('فشل حفظ الثيم'));
+                            }
+                          }}
                         />
-                        <Button size="sm" className="h-8" onClick={handleSaveCurrentTheme}
+                        <Button size="sm" className="h-8" onClick={() => {
+                          if (!newThemeNameInput.trim()) { toast.error('يرجى إدخال اسم للثيم'); return; }
+                          createUserThemeMut.mutateAsync({
+                            name: newThemeNameInput.trim(),
+                            themeData: { ...selectedTheme },
+                          }).then(() => {
+                            toast.success('تم حفظ الثيم بنجاح');
+                            setNewThemeNameInput('');
+                            setShowSaveThemeDialog(false);
+                            trpcUtils.userThemes.list.invalidate();
+                          }).catch(() => toast.error('فشل حفظ الثيم'));
+                        }}
                           disabled={createUserThemeMut.isPending}>
                           {createUserThemeMut.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
                         </Button>
-                        <Button variant="ghost" size="sm" className="h-8" onClick={() => setShowSaveDialog(false)}>
+                        <Button variant="ghost" size="sm" className="h-8" onClick={() => setShowSaveThemeDialog(false)}>
                           <X className="w-3 h-3" />
                         </Button>
                       </div>
@@ -3984,11 +3977,19 @@ export default function PerformanceEvidence() {
                             <div key={ut.id} className="flex items-center gap-1 bg-muted/50 rounded-lg px-2 py-1">
                               <span className="inline-block w-2.5 h-2.5 rounded-full" style={{ backgroundColor: td.accent || '#0d7377' }} />
                               <Button variant="ghost" size="sm" className="text-xs h-6 px-1.5"
-                                onClick={() => handleLoadUserTheme(td)}>
+                                onClick={() => {
+                                  setSelectedTheme({ ...DEFAULT_THEME, ...td });
+                                  toast.success('تم تحميل الثيم المحفوظ');
+                                }}>
                                 {ut.name}
                               </Button>
                               <button type="button" className="text-muted-foreground hover:text-red-500 transition-colors p-0.5"
-                                onClick={() => handleDeleteUserTheme(ut.id)}>
+                                onClick={() => {
+                                  deleteUserThemeMut.mutateAsync({ id: ut.id }).then(() => {
+                                    toast.success('تم حذف الثيم');
+                                    trpcUtils.userThemes.list.invalidate();
+                                  }).catch(() => toast.error('فشل حذف الثيم'));
+                                }}>
                                 <Trash2 className="w-3 h-3" />
                               </button>
                             </div>
@@ -3999,8 +4000,7 @@ export default function PerformanceEvidence() {
                       <p className="text-[10px] text-muted-foreground">لم تحفظ أي ثيمات مخصصة بعد. اختر ثيم وعدّله ثم احفظه لاستخدامه لاحقاً.</p>
                     )}
                   </div>
-                );
-              })()}
+              )}
               {/* خيارات الباركود */}
               <div className="border-t border-border pt-4">
                 <div className="flex items-center justify-between mb-3">
