@@ -142,12 +142,21 @@ function wrapWithFonts(html: string): string {
       width: 210mm;
       min-height: 297mm;
       page-break-after: always;
+      page-break-inside: auto;
       position: relative;
       overflow: visible;
       background: white;
     }
     .pdf-page:last-child {
       page-break-after: auto;
+    }
+    /* السماح بتقسيم المحتوى الطويل على صفحات متعددة */
+    [style*="page-break-inside: avoid"] {
+      page-break-inside: auto !important;
+    }
+    /* لكن الشواهد الفردية تبقى في صفحة واحدة */
+    [style*="pageBreakInside"] {
+      page-break-inside: avoid;
     }
     button, [data-no-print] {
       display: none !important;

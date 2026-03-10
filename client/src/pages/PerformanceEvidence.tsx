@@ -223,16 +223,17 @@ interface ThemeConfig {
 // مطابقة للتصميم المرجعي من وزارة التعليم
 
 // القالب 1: ترويسة بيضاء + حقول خط سفلي (التصميم المرجعي الأساسي)
+// ★ لون واحد موحد: accent = borderColor = titleBg = fieldLabelBg = footerBg = coverAccent2
 const DEFAULT_THEME: ThemeConfig = {
   id: 'default', name: 'ترويسة بيضاء',
   layoutType: 'white-header-classic',
   headerBg: '#ffffff', headerText: '#1a3a5c',
   accent: '#1a3a5c', borderColor: '#1a3a5c',
   titleBg: '#1a3a5c', fieldLabelBg: '#1a3a5c',
-  footerBg: 'linear-gradient(to right, #2ea87a, #1a5f3f, #1a3a5c)',
+  footerBg: '#1a3a5c',
   tableStyle: false, titleStyle: 'rounded', showTopLine: false, showBottomBar: true,
   fieldStyle: 'underlined', signatureStyle: 'dotted',
-  coverStyle: 'gradient-center', sectionCoverStyle: 'full-gradient', coverAccent2: '#2ea87a',
+  coverStyle: 'gradient-center', sectionCoverStyle: 'full-gradient', coverAccent2: '#1a3a5c',
   headerVariant: 'right-text-center-logo-left-info',
   headerSeparator: false,
 };
@@ -241,30 +242,30 @@ const DEFAULT_THEME: ThemeConfig = {
 const BUILTIN_THEMES: ThemeConfig[] = [
   DEFAULT_THEME,
   {
-    // القالب 2: ترويسة داكنة - تدرج أخضر داكن (مطابق للغلاف المرجعي)
+    // القالب 2: ترويسة داكنة - لون واحد موحد أخضر داكن
     id: 'builtin-dark', name: 'ترويسة داكنة',
     layoutType: 'dark-header-table',
-    headerBg: 'linear-gradient(135deg, #1a3a5c 0%, #1a5f3f 100%)', headerText: '#ffffff',
-    accent: '#1a5f3f', borderColor: '#1a3a5c',
+    headerBg: '#1a5f3f', headerText: '#ffffff',
+    accent: '#1a5f3f', borderColor: '#1a5f3f',
     titleBg: '#1a5f3f', fieldLabelBg: '#1a5f3f',
-    footerBg: 'linear-gradient(to right, #2ea87a, #1a5f3f, #1a3a5c)',
+    footerBg: '#1a5f3f',
     tableStyle: true, titleStyle: 'full-width', showTopLine: false, showBottomBar: true,
     fieldStyle: 'table', signatureStyle: 'boxed',
-    coverStyle: 'top-bar', sectionCoverStyle: 'numbered-bar', coverAccent2: '#2ea87a',
+    coverStyle: 'top-bar', sectionCoverStyle: 'numbered-bar', coverAccent2: '#1a5f3f',
     headerVariant: 'right-text-center-logo-left-info',
     bodyBg: '#ffffff',
   },
   {
-    // القالب 3: خفيف حبر - بدون شريط سفلي، أقل حبر ممكن (للطباعة)
+    // القالب 3: خفيف حبر - لون واحد موحد مع حبر أقل
     id: 'builtin-light', name: 'خفيف حبر',
     layoutType: 'white-header-classic',
     headerBg: '#ffffff', headerText: '#1a3a5c',
-    accent: '#1a3a5c', borderColor: '#d1d5db',
+    accent: '#1a3a5c', borderColor: '#1a3a5c',
     titleBg: '#1a3a5c', fieldLabelBg: '#f0f4f8',
-    footerBg: '#f9fafb',
+    footerBg: '#1a3a5c',
     tableStyle: false, titleStyle: 'rounded', showTopLine: false, showBottomBar: false,
     fieldStyle: 'underlined', signatureStyle: 'dotted',
-    coverStyle: 'minimal-line', sectionCoverStyle: 'clean-divider', coverAccent2: '#2ea87a',
+    coverStyle: 'minimal-line', sectionCoverStyle: 'clean-divider', coverAccent2: '#1a3a5c',
     headerVariant: 'right-text-center-logo-left-info',
     bodyBg: '#ffffff',
   },
@@ -373,13 +374,13 @@ export default function PerformanceEvidence() {
           id: `db-${t.id}`,
           name: t.name,
           layoutType: lt as LayoutType,
-          headerBg: t.headerBg || (isDark ? 'linear-gradient(135deg, #1a3a5c, #1a5f3f)' : '#ffffff'),
+          headerBg: t.headerBg || (isDark ? (t.accent || '#1a3a5c') : '#ffffff'),
           headerText: t.headerText || (isDark ? '#fff' : '#1a3a5c'),
-          accent: t.accent || '#1a5f3f',
-          borderColor: t.borderColor || '#1a3a5c',
-          titleBg: t.accent || '#1a5f3f',
-          fieldLabelBg: t.accent || '#1a5f3f',
-          footerBg: `linear-gradient(to left, ${t.borderColor || '#1a3a5c'}, ${t.accent || '#1a5f3f'}, #2ea87a)`,
+          accent: t.accent || '#1a3a5c',
+          borderColor: t.accent || t.borderColor || '#1a3a5c',
+          titleBg: t.accent || '#1a3a5c',
+          fieldLabelBg: t.accent || '#1a3a5c',
+          footerBg: t.accent || '#1a3a5c',
           tableStyle: (layout.fieldStyle === 'table'),
           titleStyle: (layout.titleStyle || 'rounded') as ThemeConfig['titleStyle'],
           showTopLine: isDark,
@@ -387,11 +388,11 @@ export default function PerformanceEvidence() {
           fieldStyle: (layout.fieldStyle || 'fieldset') as ThemeConfig['fieldStyle'],
           signatureStyle: (['dotted', 'solid', 'boxed', 'lined', 'stamped'].includes(layout.signatureStyle) ? layout.signatureStyle : 'dotted') as ThemeConfig['signatureStyle'],
           bodyBg: t.bodyBg || (lt === 'white-header-light' ? '#E0F7FA' : lt === 'white-header-sidebar' ? '#f8fafb' : undefined),
-          sidebarBg: lt === 'white-header-sidebar' ? `linear-gradient(to bottom, ${t.borderColor || '#1a3a5c'}, ${t.accent || '#1a5f3f'})` : undefined,
+          sidebarBg: lt === 'white-header-sidebar' ? (t.accent || '#1a3a5c') : undefined,
           headerSeparator: lt === 'white-header-sidebar',
           coverStyle: (layout.coverStyle || 'gradient-center') as ThemeConfig['coverStyle'],
           sectionCoverStyle: (layout.sectionCoverStyle || 'full-gradient') as ThemeConfig['sectionCoverStyle'],
-          coverAccent2: layout.coverAccent2 || '#2ea87a',
+          coverAccent2: t.accent || layout.coverAccent2 || '#1a3a5c',
         };
       });
       themes.push(...dbMapped);
@@ -3400,16 +3401,16 @@ export default function PerformanceEvidence() {
                               </div>
                               <div>
                                 <label className="text-xs font-medium text-gray-600 mb-1 block">ألوان سريعة</label>
-                                <div className="flex gap-1.5 flex-wrap">
-                                  {[
-                                    { name: 'أزرق داكن', accent: '#1a3a5c', border: '#1a3a5c' },
-                                    { name: 'أخضر داكن', accent: '#1a5f3f', border: '#1a3a5c' },
-                                    { name: 'تيل', accent: '#0d7377', border: '#0d7377' },
-                                    { name: 'كحلي', accent: '#1e3a5f', border: '#1e3a5f' },
-                                    { name: 'بنفسجي', accent: '#5b21b6', border: '#5b21b6' },
-                                    { name: 'عنابي', accent: '#7f1d1d', border: '#7f1d1d' },
+                                <div className="flex gap-1.5 flex-wrap">                                  {[
+                                    { name: 'أزرق داكن', accent: '#1a3a5c' },
+                                    { name: 'أخضر داكن', accent: '#1a5f3f' },
+                                    { name: 'تيل', accent: '#0d7377' },
+                                    { name: 'كحلي', accent: '#1e3a5f' },
+                                    { name: 'بنفسجي', accent: '#5b21b6' },
+                                    { name: 'عنابي', accent: '#7f1d1d' },
                                   ].map(preset => (
-                                    <button key={preset.name} title={preset.name} onClick={() => setSelectedTheme(prev => ({ ...prev, accent: preset.accent, borderColor: preset.border, titleBg: preset.accent, fieldLabelBg: preset.accent, footerBg: `linear-gradient(to right, ${preset.accent}, ${preset.border})`, headerBg: `linear-gradient(135deg, ${preset.border} 0%, ${preset.accent} 100%)` }))}
+                                    <button key={preset.name} title={preset.name} onClick={() => setSelectedTheme(prev => ({ ...prev, accent: preset.accent, borderColor: preset.accent, titleBg: preset.accent, fieldLabelBg: preset.accent, footerBg: preset.accent, headerBg: prev.headerBg === '#ffffff' || prev.headerBg === '#f8f9fa' ? prev.headerBg : preset.accent, coverAccent2: preset.accent }))
+}
                                       className="w-7 h-7 rounded-full border-2 border-white shadow-sm hover:scale-110 transition-transform" style={{ background: preset.accent }} />
                                   ))}
                                 </div>
@@ -3477,7 +3478,7 @@ export default function PerformanceEvidence() {
                       {/* ========== الترويسة الرسمية - 4 أنماط ========== */}
                       {(() => {
                         const hv = theme.headerVariant || 'right-text-center-logo-left-info';
-                        const hBg = isDarkHeader ? (theme.headerBg || 'linear-gradient(135deg, #1a3a5c 0%, #1a5f3f 50%, #2ea87a 100%)') : '#ffffff';
+                        const hBg = isDarkHeader ? (theme.headerBg || theme.accent) : '#ffffff';
                         const hTextColor = isDarkHeader ? '#ffffff' : (theme.headerText || theme.borderColor || '#1a3a5c');
                         const allDeptLines = (personalInfo.department || '').split('\n').filter((l: string) => l.trim());
 
@@ -3485,9 +3486,9 @@ export default function PerformanceEvidence() {
                         if (hv === 'right-text-center-logo-left-info') {
                           return (
                             <>
-                              {/* شريط علوي رفيع بتدرج - مطابق للهوية البصرية */}
+                              {/* شريط علوي رفيع بلون واحد */}
                               {!isDarkHeader && (
-                                <div style={{ height: '5px', background: 'linear-gradient(to left, #1a3a5c, #1a5f3f, #2ea87a)' }} />
+                                <div style={{ height: '5px', background: theme.accent }} />
                               )}
                               <div style={{ background: hBg, padding: isDarkHeader ? '16px 24px 12px' : '18px 24px 14px' }}>
                                 <table style={{ width: '100%', borderCollapse: 'collapse' as const }}>
@@ -3503,7 +3504,7 @@ export default function PerformanceEvidence() {
                                       </td>
                                       {/* خط فاصل عمودي أخضر - مطابق للهوية البصرية */}
                                       <td style={{ width: '2%', verticalAlign: 'middle', textAlign: 'center', padding: '0 4px' }}>
-                                        <div style={{ width: '2px', height: '55px', background: isDarkHeader ? 'rgba(255,255,255,0.35)' : '#5bb784', margin: '0 auto' }} />
+                                        <div style={{ width: '2px', height: '55px', background: isDarkHeader ? 'rgba(255,255,255,0.35)' : theme.accent, margin: '0 auto' }} />
                                       </td>
                                       <td style={{ width: '28%', verticalAlign: 'middle', textAlign: 'center', padding: '0' }}>
                                         <img src={getMoeLogoUrl()} alt="شعار وزارة التعليم" style={{ height: '80px', objectFit: 'contain' as const, margin: '0 auto', display: 'block', filter: getMoeLogoFilter(isDarkHeader) }} />
@@ -3529,8 +3530,8 @@ export default function PerformanceEvidence() {
                         if (hv === 'right-text-left-logo') {
                           return (
                             <>
-                              {/* شريط علوي رفيع بتدرج */}
-                              <div style={{ height: '5px', background: 'linear-gradient(to left, #1a3a5c, #1a5f3f, #2ea87a)' }} />
+                              {/* شريط علوي رفيع بلون واحد */}
+                              <div style={{ height: '5px', background: theme.accent }} />
                               <div style={{ background: '#ffffff', padding: '20px 28px 16px' }}>
                                 <table style={{ width: '100%', borderCollapse: 'collapse' as const }}>
                                   <tbody>
@@ -3545,7 +3546,7 @@ export default function PerformanceEvidence() {
                                       </td>
                                       {/* خط فاصل عمودي أخضر */}
                                       <td style={{ width: '2%', verticalAlign: 'middle', textAlign: 'center', padding: '0 6px' }}>
-                                        <div style={{ width: '2px', height: '60px', background: '#5bb784', margin: '0 auto' }} />
+                                        <div style={{ width: '2px', height: '60px', background: theme.accent, margin: '0 auto' }} />
                                       </td>
                                       <td style={{ width: '48%', verticalAlign: 'middle', textAlign: 'left', padding: '0' }}>
                                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-start', gap: '12px' }}>
@@ -3571,8 +3572,8 @@ export default function PerformanceEvidence() {
                         if (hv === 'center-logo-banner') {
                           return (
                             <>
-                              {/* شريط علوي رفيع بتدرج */}
-                              <div style={{ height: '5px', background: 'linear-gradient(to left, #1a3a5c, #1a5f3f, #2ea87a)' }} />
+                              {/* شريط علوي رفيع بلون واحد */}
+                              <div style={{ height: '5px', background: theme.accent }} />
                               <div style={{ background: '#ffffff', padding: '14px 24px 10px' }}>
                                 <table style={{ width: '100%', borderCollapse: 'collapse' as const }}>
                                   <tbody>
@@ -3588,7 +3589,7 @@ export default function PerformanceEvidence() {
                                       </td>
                                       {/* خط فاصل عمودي أخضر */}
                                       <td style={{ width: '2%', verticalAlign: 'middle', textAlign: 'center', padding: '0 4px' }}>
-                                        <div style={{ width: '2px', height: '55px', background: '#5bb784', margin: '0 auto' }} />
+                                        <div style={{ width: '2px', height: '55px', background: theme.accent, margin: '0 auto' }} />
                                       </td>
                                       <td style={{ width: '50%', verticalAlign: 'middle', textAlign: 'left', padding: '0' }}>
                                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-start', gap: '10px' }}>
@@ -3606,12 +3607,8 @@ export default function PerformanceEvidence() {
                                   </tbody>
                                 </table>
                               </div>
-                              {/* خطوط فاصلة ملونة - تتبع لون الهوية البصرية */}
-                              <div style={{ display: 'flex', height: '4px' }}>
-                                <div style={{ flex: 1, background: theme.coverAccent2 || theme.accent }} />
-                                <div style={{ flex: 1, background: theme.accent }} />
-                                <div style={{ flex: 1, background: theme.borderColor || '#9CA3AF' }} />
-                              </div>
+                              {/* خط فاصل بلون واحد موحد */}
+                              <div style={{ height: '4px', background: theme.accent }} />
                             </>
                           );
                         }
@@ -3619,8 +3616,8 @@ export default function PerformanceEvidence() {
                         // نمط 4: ترويسة كاملة مع أقسام (مثل edu-forms - الصورة 3)
                         return (
                           <>
-                            {/* شريط علوي رفيع بتدرج */}
-                            <div style={{ height: '5px', background: 'linear-gradient(to left, #1a3a5c, #1a5f3f, #2ea87a)' }} />
+                            {/* شريط علوي رفيع بلون واحد */}
+                            <div style={{ height: '5px', background: theme.accent }} />
                             <div style={{ background: '#ffffff', padding: '14px 24px 10px' }}>
                               <table style={{ width: '100%', borderCollapse: 'collapse' as const }}>
                                 <tbody>
@@ -3633,9 +3630,9 @@ export default function PerformanceEvidence() {
                                         <div style={{ fontSize: '13px', color: theme.headerText || '#1a3a5c', fontWeight: 700, lineHeight: '2.0' }}>{personalInfo.school}</div>
                                       )}
                                     </td>
-                                    {/* خط فاصل عمودي أخضر */}
+                                    {/* خط فاصل عمودي بلون الهوية */}
                                     <td style={{ width: '2%', verticalAlign: 'middle', textAlign: 'center', padding: '0 4px' }}>
-                                      <div style={{ width: '2px', height: '55px', background: '#5bb784', margin: '0 auto' }} />
+                                      <div style={{ width: '2px', height: '55px', background: theme.accent, margin: '0 auto' }} />
                                     </td>
                                     <td style={{ width: '28%', verticalAlign: 'middle', textAlign: 'center', padding: '0' }}>
                                       <img src={getMoeLogoUrl()} alt="شعار وزارة التعليم" style={{ height: '75px', objectFit: 'contain' as const, margin: '0 auto', display: 'block' }} />
@@ -3847,21 +3844,14 @@ export default function PerformanceEvidence() {
 
                       </div>{/* إغلاق المحتوى الرئيسي */}
 
-                      {/* ========== الفوتر - شكل مائل/منحني مطابق للهوية البصرية ========== */}
+                      {/* ========== الفوتر - لون واحد موحد ========== */}
                       <div style={{ marginTop: 'auto' }}>
-                        {/* الشكل المنحني/المائل - يبدأ من اليسار ويرتفع لليمين */}
+                        {/* الشكل المنحني بلون واحد */}
                         <svg viewBox="0 0 800 50" preserveAspectRatio="none" style={{ width: '100%', height: '35px', display: 'block' }}>
-                          <defs>
-                            <linearGradient id="footerGradSingle" x1="0" y1="0" x2="1" y2="0">
-                              <stop offset="0%" stopColor="#2ea87a" />
-                              <stop offset="50%" stopColor="#1a5f3f" />
-                              <stop offset="100%" stopColor="#1a3a5c" />
-                            </linearGradient>
-                          </defs>
-                          <path d="M0,50 L0,35 C150,8 400,2 800,18 L800,50 Z" fill="url(#footerGradSingle)" />
+                          <path d="M0,50 L0,35 C150,8 400,2 800,18 L800,50 Z" fill={theme.accent} />
                         </svg>
                         <div style={{
-                          background: 'linear-gradient(to left, #1a3a5c, #1a5f3f, #2ea87a)',
+                          background: theme.accent,
                           padding: '6px 28px 10px',
                           fontSize: '11px',
                           color: '#fff',
@@ -4322,7 +4312,7 @@ export default function PerformanceEvidence() {
               const a2 = theme.coverAccent2 || theme.accent;
               // ترويسة رسمية للغلاف - مطابقة للتقارير
               const coverOfficialHeader = (
-                <div style={{ background: 'linear-gradient(135deg, #1a3a5c 0%, #1a5f3f 50%, #2ea87a 100%)', padding: '14px 24px 10px', borderRadius: '0 0 8px 8px' }}>
+                <div style={{ background: theme.accent, padding: '14px 24px 10px', borderRadius: '0 0 8px 8px' }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse' as const }}>
                     <tbody>
                       <tr>
@@ -4378,7 +4368,7 @@ export default function PerformanceEvidence() {
 
               // === غلاف 1: متدرج مركزي (الافتراضي) ===
               if (cs === 'gradient-center') return (
-                <div className="bg-white shadow-lg mx-auto mb-6" style={{ width: '210mm', minHeight: '297mm', maxWidth: '100%', position: 'relative', overflow: 'hidden', pageBreakAfter: 'always' }}>
+                <div className="bg-white shadow-lg mx-auto mb-6" style={{ width: '210mm', minHeight: '297mm', maxWidth: '100%', position: 'relative', overflow: 'hidden', pageBreakAfter: 'always', border: `2px solid ${theme.accent}` }}>
                   {coverOfficialHeader}
                   <div style={{ background: theme.headerBg, color: theme.headerText, padding: '3rem 2.5rem', textAlign: 'center', position: 'relative', overflow: 'hidden', minHeight: 'calc(297mm - 80px)', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
                     <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, background: 'linear-gradient(135deg, rgba(255,255,255,0.12) 0%, transparent 40%, rgba(0,0,0,0.1) 100%)', pointerEvents: 'none' }} />
@@ -4392,7 +4382,7 @@ export default function PerformanceEvidence() {
 
               // === غلاف 2: مقسوم يسار (شريط جانبي ملون + محتوى أبيض) ===
               if (cs === 'split-left') return (
-                <div className="bg-white shadow-lg mx-auto mb-6" style={{ width: '210mm', minHeight: '297mm', maxWidth: '100%', position: 'relative', overflow: 'hidden', pageBreakAfter: 'always' }}>
+                <div className="bg-white shadow-lg mx-auto mb-6" style={{ width: '210mm', minHeight: '297mm', maxWidth: '100%', position: 'relative', overflow: 'hidden', pageBreakAfter: 'always', border: `2px solid ${theme.accent}` }}>
                   {coverOfficialHeader}
                   <div style={{ display: 'flex', minHeight: 'calc(297mm - 80px)' }}>
                   <div style={{ width: '35%', background: theme.headerBg, minHeight: '297mm', position: 'relative', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', padding: '2rem', color: theme.headerText }}>
@@ -4423,7 +4413,7 @@ export default function PerformanceEvidence() {
 
               // === غلاف 3: قطري (شريط علوي مائل + محتوى أبيض) ===
               if (cs === 'diagonal') return (
-                <div className="bg-white shadow-lg mx-auto mb-6" style={{ width: '210mm', minHeight: '297mm', maxWidth: '100%', position: 'relative', overflow: 'hidden', pageBreakAfter: 'always' }}>
+                <div className="bg-white shadow-lg mx-auto mb-6" style={{ width: '210mm', minHeight: '297mm', maxWidth: '100%', position: 'relative', overflow: 'hidden', pageBreakAfter: 'always', border: `2px solid ${theme.accent}` }}>
                   {coverOfficialHeader}
                   <div style={{ background: theme.headerBg, height: '40%', position: 'absolute', top: '80px', left: 0, right: 0, clipPath: 'polygon(0 0, 100% 0, 100% 75%, 0 100%)' }} />
                   <div style={{ position: 'relative', zIndex: 1, minHeight: '297mm', display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '4rem 3rem', textAlign: 'center' }}>
@@ -4450,7 +4440,7 @@ export default function PerformanceEvidence() {
 
               // === غلاف 4: إطار أنيق (خلفية فاتحة + إطار مزدوج) ===
               if (cs === 'framed-elegant') return (
-                <div className="bg-white shadow-lg mx-auto mb-6" style={{ width: '210mm', minHeight: '297mm', maxWidth: '100%', position: 'relative', overflow: 'hidden', pageBreakAfter: 'always', background: `${theme.accent}08` }}>
+                <div className="bg-white shadow-lg mx-auto mb-6" style={{ width: '210mm', minHeight: '297mm', maxWidth: '100%', position: 'relative', overflow: 'hidden', pageBreakAfter: 'always', background: `${theme.accent}08`, border: `2px solid ${theme.accent}` }}>
                   {coverOfficialHeader}
                   <div style={{ position: 'absolute', top: '100px', left: '20px', right: '20px', bottom: '20px', border: `2px solid ${theme.accent}`, borderRadius: '4px', pointerEvents: 'none' }} />
                   <div style={{ position: 'absolute', top: '28px', left: '28px', right: '28px', bottom: '28px', border: `1px solid ${theme.accent}40`, borderRadius: '4px', pointerEvents: 'none' }} />
@@ -4480,7 +4470,7 @@ export default function PerformanceEvidence() {
 
               // === غلاف 5: شريط علوي (شريط عريض أعلى + محتوى أبيض) ===
               if (cs === 'top-bar') return (
-                <div className="bg-white shadow-lg mx-auto mb-6" style={{ width: '210mm', minHeight: '297mm', maxWidth: '100%', position: 'relative', overflow: 'hidden', pageBreakAfter: 'always' }}>
+                <div className="bg-white shadow-lg mx-auto mb-6" style={{ width: '210mm', minHeight: '297mm', maxWidth: '100%', position: 'relative', overflow: 'hidden', pageBreakAfter: 'always', border: `2px solid ${theme.accent}` }}>
                   {coverOfficialHeader}
                   <div style={{ background: theme.headerBg, padding: '1.5rem 3rem', color: theme.headerText, textAlign: 'center' }}>
                     <div style={{ fontSize: '0.8rem', opacity: 0.7, letterSpacing: '0.15em' }}>المملكة العربية السعودية · وزارة التعليم</div>
@@ -4509,7 +4499,7 @@ export default function PerformanceEvidence() {
 
               // === غلاف 6: خط بسيط (minimal) ===
               return (
-                <div className="bg-white shadow-lg mx-auto mb-6" style={{ width: '210mm', minHeight: '297mm', maxWidth: '100%', position: 'relative', overflow: 'hidden', pageBreakAfter: 'always' }}>
+                <div className="bg-white shadow-lg mx-auto mb-6" style={{ width: '210mm', minHeight: '297mm', maxWidth: '100%', position: 'relative', overflow: 'hidden', pageBreakAfter: 'always', border: `2px solid ${theme.accent}` }}>
                   {coverOfficialHeader}
                   <div style={{ minHeight: 'calc(297mm - 80px)', display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '4rem 4rem', textAlign: 'center' }}>
                     <div style={{ fontSize: '0.8rem', color: '#9CA3AF', letterSpacing: '0.15em', marginBottom: '0.3rem' }}>المملكة العربية السعودية · وزارة التعليم</div>
@@ -4530,11 +4520,11 @@ export default function PerformanceEvidence() {
             })()}
 
             {/* === صفحة فهرس المحتويات + البيانات الشخصية === */}
-            <div className="bg-white shadow-lg mx-auto mb-6" style={{ width: '210mm', minHeight: '297mm', maxWidth: '100%', position: 'relative', pageBreakAfter: 'always', display: 'flex', flexDirection: 'column' as const, boxSizing: 'border-box' as const }}>
+            <div className="bg-white shadow-lg mx-auto mb-6" style={{ width: '210mm', minHeight: '297mm', maxWidth: '100%', position: 'relative', pageBreakAfter: 'always', display: 'flex', flexDirection: 'column' as const, boxSizing: 'border-box' as const, border: `2px solid ${theme.accent}` }}>
               <div style={{ flex: 1, padding: '2rem 2.5rem' }}>
               {/* ترويسة الصفحة - مطابقة لـ edu-forms.com */}
               <div style={{ marginBottom: '1rem' }}>
-                <div style={{ background: 'linear-gradient(135deg, #1a3a5c 0%, #1a5f3f 50%, #2ea87a 100%)', padding: '10px 20px 8px', borderRadius: '0 0 8px 8px' }}>
+                <div style={{ background: theme.accent, padding: '10px 20px 8px', borderRadius: '0 0 8px 8px' }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse' as const }}>
                     <tbody>
                       <tr>
@@ -4557,7 +4547,7 @@ export default function PerformanceEvidence() {
                   </table>
                 </div>
                 {personalInfo.school && (
-                  <div style={{ background: 'linear-gradient(to left, #1a3a5c, #1a5f3f, #2ea87a)', color: 'white', padding: '5px 16px', textAlign: 'center', fontWeight: 700, fontSize: '10px', letterSpacing: '0.3px', borderRadius: '0 0 6px 6px', margin: '0 16px' }}>
+                  <div style={{ background: theme.accent, color: 'white', padding: '5px 16px', textAlign: 'center', fontWeight: 700, fontSize: '10px', letterSpacing: '0.3px', borderRadius: '0 0 6px 6px', margin: '0 16px' }}>
                     {personalInfo.school}
                   </div>
                 )}
@@ -4627,13 +4617,10 @@ export default function PerformanceEvidence() {
               {/* الشريط السفلي المتدرج */}
               {theme.showBottomBar !== false && (
                 <div style={{ marginTop: 'auto' }}>
-                  <svg viewBox="0 0 800 20" preserveAspectRatio="none" style={{ width: '100%', height: '20px', display: 'block' }}>
-                    <path d="M0,20 C200,0 600,0 800,20 L800,20 L0,20 Z" fill="url(#footerGradP2)" />
-                    <defs><linearGradient id="footerGradP2" x1="1" y1="0" x2="0" y2="0"><stop offset="0%" stopColor="#1a3a5c" /><stop offset="50%" stopColor="#1a5f3f" /><stop offset="100%" stopColor="#2ea87a" /></linearGradient></defs>
-                  </svg>
-                  <div style={{ background: 'linear-gradient(to right, #2ea87a, #1a5f3f, #1a3a5c)', padding: '8px 28px', fontSize: '11px', color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div style={{ borderTop: `3px solid ${theme.accent}`, margin: '0 2.5rem' }} />
+                  <div style={{ padding: '8px 2.5rem', fontSize: '10px', color: theme.accent, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <span style={{ fontWeight: 700 }}>SERS - نظام السجلات التعليمية الذكي</span>
-                    <span style={{ opacity: 0.9 }}>صفحة 2</span>
+                    <span style={{ opacity: 0.7 }}>صفحة 2</span>
                   </div>
                 </div>
               )}
@@ -4646,11 +4633,11 @@ export default function PerformanceEvidence() {
             </div>
 
             {/* === صفحة جدول التقييم === */}
-            <div className="bg-white shadow-lg mx-auto mb-6" style={{ width: '210mm', minHeight: '297mm', maxWidth: '100%', position: 'relative', pageBreakAfter: 'always', display: 'flex', flexDirection: 'column' as const, boxSizing: 'border-box' as const }}>
+            <div className="bg-white shadow-lg mx-auto mb-6" style={{ width: '210mm', minHeight: '297mm', maxWidth: '100%', position: 'relative', pageBreakAfter: 'always', display: 'flex', flexDirection: 'column' as const, boxSizing: 'border-box' as const, border: `2px solid ${theme.accent}` }}>
               <div style={{ flex: 1, padding: '2rem 2.5rem' }}>
               {/* ترويسة - مطابقة لـ edu-forms.com */}
               <div style={{ marginBottom: '1rem' }}>
-                <div style={{ background: 'linear-gradient(135deg, #1a3a5c 0%, #1a5f3f 50%, #2ea87a 100%)', padding: '10px 20px 8px', borderRadius: '0 0 8px 8px' }}>
+                <div style={{ background: theme.accent, padding: '10px 20px 8px', borderRadius: '0 0 8px 8px' }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse' as const }}>
                     <tbody>
                       <tr>
@@ -4673,7 +4660,7 @@ export default function PerformanceEvidence() {
                   </table>
                 </div>
                 {personalInfo.school && (
-                  <div style={{ background: 'linear-gradient(to left, #1a3a5c, #1a5f3f, #2ea87a)', color: 'white', padding: '5px 16px', textAlign: 'center', fontWeight: 700, fontSize: '10px', letterSpacing: '0.3px', borderRadius: '0 0 6px 6px', margin: '0 16px' }}>
+                  <div style={{ background: theme.accent, color: 'white', padding: '5px 16px', textAlign: 'center', fontWeight: 700, fontSize: '10px', letterSpacing: '0.3px', borderRadius: '0 0 6px 6px', margin: '0 16px' }}>
                     {personalInfo.school}
                   </div>
                 )}
@@ -4735,13 +4722,10 @@ export default function PerformanceEvidence() {
               {/* الشريط السفلي المتدرج */}
               {theme.showBottomBar !== false && (
                 <div style={{ marginTop: 'auto' }}>
-                  <svg viewBox="0 0 800 20" preserveAspectRatio="none" style={{ width: '100%', height: '20px', display: 'block' }}>
-                    <path d="M0,20 C200,0 600,0 800,20 L800,20 L0,20 Z" fill="url(#footerGradToc)" />
-                    <defs><linearGradient id="footerGradToc" x1="1" y1="0" x2="0" y2="0"><stop offset="0%" stopColor="#1a3a5c" /><stop offset="50%" stopColor="#1a5f3f" /><stop offset="100%" stopColor="#2ea87a" /></linearGradient></defs>
-                  </svg>
-                  <div style={{ background: 'linear-gradient(to right, #2ea87a, #1a5f3f, #1a3a5c)', padding: '8px 28px', fontSize: '11px', color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div style={{ borderTop: `3px solid ${theme.accent}`, margin: '0 2.5rem' }} />
+                  <div style={{ padding: '8px 2.5rem', fontSize: '10px', color: theme.accent, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <span style={{ fontWeight: 700 }}>SERS - نظام السجلات التعليمية الذكي</span>
-                    <span style={{ opacity: 0.9 }}>صفحة 3</span>
+                    <span style={{ opacity: 0.7 }}>صفحة 3</span>
                   </div>
                 </div>
               )}
@@ -4785,7 +4769,7 @@ export default function PerformanceEvidence() {
 
                       // غلاف قسم 1: متدرج كامل
                       if (scs === 'full-gradient') return (
-                        <div className="bg-white shadow-lg mx-auto mb-6" style={{ width: '210mm', minHeight: '297mm', maxWidth: '100%', position: 'relative', overflow: 'hidden', pageBreakAfter: 'always' }}>
+                        <div className="bg-white shadow-lg mx-auto mb-6" style={{ width: '210mm', minHeight: '297mm', maxWidth: '100%', position: 'relative', overflow: 'hidden', pageBreakAfter: 'always', border: `2px solid ${theme.accent}` }}>
                           <div style={{ background: theme.headerBg, color: theme.headerText, minHeight: '297mm', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', textAlign: 'center', padding: '4rem 3rem', position: 'relative' }}>
                             <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, background: 'linear-gradient(135deg, rgba(255,255,255,0.08) 0%, transparent 40%, rgba(0,0,0,0.08) 100%)', pointerEvents: 'none' }} />
                             <div style={{ position: 'absolute', top: '16px', left: '16px', right: '16px', bottom: '16px', border: '1.5px solid rgba(255,255,255,0.12)', borderRadius: '12px', pointerEvents: 'none' }} />
@@ -4803,7 +4787,7 @@ export default function PerformanceEvidence() {
 
                       // غلاف قسم 2: شريط يسار
                       if (scs === 'left-stripe') return (
-                        <div className="bg-white shadow-lg mx-auto mb-6" style={{ width: '210mm', minHeight: '297mm', maxWidth: '100%', position: 'relative', overflow: 'hidden', pageBreakAfter: 'always', display: 'flex' }}>
+                        <div className="bg-white shadow-lg mx-auto mb-6" style={{ width: '210mm', minHeight: '297mm', maxWidth: '100%', position: 'relative', overflow: 'hidden', pageBreakAfter: 'always', display: 'flex', border: `2px solid ${theme.accent}` }}>
                           <div style={{ width: '30%', background: theme.headerBg, minHeight: '297mm', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', color: theme.headerText, position: 'relative' }}>
                             <div style={{ position: 'absolute', top: 0, right: 0, width: '4px', height: '100%', background: `linear-gradient(to bottom, ${a2}, ${theme.accent})` }} />
                             <div style={{ fontSize: '5rem', fontWeight: 900, opacity: 0.2 }}>{i + 1}</div>
@@ -4830,7 +4814,7 @@ export default function PerformanceEvidence() {
 
                       // غلاف قسم 3: شريط علوي
                       if (scs === 'top-accent') return (
-                        <div className="bg-white shadow-lg mx-auto mb-6" style={{ width: '210mm', minHeight: '297mm', maxWidth: '100%', position: 'relative', overflow: 'hidden', pageBreakAfter: 'always' }}>
+                        <div className="bg-white shadow-lg mx-auto mb-6" style={{ width: '210mm', minHeight: '297mm', maxWidth: '100%', position: 'relative', overflow: 'hidden', pageBreakAfter: 'always', border: `2px solid ${theme.accent}` }}>
                           <div style={{ background: theme.headerBg, padding: '2rem 3rem', color: theme.headerText, textAlign: 'center' }}>
                             <div style={{ fontSize: '0.8rem', opacity: 0.7 }}>البند {i + 1} من {allCriteria.length}</div>
                           </div>
@@ -4850,7 +4834,7 @@ export default function PerformanceEvidence() {
 
                       // غلاف قسم 4: بطاقة مركزية
                       if (scs === 'card-center') return (
-                        <div className="bg-white shadow-lg mx-auto mb-6" style={{ width: '210mm', minHeight: '297mm', maxWidth: '100%', position: 'relative', overflow: 'hidden', pageBreakAfter: 'always', background: `${theme.accent}08` }}>
+                        <div className="bg-white shadow-lg mx-auto mb-6" style={{ width: '210mm', minHeight: '297mm', maxWidth: '100%', position: 'relative', overflow: 'hidden', pageBreakAfter: 'always', background: `${theme.accent}08`, border: `2px solid ${theme.accent}` }}>
                           <div style={{ position: 'absolute', top: '20px', left: '20px', right: '20px', bottom: '20px', border: `1px solid ${theme.accent}25`, borderRadius: '4px', pointerEvents: 'none' }} />
                           <div style={{ minHeight: '297mm', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', textAlign: 'center', padding: '4rem 3rem', position: 'relative' }}>
                             <div style={{ background: 'white', borderRadius: '16px', padding: '3rem 4rem', boxShadow: '0 4px 20px rgba(0,0,0,0.08)', border: `1px solid ${theme.accent}20`, maxWidth: '480px', width: '100%' }}>
@@ -4876,7 +4860,7 @@ export default function PerformanceEvidence() {
 
                       // غلاف قسم 5: شريط مرقم
                       if (scs === 'numbered-bar') return (
-                        <div className="bg-white shadow-lg mx-auto mb-6" style={{ width: '210mm', minHeight: '297mm', maxWidth: '100%', position: 'relative', overflow: 'hidden', pageBreakAfter: 'always' }}>
+                        <div className="bg-white shadow-lg mx-auto mb-6" style={{ width: '210mm', minHeight: '297mm', maxWidth: '100%', position: 'relative', overflow: 'hidden', pageBreakAfter: 'always', border: `2px solid ${theme.accent}` }}>
                           <div style={{ minHeight: '297mm', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', textAlign: 'center', padding: '4rem 3rem', position: 'relative' }}>
                             <div style={{ width: '100%', maxWidth: '500px', borderTop: `4px solid ${theme.accent}`, borderBottom: `4px solid ${theme.accent}`, padding: '3rem 2rem' }}>
                               <div style={{ fontSize: '4rem', fontWeight: 900, color: theme.accent, opacity: 0.15, marginBottom: '0.5rem' }}>{String(i + 1).padStart(2, '0')}</div>
@@ -4895,7 +4879,7 @@ export default function PerformanceEvidence() {
 
                       // غلاف قسم 6: فاصل نظيف (minimal)
                       return (
-                        <div className="bg-white shadow-lg mx-auto mb-6" style={{ width: '210mm', minHeight: '297mm', maxWidth: '100%', position: 'relative', overflow: 'hidden', pageBreakAfter: 'always' }}>
+                        <div className="bg-white shadow-lg mx-auto mb-6" style={{ width: '210mm', minHeight: '297mm', maxWidth: '100%', position: 'relative', overflow: 'hidden', pageBreakAfter: 'always', border: `2px solid ${theme.accent}` }}>
                           <div style={{ minHeight: '297mm', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', textAlign: 'center', padding: '4rem 3rem', position: 'relative' }}>
                             <div style={{ width: '1px', height: '60px', background: theme.accent, marginBottom: '2rem' }} />
                             <div style={{ fontSize: '0.8rem', color: '#9CA3AF', letterSpacing: '0.1em', marginBottom: '0.5rem' }}>البند {i + 1} من {allCriteria.length}</div>
@@ -4912,11 +4896,11 @@ export default function PerformanceEvidence() {
                     })()}
 
                     {/* === صفحة الشواهد === */}
-                  <div className="bg-white shadow-lg mx-auto mb-6" style={{ width: '210mm', minHeight: '297mm', maxWidth: '100%', position: 'relative', pageBreakAfter: 'always', pageBreakInside: 'avoid', display: 'flex', flexDirection: 'column' as const, boxSizing: 'border-box' as const }}>
+                  <div className="bg-white shadow-lg mx-auto mb-6" style={{ width: '210mm', minHeight: '297mm', maxWidth: '100%', position: 'relative', pageBreakAfter: 'always', display: 'flex', flexDirection: 'column' as const, boxSizing: 'border-box' as const, border: `2px solid ${theme.accent}` }}>
                     <div style={{ flex: 1, padding: '2rem 2.5rem' }}>
                     {/* ترويسة - مطابقة لـ edu-forms.com */}
                     <div style={{ marginBottom: '1rem' }}>
-                      <div style={{ background: 'linear-gradient(135deg, #1a3a5c 0%, #1a5f3f 50%, #2ea87a 100%)', padding: '10px 20px 8px', borderRadius: '0 0 8px 8px' }}>
+                      <div style={{ background: theme.accent, padding: '10px 20px 8px', borderRadius: '0 0 8px 8px' }}>
                         <table style={{ width: '100%', borderCollapse: 'collapse' as const }}>
                           <tbody>
                             <tr>
@@ -4939,7 +4923,7 @@ export default function PerformanceEvidence() {
                         </table>
                       </div>
                       {personalInfo.school && (
-                        <div style={{ background: 'linear-gradient(to left, #1a3a5c, #1a5f3f, #2ea87a)', color: 'white', padding: '5px 16px', textAlign: 'center', fontWeight: 700, fontSize: '10px', letterSpacing: '0.3px', borderRadius: '0 0 6px 6px', margin: '0 16px' }}>
+                        <div style={{ background: theme.accent, color: 'white', padding: '5px 16px', textAlign: 'center', fontWeight: 700, fontSize: '10px', letterSpacing: '0.3px', borderRadius: '0 0 6px 6px', margin: '0 16px' }}>
                           {personalInfo.school}
                         </div>
                       )}
@@ -5054,13 +5038,10 @@ export default function PerformanceEvidence() {
                     {/* الشريط السفلي المتدرج */}
                     {theme.showBottomBar !== false && (
                       <div style={{ marginTop: 'auto' }}>
-                        <svg viewBox="0 0 800 20" preserveAspectRatio="none" style={{ width: '100%', height: '20px', display: 'block' }}>
-                          <path d="M0,20 C200,0 600,0 800,20 L800,20 L0,20 Z" fill={`url(#footerGradEv${contentPage})`} />
-                          <defs><linearGradient id={`footerGradEv${contentPage}`} x1="1" y1="0" x2="0" y2="0"><stop offset="0%" stopColor="#1a3a5c" /><stop offset="50%" stopColor="#1a5f3f" /><stop offset="100%" stopColor="#2ea87a" /></linearGradient></defs>
-                        </svg>
-                        <div style={{ background: 'linear-gradient(to right, #2ea87a, #1a5f3f, #1a3a5c)', padding: '8px 28px', fontSize: '11px', color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div style={{ borderTop: `3px solid ${theme.accent}`, margin: '0 2.5rem' }} />
+                        <div style={{ padding: '8px 2.5rem', fontSize: '10px', color: theme.accent, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                           <span style={{ fontWeight: 700 }}>SERS - نظام السجلات التعليمية الذكي</span>
-                          <span style={{ opacity: 0.9 }}>صفحة {contentPage}</span>
+                          <span style={{ opacity: 0.7 }}>صفحة {contentPage}</span>
                         </div>
                       </div>
                     )}
@@ -5081,12 +5062,12 @@ export default function PerformanceEvidence() {
               const ss = theme.signatureStyle || 'dotted';
               const sigLineStyle: React.CSSProperties = ss === 'dotted' ? { borderTop: `2px dotted ${theme.accent}` } : ss === 'solid' ? { borderTop: `2px solid ${theme.accent}` } : ss === 'boxed' ? { borderTop: `1.5px solid ${theme.accent}`, borderBottom: `1.5px solid ${theme.accent}`, borderLeft: `1.5px solid ${theme.accent}`, borderRight: `1.5px solid ${theme.accent}`, borderRadius: '8px', padding: '0.5rem' } : ss === 'lined' ? { borderTop: `1px solid ${theme.borderColor}`, borderBottom: `1px solid ${theme.borderColor}`, padding: '0.25rem 0' } : { borderTop: `2px dashed ${theme.accent}` };
               return (
-                <div className="bg-white shadow-lg mx-auto mb-6" style={{ width: '210mm', minHeight: '297mm', maxWidth: '100%', position: 'relative', display: 'flex', flexDirection: 'column' as const, boxSizing: 'border-box' as const }}>
+                <div className="bg-white shadow-lg mx-auto mb-6" style={{ width: '210mm', minHeight: '297mm', maxWidth: '100%', position: 'relative', display: 'flex', flexDirection: 'column' as const, boxSizing: 'border-box' as const, border: `2px solid ${theme.accent}` }}>
                   <div style={{ flex: 1, padding: '2rem 2.5rem', display: 'flex', flexDirection: 'column' as const, justifyContent: 'center' }}>
                   {/* ترويسة - مطابقة لـ edu-forms.com */}
                   <div style={{ position: 'absolute', top: '2rem', left: '2.5rem', right: '2.5rem' }}>
                     <div style={{ marginBottom: '0.5rem' }}>
-                      <div style={{ background: 'linear-gradient(135deg, #1a3a5c 0%, #1a5f3f 50%, #2ea87a 100%)', padding: '10px 20px 8px', borderRadius: '0 0 8px 8px' }}>
+                      <div style={{ background: theme.accent, padding: '10px 20px 8px', borderRadius: '0 0 8px 8px' }}>
                         <table style={{ width: '100%', borderCollapse: 'collapse' as const }}>
                           <tbody>
                             <tr>
@@ -5109,7 +5090,7 @@ export default function PerformanceEvidence() {
                         </table>
                       </div>
                       {personalInfo.school && (
-                        <div style={{ background: 'linear-gradient(to left, #1a3a5c, #1a5f3f, #2ea87a)', color: 'white', padding: '5px 16px', textAlign: 'center', fontWeight: 700, fontSize: '10px', letterSpacing: '0.3px', borderRadius: '0 0 6px 6px', margin: '0 16px' }}>
+                        <div style={{ background: theme.accent, color: 'white', padding: '5px 16px', textAlign: 'center', fontWeight: 700, fontSize: '10px', letterSpacing: '0.3px', borderRadius: '0 0 6px 6px', margin: '0 16px' }}>
                           {personalInfo.school}
                         </div>
                       )}
@@ -5142,13 +5123,10 @@ export default function PerformanceEvidence() {
                   {/* الشريط السفلي المتدرج */}
                   {theme.showBottomBar !== false && (
                     <div style={{ marginTop: 'auto' }}>
-                      <svg viewBox="0 0 800 20" preserveAspectRatio="none" style={{ width: '100%', height: '20px', display: 'block' }}>
-                        <path d="M0,20 C200,0 600,0 800,20 L800,20 L0,20 Z" fill="url(#footerGradSig)" />
-                        <defs><linearGradient id="footerGradSig" x1="1" y1="0" x2="0" y2="0"><stop offset="0%" stopColor="#1a3a5c" /><stop offset="50%" stopColor="#1a5f3f" /><stop offset="100%" stopColor="#2ea87a" /></linearGradient></defs>
-                      </svg>
-                      <div style={{ background: 'linear-gradient(to right, #2ea87a, #1a5f3f, #1a3a5c)', padding: '8px 28px', fontSize: '11px', color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div style={{ borderTop: `3px solid ${theme.accent}`, margin: '0 2.5rem' }} />
+                      <div style={{ padding: '8px 2.5rem', fontSize: '10px', color: theme.accent, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <span style={{ fontWeight: 700 }}>SERS - نظام السجلات التعليمية الذكي</span>
-                        <span style={{ opacity: 0.9 }}>{personalInfo.name} • {selectedJob?.title}</span>
+                        <span style={{ opacity: 0.7 }}>{personalInfo.name} • {selectedJob?.title}</span>
                       </div>
                     </div>
                   )}
