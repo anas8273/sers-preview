@@ -86,11 +86,32 @@ export default function TreatmentPlan() {
             </button>
           </div>
 
-          <div id="plan-preview" className="bg-white rounded-xl shadow-lg p-8" style={{ fontFamily: "'Cairo', 'Tajawal', sans-serif" }}>
-            <div className="text-center mb-6 pb-4" style={{ borderBottom: `3px solid ${selectedType.color}` }}>
-              <h1 className="text-2xl font-black mb-1" style={{ color: selectedType.color }}>{selectedType.title}</h1>
-              <p className="text-sm text-gray-500">{info.subject} - {info.grade} - الفصل {info.semester} - {info.year}</p>
+          <div id="plan-preview" className="bg-white rounded-xl shadow-lg overflow-hidden" style={{ fontFamily: "'Cairo', 'Tajawal', sans-serif" }}>
+            {/* شريط علوي بتدرج */}
+            <div style={{ height: '5px', background: 'linear-gradient(to left, #1a4d5e, #0d7377, #2ea87a)' }} />
+
+            {/* الهيدر */}
+            <div style={{ padding: '16px 28px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '2px solid #0d737720' }}>
+              <div style={{ textAlign: 'right' }}>
+                <div style={{ fontSize: '11px', color: '#0d7377', fontWeight: 700 }}>وزارة التعليم</div>
+                <div style={{ fontSize: '10px', color: '#1a4d5e', fontWeight: 600 }}>{info.school || 'اسم المدرسة'}</div>
+              </div>
+              <div style={{ width: '2px', height: '35px', background: '#5bb784', margin: '0 12px' }} />
+              <div style={{ textAlign: 'left' }}>
+                <div style={{ fontSize: '10px', color: '#666' }}>العام: {info.year}</div>
+                <div style={{ fontSize: '10px', color: '#666' }}>الفصل: {info.semester}</div>
+              </div>
             </div>
+
+            {/* مربع العنوان */}
+            <div style={{ padding: '12px 28px', textAlign: 'center' }}>
+              <div style={{ border: '2px solid #7ECDC0', borderRadius: '16px', padding: '10px 20px', display: 'inline-block' }}>
+                <h1 className="text-xl font-black" style={{ color: '#1a4d5e' }}>{selectedType.title}</h1>
+              </div>
+              <p className="text-sm mt-2" style={{ color: '#666' }}>{info.subject} - {info.grade}</p>
+            </div>
+
+            <div style={{ padding: '0 28px' }}>
 
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6 text-sm">
               {[
@@ -110,13 +131,13 @@ export default function TreatmentPlan() {
 
             <table className="w-full text-sm border-collapse">
               <thead>
-                <tr style={{ backgroundColor: selectedType.color }}>
-                  <th className="text-white p-2 text-right text-xs">م</th>
-                  <th className="text-white p-2 text-right text-xs">الطالب</th>
-                  <th className="text-white p-2 text-right text-xs">نقاط الضعف / القوة</th>
-                  <th className="text-white p-2 text-right text-xs">الأنشطة والإجراءات</th>
-                  <th className="text-white p-2 text-right text-xs">التقييم</th>
-                  <th className="text-white p-2 text-right text-xs">ملاحظات</th>
+                <tr style={{ background: 'linear-gradient(to left, #1a4d5e, #0d7377)', color: '#fff' }}>
+                  <th className="p-2 text-right text-xs">م</th>
+                  <th className="p-2 text-right text-xs">الطالب</th>
+                  <th className="p-2 text-right text-xs">نقاط الضعف / القوة</th>
+                  <th className="p-2 text-right text-xs">الأنشطة والإجراءات</th>
+                  <th className="p-2 text-right text-xs">التقييم</th>
+                  <th className="p-2 text-right text-xs">ملاحظات</th>
                 </tr>
               </thead>
               <tbody>
@@ -135,16 +156,42 @@ export default function TreatmentPlan() {
 
             <div className="grid grid-cols-2 gap-4 pt-6 mt-6 border-t border-gray-200">
               <div className="text-center">
-                <div className="text-xs text-gray-500 mb-8">توقيع المعلم</div>
-                <div className="border-t border-gray-300 pt-2 text-sm">{info.teacher || "_______________"}</div>
+                <div className="text-sm font-bold text-gray-800 mb-1">التنفيذ: أ/ {info.teacher || '...............'}</div>
+                <div style={{ borderTop: '2.5px dotted #0d737760', width: '160px', margin: '4px auto 0' }} />
               </div>
               <div className="text-center">
-                <div className="text-xs text-gray-500 mb-8">اعتماد مدير المدرسة</div>
-                <div className="border-t border-gray-300 pt-2 text-sm">_______________</div>
+                <div className="text-sm font-bold text-gray-800 mb-1">مديرة المدرسة: أ/ ...............</div>
+                <div style={{ borderTop: '2.5px dotted #0d737760', width: '160px', margin: '4px auto 0' }} />
               </div>
             </div>
+            </div>
 
-            <div className="text-center text-[10px] text-gray-400 mt-6">SERS - نظام السجلات التعليمية الذكية</div>
+            {/* الفوتر المنحني */}
+            <div style={{ marginTop: '16px' }}>
+              <svg viewBox="0 0 800 40" preserveAspectRatio="none" style={{ width: '100%', height: '20px', display: 'block' }}>
+                <defs>
+                  <linearGradient id="planFooterGrad" x1="0" y1="0" x2="1" y2="0">
+                    <stop offset="0%" stopColor="#2ea87a" />
+                    <stop offset="50%" stopColor="#0d7377" />
+                    <stop offset="100%" stopColor="#1a4d5e" />
+                  </linearGradient>
+                </defs>
+                <path d="M0,40 L0,28 C150,6 400,0 800,14 L800,40 Z" fill="url(#planFooterGrad)" />
+              </svg>
+              <div style={{
+                background: 'linear-gradient(to left, #1a4d5e, #0d7377, #2ea87a)',
+                padding: '4px 28px 8px',
+                fontSize: '10px',
+                color: '#fff',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginTop: '-1px',
+              }}>
+                <span style={{ fontWeight: 700 }}>SERS - نظام السجلات التعليمية الذكي</span>
+                <span style={{ opacity: 0.85 }}>{info.school || ''}</span>
+              </div>
+            </div>
           </div>
         </div>
       </div>

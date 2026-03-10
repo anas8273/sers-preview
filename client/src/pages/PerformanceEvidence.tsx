@@ -3342,68 +3342,86 @@ export default function PerformanceEvidence() {
                         // نمط 1: كتابة يمين + شعار وسط + معلومات/شعار يسار
                         if (hv === 'right-text-center-logo-left-info') {
                           return (
-                            <div style={{ background: hBg, padding: '16px 24px 12px' }}>
-                              <table style={{ width: '100%', borderCollapse: 'collapse' as const }}>
-                                <tbody>
-                                  <tr>
-                                    <td style={{ width: '35%', verticalAlign: 'middle', textAlign: 'right', padding: '0' }}>
-                                      {allDeptLines.map((line: string, i: number) => (
-                                        <div key={i} style={{ fontSize: '13px', color: hTextColor, fontWeight: 700, lineHeight: '2.0', letterSpacing: '0.3px' }}>{line}</div>
-                                      ))}
-                                      {personalInfo.school && (
-                                        <div style={{ fontSize: '13px', color: hTextColor, fontWeight: 700, lineHeight: '2.0' }}>{personalInfo.school}</div>
-                                      )}
-                                    </td>
-                                    <td style={{ width: '30%', verticalAlign: 'middle', textAlign: 'center', padding: '0' }}>
-                                      <img src={getMoeLogoUrl()} alt="شعار وزارة التعليم" style={{ height: '80px', objectFit: 'contain' as const, margin: '0 auto', display: 'block', filter: getMoeLogoFilter(isDarkHeader) }} />
-                                    </td>
-                                    <td style={{ width: '35%', verticalAlign: 'middle', textAlign: 'left', padding: '0' }}>
-                                      {personalInfo.extraLogo && (
-                                        <img src={personalInfo.extraLogo} alt="شعار إضافي" style={{ height: '55px', objectFit: 'contain' as const, display: 'block', marginBottom: '4px' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
-                                      )}
-                                      <div style={{ textAlign: 'left' }}>
-                                        {personalInfo.semester && <div style={{ fontSize: '12px', color: hTextColor, fontWeight: 600, lineHeight: '1.8' }}>الفصل الدراسي: {personalInfo.semester}</div>}
-                                        {personalInfo.year && <div style={{ fontSize: '12px', color: hTextColor, fontWeight: 600, lineHeight: '1.8' }}>العام الدراسي: {personalInfo.year}</div>}
-                                      </div>
-                                    </td>
-                                  </tr>
-                                </tbody>
-                              </table>
-                            </div>
+                            <>
+                              {/* شريط علوي رفيع بتدرج - مطابق للهوية البصرية */}
+                              {!isDarkHeader && (
+                                <div style={{ height: '5px', background: 'linear-gradient(to left, #1a4d5e, #0d7377, #2ea87a)' }} />
+                              )}
+                              <div style={{ background: hBg, padding: isDarkHeader ? '16px 24px 12px' : '18px 24px 14px' }}>
+                                <table style={{ width: '100%', borderCollapse: 'collapse' as const }}>
+                                  <tbody>
+                                    <tr>
+                                      <td style={{ width: '35%', verticalAlign: 'middle', textAlign: 'right', padding: '0' }}>
+                                        {allDeptLines.map((line: string, i: number) => (
+                                          <div key={i} style={{ fontSize: '13px', color: hTextColor, fontWeight: 700, lineHeight: '2.0', letterSpacing: '0.3px' }}>{line}</div>
+                                        ))}
+                                        {personalInfo.school && (
+                                          <div style={{ fontSize: '13px', color: hTextColor, fontWeight: 700, lineHeight: '2.0' }}>{personalInfo.school}</div>
+                                        )}
+                                      </td>
+                                      {/* خط فاصل عمودي أخضر - مطابق للهوية البصرية */}
+                                      <td style={{ width: '2%', verticalAlign: 'middle', textAlign: 'center', padding: '0 4px' }}>
+                                        <div style={{ width: '2px', height: '55px', background: isDarkHeader ? 'rgba(255,255,255,0.35)' : '#5bb784', margin: '0 auto' }} />
+                                      </td>
+                                      <td style={{ width: '28%', verticalAlign: 'middle', textAlign: 'center', padding: '0' }}>
+                                        <img src={getMoeLogoUrl()} alt="شعار وزارة التعليم" style={{ height: '80px', objectFit: 'contain' as const, margin: '0 auto', display: 'block', filter: getMoeLogoFilter(isDarkHeader) }} />
+                                      </td>
+                                      <td style={{ width: '35%', verticalAlign: 'middle', textAlign: 'left', padding: '0' }}>
+                                        {personalInfo.extraLogo && (
+                                          <img src={personalInfo.extraLogo} alt="شعار إضافي" style={{ height: '55px', objectFit: 'contain' as const, display: 'block', marginBottom: '4px' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                                        )}
+                                        <div style={{ textAlign: 'left' }}>
+                                          {personalInfo.semester && <div style={{ fontSize: '12px', color: hTextColor, fontWeight: 600, lineHeight: '1.8' }}>الفصل الدراسي: {personalInfo.semester}</div>}
+                                          {personalInfo.year && <div style={{ fontSize: '12px', color: hTextColor, fontWeight: 600, lineHeight: '1.8' }}>العام الدراسي: {personalInfo.year}</div>}
+                                        </div>
+                                      </td>
+                                    </tr>
+                                  </tbody>
+                                </table>
+                              </div>
+                            </>
                           );
                         }
 
                         // نمط 2: كتابة يمين + شعار يسار (مثل الصورة 1)
                         if (hv === 'right-text-left-logo') {
                           return (
-                            <div style={{ background: '#ffffff', padding: '20px 28px 16px' }}>
-                              <table style={{ width: '100%', borderCollapse: 'collapse' as const }}>
-                                <tbody>
-                                  <tr>
-                                    <td style={{ width: '55%', verticalAlign: 'middle', textAlign: 'right', padding: '0' }}>
-                                      {allDeptLines.map((line: string, i: number) => (
-                                        <div key={i} style={{ fontSize: '14px', color: theme.headerText || '#0d7377', fontWeight: 700, lineHeight: '2.2', letterSpacing: '0.3px' }}>{line}</div>
-                                      ))}
-{personalInfo.school && (
-                                         <div style={{ fontSize: '14px', color: theme.headerText || '#0d7377', fontWeight: 700, lineHeight: '2.2' }}>{personalInfo.school}</div>
-                                      )}
-                                    </td>
-                                    <td style={{ width: '45%', verticalAlign: 'middle', textAlign: 'left', padding: '0' }}>
-                                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-start', gap: '12px' }}>
-                                        <img src={getMoeLogoUrl()} alt="شعار وزارة التعليم" style={{ height: '85px', objectFit: 'contain' as const }} />
-                                        {personalInfo.extraLogo && (
-                                          <img src={personalInfo.extraLogo} alt="شعار إضافي" style={{ height: '60px', objectFit: 'contain' as const }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                            <>
+                              {/* شريط علوي رفيع بتدرج */}
+                              <div style={{ height: '5px', background: 'linear-gradient(to left, #1a4d5e, #0d7377, #2ea87a)' }} />
+                              <div style={{ background: '#ffffff', padding: '20px 28px 16px' }}>
+                                <table style={{ width: '100%', borderCollapse: 'collapse' as const }}>
+                                  <tbody>
+                                    <tr>
+                                      <td style={{ width: '50%', verticalAlign: 'middle', textAlign: 'right', padding: '0' }}>
+                                        {allDeptLines.map((line: string, i: number) => (
+                                          <div key={i} style={{ fontSize: '14px', color: theme.headerText || '#0d7377', fontWeight: 700, lineHeight: '2.2', letterSpacing: '0.3px' }}>{line}</div>
+                                        ))}
+                                        {personalInfo.school && (
+                                          <div style={{ fontSize: '14px', color: theme.headerText || '#0d7377', fontWeight: 700, lineHeight: '2.2' }}>{personalInfo.school}</div>
                                         )}
-                                      </div>
-                                      <div style={{ textAlign: 'left', marginTop: '4px' }}>
-{personalInfo.semester && <div style={{ fontSize: '11px', color: theme.headerText || '#0d7377', fontWeight: 600, lineHeight: '1.7' }}>الفصل الدراسي: {personalInfo.semester}</div>}
-                                         {personalInfo.year && <div style={{ fontSize: '11px', color: theme.headerText || '#0d7377', fontWeight: 600, lineHeight: '1.7' }}>العام الدراسي: {personalInfo.year}</div>}
-                                      </div>
-                                    </td>
-                                  </tr>
-                                </tbody>
-                              </table>
-                            </div>
+                                      </td>
+                                      {/* خط فاصل عمودي أخضر */}
+                                      <td style={{ width: '2%', verticalAlign: 'middle', textAlign: 'center', padding: '0 6px' }}>
+                                        <div style={{ width: '2px', height: '60px', background: '#5bb784', margin: '0 auto' }} />
+                                      </td>
+                                      <td style={{ width: '48%', verticalAlign: 'middle', textAlign: 'left', padding: '0' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-start', gap: '12px' }}>
+                                          <img src={getMoeLogoUrl()} alt="شعار وزارة التعليم" style={{ height: '85px', objectFit: 'contain' as const }} />
+                                          {personalInfo.extraLogo && (
+                                            <img src={personalInfo.extraLogo} alt="شعار إضافي" style={{ height: '60px', objectFit: 'contain' as const }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                                          )}
+                                        </div>
+                                        <div style={{ textAlign: 'left', marginTop: '4px' }}>
+                                          {personalInfo.semester && <div style={{ fontSize: '11px', color: theme.headerText || '#0d7377', fontWeight: 600, lineHeight: '1.7' }}>الفصل الدراسي: {personalInfo.semester}</div>}
+                                          {personalInfo.year && <div style={{ fontSize: '11px', color: theme.headerText || '#0d7377', fontWeight: 600, lineHeight: '1.7' }}>العام الدراسي: {personalInfo.year}</div>}
+                                        </div>
+                                      </td>
+                                    </tr>
+                                  </tbody>
+                                </table>
+                              </div>
+                            </>
                           );
                         }
 
@@ -3411,18 +3429,24 @@ export default function PerformanceEvidence() {
                         if (hv === 'center-logo-banner') {
                           return (
                             <>
+                              {/* شريط علوي رفيع بتدرج */}
+                              <div style={{ height: '5px', background: 'linear-gradient(to left, #1a4d5e, #0d7377, #2ea87a)' }} />
                               <div style={{ background: '#ffffff', padding: '14px 24px 10px' }}>
                                 <table style={{ width: '100%', borderCollapse: 'collapse' as const }}>
                                   <tbody>
                                     <tr>
-                                      <td style={{ width: '50%', verticalAlign: 'middle', textAlign: 'right', padding: '0' }}>
-<div style={{ fontSize: '13px', color: theme.headerText || '#0d7377', fontWeight: 700, lineHeight: '2.0' }}>وزارة التعليم</div>
-                                         {filteredDeptLines.map((line: string, i: number) => (
-                                           <div key={i} style={{ fontSize: '12px', color: theme.headerText || '#0d7377', fontWeight: 600, lineHeight: '1.9' }}>{line}</div>
-                                         ))}
-                                         {personalInfo.school && (
-                                           <div style={{ fontSize: '12px', color: theme.headerText || '#0d7377', fontWeight: 600, lineHeight: '1.9' }}>مدرسة: {personalInfo.school}</div>
+                                      <td style={{ width: '48%', verticalAlign: 'middle', textAlign: 'right', padding: '0' }}>
+                                        <div style={{ fontSize: '13px', color: theme.headerText || '#0d7377', fontWeight: 700, lineHeight: '2.0' }}>وزارة التعليم</div>
+                                        {filteredDeptLines.map((line: string, i: number) => (
+                                          <div key={i} style={{ fontSize: '12px', color: theme.headerText || '#0d7377', fontWeight: 600, lineHeight: '1.9' }}>{line}</div>
+                                        ))}
+                                        {personalInfo.school && (
+                                          <div style={{ fontSize: '12px', color: theme.headerText || '#0d7377', fontWeight: 600, lineHeight: '1.9' }}>مدرسة: {personalInfo.school}</div>
                                         )}
+                                      </td>
+                                      {/* خط فاصل عمودي أخضر */}
+                                      <td style={{ width: '2%', verticalAlign: 'middle', textAlign: 'center', padding: '0 4px' }}>
+                                        <div style={{ width: '2px', height: '55px', background: '#5bb784', margin: '0 auto' }} />
                                       </td>
                                       <td style={{ width: '50%', verticalAlign: 'middle', textAlign: 'left', padding: '0' }}>
                                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-start', gap: '10px' }}>
@@ -3432,8 +3456,8 @@ export default function PerformanceEvidence() {
                                           )}
                                         </div>
                                         <div style={{ textAlign: 'left', marginTop: '4px' }}>
-{personalInfo.semester && <div style={{ fontSize: '11px', color: theme.headerText || '#0d7377', fontWeight: 600, lineHeight: '1.7' }}>الفصل الدراسي: {personalInfo.semester}</div>}
-                                           {personalInfo.year && <div style={{ fontSize: '11px', color: theme.headerText || '#0d7377', fontWeight: 600, lineHeight: '1.7' }}>العام الدراسي: {personalInfo.year}</div>}
+                                          {personalInfo.semester && <div style={{ fontSize: '11px', color: theme.headerText || '#0d7377', fontWeight: 600, lineHeight: '1.7' }}>الفصل الدراسي: {personalInfo.semester}</div>}
+                                          {personalInfo.year && <div style={{ fontSize: '11px', color: theme.headerText || '#0d7377', fontWeight: 600, lineHeight: '1.7' }}>العام الدراسي: {personalInfo.year}</div>}
                                         </div>
                                       </td>
                                     </tr>
@@ -3452,48 +3476,101 @@ export default function PerformanceEvidence() {
 
                         // نمط 4: ترويسة كاملة مع أقسام (مثل edu-forms - الصورة 3)
                         return (
-                          <div style={{ background: '#ffffff', padding: '14px 24px 10px' }}>
-                            <table style={{ width: '100%', borderCollapse: 'collapse' as const }}>
-                              <tbody>
-                                <tr>
-                                  <td style={{ width: '35%', verticalAlign: 'middle', textAlign: 'right', padding: '0' }}>
-                                    {allDeptLines.map((line: string, i: number) => (
-<div key={i} style={{ fontSize: '13px', color: theme.headerText || '#0d7377', fontWeight: 700, lineHeight: '2.0' }}>{line}</div>
-                                     ))}
-                                     {personalInfo.school && (
-                                       <div style={{ fontSize: '13px', color: theme.headerText || '#0d7377', fontWeight: 700, lineHeight: '2.0' }}>{personalInfo.school}</div>
-                                    )}
-                                  </td>
-                                  <td style={{ width: '30%', verticalAlign: 'middle', textAlign: 'center', padding: '0' }}>
-                                    <img src={getMoeLogoUrl()} alt="شعار وزارة التعليم" style={{ height: '75px', objectFit: 'contain' as const, margin: '0 auto', display: 'block' }} />
-                                    {personalInfo.extraLogo && (
-                                      <img src={personalInfo.extraLogo} alt="شعار إضافي" style={{ height: '40px', objectFit: 'contain' as const, margin: '6px auto 0', display: 'block' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
-                                    )}
-                                  </td>
-                                  <td style={{ width: '35%', verticalAlign: 'middle', textAlign: 'left', padding: '0' }}>
-                                    {personalInfo.semester && <div style={{ fontSize: '12px', color: theme.borderColor || theme.accent, fontWeight: 600, lineHeight: '2.0' }}>الفصل الدراسي: {personalInfo.semester}</div>}
-                                    {personalInfo.year && <div style={{ fontSize: '12px', color: theme.borderColor || theme.accent, fontWeight: 600, lineHeight: '2.0' }}>العام الدراسي: {personalInfo.year}</div>}
-                                  </td>
-                                </tr>
-                              </tbody>
-                            </table>
-                          </div>
+                          <>
+                            {/* شريط علوي رفيع بتدرج */}
+                            <div style={{ height: '5px', background: 'linear-gradient(to left, #1a4d5e, #0d7377, #2ea87a)' }} />
+                            <div style={{ background: '#ffffff', padding: '14px 24px 10px' }}>
+                              <table style={{ width: '100%', borderCollapse: 'collapse' as const }}>
+                                <tbody>
+                                  <tr>
+                                    <td style={{ width: '34%', verticalAlign: 'middle', textAlign: 'right', padding: '0' }}>
+                                      {allDeptLines.map((line: string, i: number) => (
+                                        <div key={i} style={{ fontSize: '13px', color: theme.headerText || '#0d7377', fontWeight: 700, lineHeight: '2.0' }}>{line}</div>
+                                      ))}
+                                      {personalInfo.school && (
+                                        <div style={{ fontSize: '13px', color: theme.headerText || '#0d7377', fontWeight: 700, lineHeight: '2.0' }}>{personalInfo.school}</div>
+                                      )}
+                                    </td>
+                                    {/* خط فاصل عمودي أخضر */}
+                                    <td style={{ width: '2%', verticalAlign: 'middle', textAlign: 'center', padding: '0 4px' }}>
+                                      <div style={{ width: '2px', height: '55px', background: '#5bb784', margin: '0 auto' }} />
+                                    </td>
+                                    <td style={{ width: '28%', verticalAlign: 'middle', textAlign: 'center', padding: '0' }}>
+                                      <img src={getMoeLogoUrl()} alt="شعار وزارة التعليم" style={{ height: '75px', objectFit: 'contain' as const, margin: '0 auto', display: 'block' }} />
+                                      {personalInfo.extraLogo && (
+                                        <img src={personalInfo.extraLogo} alt="شعار إضافي" style={{ height: '40px', objectFit: 'contain' as const, margin: '6px auto 0', display: 'block' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                                      )}
+                                    </td>
+                                    <td style={{ width: '36%', verticalAlign: 'middle', textAlign: 'left', padding: '0' }}>
+                                      {personalInfo.semester && <div style={{ fontSize: '12px', color: theme.borderColor || theme.accent, fontWeight: 600, lineHeight: '2.0' }}>الفصل الدراسي: {personalInfo.semester}</div>}
+                                      {personalInfo.year && <div style={{ fontSize: '12px', color: theme.borderColor || theme.accent, fontWeight: 600, lineHeight: '2.0' }}>العام الدراسي: {personalInfo.year}</div>}
+                                    </td>
+                                  </tr>
+                                </tbody>
+                              </table>
+                            </div>
+                          </>
                         );
                       })()}
 
-                      {/* ========== شريط العنوان ========== */}
-                      <div style={{
-                        background: `linear-gradient(135deg, ${theme.titleBg || theme.accent}, ${theme.accent})`,
-                        color: 'white',
-                        padding: '12px 24px',
-                        textAlign: 'center',
-                        fontWeight: 800,
-                        fontSize: '15px',
-                        letterSpacing: '0.5px',
-                        margin: '0',
-                      }}>
-                        {prevSub.title}
-                      </div>
+                      {/* ========== شريط العنوان - مطابق للهوية البصرية ========== */}
+                      {(() => {
+                        const tStyle = theme.titleStyle || 'rounded';
+                        if (tStyle === 'rounded' && !isDarkHeader) {
+                          // نمط الإطار المدور الأخضر الفاتح (مطابق لصفحات 2,3 من PDF)
+                          return (
+                            <div style={{ padding: '10px 28px', margin: '4px 0' }}>
+                              <div style={{
+                                border: '2.5px solid #7ECDC0',
+                                borderRadius: '22px',
+                                padding: '11px 24px',
+                                textAlign: 'center',
+                                fontWeight: 800,
+                                fontSize: '15px',
+                                color: '#1a1a1a',
+                                letterSpacing: '0.5px',
+                              }}>
+                                {prevSub.title}
+                              </div>
+                            </div>
+                          );
+                        } else if (tStyle === 'full-width' || isDarkHeader) {
+                          // نمط الشريط الكامل مع إطار أخضر (مطابق لصفحات 4,5 من PDF)
+                          return (
+                            <div style={{ padding: '6px 20px', margin: '4px 0' }}>
+                              <div style={{
+                                background: `linear-gradient(135deg, ${theme.titleBg || theme.accent}, ${theme.accent})`,
+                                border: '2.5px solid #5bb784',
+                                borderRadius: '8px',
+                                color: 'white',
+                                padding: '12px 24px',
+                                textAlign: 'center',
+                                fontWeight: 800,
+                                fontSize: '15px',
+                                letterSpacing: '0.5px',
+                              }}>
+                                {prevSub.title}
+                              </div>
+                            </div>
+                          );
+                        } else {
+                          // نمط بسيط
+                          return (
+                            <div style={{
+                              background: `linear-gradient(135deg, ${theme.titleBg || theme.accent}, ${theme.accent})`,
+                              color: 'white',
+                              padding: '12px 24px',
+                              textAlign: 'center',
+                              fontWeight: 800,
+                              fontSize: '15px',
+                              letterSpacing: '0.5px',
+                              margin: '0',
+                            }}>
+                              {prevSub.title}
+                            </div>
+                          );
+                        }
+                      })()}
 
                       {/* ========== الحقول حسب نمط القالب ========== */}
                       {renderFields()}
@@ -3608,22 +3685,18 @@ export default function PerformanceEvidence() {
                         </div>
                       )}
 
-                      {/* ========== التوقيعات ========== */}
-                      <div style={{ padding: '16px 24px 20px', borderTop: `2px solid ${theme.borderColor}33` }}>
+                      {/* ========== التوقيعات - مطابق للهوية البصرية ========== */}
+                      <div style={{ padding: '20px 32px 24px', marginTop: '16px' }}>
                         <table style={{ width: '100%', borderCollapse: 'collapse' as const }}>
                           <tbody>
                             <tr>
-                              <td style={{ width: '50%', textAlign: 'center', padding: '12px 24px', verticalAlign: 'top' }}>
-                                <div style={{ fontSize: '14px', fontWeight: 700, color: '#1a1a1a', marginBottom: '8px' }}>المعلم / المعلمة</div>
-                                <div style={{ fontSize: '13px', color: '#333', marginBottom: '14px' }}>{personalInfo.name || '........................'}</div>
-                                <div style={{ width: '160px', borderBottom: '2.5px dotted #333', margin: '0 auto' }} />
-                                <div style={{ fontSize: '10px', color: '#777', marginTop: '6px' }}>التوقيع</div>
+                              <td style={{ width: '50%', textAlign: 'right', padding: '0 20px', verticalAlign: 'bottom' }}>
+                                <div style={{ fontSize: '16px', fontWeight: 800, color: '#1a1a1a', marginBottom: '4px' }}>التنفيذ: أ/ {personalInfo.name || '...................'}</div>
+                                <div style={{ width: '180px', borderBottom: '3px dotted #333', marginTop: '20px' }} />
                               </td>
-                              <td style={{ width: '50%', textAlign: 'center', padding: '12px 24px', verticalAlign: 'top', borderRight: `2px solid ${theme.borderColor}33` }}>
-                                <div style={{ fontSize: '14px', fontWeight: 700, color: '#1a1a1a', marginBottom: '8px' }}>{personalInfo.evaluatorRole || 'مدير/ة المدرسة'}</div>
-                                <div style={{ fontSize: '13px', color: '#333', marginBottom: '14px' }}>{personalInfo.evaluator || '........................'}</div>
-                                <div style={{ width: '160px', borderBottom: '2.5px dotted #333', margin: '0 auto' }} />
-                                <div style={{ fontSize: '10px', color: '#777', marginTop: '6px' }}>التوقيع والختم</div>
+                              <td style={{ width: '50%', textAlign: 'left', padding: '0 20px', verticalAlign: 'bottom' }}>
+                                <div style={{ fontSize: '16px', fontWeight: 800, color: '#1a1a1a', marginBottom: '4px' }}>{personalInfo.evaluatorRole || 'مديرة المدرسة'}: أ/ {personalInfo.evaluator || '...................'}</div>
+                                <div style={{ width: '180px', borderBottom: '3px dotted #333', marginTop: '20px', marginLeft: 'auto' }} />
                               </td>
                             </tr>
                           </tbody>
@@ -3632,23 +3705,31 @@ export default function PerformanceEvidence() {
 
                       </div>{/* إغلاق المحتوى الرئيسي */}
 
-                      {/* ========== الفوتر - شريط متدرج مع حافة مقوسة ========== */}
+                      {/* ========== الفوتر - شكل مائل/منحني مطابق للهوية البصرية ========== */}
                       <div style={{ marginTop: 'auto' }}>
-                        <svg viewBox="0 0 800 20" preserveAspectRatio="none" style={{ width: '100%', height: '20px', display: 'block' }}>
-                          <path d="M0,20 C200,0 600,0 800,20 L800,20 L0,20 Z" fill="url(#footerGrad)" />
-                          <defs><linearGradient id="footerGrad" x1="1" y1="0" x2="0" y2="0"><stop offset="0%" stopColor="#0a5c5f" /><stop offset="50%" stopColor="#0d7377" /><stop offset="100%" stopColor="#2ea87a" /></linearGradient></defs>
+                        {/* الشكل المنحني/المائل - يبدأ من اليسار ويرتفع لليمين */}
+                        <svg viewBox="0 0 800 50" preserveAspectRatio="none" style={{ width: '100%', height: '35px', display: 'block' }}>
+                          <defs>
+                            <linearGradient id="footerGradSingle" x1="0" y1="0" x2="1" y2="0">
+                              <stop offset="0%" stopColor="#2ea87a" />
+                              <stop offset="50%" stopColor="#0d7377" />
+                              <stop offset="100%" stopColor="#1a4d5e" />
+                            </linearGradient>
+                          </defs>
+                          <path d="M0,50 L0,35 C150,8 400,2 800,18 L800,50 Z" fill="url(#footerGradSingle)" />
                         </svg>
                         <div style={{
-                          background: 'linear-gradient(to right, #2ea87a, #0d7377, #0a5c5f)',
-                          padding: '8px 28px',
+                          background: 'linear-gradient(to left, #1a4d5e, #0d7377, #2ea87a)',
+                          padding: '6px 28px 10px',
                           fontSize: '11px',
                           color: '#fff',
                           display: 'flex',
                           justifyContent: 'space-between',
                           alignItems: 'center',
+                          marginTop: '-1px',
                         }}>
-                          <span style={{ fontWeight: 700 }}>SERS - نظام السجلات التعليمية الذكي</span>
-                          <span style={{ opacity: 0.9 }}>صفحة 1</span>
+                          <span style={{ fontWeight: 700, letterSpacing: '0.3px' }}>SERS - نظام السجلات التعليمية الذكي</span>
+                          <span style={{ opacity: 0.85, fontSize: '10px' }}>صفحة 1</span>
                         </div>
                       </div>
 

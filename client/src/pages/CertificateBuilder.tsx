@@ -1,24 +1,40 @@
 /*
  * شهادات الشكر والتقدير - صفحة تفاعلية كاملة
  * المستخدم يختار الثيم → يدخل البيانات → معاينة حية فورية → تصدير PDF / طباعة
+ * الهوية البصرية: تدرج أخضر/فيروزي + شريط علوي + فوتر منحني
  */
 import { useState, useMemo } from "react";
 import { motion } from "framer-motion";
-import { ArrowLeft, Download, Printer, Palette, Type, Image as ImageIcon } from "lucide-react";
+import { ArrowLeft, Download, Printer, Palette, Type } from "lucide-react";
 import { useLocation } from "wouter";
 import { exportToPDF, printElement } from "@/lib/pdf-export";
 import { generateQRDataURL } from "@/lib/qr-utils";
+import { MoeLogo } from "@/components/MoeLogo";
 
 const CERT_THEMES = [
   {
     id: "green-official",
     name: "الهوية الرسمية",
-    bg: "linear-gradient(135deg, #f0fdf4 0%, #dcfce7 50%, #f0fdf4 100%)",
-    borderColor: "#166534",
-    headerColor: "#166534",
+    bg: "#ffffff",
+    borderColor: "#0d7377",
+    headerColor: "#0d7377",
     textColor: "#1a1a1a",
-    accentColor: "#16a34a",
-    ornament: "🏛️",
+    accentColor: "#2ea87a",
+    gradientStart: "#1a4d5e",
+    gradientMid: "#0d7377",
+    gradientEnd: "#2ea87a",
+  },
+  {
+    id: "dark-teal",
+    name: "التيل الداكن",
+    bg: "#f8fffe",
+    borderColor: "#1a4d5e",
+    headerColor: "#1a4d5e",
+    textColor: "#1a1a1a",
+    accentColor: "#0d7377",
+    gradientStart: "#0a3a4a",
+    gradientMid: "#1a4d5e",
+    gradientEnd: "#0d7377",
   },
   {
     id: "gold-elegant",
@@ -28,7 +44,9 @@ const CERT_THEMES = [
     headerColor: "#78350f",
     textColor: "#1a1a1a",
     accentColor: "#d97706",
-    ornament: "⭐",
+    gradientStart: "#78350f",
+    gradientMid: "#92400e",
+    gradientEnd: "#d97706",
   },
   {
     id: "blue-modern",
@@ -38,7 +56,9 @@ const CERT_THEMES = [
     headerColor: "#1e3a8a",
     textColor: "#1a1a1a",
     accentColor: "#2563eb",
-    ornament: "🎓",
+    gradientStart: "#1e3a8a",
+    gradientMid: "#1e40af",
+    gradientEnd: "#2563eb",
   },
   {
     id: "purple-royal",
@@ -48,17 +68,9 @@ const CERT_THEMES = [
     headerColor: "#581c87",
     textColor: "#1a1a1a",
     accentColor: "#9333ea",
-    ornament: "👑",
-  },
-  {
-    id: "teal-fresh",
-    name: "التيل المنعش",
-    bg: "linear-gradient(135deg, #f0fdfa 0%, #ccfbf1 50%, #f0fdfa 100%)",
-    borderColor: "#115e59",
-    headerColor: "#134e4a",
-    textColor: "#1a1a1a",
-    accentColor: "#0d9488",
-    ornament: "🌿",
+    gradientStart: "#581c87",
+    gradientMid: "#6b21a8",
+    gradientEnd: "#9333ea",
   },
 ];
 
@@ -98,6 +110,10 @@ export default function CertificateBuilder() {
     await exportToPDF("cert-preview", `${selectedType.title}_${formData.recipientName || "شهادة"}.pdf`);
     setIsExporting(false);
   };
+
+  const t = selectedTheme;
+  const gradientId = `certGrad-${t.id}`;
+  const footerGradId = `certFooterGrad-${t.id}`;
 
   return (
     <div className="min-h-screen bg-[#F8FAFC]" dir="rtl">
@@ -222,62 +238,67 @@ export default function CertificateBuilder() {
         <main className="flex-1 p-6 flex items-center justify-center bg-gray-100 overflow-auto">
           <div
             id="cert-preview"
-            className="w-full max-w-[800px] aspect-[1.414/1] rounded-lg shadow-2xl overflow-hidden relative"
+            className="w-full max-w-[800px] aspect-[1.414/1] shadow-2xl overflow-hidden relative"
             style={{
-              background: selectedTheme.bg,
+              background: t.bg,
               fontFamily: "'Cairo', 'Tajawal', sans-serif",
             }}
           >
-            {/* إطار مزخرف */}
+            {/* شريط علوي رفيع بتدرج */}
+            <div style={{ height: '5px', background: `linear-gradient(to left, ${t.gradientStart}, ${t.gradientMid}, ${t.gradientEnd})`, position: 'absolute', top: 0, left: 0, right: 0, zIndex: 20 }} />
+
+            {/* إطار مزخرف - بلون الهوية */}
             <div
-              className="absolute inset-4 rounded-lg"
-              style={{ border: `3px double ${selectedTheme.borderColor}` }}
+              className="absolute rounded-lg"
+              style={{ inset: '16px', border: `3px double ${t.borderColor}` }}
             />
             <div
-              className="absolute inset-6 rounded"
-              style={{ border: `1px solid ${selectedTheme.borderColor}40` }}
+              className="absolute rounded"
+              style={{ inset: '24px', border: `1px solid ${t.borderColor}40` }}
             />
 
             {/* المحتوى */}
             <div className="relative z-10 h-full flex flex-col items-center justify-between p-12 text-center">
               {/* الشعار والعنوان */}
               <div>
-                <div className="text-4xl mb-2">{selectedTheme.ornament}</div>
+                <div style={{ marginBottom: '8px' }}>
+                  <MoeLogo variant="original" height={70} />
+                </div>
                 <h1
                   className="text-3xl font-black mb-1"
-                  style={{ color: selectedTheme.headerColor, fontFamily: "'Tajawal', sans-serif" }}
+                  style={{ color: t.headerColor, fontFamily: "'Tajawal', sans-serif" }}
                 >
                   {selectedType.title}
                 </h1>
                 {formData.organization && (
-                  <p className="text-sm" style={{ color: selectedTheme.accentColor }}>{formData.organization}</p>
+                  <p className="text-sm" style={{ color: t.accentColor }}>{formData.organization}</p>
                 )}
               </div>
 
               {/* النص الرئيسي */}
               <div className="flex-1 flex flex-col items-center justify-center max-w-lg">
-                <p className="text-sm mb-3" style={{ color: selectedTheme.textColor + "99" }}>
+                <p className="text-sm mb-3" style={{ color: t.textColor + "99" }}>
                   {selectedType.id === "thanks" ? "يسر إدارة المدرسة أن تتقدم بخالص الشكر والتقدير إلى" : "تشهد إدارة المدرسة بأن"}
                 </p>
 
                 <div className="mb-4">
                   <h2
                     className="text-2xl font-black mb-1"
-                    style={{ color: selectedTheme.headerColor, fontFamily: "'Tajawal', sans-serif" }}
+                    style={{ color: t.headerColor, fontFamily: "'Tajawal', sans-serif" }}
                   >
                     {formData.recipientName || "اسم المستلم"}
                   </h2>
                   {formData.recipientTitle && (
-                    <p className="text-sm font-medium" style={{ color: selectedTheme.accentColor }}>{formData.recipientTitle}</p>
+                    <p className="text-sm font-medium" style={{ color: t.accentColor }}>{formData.recipientTitle}</p>
                   )}
                 </div>
 
                 <div
                   className="w-24 h-0.5 rounded-full mb-4"
-                  style={{ backgroundColor: selectedTheme.accentColor }}
+                  style={{ background: `linear-gradient(to left, ${t.gradientStart}, ${t.gradientEnd})` }}
                 />
 
-                <p className="text-base leading-relaxed" style={{ color: selectedTheme.textColor }}>
+                <p className="text-base leading-relaxed" style={{ color: t.textColor }}>
                   {formData.reason || selectedType.defaultText}
                 </p>
               </div>
@@ -289,7 +310,7 @@ export default function CertificateBuilder() {
                   <div>
                     <img src={qrData} alt="QR" className="w-14 h-14 rounded" />
                     {formData.certNumber && (
-                      <p className="text-[9px] mt-1" style={{ color: selectedTheme.textColor + "60" }}>
+                      <p className="text-[9px] mt-1" style={{ color: t.textColor + "60" }}>
                         {formData.certNumber}
                       </p>
                     )}
@@ -298,11 +319,11 @@ export default function CertificateBuilder() {
                   {/* التوقيع */}
                   <div className="text-center">
                     <div className="mb-6" />
-                    <div className="w-40 border-t pt-2" style={{ borderColor: selectedTheme.borderColor + "40" }}>
-                      <p className="text-sm font-bold" style={{ color: selectedTheme.headerColor }}>
+                    <div className="w-40 pt-2" style={{ borderTop: `2.5px dotted ${t.borderColor}60` }}>
+                      <p className="text-sm font-bold" style={{ color: t.headerColor }}>
                         {formData.issuerName || "_______________"}
                       </p>
-                      <p className="text-xs" style={{ color: selectedTheme.textColor + "80" }}>
+                      <p className="text-xs" style={{ color: t.textColor + "80" }}>
                         {formData.issuerTitle || "المنصب"}
                       </p>
                     </div>
@@ -310,12 +331,39 @@ export default function CertificateBuilder() {
 
                   {/* التاريخ */}
                   <div className="text-left">
-                    <p className="text-xs" style={{ color: selectedTheme.textColor + "60" }}>التاريخ</p>
-                    <p className="text-sm font-medium" style={{ color: selectedTheme.headerColor }}>
+                    <p className="text-xs" style={{ color: t.textColor + "60" }}>التاريخ</p>
+                    <p className="text-sm font-medium" style={{ color: t.headerColor }}>
                       {formData.date || "____/____/____"}
                     </p>
                   </div>
                 </div>
+              </div>
+            </div>
+
+            {/* الفوتر المنحني - مطابق للهوية البصرية */}
+            <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, zIndex: 15 }}>
+              <svg viewBox="0 0 800 40" preserveAspectRatio="none" style={{ width: '100%', height: '25px', display: 'block' }}>
+                <defs>
+                  <linearGradient id={footerGradId} x1="0" y1="0" x2="1" y2="0">
+                    <stop offset="0%" stopColor={t.gradientEnd} />
+                    <stop offset="50%" stopColor={t.gradientMid} />
+                    <stop offset="100%" stopColor={t.gradientStart} />
+                  </linearGradient>
+                </defs>
+                <path d="M0,40 L0,28 C150,6 400,0 800,14 L800,40 Z" fill={`url(#${footerGradId})`} />
+              </svg>
+              <div style={{
+                background: `linear-gradient(to left, ${t.gradientStart}, ${t.gradientMid}, ${t.gradientEnd})`,
+                padding: '4px 28px 8px',
+                fontSize: '10px',
+                color: '#fff',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginTop: '-1px',
+              }}>
+                <span style={{ fontWeight: 700, letterSpacing: '0.3px' }}>SERS - نظام السجلات التعليمية الذكي</span>
+                <span style={{ opacity: 0.85 }}>{formData.organization || ''}</span>
               </div>
             </div>
           </div>

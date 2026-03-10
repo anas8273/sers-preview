@@ -343,15 +343,35 @@ export default function GradeAnalysis() {
               </button>
             </div>
 
-            <div id="analysis-report" className="bg-white rounded-xl shadow-lg p-8" style={{ fontFamily: "'Cairo', 'Tajawal', sans-serif" }}>
-              {/* هيدر التقرير */}
-              <div className="text-center mb-6 pb-6 border-b-2 border-blue-600">
-                <h1 className="text-2xl font-black text-blue-900 mb-1">تقرير تحليل نتائج الطلاب</h1>
-                <p className="text-sm text-gray-500">
-                  {subjectInfo.subject || "المادة"} - {subjectInfo.grade || "الصف"} ({subjectInfo.section || "الشعبة"}) - الفصل {subjectInfo.semester} - {subjectInfo.year}
-                </p>
-                <p className="text-xs text-gray-400 mt-1">المعلم: {subjectInfo.teacher || "---"}</p>
+            <div id="analysis-report" className="bg-white rounded-xl shadow-lg overflow-hidden" style={{ fontFamily: "'Cairo', 'Tajawal', sans-serif" }}>
+              {/* شريط علوي بتدرج */}
+              <div style={{ height: '5px', background: 'linear-gradient(to left, #1a4d5e, #0d7377, #2ea87a)' }} />
+
+              {/* هيدر التقرير - مطابق للهوية البصرية */}
+              <div style={{ padding: '16px 28px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '2px solid #0d737720' }}>
+                <div style={{ textAlign: 'right' }}>
+                  <div style={{ fontSize: '11px', color: '#0d7377', fontWeight: 700 }}>وزارة التعليم</div>
+                  <div style={{ fontSize: '10px', color: '#1a4d5e', fontWeight: 600 }}>نظام السجلات التعليمية الذكي</div>
+                </div>
+                <div style={{ width: '2px', height: '35px', background: '#5bb784', margin: '0 12px' }} />
+                <div style={{ textAlign: 'left' }}>
+                  <div style={{ fontSize: '10px', color: '#666' }}>العام: {subjectInfo.year}</div>
+                  <div style={{ fontSize: '10px', color: '#666' }}>الفصل: {subjectInfo.semester}</div>
+                </div>
               </div>
+
+              {/* مربع العنوان */}
+              <div style={{ padding: '12px 28px', textAlign: 'center' }}>
+                <div style={{ border: '2px solid #7ECDC0', borderRadius: '16px', padding: '10px 20px', display: 'inline-block' }}>
+                  <h1 className="text-xl font-black" style={{ color: '#1a4d5e' }}>تقرير تحليل نتائج الطلاب</h1>
+                </div>
+                <p className="text-sm mt-2" style={{ color: '#666' }}>
+                  {subjectInfo.subject || "المادة"} - {subjectInfo.grade || "الصف"} ({subjectInfo.section || "الشعبة"})
+                </p>
+                <p className="text-xs mt-1" style={{ color: '#999' }}>المعلم: {subjectInfo.teacher || "---"}</p>
+              </div>
+
+              <div style={{ padding: '0 28px 28px' }}>
 
               {stats && (
                 <>
@@ -403,7 +423,7 @@ export default function GradeAnalysis() {
                   <h3 className="font-bold text-gray-800 mb-3">تفاصيل الدرجات</h3>
                   <table className="w-full text-sm border-collapse mb-4">
                     <thead>
-                      <tr className="bg-blue-900 text-white">
+                      <tr style={{ background: 'linear-gradient(to left, #1a4d5e, #0d7377)', color: '#fff' }}>
                         <th className="p-2 text-right text-xs">م</th>
                         <th className="p-2 text-right text-xs">اسم الطالب</th>
                         <th className="p-2 text-center text-xs">الدرجة</th>
@@ -427,12 +447,36 @@ export default function GradeAnalysis() {
                       ))}
                     </tbody>
                   </table>
-
-                  <div className="text-center text-[10px] text-gray-400 mt-6 pt-4 border-t border-gray-100">
-                    تم إنشاء هذا التقرير بواسطة نظام SERS - السجلات التعليمية الذكية
-                  </div>
                 </>
               )}
+              </div>
+
+              {/* الفوتر المنحني */}
+              <div style={{ marginTop: '24px' }}>
+                <svg viewBox="0 0 800 40" preserveAspectRatio="none" style={{ width: '100%', height: '20px', display: 'block' }}>
+                  <defs>
+                    <linearGradient id="gradeFooterGrad" x1="0" y1="0" x2="1" y2="0">
+                      <stop offset="0%" stopColor="#2ea87a" />
+                      <stop offset="50%" stopColor="#0d7377" />
+                      <stop offset="100%" stopColor="#1a4d5e" />
+                    </linearGradient>
+                  </defs>
+                  <path d="M0,40 L0,28 C150,6 400,0 800,14 L800,40 Z" fill="url(#gradeFooterGrad)" />
+                </svg>
+                <div style={{
+                  background: 'linear-gradient(to left, #1a4d5e, #0d7377, #2ea87a)',
+                  padding: '4px 28px 8px',
+                  fontSize: '10px',
+                  color: '#fff',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  marginTop: '-1px',
+                }}>
+                  <span style={{ fontWeight: 700 }}>SERS - نظام السجلات التعليمية الذكي</span>
+                  <span style={{ opacity: 0.85 }}>تم إنشاء هذا التقرير تلقائياً</span>
+                </div>
+              </div>
             </div>
           </div>
         )}

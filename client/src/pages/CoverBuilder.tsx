@@ -1,6 +1,7 @@
 /*
  * أغلفة وفواصل تفاعلية
  * المستخدم يختار نوع الغلاف → يدخل البيانات → معاينة حية → تصدير PDF
+ * الهوية البصرية: تدرج أخضر/فيروزي + شريط علوي + فوتر منحني
  */
 import { useState, useMemo } from "react";
 import { motion } from "framer-motion";
@@ -8,6 +9,7 @@ import { ArrowLeft, Download, Printer, Palette } from "lucide-react";
 import { useLocation } from "wouter";
 import { exportToPDF, printElement } from "@/lib/pdf-export";
 import { generateQRDataURL } from "@/lib/qr-utils";
+import { MoeLogo } from "@/components/MoeLogo";
 
 const COVER_TYPES = [
   { id: "portfolio", title: "غلاف ملف إنجاز", icon: "📁" },
@@ -19,11 +21,61 @@ const COVER_TYPES = [
 ];
 
 const COVER_THEMES = [
-  { id: "green", name: "أخضر رسمي", primary: "#166534", secondary: "#dcfce7", accent: "#16a34a", bg: "#f0fdf4" },
-  { id: "blue", name: "أزرق كلاسيكي", primary: "#1e3a8a", secondary: "#dbeafe", accent: "#2563eb", bg: "#eff6ff" },
-  { id: "purple", name: "بنفسجي أنيق", primary: "#581c87", secondary: "#f3e8ff", accent: "#9333ea", bg: "#faf5ff" },
-  { id: "teal", name: "تيل عصري", primary: "#134e4a", secondary: "#ccfbf1", accent: "#0d9488", bg: "#f0fdfa" },
-  { id: "amber", name: "ذهبي دافئ", primary: "#78350f", secondary: "#fef3c7", accent: "#d97706", bg: "#fffbeb" },
+  {
+    id: "sers-official",
+    name: "الهوية الرسمية",
+    primary: "#0d7377",
+    secondary: "#f0faf9",
+    accent: "#2ea87a",
+    bg: "#ffffff",
+    gradientStart: "#1a4d5e",
+    gradientMid: "#0d7377",
+    gradientEnd: "#2ea87a",
+  },
+  {
+    id: "sers-dark",
+    name: "التيل الداكن",
+    primary: "#1a4d5e",
+    secondary: "#e8f5f3",
+    accent: "#0d7377",
+    bg: "#f8fffe",
+    gradientStart: "#0a3a4a",
+    gradientMid: "#1a4d5e",
+    gradientEnd: "#0d7377",
+  },
+  {
+    id: "blue",
+    name: "أزرق كلاسيكي",
+    primary: "#1e3a8a",
+    secondary: "#dbeafe",
+    accent: "#2563eb",
+    bg: "#eff6ff",
+    gradientStart: "#1e3a8a",
+    gradientMid: "#1e40af",
+    gradientEnd: "#2563eb",
+  },
+  {
+    id: "purple",
+    name: "بنفسجي أنيق",
+    primary: "#581c87",
+    secondary: "#f3e8ff",
+    accent: "#9333ea",
+    bg: "#faf5ff",
+    gradientStart: "#581c87",
+    gradientMid: "#6b21a8",
+    gradientEnd: "#9333ea",
+  },
+  {
+    id: "amber",
+    name: "ذهبي دافئ",
+    primary: "#78350f",
+    secondary: "#fef3c7",
+    accent: "#d97706",
+    bg: "#fffbeb",
+    gradientStart: "#78350f",
+    gradientMid: "#92400e",
+    gradientEnd: "#d97706",
+  },
 ];
 
 export default function CoverBuilder() {
@@ -54,6 +106,9 @@ export default function CoverBuilder() {
     await exportToPDF("cover-preview", `${selectedType.title}_${formData.name || "غلاف"}.pdf`);
     setIsExporting(false);
   };
+
+  const t = selectedTheme;
+  const footerGradId = `coverFooterGrad-${t.id}`;
 
   return (
     <div className="min-h-screen bg-[#F8FAFC]" dir="rtl">
@@ -167,68 +222,139 @@ export default function CoverBuilder() {
         <main className="flex-1 p-6 flex items-center justify-center bg-gray-100 overflow-auto">
           <div
             id="cover-preview"
-            className="w-full max-w-[595px] shadow-2xl rounded-lg overflow-hidden"
+            className="w-full max-w-[595px] shadow-2xl overflow-hidden"
             style={{
               aspectRatio: "1/1.414",
-              background: selectedTheme.bg,
+              background: t.bg,
               fontFamily: "'Cairo', 'Tajawal', sans-serif",
             }}
           >
             {selectedType.id === "divider" ? (
-              /* فاصل */
-              <div className="h-full flex items-center justify-center relative">
-                <div className="absolute inset-6 rounded-lg" style={{ border: `3px solid ${selectedTheme.primary}` }} />
-                <div className="absolute inset-8 rounded" style={{ border: `1px solid ${selectedTheme.accent}40` }} />
-                <div className="text-center z-10">
-                  <div className="w-20 h-1 rounded-full mx-auto mb-4" style={{ backgroundColor: selectedTheme.accent }} />
-                  <h1 className="text-4xl font-black mb-2" style={{ color: selectedTheme.primary, fontFamily: "'Tajawal', sans-serif" }}>
-                    {formData.dividerTitle || "عنوان الفاصل"}
-                  </h1>
-                  <div className="w-20 h-1 rounded-full mx-auto mt-4" style={{ backgroundColor: selectedTheme.accent }} />
+              /* فاصل - مع هوية بصرية */
+              <div className="h-full flex flex-col relative">
+                {/* شريط علوي بتدرج */}
+                <div style={{ height: '5px', background: `linear-gradient(to left, ${t.gradientStart}, ${t.gradientMid}, ${t.gradientEnd})` }} />
+                <div className="flex-1 flex items-center justify-center relative">
+                  <div className="absolute rounded-lg" style={{ inset: '24px', border: `3px solid ${t.primary}` }} />
+                  <div className="absolute rounded" style={{ inset: '32px', border: `1px solid ${t.accent}40` }} />
+                  <div className="text-center z-10">
+                    <div className="w-20 h-1 rounded-full mx-auto mb-4" style={{ background: `linear-gradient(to left, ${t.gradientStart}, ${t.gradientEnd})` }} />
+                    <h1 className="text-4xl font-black mb-2" style={{ color: t.primary, fontFamily: "'Tajawal', sans-serif" }}>
+                      {formData.dividerTitle || "عنوان الفاصل"}
+                    </h1>
+                    <div className="w-20 h-1 rounded-full mx-auto mt-4" style={{ background: `linear-gradient(to left, ${t.gradientStart}, ${t.gradientEnd})` }} />
+                  </div>
+                </div>
+                {/* فوتر منحني */}
+                <div>
+                  <svg viewBox="0 0 800 40" preserveAspectRatio="none" style={{ width: '100%', height: '20px', display: 'block' }}>
+                    <defs>
+                      <linearGradient id={`${footerGradId}-div`} x1="0" y1="0" x2="1" y2="0">
+                        <stop offset="0%" stopColor={t.gradientEnd} />
+                        <stop offset="50%" stopColor={t.gradientMid} />
+                        <stop offset="100%" stopColor={t.gradientStart} />
+                      </linearGradient>
+                    </defs>
+                    <path d="M0,40 L0,28 C150,6 400,0 800,14 L800,40 Z" fill={`url(#${footerGradId}-div)`} />
+                  </svg>
+                  <div style={{
+                    background: `linear-gradient(to left, ${t.gradientStart}, ${t.gradientMid}, ${t.gradientEnd})`,
+                    padding: '4px 20px 6px',
+                    fontSize: '9px',
+                    color: '#fff',
+                    textAlign: 'center',
+                    marginTop: '-1px',
+                  }}>
+                    SERS - نظام السجلات التعليمية الذكي
+                  </div>
                 </div>
               </div>
             ) : (
-              /* غلاف */
+              /* غلاف - مع هوية بصرية كاملة */
               <div className="h-full flex flex-col relative">
-                {/* شريط علوي */}
-                <div className="h-2" style={{ backgroundColor: selectedTheme.primary }} />
+                {/* شريط علوي بتدرج */}
+                <div style={{ height: '5px', background: `linear-gradient(to left, ${t.gradientStart}, ${t.gradientMid}, ${t.gradientEnd})` }} />
 
-                {/* الهيدر */}
-                <div className="p-6 text-center" style={{ backgroundColor: selectedTheme.secondary }}>
-                  <p className="text-xs mb-1" style={{ color: selectedTheme.accent }}>{formData.department || "وزارة التعليم"}</p>
-                  <p className="text-sm font-bold" style={{ color: selectedTheme.primary }}>{formData.school || "اسم المدرسة"}</p>
+                {/* الهيدر - شعار + معلومات */}
+                <div style={{ padding: '16px 24px 12px', background: '#fff' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div style={{ textAlign: 'right' }}>
+                      <div style={{ fontSize: '12px', color: t.primary, fontWeight: 700, lineHeight: '1.8' }}>وزارة التعليم</div>
+                      <div style={{ fontSize: '11px', color: t.primary, fontWeight: 600, lineHeight: '1.7' }}>{formData.department || "إدارة التعليم"}</div>
+                      <div style={{ fontSize: '11px', color: t.primary, fontWeight: 600, lineHeight: '1.7' }}>{formData.school || "اسم المدرسة"}</div>
+                    </div>
+                    {/* خط فاصل عمودي */}
+                    <div style={{ width: '2px', height: '45px', background: '#5bb784', margin: '0 12px' }} />
+                    <MoeLogo variant="original" height={60} />
+                  </div>
+                </div>
+
+                {/* خطوط فاصلة ملونة */}
+                <div style={{ display: 'flex', height: '4px' }}>
+                  <div style={{ flex: 1, background: t.gradientEnd }} />
+                  <div style={{ flex: 1, background: t.gradientMid }} />
+                  <div style={{ flex: 1, background: t.gradientStart }} />
                 </div>
 
                 {/* المحتوى الرئيسي */}
                 <div className="flex-1 flex flex-col items-center justify-center p-8 text-center">
-                  <div className="text-5xl mb-4">{selectedType.icon}</div>
-                  <h1 className="text-3xl font-black mb-2" style={{ color: selectedTheme.primary, fontFamily: "'Tajawal', sans-serif" }}>
-                    {formData.title || selectedType.title}
-                  </h1>
-                  {formData.subtitle && (
-                    <p className="text-lg mb-6" style={{ color: selectedTheme.accent }}>{formData.subtitle}</p>
-                  )}
+                  {/* مربع العنوان بإطار */}
+                  <div style={{
+                    border: `2.5px solid ${t.accent}80`,
+                    borderRadius: '16px',
+                    padding: '16px 32px',
+                    marginBottom: '24px',
+                    minWidth: '280px',
+                  }}>
+                    <h1 className="text-3xl font-black" style={{ color: t.primary, fontFamily: "'Tajawal', sans-serif" }}>
+                      {formData.title || selectedType.title}
+                    </h1>
+                    {formData.subtitle && (
+                      <p className="text-base mt-2" style={{ color: t.accent }}>{formData.subtitle}</p>
+                    )}
+                  </div>
 
-                  <div className="w-24 h-0.5 rounded-full mb-6" style={{ backgroundColor: selectedTheme.accent }} />
+                  <div style={{ width: '80px', height: '2px', borderRadius: '2px', background: `linear-gradient(to left, ${t.gradientStart}, ${t.gradientEnd})`, marginBottom: '24px' }} />
 
                   <div className="space-y-2">
-                    <p className="text-xs" style={{ color: selectedTheme.primary + "80" }}>إعداد</p>
-                    <p className="text-xl font-bold" style={{ color: selectedTheme.primary }}>{formData.name || "الاسم"}</p>
-                    {formData.role && <p className="text-sm" style={{ color: selectedTheme.accent }}>{formData.role}</p>}
+                    <p className="text-xs" style={{ color: t.primary + "80" }}>إعداد</p>
+                    <p className="text-xl font-bold" style={{ color: t.primary }}>{formData.name || "الاسم"}</p>
+                    {formData.role && <p className="text-sm" style={{ color: t.accent }}>{formData.role}</p>}
                   </div>
                 </div>
 
-                {/* الفوتر */}
-                <div className="p-6 flex items-end justify-between" style={{ backgroundColor: selectedTheme.secondary }}>
-                  <img src={qrData} alt="QR" className="w-12 h-12 rounded" />
-                  <div className="text-center">
-                    <p className="text-xs" style={{ color: selectedTheme.primary }}>العام الدراسي {formData.year}</p>
-                    <p className="text-xs" style={{ color: selectedTheme.accent }}>الفصل {formData.semester}</p>
-                  </div>
-                  <div className="text-[9px]" style={{ color: selectedTheme.primary + "60" }}>SERS</div>
+                {/* معلومات العام والفصل */}
+                <div style={{ padding: '8px 24px', textAlign: 'center' }}>
+                  <p className="text-sm font-bold" style={{ color: t.primary }}>العام الدراسي {formData.year}</p>
+                  <p className="text-xs" style={{ color: t.accent }}>الفصل الدراسي {formData.semester}</p>
                 </div>
 
-                <div className="h-2" style={{ backgroundColor: selectedTheme.primary }} />
+                {/* الفوتر المنحني */}
+                <div>
+                  <svg viewBox="0 0 800 50" preserveAspectRatio="none" style={{ width: '100%', height: '30px', display: 'block' }}>
+                    <defs>
+                      <linearGradient id={footerGradId} x1="0" y1="0" x2="1" y2="0">
+                        <stop offset="0%" stopColor={t.gradientEnd} />
+                        <stop offset="50%" stopColor={t.gradientMid} />
+                        <stop offset="100%" stopColor={t.gradientStart} />
+                      </linearGradient>
+                    </defs>
+                    <path d="M0,50 L0,35 C150,8 400,2 800,18 L800,50 Z" fill={`url(#${footerGradId})`} />
+                  </svg>
+                  <div style={{
+                    background: `linear-gradient(to left, ${t.gradientStart}, ${t.gradientMid}, ${t.gradientEnd})`,
+                    padding: '4px 24px 8px',
+                    fontSize: '10px',
+                    color: '#fff',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    marginTop: '-1px',
+                  }}>
+                    <span style={{ fontWeight: 700 }}>SERS - نظام السجلات التعليمية الذكي</span>
+                    <img src={qrData} alt="QR" style={{ width: '28px', height: '28px', borderRadius: '3px' }} />
+                  </div>
+                </div>
               </div>
             )}
           </div>
