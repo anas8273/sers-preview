@@ -63,20 +63,25 @@ async function startServer() {
   });
 
   // Server-side DOCX export endpoint (structured - editable text)
-  app.post('/api/export-docx', async (req, res) => {
+  // Increase body limit for base64 images
+  app.post('/api/export-docx', express.json({ limit: '50mb' }), async (req, res) => {
     try {
-      const { data, html, filename } = req.body;
+      const { data, html, imageBase64, filename, width, height } = req.body;
       let docxBuffer: Buffer;
       
-      if (data) {
-        // New: structured data → editable Word
+      if (imageBase64) {
+        // New: image from html2canvas → Word with image
+        const { renderImageToDocx } = await import('../docx-renderer');
+        docxBuffer = await renderImageToDocx(imageBase64, width, height);
+      } else if (data) {
+        // Structured data → editable Word
         const { renderStructuredDocx } = await import('../docx-renderer');
         docxBuffer = await renderStructuredDocx(data);
       } else if (html) {
         // Legacy: HTML → screenshot Word
         docxBuffer = await renderHtmlToDocx(html);
       } else {
-        res.status(400).json({ error: 'Missing data or html content' });
+        res.status(400).json({ error: 'Missing data, imageBase64, or html content' });
         return;
       }
       

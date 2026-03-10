@@ -35,7 +35,8 @@ import {
   BookOpen, Baby, Accessibility, Briefcase, ClipboardList,
   ClipboardCheck, Handshake, UserCheck, Target,
   NotebookPen, Monitor, School, Award, PieChart, ListChecks,
-  GripVertical, Move, FlaskConical, Activity, Megaphone, Share2, Globe, Copy, Link2, Settings
+  GripVertical, Move, FlaskConical, Activity, Megaphone, Share2, Globe, Copy, Link2, Settings,
+  ZoomIn, ZoomOut, RotateCcw, Maximize2, RefreshCw
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -403,8 +404,8 @@ export default function PerformanceEvidence() {
   const [showShareSettings, setShowShareSettings] = useState(false);
   const [shareUrl, setShareUrl] = useState<string | null>(null);
 
-  // Preview scaling - responsive
-  const { containerRef: previewContainerRef, pageRef: previewPageRef, scale: previewScale, scaledHeight: previewScaledHeight, recalculate: recalcPreview } = usePreviewScale();
+  // Preview scaling - responsive + image capture
+  const { containerRef: previewContainerRef, pageRef: previewPageRef, scale: previewScale, scaledHeight: previewScaledHeight, recalculate: recalcPreview, previewImageUrl, isCapturing, capturePreview, zoomLevel, zoomIn, zoomOut, resetZoom } = usePreviewScale();
 
   // Lightbox state
   const [lightboxImage, setLightboxImage] = useState<string | null>(null);
@@ -774,6 +775,15 @@ export default function PerformanceEvidence() {
     setPreviewCriterionId(criterionId);
     setPreviewSubId(subId);
   };
+
+  // التقاط صورة المعاينة عند فتحها أو تغيير الثيم
+  useEffect(() => {
+    if (previewSubId && previewCriterionId) {
+      // تأخير لضمان render المحتوى المخفي
+      const timer = setTimeout(() => capturePreview(), 800);
+      return () => clearTimeout(timer);
+    }
+  }, [previewSubId, previewCriterionId, selectedTheme.id]);
 
   const handleDragStart = useCallback((ev: EvidenceItem, criterionId: string, subId: string) => {
     setDraggedEvidence({ evidence: ev, fromCriterionId: criterionId, fromSubId: subId });
@@ -1443,12 +1453,11 @@ export default function PerformanceEvidence() {
   const handleExportDocx = async () => {
     setIsExportingDocx(true);
     try {
-      const data = buildDocxData('full');
-      await exportToDocxStructured(
-        data,
+      await exportToDocx(
+        'preview-content',
         `${personalInfo.reportTitle || 'شواهد_الأداء'}_${personalInfo.name || 'مستند'}.docx`
       );
-      toast.success('تم تصدير Word بنجاح - المستند قابل للتعديل');
+      toast.success('تم تصدير Word بنجاح');
     } catch (err) {
       toast.error('فشل تصدير Word - حاول مرة أخرى');
     } finally {
@@ -3245,42 +3254,66 @@ export default function PerformanceEvidence() {
                 <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
                   className="bg-white rounded-2xl shadow-2xl" style={{ width: '100%', maxWidth: '860px', overflow: 'hidden' }}
                   ref={previewContainerRef}>
-                  {/* شريط الأدوات */}
+                  {/* شريط الأدوات العلوي */}
                   <div className="flex items-center justify-between p-2 sm:p-3 bg-gray-50 border-b flex-wrap gap-1 sm:gap-2" data-no-print>
-                    <div className="flex items-center gap-2 flex-wrap">
+                    <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
                       <Button size="sm" variant="outline" className="gap-1 text-xs h-7" onClick={() => exportSingleEvidence(previewCriterionId, previewSubId)}>
-                        <Download className="w-3 h-3" />تصدير PDF
+                        <Download className="w-3 h-3" />PDF
                       </Button>
                       <Button size="sm" variant="outline" className="gap-1 text-xs h-7" onClick={async () => {
                         try {
-                          const docxData = buildDocxData('single', previewCriterionId!, previewSubId!);
-                          await exportToDocxStructured(docxData, `شاهد_${previewSubId}.docx`);
-                          toast.success('تم تصدير Word بنجاح - قابل للتعديل');
+                          await exportToDocx(`single-preview-${previewSubId}`, `شاهد_${previewSubId}.docx`);
+                          toast.success('تم تصدير Word بنجاح');
                         } catch { toast.error('فشل تصدير Word'); }
                       }}>
-                        <FileText className="w-3 h-3" />تصدير Word
+                        <FileText className="w-3 h-3" />Word
                       </Button>
                       <Button size="sm" variant="outline" className="gap-1 text-xs h-7" onClick={() => { const el = document.getElementById(`single-preview-${previewSubId}`); if (el) printElement(`single-preview-${previewSubId}`); }}>
                         <Printer className="w-3 h-3" />طباعة
                       </Button>
-                      {/* اختيار الثيم */}
                       <select value={selectedTheme.id} onChange={(e) => { const t = allThemes.find(th => th.id === e.target.value); if (t) setSelectedTheme(t); }}
                         className="text-xs h-7 px-2 rounded border border-gray-300 bg-white">
                         {allThemes.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
                       </select>
+                      {/* أزرار التكبير/التصغير */}
+                      <div className="flex items-center gap-1 border rounded-lg px-1 bg-white">
+                        <button onClick={zoomOut} className="p-1 hover:bg-gray-100 rounded" title="تصغير">
+                          <ZoomOut className="w-3.5 h-3.5 text-gray-600" />
+                        </button>
+                        <span className="text-[10px] font-mono text-gray-500 min-w-[32px] text-center">{zoomLevel}%</span>
+                        <button onClick={zoomIn} className="p-1 hover:bg-gray-100 rounded" title="تكبير">
+                          <ZoomIn className="w-3.5 h-3.5 text-gray-600" />
+                        </button>
+                        <button onClick={resetZoom} className="p-1 hover:bg-gray-100 rounded" title="إعادة الحجم الأصلي">
+                          <RotateCcw className="w-3 h-3 text-gray-500" />
+                        </button>
+                      </div>
                     </div>
                     <button onClick={() => { setPreviewSubId(null); setPreviewCriterionId(null); }} className="p-1.5 rounded-lg hover:bg-gray-200">
                       <X className="w-5 h-5" />
                     </button>
                   </div>
 
-                  {/* ========== محتوى المعاينة - صفحة A4 كاملة مطابقة لنماذج تعليمية ========== */}
-                  <div style={{ overflow: 'hidden', height: previewScaledHeight ? `${previewScaledHeight}px` : 'auto' }}>
+                  {/* ========== محتوى المعاينة - CSS transform: scale() responsive ========== */}
+                  <div ref={previewContainerRef} style={{ overflow: 'auto', maxHeight: 'calc(100vh - 120px)', background: '#e5e7eb', padding: '16px' }}>
+                    {/* wrapper بارتفاع محسوب لاحتواء الصفحة المصغرة */}
+                    <div style={{
+                      width: previewScaledHeight ? `${793.7 * previewScale}px` : '210mm',
+                      height: previewScaledHeight ? `${previewScaledHeight}px` : 'auto',
+                      margin: '0 auto',
+                      position: 'relative' as const,
+                      overflow: 'hidden',
+                    }}>
+                    {/* الصفحة الفعلية - تُعرض مباشرة مع transform: scale() */}
+                    <div style={{
+                      width: '210mm',
+                      transformOrigin: 'top left',
+                      transform: `scale(${previewScale})`,
+                      transition: 'transform 0.2s ease',
+                    }}>
                   <div id={`single-preview-${previewSubId}`} ref={previewPageRef} style={{
                     fontFamily: "'Cairo', sans-serif",
                     direction: 'rtl',
-                    transform: previewScale < 1 ? `scale(${previewScale})` : undefined,
-                    transformOrigin: 'top center',
                     width: '210mm',
                   }}>
                     <div className="pdf-page" style={{
@@ -3619,8 +3652,10 @@ export default function PerformanceEvidence() {
                       </div>
 
                     </div>{/* إغلاق pdf-page */}
-                  </div>
-                  </div>{/* إغلاق حاوية overflow */}
+                  </div>{/* إغلاق div التصدير */}
+                  </div>{/* إغلاق حاوية scale */}
+                  </div>{/* إغلاق wrapper بارتفاع محسوب */}
+                  </div>{/* إغلاق حاوية العرض */}
 
                 </motion.div>
                 </div>{/* إغلاق div المركزي */}

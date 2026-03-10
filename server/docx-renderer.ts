@@ -677,3 +677,65 @@ export async function renderHtmlToDocx(htmlContent: string): Promise<Buffer> {
     await browserInstance.close();
   }
 }
+
+// ===== New: convert base64 image from html2canvas to Word =====
+export async function renderImageToDocx(
+  imageBase64: string,
+  canvasWidth?: number,
+  canvasHeight?: number
+): Promise<Buffer> {
+  // استخراج البيانات من base64
+  const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, '');
+  const imageBuffer = Buffer.from(base64Data, 'base64');
+
+  // حساب أبعاد الصورة في Word (A4 = 595pt × 842pt)
+  const a4WidthPt = 595;
+  const a4HeightPt = 842;
+  
+  let imgWidth = a4WidthPt;
+  let imgHeight = a4HeightPt;
+
+  if (canvasWidth && canvasHeight) {
+    const aspectRatio = canvasHeight / canvasWidth;
+    imgHeight = Math.round(imgWidth * aspectRatio);
+    
+    // إذا كانت الصورة أطول من A4، نقسمها لصفحات
+    // لكن في الغالب ستكون صفحة واحدة
+    if (imgHeight > a4HeightPt * 1.5) {
+      // صورة طويلة - نصغرها لتناسب العرض
+      imgWidth = a4WidthPt;
+      imgHeight = Math.round(imgWidth * aspectRatio);
+    }
+  }
+
+  const doc = new Document({
+    sections: [{
+      properties: {
+        page: {
+          size: { 
+            width: 11906, // A4 width in twips
+            height: 16838, // A4 height in twips
+            orientation: PageOrientation.PORTRAIT,
+          },
+          margin: { top: 0, right: 0, bottom: 0, left: 0 },
+        },
+      },
+      children: [
+        new Paragraph({
+          alignment: AlignmentType.CENTER,
+          spacing: { before: 0, after: 0 },
+          children: [
+            new ImageRun({
+              data: imageBuffer,
+              transformation: { width: imgWidth, height: imgHeight },
+              type: "png",
+            }),
+          ],
+        }),
+      ],
+    }],
+  });
+
+  const buffer = await Packer.toBuffer(doc);
+  return Buffer.from(buffer);
+}
