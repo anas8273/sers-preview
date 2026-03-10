@@ -62,15 +62,24 @@ async function startServer() {
     }
   });
 
-  // Server-side DOCX export endpoint
+  // Server-side DOCX export endpoint (structured - editable text)
   app.post('/api/export-docx', async (req, res) => {
     try {
-      const { html, filename } = req.body;
-      if (!html) {
-        res.status(400).json({ error: 'Missing html content' });
+      const { data, html, filename } = req.body;
+      let docxBuffer: Buffer;
+      
+      if (data) {
+        // New: structured data → editable Word
+        const { renderStructuredDocx } = await import('../docx-renderer');
+        docxBuffer = await renderStructuredDocx(data);
+      } else if (html) {
+        // Legacy: HTML → screenshot Word
+        docxBuffer = await renderHtmlToDocx(html);
+      } else {
+        res.status(400).json({ error: 'Missing data or html content' });
         return;
       }
-      const docxBuffer = await renderHtmlToDocx(html);
+      
       res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
       res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(filename || 'document.docx')}`);
       res.setHeader('Content-Length', docxBuffer.length.toString());

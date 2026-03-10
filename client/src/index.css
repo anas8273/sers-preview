@@ -162,25 +162,16 @@
 .preview-scale-container {
   container-type: inline-size;
   width: 100%;
+  overflow: visible;
 }
 
-/* تصغير المعاينة المفردة باستخدام zoom (أبسط وأكثر توافقاً) */
-@media screen and (max-width: 850px) {
-  .single-preview-page {
-    zoom: calc((100vw - 32px) / 793.7);
-  }
-  #preview-content {
-    zoom: calc((100vw - 32px) / 793.7);
-  }
+/* التصغير يتم بواسطة JavaScript فقط - لا حاجة لـ CSS media queries */
+/* المعاينة المفردة تستخدم usePreviewScale hook */
+.single-preview-page {
+  transform-origin: top center;
 }
-
-@media screen and (max-width: 500px) {
-  .single-preview-page {
-    zoom: calc((100vw - 20px) / 793.7);
-  }
-  #preview-content {
-    zoom: calc((100vw - 20px) / 793.7);
-  }
+#preview-content {
+  transform-origin: top center;
 }
 
 /* طباعة */

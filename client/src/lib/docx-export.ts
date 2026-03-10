@@ -1,18 +1,101 @@
 /**
  * نظام تصدير Word (.docx) - SERS
- * يحول المعاينة HTML إلى ملف Word بتنسيق مطابق
  * 
- * الآلية:
- * 1. يأخذ HTML من العنصر المحدد (مع inline styles كاملة)
- * 2. يرسله إلى السيرفر عبر /api/export-docx
- * 3. السيرفر يستخدم Puppeteer لالتقاط صور عالية الجودة
- * 4. يدمج الصور في مستند Word
+ * النهج الجديد: يرسل بيانات منظمة (JSON) إلى السيرفر
+ * السيرفر يبني مستند Word نصي قابل للتعديل مباشرة
+ * 
+ * النهج القديم (HTML → screenshot) لا يزال متاحاً كـ fallback
  */
 
 import { saveAs } from 'file-saver';
 
+// ===== Types =====
+interface DocxField {
+  label: string;
+  value: string;
+}
+
+interface DocxEvidence {
+  fileName?: string;
+  fileUrl?: string;
+  displayAs?: "image" | "qr";
+  type?: string;
+  text?: string;
+  link?: string;
+}
+
+interface DocxSubEvidence {
+  title: string;
+  fields: DocxField[];
+  evidences: DocxEvidence[];
+}
+
+interface DocxCriterion {
+  title: string;
+  subEvidences: DocxSubEvidence[];
+}
+
+interface DocxPersonalInfo {
+  name: string;
+  school: string;
+  department: string;
+  year: string;
+  semester: string;
+  evaluator: string;
+  evaluatorRole: string;
+  date: string;
+  reportTitle: string;
+}
+
+export interface DocxExportData {
+  personalInfo: DocxPersonalInfo;
+  criteria: DocxCriterion[];
+  themeColor?: string;
+  mode: "single" | "full";
+  singleTitle?: string;
+}
+
 /**
- * تصدير Word عبر Server-Side Rendering
+ * تصدير Word نصي قابل للتعديل - النهج الجديد
+ * يرسل بيانات منظمة بدلاً من HTML
+ */
+export async function exportToDocxStructured(
+  data: DocxExportData,
+  filename: string = "document.docx",
+  onProgress?: (current: number, total: number) => void
+): Promise<boolean> {
+  try {
+    onProgress?.(1, 3);
+
+    // إرسال البيانات المنظمة إلى السيرفر
+    onProgress?.(2, 3);
+
+    const response = await fetch('/api/export-docx', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ data, filename }),
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ error: 'Unknown error' }));
+      throw new Error(error.error || 'DOCX export failed');
+    }
+
+    // تحميل الملف
+    const blob = await response.blob();
+    saveAs(blob, filename);
+
+    onProgress?.(3, 3);
+    return true;
+  } catch (err) {
+    console.error("DOCX structured export error:", err);
+    throw err;
+  }
+}
+
+/**
+ * تصدير Word عبر HTML (النهج القديم - fallback)
+ * يحول HTML إلى صورة في Word
  */
 export async function exportToDocx(
   elementId: string,
@@ -58,10 +141,8 @@ export async function exportToDocx(
 
 /**
  * استخراج HTML مع تحويل جميع الأنماط المحسوبة إلى inline styles
- * مطابق تماماً لـ pdf-export.ts
  */
 async function extractHtmlWithFullStyles(element: HTMLElement): Promise<string> {
-  // إخفاء الأزرار مؤقتاً
   const buttons = element.querySelectorAll("button, [data-no-print]");
   const buttonDisplays: string[] = [];
   buttons.forEach((btn, i) => {
@@ -69,27 +150,18 @@ async function extractHtmlWithFullStyles(element: HTMLElement): Promise<string> 
     (btn as HTMLElement).style.display = "none";
   });
 
-  // نسخ العنصر
   const clone = element.cloneNode(true) as HTMLElement;
 
-  // استعادة الأزرار في العنصر الأصلي
   buttons.forEach((btn, i) => {
     (btn as HTMLElement).style.display = buttonDisplays[i];
   });
 
-  // حذف الأزرار من النسخة
   clone.querySelectorAll("button, [data-no-print]").forEach(el => el.remove());
 
-  // تحويل الأنماط المحسوبة إلى inline styles (نفس القائمة الكاملة من pdf-export)
   await inlineComputedStyles(element, clone);
-
-  // تحويل الصور إلى data URLs
   await convertImagesToDataUrls(clone);
-
-  // تحويل oklch colors
   convertOklchInClone(clone);
 
-  // إعداد الصفحات
   const pages = clone.querySelectorAll(":scope > div");
   if (pages.length > 0) {
     pages.forEach(page => {
@@ -102,10 +174,6 @@ async function extractHtmlWithFullStyles(element: HTMLElement): Promise<string> 
   return clone.innerHTML;
 }
 
-/**
- * تحويل الأنماط المحسوبة إلى inline styles
- * القائمة الكاملة من pdf-export.ts
- */
 async function inlineComputedStyles(original: HTMLElement, clone: HTMLElement): Promise<void> {
   const origElements = [original, ...Array.from(original.querySelectorAll("*"))] as HTMLElement[];
   const cloneElements = [clone, ...Array.from(clone.querySelectorAll("*"))] as HTMLElement[];
@@ -159,9 +227,6 @@ async function inlineComputedStyles(original: HTMLElement, clone: HTMLElement): 
   }
 }
 
-/**
- * تحويل الصور الخارجية إلى data URLs
- */
 async function convertImagesToDataUrls(element: HTMLElement): Promise<void> {
   const images = element.querySelectorAll("img");
   
@@ -205,7 +270,6 @@ async function convertImagesToDataUrls(element: HTMLElement): Promise<void> {
 
   await Promise.all(promises);
 
-  // تحويل background images أيضاً
   const allElements = [element, ...Array.from(element.querySelectorAll("*"))] as HTMLElement[];
   for (const el of allElements) {
     const bgImage = el.style.backgroundImage;
@@ -228,9 +292,6 @@ async function convertImagesToDataUrls(element: HTMLElement): Promise<void> {
   }
 }
 
-/**
- * تحويل ألوان oklch إلى RGB في النسخة المستنسخة
- */
 function convertOklchInClone(element: HTMLElement): void {
   const allElements = [element, ...Array.from(element.querySelectorAll("*"))] as HTMLElement[];
   const colorProps = [

@@ -1,288 +1,679 @@
 /**
  * محرك تصدير Word (.docx) - SERS
- * النهج: يستخدم Puppeteer لتوليد PDF أولاً ثم يحول كل صفحة إلى صورة
- * ثم يدمج الصور في مستند Word
+ * النهج الجديد: يبني مستند Word نصي قابل للتعديل مباشرة
+ * بدلاً من التقاط screenshot وتحويلها لصورة
  * 
- * هذا يضمن تطابق 100% بين PDF و Word
+ * يستقبل بيانات منظمة (JSON) من الفرونت ويبني المستند
  */
-import puppeteer from "puppeteer";
 import {
   Document,
   Packer,
   Paragraph,
-  ImageRun,
+  TextRun,
+  Table,
+  TableRow,
+  TableCell,
+  WidthType,
   AlignmentType,
   PageOrientation,
-  SectionType,
+  BorderStyle,
+  ImageRun,
+  HeadingLevel,
+  ShadingType,
+  VerticalAlign,
+  Header,
+  Footer,
+  TabStopPosition,
+  TabStopType,
+  convertInchesToTwip,
 } from "docx";
 
-let browserInstance: Awaited<ReturnType<typeof puppeteer.launch>> | null = null;
-
-async function getBrowser() {
-  if (browserInstance && browserInstance.connected) {
-    return browserInstance;
-  }
-  browserInstance = await puppeteer.launch({
-    headless: true,
-    args: [
-      "--no-sandbox",
-      "--disable-setuid-sandbox",
-      "--disable-dev-shm-usage",
-      "--disable-gpu",
-      "--font-render-hinting=none",
-      "--disable-lcd-text",
-      "--enable-font-antialiasing",
-      "--force-color-profile=srgb",
-    ],
-    protocolTimeout: 120000,
-  });
-  return browserInstance;
+// ===== Types =====
+interface DocxField {
+  label: string;
+  value: string;
 }
 
-/**
- * تحويل HTML إلى DOCX
- * الخطوات:
- * 1. تحميل HTML في Puppeteer
- * 2. التقاط صورة كاملة للصفحة (fullPage screenshot)
- * 3. تقسيم الصورة إلى صفحات A4
- * 4. إنشاء مستند Word مع الصور
- */
-export async function renderHtmlToDocx(htmlContent: string): Promise<Buffer> {
-  const browser = await getBrowser();
-  const page = await browser.newPage();
+interface DocxEvidence {
+  fileName?: string;
+  fileUrl?: string;
+  displayAs?: "image" | "qr";
+  type?: string;
+  text?: string;
+  link?: string;
+}
 
-  try {
-    // تعيين viewport بحجم A4 (عرض 794px)
-    await page.setViewport({ width: 794, height: 1123, deviceScaleFactor: 2 });
+interface DocxSubEvidence {
+  title: string;
+  fields: DocxField[];
+  evidences: DocxEvidence[];
+}
 
-    // تحميل HTML مع الخطوط العربية
-    const fullHtml = wrapWithFonts(htmlContent);
-    await page.setContent(fullHtml, {
-      waitUntil: ["networkidle0", "domcontentloaded"],
-      timeout: 60000,
-    });
+interface DocxCriterion {
+  title: string;
+  subEvidences: DocxSubEvidence[];
+}
 
-    // انتظار تحميل الخطوط
-    await page.evaluate(() => document.fonts.ready);
-    await new Promise(resolve => setTimeout(resolve, 2000));
+interface DocxExportData {
+  personalInfo: {
+    name: string;
+    school: string;
+    department: string;
+    year: string;
+    semester: string;
+    evaluator: string;
+    evaluatorRole: string;
+    date: string;
+    reportTitle: string;
+  };
+  criteria: DocxCriterion[];
+  themeColor?: string; // لون الهوية البصرية
+  mode: "single" | "full"; // معاينة مفردة أو تقرير كامل
+  singleTitle?: string; // عنوان الشاهد المفرد
+}
 
-    // انتظار تحميل الصور
-    await page.evaluate(() => {
-      return new Promise<void>((resolve) => {
-        const images = document.querySelectorAll("img");
-        if (images.length === 0) return resolve();
-        let loaded = 0;
-        const total = images.length;
-        images.forEach((img) => {
-          if (img.complete) {
-            loaded++;
-            if (loaded >= total) resolve();
-          } else {
-            img.onload = () => { loaded++; if (loaded >= total) resolve(); };
-            img.onerror = () => { loaded++; if (loaded >= total) resolve(); };
-          }
-        });
-        setTimeout(resolve, 10000);
-      });
-    });
+// ===== Helper functions =====
+function hexToRgb(hex: string): string {
+  const h = hex.replace('#', '');
+  return h.length === 6 ? h : '0d7377';
+}
 
-    // التقاط صورة كاملة للصفحة بالكامل
-    const fullScreenshot = await page.screenshot({
-      type: 'png',
-      fullPage: true,
-      omitBackground: false,
-    });
+function lightenHex(hex: string): string {
+  // تفتيح اللون بنسبة 80% (مزج مع الأبيض)
+  const r = parseInt(hex.substring(0, 2), 16);
+  const g = parseInt(hex.substring(2, 4), 16);
+  const b = parseInt(hex.substring(4, 6), 16);
+  const mix = 0.8;
+  const lr = Math.round(r + (255 - r) * mix);
+  const lg = Math.round(g + (255 - g) * mix);
+  const lb = Math.round(b + (255 - b) * mix);
+  return lr.toString(16).padStart(2, '0') + lg.toString(16).padStart(2, '0') + lb.toString(16).padStart(2, '0');
+}
 
-    const screenshotBuffer = Buffer.from(fullScreenshot);
+function createBorder(color: string, size = 6) {
+  return {
+    top: { style: BorderStyle.SINGLE, size, color },
+    bottom: { style: BorderStyle.SINGLE, size, color },
+    left: { style: BorderStyle.SINGLE, size, color },
+    right: { style: BorderStyle.SINGLE, size, color },
+  };
+}
 
-    // الحصول على ارتفاع الصفحة الكلي
-    const pageHeight = await page.evaluate(() => document.body.scrollHeight);
-    const a4HeightPx = 1123; // ارتفاع A4 بالبكسل عند 96dpi
-    const numPages = Math.max(1, Math.ceil(pageHeight / a4HeightPx));
+// ===== تصدير شاهد مفرد =====
+function buildSingleEvidenceDoc(data: DocxExportData): Document {
+  const color = hexToRgb(data.themeColor || '#0d7377');
+  const pi = data.personalInfo;
+  const criterion = data.criteria[0];
+  const sub = criterion?.subEvidences[0];
 
-    // إذا كانت صفحة واحدة فقط - استخدم الصورة كاملة
-    if (numPages <= 1) {
-      const doc = new Document({
-        sections: [{
-          properties: {
-            page: {
-              size: {
-                width: 11906,
-                height: 16838,
-                orientation: PageOrientation.PORTRAIT,
-              },
-              margin: { top: 0, right: 0, bottom: 0, left: 0 },
-            },
-          },
-          children: [
-            new Paragraph({
+  const children: (Paragraph | Table)[] = [];
+
+  // ===== الترويسة =====
+  // سطر الجهات
+  const deptLines = (pi.department || '').split('\n').filter(l => l.trim());
+  
+  children.push(new Paragraph({
+    alignment: AlignmentType.CENTER,
+    spacing: { after: 100 },
+    children: deptLines.map((line, i) => new TextRun({
+      text: line.trim() + (i < deptLines.length - 1 ? '\n' : ''),
+      font: 'Cairo',
+      size: 22,
+      color: '333333',
+      break: i > 0 ? 1 : undefined,
+    })),
+  }));
+
+  // خط فاصل
+  children.push(new Paragraph({
+    alignment: AlignmentType.CENTER,
+    spacing: { before: 100, after: 100 },
+    border: { bottom: { style: BorderStyle.SINGLE, size: 12, color } },
+    children: [],
+  }));
+
+  // عنوان البند
+  children.push(new Paragraph({
+    alignment: AlignmentType.CENTER,
+    spacing: { before: 200, after: 200 },
+    shading: { type: ShadingType.SOLID, color },
+    children: [new TextRun({
+      text: data.singleTitle || criterion?.title || 'شاهد الأداء',
+      font: 'Cairo',
+      size: 28,
+      bold: true,
+      color: 'ffffff',
+    })],
+  }));
+
+  // ===== جدول الحقول =====
+  if (sub && sub.fields.length > 0) {
+    const tableRows: TableRow[] = [];
+
+    for (const field of sub.fields) {
+      tableRows.push(new TableRow({
+        children: [
+          new TableCell({
+            width: { size: 25, type: WidthType.PERCENTAGE },
+            shading: { type: ShadingType.SOLID, color },
+            verticalAlign: VerticalAlign.CENTER,
+            borders: createBorder(color),
+            children: [new Paragraph({
               alignment: AlignmentType.CENTER,
-              spacing: { before: 0, after: 0 },
-              children: [
-                new ImageRun({
-                  data: screenshotBuffer,
-                  transformation: { width: 595, height: 842 },
-                  type: "png",
-                }),
-              ],
-            }),
-          ],
-        }],
-      });
-
-      const buffer = await Packer.toBuffer(doc);
-      return Buffer.from(buffer);
+              children: [new TextRun({
+                text: field.label,
+                font: 'Cairo',
+                size: 22,
+                bold: true,
+                color: 'ffffff',
+              })],
+            })],
+          }),
+          new TableCell({
+            width: { size: 75, type: WidthType.PERCENTAGE },
+            verticalAlign: VerticalAlign.CENTER,
+            borders: createBorder(color),
+            children: [new Paragraph({
+              alignment: AlignmentType.RIGHT,
+              spacing: { before: 60, after: 60 },
+              children: [new TextRun({
+                text: field.value || '.....................',
+                font: 'Cairo',
+                size: 22,
+                color: field.value ? '1a1a1a' : '999999',
+              })],
+            })],
+          }),
+        ],
+      }));
     }
 
-    // إذا كانت عدة صفحات - التقاط كل صفحة على حدة
-    const pageImages: Buffer[] = [];
+    children.push(new Table({
+      width: { size: 100, type: WidthType.PERCENTAGE },
+      rows: tableRows,
+    }));
+  }
 
-    // البحث عن صفحات pdf-page
-    const pdfPageCount = await page.evaluate(() => {
-      const pages = document.querySelectorAll('.pdf-page');
-      return pages.length;
-    });
+  // ===== الشواهد المرفقة =====
+  if (sub && sub.evidences.length > 0) {
+    children.push(new Paragraph({
+      alignment: AlignmentType.RIGHT,
+      spacing: { before: 300, after: 100 },
+      children: [new TextRun({
+        text: 'الشواهد المرفقة:',
+        font: 'Cairo',
+        size: 24,
+        bold: true,
+        color,
+      })],
+    }));
 
-    if (pdfPageCount > 0) {
-      // لدينا صفحات pdf-page - نلتقط كل واحدة على حدة
-      for (let i = 0; i < pdfPageCount; i++) {
-        // إظهار صفحة واحدة فقط
-        await page.evaluate((pageIndex) => {
-          const pages = document.querySelectorAll('.pdf-page');
-          pages.forEach((p, idx) => {
-            (p as HTMLElement).style.display = idx === pageIndex ? 'flex' : 'none';
-            if (idx === pageIndex) {
-              (p as HTMLElement).style.minHeight = '297mm';
-              (p as HTMLElement).style.width = '210mm';
-              (p as HTMLElement).style.margin = '0';
-              (p as HTMLElement).style.boxShadow = 'none';
-            }
-          });
-        }, i);
-
-        await new Promise(resolve => setTimeout(resolve, 500));
-
-        const screenshot = await page.screenshot({
-          type: 'png',
-          fullPage: true,
-          omitBackground: false,
-        });
-
-        pageImages.push(Buffer.from(screenshot));
+    for (const ev of sub.evidences) {
+      if (ev.type === 'text' && ev.text) {
+        children.push(new Paragraph({
+          alignment: AlignmentType.RIGHT,
+          spacing: { before: 60, after: 60 },
+          bullet: { level: 0 },
+          children: [new TextRun({
+            text: ev.text,
+            font: 'Cairo',
+            size: 20,
+            color: '333333',
+          })],
+        }));
+      } else if (ev.type === 'link' && ev.link) {
+        children.push(new Paragraph({
+          alignment: AlignmentType.RIGHT,
+          spacing: { before: 60, after: 60 },
+          bullet: { level: 0 },
+          children: [new TextRun({
+            text: `رابط: ${ev.link}`,
+            font: 'Cairo',
+            size: 20,
+            color: '0066cc',
+          })],
+        }));
+      } else if (ev.fileName) {
+        children.push(new Paragraph({
+          alignment: AlignmentType.RIGHT,
+          spacing: { before: 60, after: 60 },
+          bullet: { level: 0 },
+          children: [new TextRun({
+            text: `ملف مرفق: ${ev.fileName}`,
+            font: 'Cairo',
+            size: 20,
+            color: '333333',
+          })],
+        }));
+        if (ev.fileUrl) {
+          children.push(new Paragraph({
+            alignment: AlignmentType.RIGHT,
+            spacing: { before: 20, after: 60 },
+            indent: { left: convertInchesToTwip(0.5) },
+            children: [new TextRun({
+              text: ev.fileUrl,
+              font: 'Cairo',
+              size: 18,
+              color: '0066cc',
+            })],
+          }));
+        }
       }
-    } else {
-      // لا توجد صفحات pdf-page - نستخدم الصورة الكاملة
-      pageImages.push(screenshotBuffer);
     }
+  }
 
-    // إنشاء مستند Word
-    const sections = pageImages.map((imageBuffer, index) => ({
-      properties: {
-        type: index === 0 ? undefined : SectionType.NEXT_PAGE,
-        page: {
-          size: {
-            width: 11906,
-            height: 16838,
-            orientation: PageOrientation.PORTRAIT,
-          },
-          margin: { top: 0, right: 0, bottom: 0, left: 0 },
+  // ===== التوقيعات =====
+  children.push(new Paragraph({ spacing: { before: 600 }, children: [] }));
+
+  children.push(new Table({
+    width: { size: 100, type: WidthType.PERCENTAGE },
+    rows: [
+      new TableRow({
+        children: [
+          new TableCell({
+            width: { size: 50, type: WidthType.PERCENTAGE },
+            borders: createBorder('ffffff', 0),
+            children: [
+              new Paragraph({
+                alignment: AlignmentType.CENTER,
+                children: [new TextRun({ text: 'المعلم / المعلمة', font: 'Cairo', size: 22, bold: true, color: '333333' })],
+              }),
+              new Paragraph({
+                alignment: AlignmentType.CENTER,
+                spacing: { before: 100 },
+                children: [new TextRun({ text: pi.name || '......................', font: 'Cairo', size: 20, color: pi.name ? '333333' : '999999' })],
+              }),
+              new Paragraph({
+                alignment: AlignmentType.CENTER,
+                spacing: { before: 200 },
+                children: [new TextRun({ text: 'التوقيع: ......................', font: 'Cairo', size: 20, color: '999999' })],
+              }),
+            ],
+          }),
+          new TableCell({
+            width: { size: 50, type: WidthType.PERCENTAGE },
+            borders: createBorder('ffffff', 0),
+            children: [
+              new Paragraph({
+                alignment: AlignmentType.CENTER,
+                children: [new TextRun({ text: pi.evaluatorRole || 'مدير المدرسة', font: 'Cairo', size: 22, bold: true, color: '333333' })],
+              }),
+              new Paragraph({
+                alignment: AlignmentType.CENTER,
+                spacing: { before: 100 },
+                children: [new TextRun({ text: pi.evaluator || '......................', font: 'Cairo', size: 20, color: pi.evaluator ? '333333' : '999999' })],
+              }),
+              new Paragraph({
+                alignment: AlignmentType.CENTER,
+                spacing: { before: 200 },
+                children: [new TextRun({ text: 'التوقيع: ......................', font: 'Cairo', size: 20, color: '999999' })],
+              }),
+            ],
+          }),
+        ],
+      }),
+    ],
+  }));
+
+  // ===== التذييل =====
+  children.push(new Paragraph({
+    alignment: AlignmentType.CENTER,
+    spacing: { before: 400 },
+    border: { top: { style: BorderStyle.SINGLE, size: 6, color } },
+    children: [new TextRun({
+      text: 'SERS - نظام السجلات التعليمية الذكي',
+      font: 'Cairo',
+      size: 18,
+      color,
+      bold: true,
+    })],
+  }));
+
+  return new Document({
+    styles: {
+      default: {
+        document: {
+          run: { font: 'Cairo', size: 22 },
+          paragraph: { alignment: AlignmentType.RIGHT },
         },
       },
+    },
+    sections: [{
+      properties: {
+        page: {
+          size: { width: 11906, height: 16838, orientation: PageOrientation.PORTRAIT },
+          margin: { top: 720, right: 720, bottom: 720, left: 720 },
+        },
+      },
+      children,
+    }],
+  });
+}
+
+// ===== تصدير تقرير كامل =====
+function buildFullReportDoc(data: DocxExportData): Document {
+  const color = hexToRgb(data.themeColor || '#0d7377');
+  const pi = data.personalInfo;
+
+  const children: (Paragraph | Table)[] = [];
+
+  // ===== صفحة الغلاف =====
+  children.push(new Paragraph({ spacing: { before: 2000 }, children: [] }));
+
+  const deptLines = (pi.department || '').split('\n').filter(l => l.trim());
+  children.push(new Paragraph({
+    alignment: AlignmentType.CENTER,
+    spacing: { after: 200 },
+    children: deptLines.map((line, i) => new TextRun({
+      text: line.trim(),
+      font: 'Cairo',
+      size: 24,
+      color: '333333',
+      break: i > 0 ? 1 : undefined,
+    })),
+  }));
+
+  children.push(new Paragraph({
+    alignment: AlignmentType.CENTER,
+    spacing: { before: 600, after: 200 },
+    shading: { type: ShadingType.SOLID, color },
+    children: [new TextRun({
+      text: pi.reportTitle || 'شواهد الأداء الوظيفي',
+      font: 'Cairo',
+      size: 40,
+      bold: true,
+      color: 'ffffff',
+    })],
+  }));
+
+  // معلومات شخصية
+  const infoFields = [
+    { label: 'اسم المعلم/ة', value: pi.name },
+    { label: 'المدرسة', value: pi.school },
+    { label: 'العام الدراسي', value: pi.year },
+    { label: 'الفصل الدراسي', value: pi.semester },
+  ].filter(f => f.value);
+
+  if (infoFields.length > 0) {
+    children.push(new Paragraph({ spacing: { before: 400 }, children: [] }));
+    
+    const infoRows = infoFields.map(f => new TableRow({
       children: [
-        new Paragraph({
-          alignment: AlignmentType.CENTER,
-          spacing: { before: 0, after: 0 },
-          children: [
-            new ImageRun({
-              data: imageBuffer,
-              transformation: { width: 595, height: 842 },
-              type: "png",
-            }),
-          ],
+        new TableCell({
+          width: { size: 30, type: WidthType.PERCENTAGE },
+          shading: { type: ShadingType.SOLID, color: lightenHex(color) },
+          borders: createBorder(color, 4),
+          children: [new Paragraph({
+            alignment: AlignmentType.CENTER,
+            children: [new TextRun({ text: f.label, font: 'Cairo', size: 22, bold: true, color })],
+          })],
+        }),
+        new TableCell({
+          width: { size: 70, type: WidthType.PERCENTAGE },
+          borders: createBorder(color, 4),
+          children: [new Paragraph({
+            alignment: AlignmentType.RIGHT,
+            spacing: { before: 40, after: 40 },
+            children: [new TextRun({ text: f.value, font: 'Cairo', size: 22, color: '1a1a1a' })],
+          })],
         }),
       ],
     }));
 
-    const doc = new Document({ sections });
-    const buffer = await Packer.toBuffer(doc);
-    return Buffer.from(buffer);
-  } finally {
-    await page.close();
+    children.push(new Table({
+      width: { size: 80, type: WidthType.PERCENTAGE },
+      rows: infoRows,
+    }));
   }
+
+  // ===== البنود =====
+  for (const criterion of data.criteria) {
+    // عنوان البند - صفحة جديدة
+    children.push(new Paragraph({
+      pageBreakBefore: true,
+      alignment: AlignmentType.CENTER,
+      spacing: { before: 200, after: 300 },
+      shading: { type: ShadingType.SOLID, color },
+      children: [new TextRun({
+        text: criterion.title,
+        font: 'Cairo',
+        size: 28,
+        bold: true,
+        color: 'ffffff',
+      })],
+    }));
+
+    for (const sub of criterion.subEvidences) {
+      // عنوان الشاهد الفرعي
+      children.push(new Paragraph({
+        alignment: AlignmentType.RIGHT,
+        spacing: { before: 300, after: 150 },
+        border: { bottom: { style: BorderStyle.SINGLE, size: 4, color } },
+        children: [new TextRun({
+          text: sub.title,
+          font: 'Cairo',
+          size: 24,
+          bold: true,
+          color,
+        })],
+      }));
+
+      // جدول الحقول
+      if (sub.fields.length > 0) {
+        const fieldRows = sub.fields.map(field => new TableRow({
+          children: [
+            new TableCell({
+              width: { size: 25, type: WidthType.PERCENTAGE },
+              shading: { type: ShadingType.SOLID, color },
+              verticalAlign: VerticalAlign.CENTER,
+              borders: createBorder(color),
+              children: [new Paragraph({
+                alignment: AlignmentType.CENTER,
+                children: [new TextRun({
+                  text: field.label,
+                  font: 'Cairo',
+                  size: 20,
+                  bold: true,
+                  color: 'ffffff',
+                })],
+              })],
+            }),
+            new TableCell({
+              width: { size: 75, type: WidthType.PERCENTAGE },
+              verticalAlign: VerticalAlign.CENTER,
+              borders: createBorder(color),
+              children: [new Paragraph({
+                alignment: AlignmentType.RIGHT,
+                spacing: { before: 40, after: 40 },
+                children: [new TextRun({
+                  text: field.value || '.....................',
+                  font: 'Cairo',
+                  size: 20,
+                  color: field.value ? '1a1a1a' : '999999',
+                })],
+              })],
+            }),
+          ],
+        }));
+
+        children.push(new Table({
+          width: { size: 100, type: WidthType.PERCENTAGE },
+          rows: fieldRows,
+        }));
+      }
+
+      // الشواهد المرفقة
+      if (sub.evidences.length > 0) {
+        children.push(new Paragraph({
+          alignment: AlignmentType.RIGHT,
+          spacing: { before: 200, after: 80 },
+          children: [new TextRun({
+            text: 'الشواهد المرفقة:',
+            font: 'Cairo',
+            size: 20,
+            bold: true,
+            color: '555555',
+          })],
+        }));
+
+        for (const ev of sub.evidences) {
+          if (ev.type === 'text' && ev.text) {
+            children.push(new Paragraph({
+              alignment: AlignmentType.RIGHT,
+              spacing: { before: 40, after: 40 },
+              bullet: { level: 0 },
+              children: [new TextRun({ text: ev.text, font: 'Cairo', size: 18, color: '333333' })],
+            }));
+          } else if (ev.type === 'link' && ev.link) {
+            children.push(new Paragraph({
+              alignment: AlignmentType.RIGHT,
+              spacing: { before: 40, after: 40 },
+              bullet: { level: 0 },
+              children: [new TextRun({ text: `رابط: ${ev.link}`, font: 'Cairo', size: 18, color: '0066cc' })],
+            }));
+          } else if (ev.fileName) {
+            children.push(new Paragraph({
+              alignment: AlignmentType.RIGHT,
+              spacing: { before: 40, after: 40 },
+              bullet: { level: 0 },
+              children: [
+                new TextRun({ text: `ملف: ${ev.fileName}`, font: 'Cairo', size: 18, color: '333333' }),
+                ...(ev.fileUrl ? [new TextRun({ text: ` (${ev.fileUrl})`, font: 'Cairo', size: 16, color: '0066cc' })] : []),
+              ],
+            }));
+          }
+        }
+      }
+    }
+  }
+
+  // ===== التوقيعات =====
+  children.push(new Paragraph({ spacing: { before: 600 }, children: [] }));
+
+  children.push(new Table({
+    width: { size: 100, type: WidthType.PERCENTAGE },
+    rows: [
+      new TableRow({
+        children: [
+          new TableCell({
+            width: { size: 50, type: WidthType.PERCENTAGE },
+            borders: createBorder('ffffff', 0),
+            children: [
+              new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'المعلم / المعلمة', font: 'Cairo', size: 22, bold: true, color: '333333' })] }),
+              new Paragraph({ alignment: AlignmentType.CENTER, spacing: { before: 100 }, children: [new TextRun({ text: pi.name || '......................', font: 'Cairo', size: 20, color: '333333' })] }),
+              new Paragraph({ alignment: AlignmentType.CENTER, spacing: { before: 200 }, children: [new TextRun({ text: 'التوقيع: ......................', font: 'Cairo', size: 20, color: '999999' })] }),
+            ],
+          }),
+          new TableCell({
+            width: { size: 50, type: WidthType.PERCENTAGE },
+            borders: createBorder('ffffff', 0),
+            children: [
+              new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: pi.evaluatorRole || 'مدير المدرسة', font: 'Cairo', size: 22, bold: true, color: '333333' })] }),
+              new Paragraph({ alignment: AlignmentType.CENTER, spacing: { before: 100 }, children: [new TextRun({ text: pi.evaluator || '......................', font: 'Cairo', size: 20, color: '333333' })] }),
+              new Paragraph({ alignment: AlignmentType.CENTER, spacing: { before: 200 }, children: [new TextRun({ text: 'التوقيع: ......................', font: 'Cairo', size: 20, color: '999999' })] }),
+            ],
+          }),
+        ],
+      }),
+    ],
+  }));
+
+  return new Document({
+    styles: {
+      default: {
+        document: {
+          run: { font: 'Cairo', size: 22 },
+          paragraph: { alignment: AlignmentType.RIGHT },
+        },
+      },
+    },
+    sections: [{
+      properties: {
+        page: {
+          size: { width: 11906, height: 16838, orientation: PageOrientation.PORTRAIT },
+          margin: { top: 720, right: 720, bottom: 720, left: 720 },
+        },
+      },
+      children,
+    }],
+  });
 }
 
-/**
- * تغليف HTML بالخطوط العربية
- */
-function wrapWithFonts(html: string): string {
-  return `<!DOCTYPE html>
+// ===== Main export function =====
+export async function renderStructuredDocx(data: DocxExportData): Promise<Buffer> {
+  const doc = data.mode === 'single'
+    ? buildSingleEvidenceDoc(data)
+    : buildFullReportDoc(data);
+
+  const buffer = await Packer.toBuffer(doc);
+  return Buffer.from(buffer);
+}
+
+// ===== Legacy: keep old function for backward compatibility =====
+export async function renderHtmlToDocx(htmlContent: string): Promise<Buffer> {
+  // Fallback: إذا تم استدعاء الدالة القديمة، نستخدم Puppeteer
+  const puppeteer = await import("puppeteer");
+  
+  let browserInstance = await puppeteer.default.launch({
+    headless: true,
+    args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage", "--disable-gpu"],
+    protocolTimeout: 120000,
+  });
+
+  const page = await browserInstance.newPage();
+  try {
+    await page.setViewport({ width: 794, height: 1123, deviceScaleFactor: 2 });
+    
+    const fullHtml = `<!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@200..1000&family=Tajawal:wght@200;300;400;500;700;800;900&display=swap" rel="stylesheet">
   <style>
-    @page {
-      size: A4;
-      margin: 0;
-    }
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
-    html, body {
-      font-family: 'Cairo', 'Tajawal', 'Arial', sans-serif;
-      direction: rtl;
-      text-align: right;
-      -webkit-print-color-adjust: exact;
-      print-color-adjust: exact;
-      color-adjust: exact;
-      background: white;
-      font-size: 14px;
-      line-height: 1.7;
-      color: #1a1a1a;
-      -webkit-font-smoothing: antialiased;
-      text-rendering: optimizeLegibility;
-    }
-    body {
-      width: 210mm;
-      min-height: 297mm;
-    }
-    .pdf-page {
-      width: 210mm;
-      min-height: 297mm;
-      page-break-after: always;
-      position: relative;
-      overflow: visible;
-      background: white;
-      display: flex;
-      flex-direction: column;
-    }
-    .pdf-page:last-child {
-      page-break-after: auto;
-    }
-    button, [data-no-print] {
-      display: none !important;
-    }
-    img {
-      max-width: 100%;
-      display: inline-block;
-    }
-    table {
-      border-collapse: collapse;
-      width: 100%;
-    }
-    body > div > div {
-      margin-bottom: 0 !important;
-      box-shadow: none !important;
-    }
+    @page { size: A4; margin: 0; }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { font-family: 'Cairo', 'Tajawal', 'Arial', sans-serif; direction: rtl; background: white; }
+    body { width: 210mm; min-height: 297mm; }
+    .pdf-page { width: 210mm; min-height: 297mm; page-break-after: always; display: flex; flex-direction: column; }
+    button, [data-no-print] { display: none !important; }
+    img { max-width: 100%; }
+    table { border-collapse: collapse; width: 100%; }
   </style>
 </head>
-<body>
-${html}
-</body>
+<body>${htmlContent}</body>
 </html>`;
+
+    await page.setContent(fullHtml, { waitUntil: ["networkidle0", "domcontentloaded"], timeout: 60000 });
+    await page.evaluate(() => document.fonts.ready);
+    await new Promise(resolve => setTimeout(resolve, 2000));
+
+    const screenshot = await page.screenshot({ type: 'png', fullPage: true, omitBackground: false });
+    const screenshotBuffer = Buffer.from(screenshot);
+
+    const { Document: Doc, Packer: Pack, Paragraph: Para, ImageRun: ImgRun, AlignmentType: Align, PageOrientation: Orient } = await import("docx");
+
+    const doc = new Doc({
+      sections: [{
+        properties: {
+          page: {
+            size: { width: 11906, height: 16838, orientation: Orient.PORTRAIT },
+            margin: { top: 0, right: 0, bottom: 0, left: 0 },
+          },
+        },
+        children: [
+          new Para({
+            alignment: Align.CENTER,
+            spacing: { before: 0, after: 0 },
+            children: [new ImgRun({ data: screenshotBuffer, transformation: { width: 595, height: 842 }, type: "png" })],
+          }),
+        ],
+      }],
+    });
+
+    const buffer = await Pack.toBuffer(doc);
+    return Buffer.from(buffer);
+  } finally {
+    await page.close();
+    await browserInstance.close();
+  }
 }

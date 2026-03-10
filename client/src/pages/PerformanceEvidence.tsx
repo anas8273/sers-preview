@@ -12,11 +12,13 @@ import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { usePortfolio } from "@/hooks/usePortfolio";
 import { useOfflineSync } from "@/hooks/useOfflineSync";
+import { usePreviewScale } from "@/hooks/usePreviewScale";
 import { saveFileToIDB, getFileFromIDB, deleteFileFromIDB, cleanOldFiles } from "@/hooks/useIndexedDB";
 import { getLoginUrl } from "@/const";
 import { generateQRDataURL } from "@/lib/qr-utils";
 import { exportToPDF, printElement } from "@/lib/pdf-export";
-import { exportToDocx } from "@/lib/docx-export";
+import { exportToDocx, exportToDocxStructured } from "@/lib/docx-export";
+import type { DocxExportData } from "@/lib/docx-export";
 import { getMoeLogoDataUrl, getMoeLogoUrl, getMoeDotsUrl, getMoeLogoFilter } from "@/components/MoeLogo";
 import { STANDARDS, type Standard, type Indicator } from "@/lib/standards-data";
 import {
@@ -400,6 +402,9 @@ export default function PerformanceEvidence() {
   const [shareExpiryDays, setShareExpiryDays] = useState(30);
   const [showShareSettings, setShowShareSettings] = useState(false);
   const [shareUrl, setShareUrl] = useState<string | null>(null);
+
+  // Preview scaling - responsive
+  const { containerRef: previewContainerRef, pageRef: previewPageRef, scale: previewScale, scaledHeight: previewScaledHeight, recalculate: recalcPreview } = usePreviewScale();
 
   // Lightbox state
   const [lightboxImage, setLightboxImage] = useState<string | null>(null);
@@ -1341,14 +1346,109 @@ export default function PerformanceEvidence() {
   };
 
   const [isExportingDocx, setIsExportingDocx] = useState(false);
+  const buildDocxData = (mode: 'full' | 'single', criterionId?: string, subId?: string): DocxExportData => {
+    const criteriaForExport: DocxExportData['criteria'] = [];
+
+    if (mode === 'single' && criterionId && subId) {
+      const criterion = allCriteria.find(c => c.id === criterionId);
+      const sub = criterion?.subEvidences.find(s => s.id === subId);
+      const data = criteriaData[criterionId];
+      if (criterion && sub && data) {
+        const evidences = data.evidences.filter(e => e.subEvidenceId === subId);
+        const fields: { label: string; value: string }[] = [];
+        evidences.forEach(ev => {
+          if (ev.formData) {
+            const formFields = sub.formFields || [];
+            formFields.forEach(ff => {
+              if (ev.formData![ff.id]) {
+                fields.push({ label: ff.label, value: ev.formData![ff.id] });
+              }
+            });
+          }
+        });
+        criteriaForExport.push({
+          title: criterion.title,
+          subEvidences: [{
+            title: sub.title,
+            fields,
+            evidences: evidences.map(ev => ({
+              fileName: ev.fileName || undefined,
+              fileUrl: ev.uploadedUrl || undefined,
+              displayAs: ev.displayAs,
+              type: ev.type,
+              text: ev.text || undefined,
+              link: ev.link || undefined,
+            })),
+          }],
+        });
+      }
+    } else {
+      // Full report
+      for (const criterion of allCriteria) {
+        const data = criteriaData[criterion.id];
+        if (!data) continue;
+        const subs: DocxExportData['criteria'][0]['subEvidences'] = [];
+        for (const sub of criterion.subEvidences) {
+          const evidences = data.evidences.filter(e => e.subEvidenceId === sub.id);
+          if (evidences.length === 0) continue;
+          const fields: { label: string; value: string }[] = [];
+          evidences.forEach(ev => {
+            if (ev.formData) {
+              const formFields = sub.formFields || [];
+              formFields.forEach(ff => {
+                if (ev.formData![ff.id]) {
+                  fields.push({ label: ff.label, value: ev.formData![ff.id] });
+                }
+              });
+            }
+          });
+          subs.push({
+            title: sub.title,
+            fields,
+            evidences: evidences.map(ev => ({
+              fileName: ev.fileName || undefined,
+              fileUrl: ev.uploadedUrl || undefined,
+              displayAs: ev.displayAs,
+              type: ev.type,
+              text: ev.text || undefined,
+              link: ev.link || undefined,
+            })),
+          });
+        }
+        if (subs.length > 0) {
+          criteriaForExport.push({ title: criterion.title, subEvidences: subs });
+        }
+      }
+    }
+
+    return {
+      personalInfo: {
+        name: personalInfo.name,
+        school: personalInfo.school,
+        department: personalInfo.department,
+        year: personalInfo.year,
+        semester: personalInfo.semester,
+        evaluator: personalInfo.evaluator,
+        evaluatorRole: personalInfo.evaluatorRole,
+        date: personalInfo.date,
+        reportTitle: personalInfo.reportTitle,
+      },
+      criteria: criteriaForExport,
+      themeColor: selectedTheme.accent,
+      mode,
+      singleTitle: mode === 'single' ? criteriaForExport[0]?.subEvidences[0]?.title : undefined,
+    };
+  };
+
   const handleExportDocx = async () => {
     setIsExportingDocx(true);
     try {
-      await exportToDocx(
-        "preview-content",
+      const data = buildDocxData('full');
+      await exportToDocxStructured(
+        data,
         `${personalInfo.reportTitle || 'شواهد_الأداء'}_${personalInfo.name || 'مستند'}.docx`
       );
-      toast.success('تم تصدير Word بنجاح');
+      toast.success('تم تصدير Word بنجاح - المستند قابل للتعديل');
     } catch (err) {
       toast.error('فشل تصدير Word - حاول مرة أخرى');
     } finally {
@@ -3143,7 +3243,8 @@ export default function PerformanceEvidence() {
               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 bg-black/60 z-50" style={{ overflowX: 'hidden', overflowY: 'auto', WebkitOverflowScrolling: 'touch' }}>
                 <div style={{ display: 'flex', justifyContent: 'center', padding: '16px 8px 80px 8px', minHeight: '100%' }}>
                 <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
-                  className="bg-white rounded-2xl shadow-2xl preview-scale-container" style={{ width: '100%', maxWidth: '860px', overflow: 'visible' }}>
+                  className="bg-white rounded-2xl shadow-2xl" style={{ width: '100%', maxWidth: '860px', overflow: 'hidden' }}
+                  ref={previewContainerRef}>
                   {/* شريط الأدوات */}
                   <div className="flex items-center justify-between p-2 sm:p-3 bg-gray-50 border-b flex-wrap gap-1 sm:gap-2" data-no-print>
                     <div className="flex items-center gap-2 flex-wrap">
@@ -3152,8 +3253,9 @@ export default function PerformanceEvidence() {
                       </Button>
                       <Button size="sm" variant="outline" className="gap-1 text-xs h-7" onClick={async () => {
                         try {
-                          await exportToDocx(`single-preview-${previewSubId}`, `شاهد_${previewSubId}.docx`);
-                          toast.success('تم تصدير Word بنجاح');
+                          const docxData = buildDocxData('single', previewCriterionId!, previewSubId!);
+                          await exportToDocxStructured(docxData, `شاهد_${previewSubId}.docx`);
+                          toast.success('تم تصدير Word بنجاح - قابل للتعديل');
                         } catch { toast.error('فشل تصدير Word'); }
                       }}>
                         <FileText className="w-3 h-3" />تصدير Word
@@ -3173,8 +3275,15 @@ export default function PerformanceEvidence() {
                   </div>
 
                   {/* ========== محتوى المعاينة - صفحة A4 كاملة مطابقة لنماذج تعليمية ========== */}
-                  <div id={`single-preview-${previewSubId}`} style={{ fontFamily: "'Cairo', sans-serif", direction: 'rtl' }}>
-                    <div className="pdf-page single-preview-page" style={{
+                  <div style={{ overflow: 'hidden', height: previewScaledHeight ? `${previewScaledHeight}px` : 'auto' }}>
+                  <div id={`single-preview-${previewSubId}`} ref={previewPageRef} style={{
+                    fontFamily: "'Cairo', sans-serif",
+                    direction: 'rtl',
+                    transform: previewScale < 1 ? `scale(${previewScale})` : undefined,
+                    transformOrigin: 'top center',
+                    width: '210mm',
+                  }}>
+                    <div className="pdf-page" style={{
                       background: '#ffffff',
                       margin: '0 auto',
                       border: `2px solid ${theme.borderColor || '#0d7377'}`,
@@ -3182,6 +3291,8 @@ export default function PerformanceEvidence() {
                       boxSizing: 'border-box' as const,
                       display: 'flex',
                       flexDirection: 'column' as const,
+                      width: '210mm',
+                      minHeight: '297mm',
                     }}>
 
                       {/* ========== المحتوى الرئيسي ========== */}
@@ -3295,11 +3406,11 @@ export default function PerformanceEvidence() {
                                   </tbody>
                                 </table>
                               </div>
-                              {/* خطوط فاصلة ملونة */}
+                              {/* خطوط فاصلة ملونة - تتبع لون الهوية البصرية */}
                               <div style={{ display: 'flex', height: '4px' }}>
-                                <div style={{ flex: 1, background: '#2ea87a' }} />
-                                <div style={{ flex: 1, background: '#0d7377' }} />
-                                <div style={{ flex: 1, background: '#9CA3AF' }} />
+                                <div style={{ flex: 1, background: theme.coverAccent2 || theme.accent }} />
+                                <div style={{ flex: 1, background: theme.accent }} />
+                                <div style={{ flex: 1, background: theme.borderColor || '#9CA3AF' }} />
                               </div>
                             </>
                           );
@@ -3326,8 +3437,8 @@ export default function PerformanceEvidence() {
                                     )}
                                   </td>
                                   <td style={{ width: '35%', verticalAlign: 'middle', textAlign: 'left', padding: '0' }}>
-                                    {personalInfo.semester && <div style={{ fontSize: '12px', color: '#1a4d4e', fontWeight: 600, lineHeight: '2.0' }}>الفصل الدراسي: {personalInfo.semester}</div>}
-                                    {personalInfo.year && <div style={{ fontSize: '12px', color: '#1a4d4e', fontWeight: 600, lineHeight: '2.0' }}>العام الدراسي: {personalInfo.year}</div>}
+                                    {personalInfo.semester && <div style={{ fontSize: '12px', color: theme.borderColor || theme.accent, fontWeight: 600, lineHeight: '2.0' }}>الفصل الدراسي: {personalInfo.semester}</div>}
+                                    {personalInfo.year && <div style={{ fontSize: '12px', color: theme.borderColor || theme.accent, fontWeight: 600, lineHeight: '2.0' }}>العام الدراسي: {personalInfo.year}</div>}
                                   </td>
                                 </tr>
                               </tbody>
@@ -3509,6 +3620,7 @@ export default function PerformanceEvidence() {
 
                     </div>{/* إغلاق pdf-page */}
                   </div>
+                  </div>{/* إغلاق حاوية overflow */}
 
                 </motion.div>
                 </div>{/* إغلاق div المركزي */}
