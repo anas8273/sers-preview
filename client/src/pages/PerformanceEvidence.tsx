@@ -213,36 +213,36 @@ interface ThemeConfig {
   headerVariant?: 'right-text-center-logo-left-info' | 'right-text-left-logo' | 'center-logo-banner' | 'full-header-sections';
 }
 
-// ===== 3 قوالب فقط مطابقة للهوية البصرية الرسمية =====
-// الألوان الرسمية من الهوية البصرية: فيروزي #0d7377، أخضر #2ea87a
-// جميع القوالب بنفس الألوان - الفرق في التنسيق فقط
+// ===== 3 قوالب مطابقة لملف الهوية البصرية تماماً =====
+// الألوان: فيروزي #0d7377 | أزرق داكن #0a5c5f | أخضر #2ea87a
+// الفرق في التنسيق فقط (شكل الترويسة + نمط الحقول + كثافة الحبر)
 
-// القالب 1: متدرج (Gradient) - شريط علوي + ترويسة بيضاء + شريط سفلي gradient
+// القالب 1: ترويسة بيضاء + حقول خط سفلي (PDF صفحات 2,7,8,10,11)
 const DEFAULT_THEME: ThemeConfig = {
-  id: 'default', name: 'متدرج',
+  id: 'default', name: 'ترويسة بيضاء',
   layoutType: 'white-header-classic',
   headerBg: '#ffffff', headerText: '#0d7377',
   accent: '#0d7377', borderColor: '#0d7377',
   titleBg: '#0d7377', fieldLabelBg: '#0d7377',
-  footerBg: 'linear-gradient(to left, #0d7377, #1a9a7a, #2ea87a)',
-  tableStyle: true, titleStyle: 'rounded', showTopLine: true, showBottomBar: true,
-  fieldStyle: 'table', signatureStyle: 'boxed',
+  footerBg: 'linear-gradient(to right, #2ea87a, #0d7377, #0a5c5f)',
+  tableStyle: false, titleStyle: 'rounded', showTopLine: false, showBottomBar: true,
+  fieldStyle: 'underlined', signatureStyle: 'dotted',
   coverStyle: 'gradient-center', sectionCoverStyle: 'full-gradient', coverAccent2: '#2ea87a',
   headerVariant: 'right-text-center-logo-left-info',
-  headerSeparator: true,
+  headerSeparator: false,
 };
 
-// 3 قوالب مدمجة فقط: متدرج / داكن / خفيف حبر - نفس الألوان، فرق التنسيق فقط
+// 3 قوالب مدمجة مطابقة لملف الهوية البصرية
 const BUILTIN_THEMES: ThemeConfig[] = [
   DEFAULT_THEME,
   {
-    // القالب 2: داكن (Dark) - ترويسة كاملة بخلفية فيروزية داكنة
-    id: 'builtin-dark', name: 'داكن',
+    // القالب 2: ترويسة داكنة (PDF صفحات 4,5,6,9) - تدرج أزرق داكن → فيروزي
+    id: 'builtin-dark', name: 'ترويسة داكنة',
     layoutType: 'dark-header-table',
-    headerBg: '#0d7377', headerText: '#ffffff',
+    headerBg: 'linear-gradient(135deg, #0a5c5f 0%, #0d7377 100%)', headerText: '#ffffff',
     accent: '#0d7377', borderColor: '#0d7377',
     titleBg: '#0d7377', fieldLabelBg: '#0d7377',
-    footerBg: 'linear-gradient(to left, #0d7377, #1a9a7a, #2ea87a)',
+    footerBg: 'linear-gradient(to right, #2ea87a, #0d7377, #0a5c5f)',
     tableStyle: true, titleStyle: 'full-width', showTopLine: false, showBottomBar: true,
     fieldStyle: 'table', signatureStyle: 'boxed',
     coverStyle: 'top-bar', sectionCoverStyle: 'numbered-bar', coverAccent2: '#2ea87a',
@@ -250,7 +250,7 @@ const BUILTIN_THEMES: ThemeConfig[] = [
     bodyBg: '#ffffff',
   },
   {
-    // القالب 3: خفيف حبر (Light Ink) - بدون شريط، أقل حبر ممكن
+    // القالب 3: خفيف حبر - بدون شريط سفلي، أقل حبر ممكن (للطباعة)
     id: 'builtin-light', name: 'خفيف حبر',
     layoutType: 'white-header-classic',
     headerBg: '#ffffff', headerText: '#0d7377',
@@ -3089,9 +3089,9 @@ export default function PerformanceEvidence() {
             };
 
             return (
-              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 bg-black/60 z-50 flex items-start justify-center overflow-y-auto" style={{ padding: '16px 8px' }}>
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 bg-black/60 z-50 flex items-start justify-center overflow-y-auto" style={{ padding: '16px 8px 80px 8px' }}>
                 <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
-                  className="bg-white rounded-2xl shadow-2xl w-full overflow-hidden" style={{ maxWidth: '220mm' }}>
+                  className="bg-white rounded-2xl shadow-2xl w-full" style={{ maxWidth: '220mm', overflow: 'visible' }}>
                   {/* شريط الأدوات */}
                   <div className="flex items-center justify-between p-3 bg-gray-50 border-b flex-wrap gap-2" data-no-print>
                     <div className="flex items-center gap-2 flex-wrap">
@@ -3125,8 +3125,7 @@ export default function PerformanceEvidence() {
                     <div className="pdf-page" style={{
                       background: '#ffffff',
                       width: '210mm',
-                      height: '297mm',
-                      overflow: 'hidden' as const,
+                      minHeight: '297mm',
                       margin: '0 auto',
                       border: `2px solid ${theme.borderColor || '#0d7377'}`,
                       position: 'relative' as const,
@@ -3405,24 +3404,28 @@ export default function PerformanceEvidence() {
                         </table>
                       </div>
 
-                      {/* ========== مساحة مرنة - الفوتر يستخدم marginTop: auto ========== */}
+                      </div>{/* إغلاق المحتوى الرئيسي */}
 
-                      {/* ========== الفوتر ========== */}
-                      <div style={{
-                        background: theme.footerBg || `linear-gradient(to left, ${theme.borderColor || '#004D5A'}, ${theme.accent}, #26C6DA)`,
-                        padding: '10px 28px',
-                        fontSize: '11px',
-                        color: '#fff',
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        marginTop: 'auto',
-                      }}>
-                        <span style={{ fontWeight: 700 }}>SERS - نظام السجلات التعليمية الذكي</span>
-                        <span style={{ opacity: 0.9 }}>صفحة 1</span>
+                      {/* ========== الفوتر - شريط متدرج مع حافة مقوسة ========== */}
+                      <div style={{ marginTop: 'auto' }}>
+                        <svg viewBox="0 0 800 20" preserveAspectRatio="none" style={{ width: '100%', height: '20px', display: 'block' }}>
+                          <path d="M0,20 C200,0 600,0 800,20 L800,20 L0,20 Z" fill="url(#footerGrad)" />
+                          <defs><linearGradient id="footerGrad" x1="1" y1="0" x2="0" y2="0"><stop offset="0%" stopColor="#0a5c5f" /><stop offset="50%" stopColor="#0d7377" /><stop offset="100%" stopColor="#2ea87a" /></linearGradient></defs>
+                        </svg>
+                        <div style={{
+                          background: 'linear-gradient(to right, #2ea87a, #0d7377, #0a5c5f)',
+                          padding: '8px 28px',
+                          fontSize: '11px',
+                          color: '#fff',
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                        }}>
+                          <span style={{ fontWeight: 700 }}>SERS - نظام السجلات التعليمية الذكي</span>
+                          <span style={{ opacity: 0.9 }}>صفحة 1</span>
+                        </div>
                       </div>
 
-                      </div>{/* إغلاق المحتوى الرئيسي */}
                     </div>{/* إغلاق pdf-page */}
                   </div>
 
@@ -4011,7 +4014,8 @@ export default function PerformanceEvidence() {
             })()}
 
             {/* === صفحة فهرس المحتويات + البيانات الشخصية === */}
-            <div className="bg-white shadow-lg mx-auto mb-6" style={{ width: '210mm', minHeight: '297mm', maxWidth: '100%', padding: '2rem 2.5rem', position: 'relative', pageBreakAfter: 'always' }}>
+            <div className="bg-white shadow-lg mx-auto mb-6" style={{ width: '210mm', minHeight: '297mm', maxWidth: '100%', position: 'relative', pageBreakAfter: 'always', display: 'flex', flexDirection: 'column' as const, boxSizing: 'border-box' as const }}>
+              <div style={{ flex: 1, padding: '2rem 2.5rem' }}>
               {/* ترويسة الصفحة - مطابقة لـ edu-forms.com */}
               <div style={{ marginBottom: '1rem' }}>
                 <div style={{ background: 'linear-gradient(135deg, #1a4d4e 0%, #0d5f61 50%, #0d7377 100%)', padding: '10px 20px 8px', borderRadius: '0 0 8px 8px' }}>
@@ -4103,15 +4107,31 @@ export default function PerformanceEvidence() {
                 </div>
               )}
 
-              {/* تذييل الصفحة */}
-              <div style={{ position: 'absolute', bottom: '1.5rem', left: '2.5rem', right: '2.5rem', borderTop: `1px solid ${theme.borderColor}`, paddingTop: '0.5rem', display: 'flex', justifyContent: 'space-between', fontSize: '0.6rem', color: '#9CA3AF' }}>
-                <span>نظام SERS - السجلات التعليمية الذكية</span>
-                <span>صفحة 2</span>
-              </div>
+              </div>{/* إغلاق flex:1 للبيانات الشخصية */}
+              {/* الشريط السفلي المتدرج */}
+              {theme.showBottomBar !== false && (
+                <div style={{ marginTop: 'auto' }}>
+                  <svg viewBox="0 0 800 20" preserveAspectRatio="none" style={{ width: '100%', height: '20px', display: 'block' }}>
+                    <path d="M0,20 C200,0 600,0 800,20 L800,20 L0,20 Z" fill="url(#footerGradP2)" />
+                    <defs><linearGradient id="footerGradP2" x1="1" y1="0" x2="0" y2="0"><stop offset="0%" stopColor="#0a5c5f" /><stop offset="50%" stopColor="#0d7377" /><stop offset="100%" stopColor="#2ea87a" /></linearGradient></defs>
+                  </svg>
+                  <div style={{ background: 'linear-gradient(to right, #2ea87a, #0d7377, #0a5c5f)', padding: '8px 28px', fontSize: '11px', color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontWeight: 700 }}>SERS - نظام السجلات التعليمية الذكي</span>
+                    <span style={{ opacity: 0.9 }}>صفحة 2</span>
+                  </div>
+                </div>
+              )}
+              {theme.showBottomBar === false && (
+                <div style={{ padding: '0.5rem 2.5rem', borderTop: `1px solid ${theme.borderColor}`, display: 'flex', justifyContent: 'space-between', fontSize: '0.6rem', color: '#9CA3AF' }}>
+                  <span>نظام SERS - السجلات التعليمية الذكية</span>
+                  <span>صفحة 2</span>
+                </div>
+              )}
             </div>
 
             {/* === صفحة جدول التقييم === */}
-            <div className="bg-white shadow-lg mx-auto mb-6" style={{ width: '210mm', minHeight: '297mm', maxWidth: '100%', padding: '2rem 2.5rem', position: 'relative', pageBreakAfter: 'always' }}>
+            <div className="bg-white shadow-lg mx-auto mb-6" style={{ width: '210mm', minHeight: '297mm', maxWidth: '100%', position: 'relative', pageBreakAfter: 'always', display: 'flex', flexDirection: 'column' as const, boxSizing: 'border-box' as const }}>
+              <div style={{ flex: 1, padding: '2rem 2.5rem' }}>
               {/* ترويسة - مطابقة لـ edu-forms.com */}
               <div style={{ marginBottom: '1rem' }}>
                 <div style={{ background: 'linear-gradient(135deg, #1a4d4e 0%, #0d5f61 50%, #0d7377 100%)', padding: '10px 20px 8px', borderRadius: '0 0 8px 8px' }}>
@@ -4195,11 +4215,26 @@ export default function PerformanceEvidence() {
                 )}
               </div>
 
-              {/* تذييل */}
-              <div style={{ position: 'absolute', bottom: '1.5rem', left: '2.5rem', right: '2.5rem', borderTop: `1px solid ${theme.borderColor}`, paddingTop: '0.5rem', display: 'flex', justifyContent: 'space-between', fontSize: '0.6rem', color: '#9CA3AF' }}>
-                <span>نظام SERS - السجلات التعليمية الذكية</span>
-                <span>صفحة 3</span>
-              </div>
+              </div>{/* إغلاق flex:1 */}
+              {/* الشريط السفلي المتدرج */}
+              {theme.showBottomBar !== false && (
+                <div style={{ marginTop: 'auto' }}>
+                  <svg viewBox="0 0 800 20" preserveAspectRatio="none" style={{ width: '100%', height: '20px', display: 'block' }}>
+                    <path d="M0,20 C200,0 600,0 800,20 L800,20 L0,20 Z" fill="url(#footerGradToc)" />
+                    <defs><linearGradient id="footerGradToc" x1="1" y1="0" x2="0" y2="0"><stop offset="0%" stopColor="#0a5c5f" /><stop offset="50%" stopColor="#0d7377" /><stop offset="100%" stopColor="#2ea87a" /></linearGradient></defs>
+                  </svg>
+                  <div style={{ background: 'linear-gradient(to right, #2ea87a, #0d7377, #0a5c5f)', padding: '8px 28px', fontSize: '11px', color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontWeight: 700 }}>SERS - نظام السجلات التعليمية الذكي</span>
+                    <span style={{ opacity: 0.9 }}>صفحة 3</span>
+                  </div>
+                </div>
+              )}
+              {theme.showBottomBar === false && (
+                <div style={{ padding: '0.5rem 2.5rem', borderTop: `1px solid ${theme.borderColor}`, display: 'flex', justifyContent: 'space-between', fontSize: '0.6rem', color: '#9CA3AF' }}>
+                  <span>نظام SERS - السجلات التعليمية الذكية</span>
+                  <span>صفحة 3</span>
+                </div>
+              )}
             </div>
 
             {/* === صفحات الشواهد - كل بند في صفحة منفصلة === */}
@@ -4361,7 +4396,8 @@ export default function PerformanceEvidence() {
                     })()}
 
                     {/* === صفحة الشواهد === */}
-                  <div className="bg-white shadow-lg mx-auto mb-6" style={{ width: '210mm', minHeight: '297mm', maxWidth: '100%', padding: '2rem 2.5rem', position: 'relative', pageBreakAfter: 'always', pageBreakInside: 'avoid' }}>
+                  <div className="bg-white shadow-lg mx-auto mb-6" style={{ width: '210mm', minHeight: '297mm', maxWidth: '100%', position: 'relative', pageBreakAfter: 'always', pageBreakInside: 'avoid', display: 'flex', flexDirection: 'column' as const, boxSizing: 'border-box' as const }}>
+                    <div style={{ flex: 1, padding: '2rem 2.5rem' }}>
                     {/* ترويسة - مطابقة لـ edu-forms.com */}
                     <div style={{ marginBottom: '1rem' }}>
                       <div style={{ background: 'linear-gradient(135deg, #1a4d4e 0%, #0d5f61 50%, #0d7377 100%)', padding: '10px 20px 8px', borderRadius: '0 0 8px 8px' }}>
@@ -4498,11 +4534,26 @@ export default function PerformanceEvidence() {
                       })}
                     </div>
 
-                    {/* تذييل */}
-                    <div style={{ position: 'absolute', bottom: '1.5rem', left: '2.5rem', right: '2.5rem', borderTop: `1px solid ${theme.borderColor}`, paddingTop: '0.5rem', display: 'flex', justifyContent: 'space-between', fontSize: '0.6rem', color: '#9CA3AF' }}>
-                      <span>نظام SERS - السجلات التعليمية الذكية</span>
-                      <span>صفحة {contentPage}</span>
-                    </div>
+                    </div>{/* إغلاق flex:1 */}
+                    {/* الشريط السفلي المتدرج */}
+                    {theme.showBottomBar !== false && (
+                      <div style={{ marginTop: 'auto' }}>
+                        <svg viewBox="0 0 800 20" preserveAspectRatio="none" style={{ width: '100%', height: '20px', display: 'block' }}>
+                          <path d="M0,20 C200,0 600,0 800,20 L800,20 L0,20 Z" fill={`url(#footerGradEv${contentPage})`} />
+                          <defs><linearGradient id={`footerGradEv${contentPage}`} x1="1" y1="0" x2="0" y2="0"><stop offset="0%" stopColor="#0a5c5f" /><stop offset="50%" stopColor="#0d7377" /><stop offset="100%" stopColor="#2ea87a" /></linearGradient></defs>
+                        </svg>
+                        <div style={{ background: 'linear-gradient(to right, #2ea87a, #0d7377, #0a5c5f)', padding: '8px 28px', fontSize: '11px', color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ fontWeight: 700 }}>SERS - نظام السجلات التعليمية الذكي</span>
+                          <span style={{ opacity: 0.9 }}>صفحة {contentPage}</span>
+                        </div>
+                      </div>
+                    )}
+                    {theme.showBottomBar === false && (
+                      <div style={{ padding: '0.5rem 2.5rem', borderTop: `1px solid ${theme.borderColor}`, display: 'flex', justifyContent: 'space-between', fontSize: '0.6rem', color: '#9CA3AF' }}>
+                        <span>نظام SERS - السجلات التعليمية الذكية</span>
+                        <span>صفحة {contentPage}</span>
+                      </div>
+                    )}
                   </div>
                   </React.Fragment>
                 );
@@ -4514,7 +4565,8 @@ export default function PerformanceEvidence() {
               const ss = theme.signatureStyle || 'dotted';
               const sigLineStyle: React.CSSProperties = ss === 'dotted' ? { borderTop: `2px dotted ${theme.accent}` } : ss === 'solid' ? { borderTop: `2px solid ${theme.accent}` } : ss === 'boxed' ? { border: `1.5px solid ${theme.accent}`, borderRadius: '8px', padding: '0.5rem' } : ss === 'lined' ? { borderTop: `1px solid ${theme.borderColor}`, borderBottom: `1px solid ${theme.borderColor}`, padding: '0.25rem 0' } : { borderTop: `2px dashed ${theme.accent}` };
               return (
-                <div className="bg-white shadow-lg mx-auto mb-6" style={{ width: '210mm', minHeight: '297mm', maxWidth: '100%', padding: '2rem 2.5rem', position: 'relative', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                <div className="bg-white shadow-lg mx-auto mb-6" style={{ width: '210mm', minHeight: '297mm', maxWidth: '100%', position: 'relative', display: 'flex', flexDirection: 'column' as const, boxSizing: 'border-box' as const }}>
+                  <div style={{ flex: 1, padding: '2rem 2.5rem', display: 'flex', flexDirection: 'column' as const, justifyContent: 'center' }}>
                   {/* ترويسة - مطابقة لـ edu-forms.com */}
                   <div style={{ position: 'absolute', top: '2rem', left: '2.5rem', right: '2.5rem' }}>
                     <div style={{ marginBottom: '0.5rem' }}>
@@ -4574,11 +4626,26 @@ export default function PerformanceEvidence() {
                     <div style={{ borderBottom: `1px solid ${theme.accent}15`, height: '2rem' }} />
                   </div>
 
-                  {/* تذييل */}
-                  <div style={{ position: 'absolute', bottom: '1.5rem', left: '2.5rem', right: '2.5rem', borderTop: `1px solid ${theme.borderColor}`, paddingTop: '0.5rem', display: 'flex', justifyContent: 'space-between', fontSize: '0.6rem', color: '#9CA3AF' }}>
-                    <span>نظام SERS - السجلات التعليمية الذكية</span>
-                    <span>{personalInfo.name} • {selectedJob?.title} • {personalInfo.year}</span>
-                  </div>
+                  </div>{/* إغلاق flex:1 */}
+                  {/* الشريط السفلي المتدرج */}
+                  {theme.showBottomBar !== false && (
+                    <div style={{ marginTop: 'auto' }}>
+                      <svg viewBox="0 0 800 20" preserveAspectRatio="none" style={{ width: '100%', height: '20px', display: 'block' }}>
+                        <path d="M0,20 C200,0 600,0 800,20 L800,20 L0,20 Z" fill="url(#footerGradSig)" />
+                        <defs><linearGradient id="footerGradSig" x1="1" y1="0" x2="0" y2="0"><stop offset="0%" stopColor="#0a5c5f" /><stop offset="50%" stopColor="#0d7377" /><stop offset="100%" stopColor="#2ea87a" /></linearGradient></defs>
+                      </svg>
+                      <div style={{ background: 'linear-gradient(to right, #2ea87a, #0d7377, #0a5c5f)', padding: '8px 28px', fontSize: '11px', color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontWeight: 700 }}>SERS - نظام السجلات التعليمية الذكي</span>
+                        <span style={{ opacity: 0.9 }}>{personalInfo.name} • {selectedJob?.title}</span>
+                      </div>
+                    </div>
+                  )}
+                  {theme.showBottomBar === false && (
+                    <div style={{ padding: '0.5rem 2.5rem', borderTop: `1px solid ${theme.borderColor}`, display: 'flex', justifyContent: 'space-between', fontSize: '0.6rem', color: '#9CA3AF' }}>
+                      <span>نظام SERS - السجلات التعليمية الذكية</span>
+                      <span>{personalInfo.name} • {selectedJob?.title} • {personalInfo.year}</span>
+                    </div>
+                  )}
                 </div>
               );
             })()}
