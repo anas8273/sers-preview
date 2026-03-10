@@ -38,7 +38,7 @@ import {
   ClipboardCheck, Handshake, UserCheck, Target,
   NotebookPen, Monitor, School, Award, PieChart, ListChecks,
   GripVertical, Move, FlaskConical, Activity, Megaphone, Share2, Globe, Copy, Link2, Settings,
-  ZoomIn, ZoomOut, RotateCcw, Maximize2, RefreshCw
+  ZoomIn, ZoomOut, RotateCcw, Maximize2, RefreshCw, Palette
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -414,6 +414,7 @@ export default function PerformanceEvidence() {
   const [shareExpiryDays, setShareExpiryDays] = useState(30);
   const [showShareSettings, setShowShareSettings] = useState(false);
   const [shareUrl, setShareUrl] = useState<string | null>(null);
+  const [showColorPicker, setShowColorPicker] = useState(false);
 
   // Preview scaling - responsive
   const { containerRef: previewContainerRef, pageRef: previewPageRef, previewScale, wrapperWidth, wrapperHeight, recalculate: recalcPreview, zoomLevel, zoomIn, zoomOut, resetZoom } = usePreviewScale();
@@ -3371,6 +3372,52 @@ export default function PerformanceEvidence() {
                         className="text-xs h-7 px-2 rounded border border-gray-300 bg-white focus:ring-1 focus:ring-[#1a3a5c] focus:border-[#1a3a5c] outline-none">
                         {allThemes.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
                       </select>
+                      {/* زر تخصيص الألوان */}
+                      <div className="relative">
+                        <Button size="sm" variant="outline" className={`gap-1 text-xs h-7 ${showColorPicker ? 'bg-[#1a3a5c] text-white' : ''}`} onClick={() => setShowColorPicker(!showColorPicker)}>
+                          <Palette className="w-3 h-3" />الألوان
+                        </Button>
+                        {showColorPicker && (
+                          <div className="absolute top-9 right-0 z-50 bg-white rounded-xl shadow-2xl border p-4 w-72" dir="rtl">
+                            <div className="flex items-center justify-between mb-3">
+                              <h4 className="text-sm font-bold text-gray-800">تخصيص الألوان</h4>
+                              <button onClick={() => setShowColorPicker(false)} className="p-1 hover:bg-gray-100 rounded"><X className="w-3.5 h-3.5" /></button>
+                            </div>
+                            <div className="space-y-3">
+                              <div>
+                                <label className="text-xs font-medium text-gray-600 mb-1 block">لون الترويسة والعناوين</label>
+                                <div className="flex items-center gap-2">
+                                  <input type="color" value={selectedTheme.accent} onChange={(e) => setSelectedTheme(prev => ({ ...prev, accent: e.target.value, titleBg: e.target.value, fieldLabelBg: e.target.value }))} className="w-8 h-8 rounded cursor-pointer border-0" />
+                                  <span className="text-xs text-gray-500 font-mono">{selectedTheme.accent}</span>
+                                </div>
+                              </div>
+                              <div>
+                                <label className="text-xs font-medium text-gray-600 mb-1 block">لون الإطارات والحدود</label>
+                                <div className="flex items-center gap-2">
+                                  <input type="color" value={selectedTheme.borderColor} onChange={(e) => setSelectedTheme(prev => ({ ...prev, borderColor: e.target.value }))} className="w-8 h-8 rounded cursor-pointer border-0" />
+                                  <span className="text-xs text-gray-500 font-mono">{selectedTheme.borderColor}</span>
+                                </div>
+                              </div>
+                              <div>
+                                <label className="text-xs font-medium text-gray-600 mb-1 block">ألوان سريعة</label>
+                                <div className="flex gap-1.5 flex-wrap">
+                                  {[
+                                    { name: 'أزرق داكن', accent: '#1a3a5c', border: '#1a3a5c' },
+                                    { name: 'أخضر داكن', accent: '#1a5f3f', border: '#1a3a5c' },
+                                    { name: 'تيل', accent: '#0d7377', border: '#0d7377' },
+                                    { name: 'كحلي', accent: '#1e3a5f', border: '#1e3a5f' },
+                                    { name: 'بنفسجي', accent: '#5b21b6', border: '#5b21b6' },
+                                    { name: 'عنابي', accent: '#7f1d1d', border: '#7f1d1d' },
+                                  ].map(preset => (
+                                    <button key={preset.name} title={preset.name} onClick={() => setSelectedTheme(prev => ({ ...prev, accent: preset.accent, borderColor: preset.border, titleBg: preset.accent, fieldLabelBg: preset.accent, footerBg: `linear-gradient(to right, ${preset.accent}, ${preset.border})`, headerBg: `linear-gradient(135deg, ${preset.border} 0%, ${preset.accent} 100%)` }))}
+                                      className="w-7 h-7 rounded-full border-2 border-white shadow-sm hover:scale-110 transition-transform" style={{ background: preset.accent }} />
+                                  ))}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
                       {/* أزرار التكبير/التصغير */}
                       <div className="flex items-center gap-1 border rounded-lg px-1 bg-white">
                         <button onClick={zoomOut} className="p-1 hover:bg-gray-100 rounded" title="تصغير">
@@ -3785,17 +3832,13 @@ export default function PerformanceEvidence() {
                         <table style={{ width: '100%', borderCollapse: 'collapse' as const }}>
                           <tbody>
                             <tr>
-                              <td style={{ width: '50%', textAlign: 'center', padding: '0 20px', verticalAlign: 'top' }}>
-                                <div style={{ fontSize: '14px', fontWeight: 800, color: theme.accent || '#1a3a5c', marginBottom: '10px', textAlign: 'center' }}>التنفيذ:</div>
-                                <div style={{ fontSize: '14px', fontWeight: 700, color: '#1a1a1a', marginBottom: '4px', textAlign: 'center' }}>أ/ {personalInfo.name || '..............................'}</div>
-                                <div style={{ fontSize: '13px', color: '#555', marginBottom: '4px', textAlign: 'center' }}>التوقيع:</div>
-                                <div style={{ width: '180px', borderBottom: `2px dotted ${theme.accent || '#1a3a5c'}`, margin: '4px auto 0' }} />
+                              <td style={{ width: '50%', padding: '0 20px', verticalAlign: 'top' }}>
+                                <div style={{ fontSize: '14px', fontWeight: 800, color: theme.accent || '#1a3a5c', marginBottom: '12px' }}>التنفيذ: <span style={{ fontWeight: 700, color: '#1a1a1a' }}>أ/ {personalInfo.name || '..............................'}</span></div>
+                                <div style={{ fontSize: '13px', color: '#555' }}>التوقيع: <span style={{ display: 'inline-block', width: '180px', borderBottom: `2px dotted ${theme.accent || '#1a3a5c'}`, verticalAlign: 'middle' }}>&nbsp;</span></div>
                               </td>
-                              <td style={{ width: '50%', textAlign: 'center', padding: '0 20px', verticalAlign: 'top' }}>
-                                <div style={{ fontSize: '14px', fontWeight: 800, color: theme.accent || '#1a3a5c', marginBottom: '10px', textAlign: 'center' }}>{personalInfo.evaluatorRole || 'مدير المدرسة'}:</div>
-                                <div style={{ fontSize: '14px', fontWeight: 700, color: '#1a1a1a', marginBottom: '4px', textAlign: 'center' }}>أ/ {personalInfo.evaluator || '..............................'}</div>
-                                <div style={{ fontSize: '13px', color: '#555', marginBottom: '4px', textAlign: 'center' }}>التوقيع:</div>
-                                <div style={{ width: '180px', borderBottom: `2px dotted ${theme.accent || '#1a3a5c'}`, margin: '4px auto 0' }} />
+                              <td style={{ width: '50%', padding: '0 20px', verticalAlign: 'top' }}>
+                                <div style={{ fontSize: '14px', fontWeight: 800, color: theme.accent || '#1a3a5c', marginBottom: '12px' }}>{personalInfo.evaluatorRole || 'مدير المدرسة'}: <span style={{ fontWeight: 700, color: '#1a1a1a' }}>أ/ {personalInfo.evaluator || '..............................'}</span></div>
+                                <div style={{ fontSize: '13px', color: '#555' }}>التوقيع: <span style={{ display: 'inline-block', width: '180px', borderBottom: `2px dotted ${theme.accent || '#1a3a5c'}`, verticalAlign: 'middle' }}>&nbsp;</span></div>
                               </td>
                             </tr>
                           </tbody>
@@ -4277,12 +4320,43 @@ export default function PerformanceEvidence() {
             {(() => {
               const cs = theme.coverStyle || 'gradient-center';
               const a2 = theme.coverAccent2 || theme.accent;
+              // ترويسة رسمية للغلاف - مطابقة للتقارير
+              const coverOfficialHeader = (
+                <div style={{ background: 'linear-gradient(135deg, #1a3a5c 0%, #1a5f3f 50%, #2ea87a 100%)', padding: '14px 24px 10px', borderRadius: '0 0 8px 8px' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse' as const }}>
+                    <tbody>
+                      <tr>
+                        <td style={{ width: '35%', verticalAlign: 'middle', textAlign: 'right', padding: '0' }}>
+                          {filteredDeptLines.map((line: string, i: number) => (
+                            <div key={i} style={{ fontSize: '12px', color: '#ffffff', fontWeight: 700, lineHeight: '2.0', letterSpacing: '0.3px' }}>{line}</div>
+                          ))}
+                          {personalInfo.school && (
+                            <div style={{ fontSize: '12px', color: '#ffffff', fontWeight: 700, lineHeight: '2.0' }}>{personalInfo.school}</div>
+                          )}
+                        </td>
+                        <td style={{ width: '2%', verticalAlign: 'middle', textAlign: 'center', padding: '0 4px' }}>
+                          <div style={{ width: '2px', height: '50px', background: 'rgba(255,255,255,0.35)', margin: '0 auto' }} />
+                        </td>
+                        <td style={{ width: '28%', verticalAlign: 'middle', textAlign: 'center', padding: '0' }}>
+                          <img src={MOE_LOGO} alt="\u0634\u0639\u0627\u0631 \u0648\u0632\u0627\u0631\u0629 \u0627\u0644\u062a\u0639\u0644\u064a\u0645" style={{ height: '65px', objectFit: 'contain' as const, margin: '0 auto', display: 'block', filter: 'brightness(0) invert(1)' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                        </td>
+                        <td style={{ width: '35%', verticalAlign: 'middle', textAlign: 'left', padding: '0' }}>
+                          {personalInfo.extraLogo && (
+                            <img src={personalInfo.extraLogo} alt="\u0634\u0639\u0627\u0631 \u0625\u0636\u0627\u0641\u064a" style={{ height: '50px', objectFit: 'contain' as const, display: 'block', marginBottom: '4px' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                          )}
+                          <div style={{ textAlign: 'left' }}>
+                            {personalInfo.semester && <div style={{ fontSize: '11px', color: '#ffffff', fontWeight: 600, lineHeight: '1.8' }}>{`\u0627\u0644\u0641\u0635\u0644 \u0627\u0644\u062f\u0631\u0627\u0633\u064a: ${personalInfo.semester}`}</div>}
+                            {personalInfo.year && <div style={{ fontSize: '11px', color: '#ffffff', fontWeight: 600, lineHeight: '1.8' }}>{`\u0627\u0644\u0639\u0627\u0645 \u0627\u0644\u062f\u0631\u0627\u0633\u064a: ${personalInfo.year}`}</div>}
+                          </div>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              );
+
               const coverContent = (
                 <>
-                  <div style={{ fontSize: '0.8rem', opacity: 0.65, marginBottom: '0.3rem', letterSpacing: '0.2em' }}>المملكة العربية السعودية</div>
-                  <div style={{ fontSize: '0.95rem', opacity: 0.8, marginBottom: '0.5rem', fontWeight: 600 }}>وزارة التعليم</div>
-                  {personalInfo.department && <p style={{ fontSize: '0.9rem', opacity: 0.85, marginBottom: '1rem', lineHeight: 1.7, whiteSpace: 'pre-line' as const }}>{personalInfo.department}</p>}
-                  <div style={{ width: '80px', height: '2px', background: 'rgba(255,255,255,0.3)', margin: '0 auto 1.5rem' }} />
                   <h1 style={{ fontSize: '2.5rem', fontWeight: 900, marginBottom: '0.75rem', fontFamily: "'Cairo', sans-serif", letterSpacing: '-0.01em' }}>{personalInfo.reportTitle || 'شواهد الأداء الوظيفي'}</h1>
                   <p style={{ fontSize: '1.4rem', fontWeight: 700, opacity: 0.95, marginBottom: '0.5rem' }}>{selectedJob?.title}</p>
                   <div style={{ width: '50px', height: '2px', background: 'rgba(255,255,255,0.25)', margin: '1rem auto' }} />
@@ -4305,7 +4379,8 @@ export default function PerformanceEvidence() {
               // === غلاف 1: متدرج مركزي (الافتراضي) ===
               if (cs === 'gradient-center') return (
                 <div className="bg-white shadow-lg mx-auto mb-6" style={{ width: '210mm', minHeight: '297mm', maxWidth: '100%', position: 'relative', overflow: 'hidden', pageBreakAfter: 'always' }}>
-                  <div style={{ background: theme.headerBg, color: theme.headerText, padding: '4rem 2.5rem', textAlign: 'center', position: 'relative', overflow: 'hidden', minHeight: '297mm', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                  {coverOfficialHeader}
+                  <div style={{ background: theme.headerBg, color: theme.headerText, padding: '3rem 2.5rem', textAlign: 'center', position: 'relative', overflow: 'hidden', minHeight: 'calc(297mm - 80px)', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
                     <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, background: 'linear-gradient(135deg, rgba(255,255,255,0.12) 0%, transparent 40%, rgba(0,0,0,0.1) 100%)', pointerEvents: 'none' }} />
                     <div style={{ position: 'absolute', top: '-50px', right: '-50px', width: '200px', height: '200px', borderRadius: '50%', background: 'rgba(255,255,255,0.06)', pointerEvents: 'none' }} />
                     <div style={{ position: 'absolute', bottom: '-40px', left: '-40px', width: '150px', height: '150px', borderRadius: '50%', background: 'rgba(255,255,255,0.04)', pointerEvents: 'none' }} />
@@ -4317,7 +4392,9 @@ export default function PerformanceEvidence() {
 
               // === غلاف 2: مقسوم يسار (شريط جانبي ملون + محتوى أبيض) ===
               if (cs === 'split-left') return (
-                <div className="bg-white shadow-lg mx-auto mb-6" style={{ width: '210mm', minHeight: '297mm', maxWidth: '100%', position: 'relative', overflow: 'hidden', pageBreakAfter: 'always', display: 'flex' }}>
+                <div className="bg-white shadow-lg mx-auto mb-6" style={{ width: '210mm', minHeight: '297mm', maxWidth: '100%', position: 'relative', overflow: 'hidden', pageBreakAfter: 'always' }}>
+                  {coverOfficialHeader}
+                  <div style={{ display: 'flex', minHeight: 'calc(297mm - 80px)' }}>
                   <div style={{ width: '35%', background: theme.headerBg, minHeight: '297mm', position: 'relative', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', padding: '2rem', color: theme.headerText }}>
                     <div style={{ position: 'absolute', top: 0, right: 0, width: '4px', background: `linear-gradient(to bottom, ${a2}, ${theme.accent})`, height: '100%' }} />
                     <div style={{ fontSize: '4rem', fontWeight: 900, opacity: 0.15, position: 'absolute', top: '3rem', fontFamily: "'Cairo'" }}>SERS</div>
@@ -4340,13 +4417,15 @@ export default function PerformanceEvidence() {
                     <p style={{ fontSize: '0.9rem', color: '#9CA3AF', marginTop: '2rem' }}>{personalInfo.semester}</p>
                     <div style={{ marginTop: '4rem', fontSize: '0.65rem', color: '#D1D5DB' }}>نظام SERS - السجلات التعليمية الذكية</div>
                   </div>
+                  </div>
                 </div>
               );
 
               // === غلاف 3: قطري (شريط علوي مائل + محتوى أبيض) ===
               if (cs === 'diagonal') return (
                 <div className="bg-white shadow-lg mx-auto mb-6" style={{ width: '210mm', minHeight: '297mm', maxWidth: '100%', position: 'relative', overflow: 'hidden', pageBreakAfter: 'always' }}>
-                  <div style={{ background: theme.headerBg, height: '45%', position: 'absolute', top: 0, left: 0, right: 0, clipPath: 'polygon(0 0, 100% 0, 100% 75%, 0 100%)' }} />
+                  {coverOfficialHeader}
+                  <div style={{ background: theme.headerBg, height: '40%', position: 'absolute', top: '80px', left: 0, right: 0, clipPath: 'polygon(0 0, 100% 0, 100% 75%, 0 100%)' }} />
                   <div style={{ position: 'relative', zIndex: 1, minHeight: '297mm', display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '4rem 3rem', textAlign: 'center' }}>
                     <div style={{ color: theme.headerText, marginBottom: '4rem' }}>
                       <div style={{ fontSize: '0.8rem', opacity: 0.7, letterSpacing: '0.2em', marginBottom: '0.3rem' }}>المملكة العربية السعودية</div>
@@ -4372,7 +4451,8 @@ export default function PerformanceEvidence() {
               // === غلاف 4: إطار أنيق (خلفية فاتحة + إطار مزدوج) ===
               if (cs === 'framed-elegant') return (
                 <div className="bg-white shadow-lg mx-auto mb-6" style={{ width: '210mm', minHeight: '297mm', maxWidth: '100%', position: 'relative', overflow: 'hidden', pageBreakAfter: 'always', background: `${theme.accent}08` }}>
-                  <div style={{ position: 'absolute', top: '20px', left: '20px', right: '20px', bottom: '20px', border: `2px solid ${theme.accent}`, borderRadius: '4px', pointerEvents: 'none' }} />
+                  {coverOfficialHeader}
+                  <div style={{ position: 'absolute', top: '100px', left: '20px', right: '20px', bottom: '20px', border: `2px solid ${theme.accent}`, borderRadius: '4px', pointerEvents: 'none' }} />
                   <div style={{ position: 'absolute', top: '28px', left: '28px', right: '28px', bottom: '28px', border: `1px solid ${theme.accent}40`, borderRadius: '4px', pointerEvents: 'none' }} />
                   <div style={{ position: 'relative', zIndex: 1, minHeight: '297mm', display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '5rem 4rem', textAlign: 'center', color: theme.accent }}>
                     <div style={{ fontSize: '0.8rem', color: '#9CA3AF', letterSpacing: '0.2em', marginBottom: '0.3rem' }}>المملكة العربية السعودية</div>
@@ -4401,7 +4481,8 @@ export default function PerformanceEvidence() {
               // === غلاف 5: شريط علوي (شريط عريض أعلى + محتوى أبيض) ===
               if (cs === 'top-bar') return (
                 <div className="bg-white shadow-lg mx-auto mb-6" style={{ width: '210mm', minHeight: '297mm', maxWidth: '100%', position: 'relative', overflow: 'hidden', pageBreakAfter: 'always' }}>
-                  <div style={{ background: theme.headerBg, padding: '2.5rem 3rem', color: theme.headerText, textAlign: 'center' }}>
+                  {coverOfficialHeader}
+                  <div style={{ background: theme.headerBg, padding: '1.5rem 3rem', color: theme.headerText, textAlign: 'center' }}>
                     <div style={{ fontSize: '0.8rem', opacity: 0.7, letterSpacing: '0.15em' }}>المملكة العربية السعودية · وزارة التعليم</div>
                     {personalInfo.department && <p style={{ fontSize: '0.8rem', opacity: 0.7, marginTop: '0.3rem', whiteSpace: 'pre-line' as const }}>{personalInfo.department}</p>}
                   </div>
@@ -4429,7 +4510,8 @@ export default function PerformanceEvidence() {
               // === غلاف 6: خط بسيط (minimal) ===
               return (
                 <div className="bg-white shadow-lg mx-auto mb-6" style={{ width: '210mm', minHeight: '297mm', maxWidth: '100%', position: 'relative', overflow: 'hidden', pageBreakAfter: 'always' }}>
-                  <div style={{ minHeight: '297mm', display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '5rem 4rem', textAlign: 'center' }}>
+                  {coverOfficialHeader}
+                  <div style={{ minHeight: 'calc(297mm - 80px)', display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '4rem 4rem', textAlign: 'center' }}>
                     <div style={{ fontSize: '0.8rem', color: '#9CA3AF', letterSpacing: '0.15em', marginBottom: '0.3rem' }}>المملكة العربية السعودية · وزارة التعليم</div>
                     {personalInfo.department && <p style={{ fontSize: '0.8rem', color: '#9CA3AF', marginBottom: '1rem', whiteSpace: 'pre-line' as const }}>{personalInfo.department}</p>}
                     <div style={{ width: '1px', height: '60px', background: theme.accent, margin: '1.5rem auto' }} />
@@ -5037,18 +5119,14 @@ export default function PerformanceEvidence() {
                   {/* عنوان */}
                   <h2 style={{ textAlign: 'center', fontSize: '1.2rem', fontWeight: 800, color: theme.accent, fontFamily: "'Cairo', sans-serif", marginBottom: '3rem' }}>اعتماد التقرير</h2>
 
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '3rem', textAlign: 'center', padding: '0 2rem' }}>
-                    <div style={{ padding: '2rem', border: `1px solid ${theme.accent}20`, borderRadius: '12px', background: `${theme.accent}05` }}>
-                      <p style={{ color: theme.accent, marginBottom: '4rem', fontSize: '0.9rem', fontWeight: 700 }}>توقيع مدير/ة المدرسة</p>
-                      <div style={{ ...sigLineStyle, paddingTop: '0.75rem', marginBottom: '0.5rem' }} />
-                      <div style={{ fontWeight: 700, fontSize: '0.95rem', color: '#1F2937', marginTop: '0.75rem' }}>{personalInfo.evaluator || '____________'}</div>
-                      <p style={{ fontSize: '0.75rem', color: '#9CA3AF', marginTop: '0.25rem' }}>{personalInfo.evaluatorRole}</p>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '3rem', padding: '0 2rem' }}>
+                    <div style={{ padding: '2rem' }}>
+                      <div style={{ fontSize: '14px', fontWeight: 800, color: theme.accent, marginBottom: '12px' }}>التنفيذ: <span style={{ fontWeight: 700, color: '#1a1a1a' }}>أ/ {personalInfo.name || '..............................'}</span></div>
+                      <div style={{ fontSize: '13px', color: '#555' }}>التوقيع: <span style={{ display: 'inline-block', width: '180px', borderBottom: `2px dotted ${theme.accent}`, verticalAlign: 'middle' }}>&nbsp;</span></div>
                     </div>
-                    <div style={{ padding: '2rem', border: `1px solid ${theme.accent}20`, borderRadius: '12px', background: `${theme.accent}05` }}>
-                      <p style={{ color: theme.accent, marginBottom: '4rem', fontSize: '0.9rem', fontWeight: 700 }}>توقيع الموظف</p>
-                      <div style={{ ...sigLineStyle, paddingTop: '0.75rem', marginBottom: '0.5rem' }} />
-                      <div style={{ fontWeight: 700, fontSize: '0.95rem', color: '#1F2937', marginTop: '0.75rem' }}>{personalInfo.name || '____________'}</div>
-                      <p style={{ fontSize: '0.75rem', color: '#9CA3AF', marginTop: '0.25rem' }}>{selectedJob?.title}</p>
+                    <div style={{ padding: '2rem' }}>
+                      <div style={{ fontSize: '14px', fontWeight: 800, color: theme.accent, marginBottom: '12px' }}>{personalInfo.evaluatorRole || 'مدير المدرسة'}: <span style={{ fontWeight: 700, color: '#1a1a1a' }}>أ/ {personalInfo.evaluator || '..............................'}</span></div>
+                      <div style={{ fontSize: '13px', color: '#555' }}>التوقيع: <span style={{ display: 'inline-block', width: '180px', borderBottom: `2px dotted ${theme.accent}`, verticalAlign: 'middle' }}>&nbsp;</span></div>
                     </div>
                   </div>
 

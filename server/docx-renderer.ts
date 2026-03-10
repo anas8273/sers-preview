@@ -265,48 +265,63 @@ function buildSingleEvidenceDoc(data: DocxExportData): Document {
   // ===== التوقيعات =====
   children.push(new Paragraph({ spacing: { before: 600 }, children: [] }));
 
+  // التوقيعات - التنفيذ بجانب الاسم
   children.push(new Table({
     width: { size: 100, type: WidthType.PERCENTAGE },
     rows: [
       new TableRow({
         children: [
+          // التنفيذ (يمين)
           new TableCell({
             width: { size: 50, type: WidthType.PERCENTAGE },
             borders: createBorder('ffffff', 0),
             children: [
               new Paragraph({
                 alignment: AlignmentType.CENTER,
-                children: [new TextRun({ text: 'المعلم / المعلمة', font: 'Cairo', size: 22, bold: true, color: '333333' })],
+                children: [
+                  new TextRun({ text: 'التنفيذ:', font: 'Cairo', size: 22, bold: true, color }),
+                ],
               }),
               new Paragraph({
                 alignment: AlignmentType.CENTER,
-                spacing: { before: 100 },
-                children: [new TextRun({ text: pi.name || '......................', font: 'Cairo', size: 20, color: pi.name ? '333333' : '999999' })],
+                spacing: { before: 80 },
+                children: [
+                  new TextRun({ text: `أ/ ${pi.name || '..........................'}`, font: 'Cairo', size: 20, color: pi.name ? '333333' : '999999' }),
+                ],
               }),
               new Paragraph({
                 alignment: AlignmentType.CENTER,
-                spacing: { before: 200 },
-                children: [new TextRun({ text: 'التوقيع: ......................', font: 'Cairo', size: 20, color: '999999' })],
+                spacing: { before: 120 },
+                children: [
+                  new TextRun({ text: 'التوقيع: ..........................', font: 'Cairo', size: 20, color: '999999' }),
+                ],
               }),
             ],
           }),
+          // مدير المدرسة (يسار)
           new TableCell({
             width: { size: 50, type: WidthType.PERCENTAGE },
             borders: createBorder('ffffff', 0),
             children: [
               new Paragraph({
                 alignment: AlignmentType.CENTER,
-                children: [new TextRun({ text: pi.evaluatorRole || 'مدير المدرسة', font: 'Cairo', size: 22, bold: true, color: '333333' })],
+                children: [
+                  new TextRun({ text: `${pi.evaluatorRole || 'مدير المدرسة'}:`, font: 'Cairo', size: 22, bold: true, color }),
+                ],
               }),
               new Paragraph({
                 alignment: AlignmentType.CENTER,
-                spacing: { before: 100 },
-                children: [new TextRun({ text: pi.evaluator || '......................', font: 'Cairo', size: 20, color: pi.evaluator ? '333333' : '999999' })],
+                spacing: { before: 80 },
+                children: [
+                  new TextRun({ text: `أ/ ${pi.evaluator || '..........................'}`, font: 'Cairo', size: 20, color: pi.evaluator ? '333333' : '999999' }),
+                ],
               }),
               new Paragraph({
                 alignment: AlignmentType.CENTER,
-                spacing: { before: 200 },
-                children: [new TextRun({ text: 'التوقيع: ......................', font: 'Cairo', size: 20, color: '999999' })],
+                spacing: { before: 120 },
+                children: [
+                  new TextRun({ text: 'التوقيع: ..........................', font: 'Cairo', size: 20, color: '999999' }),
+                ],
               }),
             ],
           }),
@@ -319,12 +334,12 @@ function buildSingleEvidenceDoc(data: DocxExportData): Document {
   children.push(new Paragraph({
     alignment: AlignmentType.CENTER,
     spacing: { before: 400 },
-    border: { top: { style: BorderStyle.SINGLE, size: 6, color } },
+    shading: { type: ShadingType.SOLID, color },
     children: [new TextRun({
       text: 'SERS - نظام السجلات التعليمية الذكي',
       font: 'Cairo',
       size: 18,
-      color,
+      color: 'ffffff',
       bold: true,
     })],
   }));
@@ -550,6 +565,7 @@ function buildFullReportDoc(data: DocxExportData): Document {
   // ===== التوقيعات =====
   children.push(new Paragraph({ spacing: { before: 600 }, children: [] }));
 
+  // التوقيعات - التنفيذ بجانب الاسم
   children.push(new Table({
     width: { size: 100, type: WidthType.PERCENTAGE },
     rows: [
@@ -559,18 +575,18 @@ function buildFullReportDoc(data: DocxExportData): Document {
             width: { size: 50, type: WidthType.PERCENTAGE },
             borders: createBorder('ffffff', 0),
             children: [
-              new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'المعلم / المعلمة', font: 'Cairo', size: 22, bold: true, color: '333333' })] }),
-              new Paragraph({ alignment: AlignmentType.CENTER, spacing: { before: 100 }, children: [new TextRun({ text: pi.name || '......................', font: 'Cairo', size: 20, color: '333333' })] }),
-              new Paragraph({ alignment: AlignmentType.CENTER, spacing: { before: 200 }, children: [new TextRun({ text: 'التوقيع: ......................', font: 'Cairo', size: 20, color: '999999' })] }),
+              new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'التنفيذ:', font: 'Cairo', size: 22, bold: true, color })] }),
+              new Paragraph({ alignment: AlignmentType.CENTER, spacing: { before: 80 }, children: [new TextRun({ text: `أ/ ${pi.name || '..........................'}`, font: 'Cairo', size: 20, color: pi.name ? '333333' : '999999' })] }),
+              new Paragraph({ alignment: AlignmentType.CENTER, spacing: { before: 120 }, children: [new TextRun({ text: 'التوقيع: ..........................', font: 'Cairo', size: 20, color: '999999' })] }),
             ],
           }),
           new TableCell({
             width: { size: 50, type: WidthType.PERCENTAGE },
             borders: createBorder('ffffff', 0),
             children: [
-              new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: pi.evaluatorRole || 'مدير المدرسة', font: 'Cairo', size: 22, bold: true, color: '333333' })] }),
-              new Paragraph({ alignment: AlignmentType.CENTER, spacing: { before: 100 }, children: [new TextRun({ text: pi.evaluator || '......................', font: 'Cairo', size: 20, color: '333333' })] }),
-              new Paragraph({ alignment: AlignmentType.CENTER, spacing: { before: 200 }, children: [new TextRun({ text: 'التوقيع: ......................', font: 'Cairo', size: 20, color: '999999' })] }),
+              new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: `${pi.evaluatorRole || 'مدير المدرسة'}:`, font: 'Cairo', size: 22, bold: true, color })] }),
+              new Paragraph({ alignment: AlignmentType.CENTER, spacing: { before: 80 }, children: [new TextRun({ text: `أ/ ${pi.evaluator || '..........................'}`, font: 'Cairo', size: 20, color: pi.evaluator ? '333333' : '999999' })] }),
+              new Paragraph({ alignment: AlignmentType.CENTER, spacing: { before: 120 }, children: [new TextRun({ text: 'التوقيع: ..........................', font: 'Cairo', size: 20, color: '999999' })] }),
             ],
           }),
         ],
