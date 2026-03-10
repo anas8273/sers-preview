@@ -30,8 +30,8 @@ interface PlanStudent {
 
 // ألوان الهوية البصرية
 const C = {
-  tealDark: "#1a4d5e",
-  teal: "#0d7377",
+  tealDark: "#1a3a5c",
+  teal: "#1a5f3f",
   green: "#2ea87a",
   greenLight: "#7ECDC0",
   separator: "#5bb784",
@@ -115,7 +115,7 @@ export default function TreatmentPlan() {
               logoUrl="https://d2xsxph8kpxj0f.cloudfront.net/310519663047121386/h34s4aPNVyHXdtjgZ7eNNf/moe-logo_b9fec681.png"
               variant="full"
               accentColor={C.teal}
-              headerBg={`linear-gradient(135deg, ${C.tealDark} 0%, #0d5f61 50%, ${C.teal} 100%)`}
+              headerBg={`linear-gradient(135deg, ${C.tealDark} 0%, ${C.teal} 50%, ${C.green} 100%)`}
               headerText="#ffffff"
               borderColor={C.tealDark}
             />

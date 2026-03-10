@@ -1,0 +1,34 @@
+{
+  "query": "SELECT id, name, accent, isActive FROM pdf_templates ORDER BY id;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 6C7x6f29RX1BcFf.7325488fde9e --database h34s4aPNVyHXdtjgZ7eNNf --execute SELECT id, name, accent, isActive FROM pdf_templates ORDER BY id;",
+  "rows": [
+    {
+      "id": "420003",
+      "name": "بطاقات - شريط جانبي",
+      "accent": "#0D9488",
+      "isActive": "1"
+    },
+    {
+      "id": "540001",
+      "name": "قالب اختبار جديد",
+      "accent": "#059669",
+      "isActive": "1"
+    },
+    {
+      "id": "540002",
+      "name": "قالب اختبار",
+      "accent": "#2E7D32",
+      "isActive": "1"
+    },
+    {
+      "id": "540003",
+      "name": "قالب معدّل",
+      "accent": "#2E7D32",
+      "isActive": "1"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tname\taccent\tisActive\n420003\tبطاقات - شريط جانبي\t#0D9488\t1\n540001\tقالب اختبار جديد\t#059669\t1\n540002\tقالب اختبار\t#2E7D32\t1\n540003\tقالب معدّل\t#2E7D32\t1\n",
+  "stderr": "",
+  "execution_time_ms": 55
+}

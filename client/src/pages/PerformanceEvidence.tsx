@@ -219,17 +219,17 @@ interface ThemeConfig {
 }
 
 // ===== 3 قوالب مطابقة لملف الهوية البصرية تماماً =====
-// الألوان: فيروزي #0d7377 | أزرق داكن #0a5c5f | أخضر #2ea87a
-// الفرق في التنسيق فقط (شكل الترويسة + نمط الحقول + كثافة الحبر)
+// الألوان: أزرق داكن #1a3a5c | أخضر داكن #1a5f3f | أخضر #2ea87a | ذهبي #D4AF37
+// مطابقة للتصميم المرجعي من وزارة التعليم
 
-// القالب 1: ترويسة بيضاء + حقول خط سفلي (PDF صفحات 2,7,8,10,11)
+// القالب 1: ترويسة بيضاء + حقول خط سفلي (التصميم المرجعي الأساسي)
 const DEFAULT_THEME: ThemeConfig = {
   id: 'default', name: 'ترويسة بيضاء',
   layoutType: 'white-header-classic',
-  headerBg: '#ffffff', headerText: '#0d7377',
-  accent: '#0d7377', borderColor: '#0d7377',
-  titleBg: '#0d7377', fieldLabelBg: '#0d7377',
-  footerBg: 'linear-gradient(to right, #2ea87a, #0d7377, #0a5c5f)',
+  headerBg: '#ffffff', headerText: '#1a3a5c',
+  accent: '#1a3a5c', borderColor: '#1a3a5c',
+  titleBg: '#1a3a5c', fieldLabelBg: '#1a3a5c',
+  footerBg: 'linear-gradient(to right, #2ea87a, #1a5f3f, #1a3a5c)',
   tableStyle: false, titleStyle: 'rounded', showTopLine: false, showBottomBar: true,
   fieldStyle: 'underlined', signatureStyle: 'dotted',
   coverStyle: 'gradient-center', sectionCoverStyle: 'full-gradient', coverAccent2: '#2ea87a',
@@ -241,13 +241,13 @@ const DEFAULT_THEME: ThemeConfig = {
 const BUILTIN_THEMES: ThemeConfig[] = [
   DEFAULT_THEME,
   {
-    // القالب 2: ترويسة داكنة (PDF صفحات 4,5,6,9) - تدرج أزرق داكن → فيروزي
+    // القالب 2: ترويسة داكنة - تدرج أخضر داكن (مطابق للغلاف المرجعي)
     id: 'builtin-dark', name: 'ترويسة داكنة',
     layoutType: 'dark-header-table',
-    headerBg: 'linear-gradient(135deg, #0a5c5f 0%, #0d7377 100%)', headerText: '#ffffff',
-    accent: '#0d7377', borderColor: '#0d7377',
-    titleBg: '#0d7377', fieldLabelBg: '#0d7377',
-    footerBg: 'linear-gradient(to right, #2ea87a, #0d7377, #0a5c5f)',
+    headerBg: 'linear-gradient(135deg, #1a3a5c 0%, #1a5f3f 100%)', headerText: '#ffffff',
+    accent: '#1a5f3f', borderColor: '#1a3a5c',
+    titleBg: '#1a5f3f', fieldLabelBg: '#1a5f3f',
+    footerBg: 'linear-gradient(to right, #2ea87a, #1a5f3f, #1a3a5c)',
     tableStyle: true, titleStyle: 'full-width', showTopLine: false, showBottomBar: true,
     fieldStyle: 'table', signatureStyle: 'boxed',
     coverStyle: 'top-bar', sectionCoverStyle: 'numbered-bar', coverAccent2: '#2ea87a',
@@ -258,9 +258,9 @@ const BUILTIN_THEMES: ThemeConfig[] = [
     // القالب 3: خفيف حبر - بدون شريط سفلي، أقل حبر ممكن (للطباعة)
     id: 'builtin-light', name: 'خفيف حبر',
     layoutType: 'white-header-classic',
-    headerBg: '#ffffff', headerText: '#0d7377',
-    accent: '#0d7377', borderColor: '#d1d5db',
-    titleBg: '#0d7377', fieldLabelBg: '#f0fdfa',
+    headerBg: '#ffffff', headerText: '#1a3a5c',
+    accent: '#1a3a5c', borderColor: '#d1d5db',
+    titleBg: '#1a3a5c', fieldLabelBg: '#f0f4f8',
     footerBg: '#f9fafb',
     tableStyle: false, titleStyle: 'rounded', showTopLine: false, showBottomBar: false,
     fieldStyle: 'underlined', signatureStyle: 'dotted',
@@ -358,11 +358,14 @@ export default function PerformanceEvidence() {
   const [selectedTheme, setSelectedTheme] = useState<ThemeConfig>(DEFAULT_THEME);
   // جلب القوالب من قاعدة البيانات
   const { data: dbTemplates } = trpc.templates.list.useQuery(undefined, { staleTime: 60000 });
-  // تحويل قوالب DB إلى ThemeConfig (النظام يعتمد 100% على قاعدة البيانات - الإدارة تضيف القوالب)
+  // تحويل قوالب DB إلى ThemeConfig مع إزالة التكرار
   const allThemes = useMemo(() => {
     const themes: ThemeConfig[] = [...BUILTIN_THEMES];
     if (dbTemplates && dbTemplates.length > 0) {
-      const dbMapped: ThemeConfig[] = dbTemplates.map((t: any) => {
+      const builtinNames = new Set(BUILTIN_THEMES.map(t => t.name));
+      const dbMapped: ThemeConfig[] = dbTemplates
+        .filter((t: any) => !builtinNames.has(t.name)) // إزالة التكرار بالاسم
+        .map((t: any) => {
         const layout = t.templateLayout || {};
         const lt = layout.layoutType || (layout.headerStyle === 'full-width' ? 'dark-header-table' : 'white-header-classic');
         const isDark = lt.startsWith('dark-');
@@ -370,13 +373,13 @@ export default function PerformanceEvidence() {
           id: `db-${t.id}`,
           name: t.name,
           layoutType: lt as LayoutType,
-          headerBg: t.headerBg || (isDark ? 'linear-gradient(135deg, #1a4d4e, #0d7377)' : '#ffffff'),
-          headerText: t.headerText || (isDark ? '#fff' : '#1a4d4e'),
-          accent: t.accent || '#0d7377',
-          borderColor: t.borderColor || '#1a4d4e',
-          titleBg: t.accent || '#0d7377',
-          fieldLabelBg: t.accent || '#0d7377',
-          footerBg: `linear-gradient(to left, ${t.borderColor || '#1a4d4e'}, ${t.accent || '#0d7377'}, #2ea87a)`,
+          headerBg: t.headerBg || (isDark ? 'linear-gradient(135deg, #1a3a5c, #1a5f3f)' : '#ffffff'),
+          headerText: t.headerText || (isDark ? '#fff' : '#1a3a5c'),
+          accent: t.accent || '#1a5f3f',
+          borderColor: t.borderColor || '#1a3a5c',
+          titleBg: t.accent || '#1a5f3f',
+          fieldLabelBg: t.accent || '#1a5f3f',
+          footerBg: `linear-gradient(to left, ${t.borderColor || '#1a3a5c'}, ${t.accent || '#1a5f3f'}, #2ea87a)`,
           tableStyle: (layout.fieldStyle === 'table'),
           titleStyle: (layout.titleStyle || 'rounded') as ThemeConfig['titleStyle'],
           showTopLine: isDark,
@@ -384,7 +387,7 @@ export default function PerformanceEvidence() {
           fieldStyle: (layout.fieldStyle || 'fieldset') as ThemeConfig['fieldStyle'],
           signatureStyle: (['dotted', 'solid', 'boxed', 'lined', 'stamped'].includes(layout.signatureStyle) ? layout.signatureStyle : 'dotted') as ThemeConfig['signatureStyle'],
           bodyBg: t.bodyBg || (lt === 'white-header-light' ? '#E0F7FA' : lt === 'white-header-sidebar' ? '#f8fafb' : undefined),
-          sidebarBg: lt === 'white-header-sidebar' ? `linear-gradient(to bottom, ${t.borderColor || '#1a4d4e'}, ${t.accent || '#0d7377'})` : undefined,
+          sidebarBg: lt === 'white-header-sidebar' ? `linear-gradient(to bottom, ${t.borderColor || '#1a3a5c'}, ${t.accent || '#1a5f3f'})` : undefined,
           headerSeparator: lt === 'white-header-sidebar',
           coverStyle: (layout.coverStyle || 'gradient-center') as ThemeConfig['coverStyle'],
           sectionCoverStyle: (layout.sectionCoverStyle || 'full-gradient') as ThemeConfig['sectionCoverStyle'],
@@ -393,7 +396,13 @@ export default function PerformanceEvidence() {
       });
       themes.push(...dbMapped);
     }
-    return themes;
+    // إزالة أي تكرار إضافي بالاسم (الأولوية للأول)
+    const seen = new Set<string>();
+    return themes.filter(t => {
+      if (seen.has(t.name)) return false;
+      seen.add(t.name);
+      return true;
+    });
   }, [dbTemplates]);
   const [portfolioId, setPortfolioId] = useState<number | null>(null);
   const [currentCriterionIndex, setCurrentCriterionIndex] = useState(0);
@@ -1463,12 +1472,56 @@ export default function PerformanceEvidence() {
   const handleExportDocx = async () => {
     setIsExportingDocx(true);
     try {
-      await exportToDocx(
-        'preview-content',
+      // بناء بيانات منظمة للتقرير الكامل
+      const docxCriteria = allCriteria.map(c => {
+        const cData = criteriaData[c.id];
+        const allSubs = [...c.subEvidences, ...(cData?.customSubEvidences || [])];
+        return {
+          title: c.title,
+          subEvidences: allSubs.map(sub => {
+            const subEvs = (cData?.evidences || []).filter(e => e.subEvidenceId === sub.id);
+            const formEv = subEvs.find(e => e.formData !== undefined);
+            const staticFields = (sub.formFields || []).map(f => ({ label: f.label, value: formEv?.formData?.[f.id] || '' }));
+            const dynamicFields = formEv?.formData ? Object.keys(formEv.formData).filter(k => k.startsWith('dynamic_') && !k.startsWith('__label_')).map(k => ({ label: formEv.formData?.[`__label_${k}`] || 'حقل إضافي', value: formEv.formData?.[k] || '' })) : [];
+            return {
+              title: sub.title,
+              fields: [...staticFields, ...dynamicFields],
+              evidences: subEvs.filter(e => e.type !== 'text' || e.formData === undefined).map(ev => ({
+                type: ev.type || 'file',
+                fileName: ev.fileName,
+                fileUrl: ev.fileData || ev.link,
+                text: ev.text,
+                link: ev.link,
+              })),
+            };
+          }),
+        };
+      });
+
+      const docxData = {
+        personalInfo: {
+          name: personalInfo.name || '',
+          school: personalInfo.school || '',
+          department: personalInfo.department || '',
+          year: personalInfo.year || '',
+          semester: personalInfo.semester || '',
+          evaluator: personalInfo.evaluator || '',
+          evaluatorRole: personalInfo.evaluatorRole || 'مدير المدرسة',
+          date: personalInfo.date || '',
+          reportTitle: personalInfo.reportTitle || 'شواهد الأداء الوظيفي',
+        },
+        criteria: docxCriteria,
+        themeColor: selectedTheme.accent || '#1a3a5c',
+        mode: 'full' as const,
+      };
+
+      await exportToDocxStructured(
+        docxData,
         `${personalInfo.reportTitle || 'شواهد_الأداء'}_${personalInfo.name || 'مستند'}.docx`
       );
       toast.success('تم تصدير Word بنجاح');
     } catch (err) {
+      console.error('DOCX export error:', err);
       toast.error('فشل تصدير Word - حاول مرة أخرى');
     } finally {
       setIsExportingDocx(false);
@@ -3045,7 +3098,7 @@ export default function PerformanceEvidence() {
                           flex: (field.value?.length || 0) >= 80 ? '1 1 100%' : '1 1 calc(50% - 5px)',
                           background: '#fff',
                           borderRadius: '8px',
-                          border: `2px solid #a8dcd8`,
+                          border: `2px solid ${theme.borderColor || '#b8c9d9'}`,
                           overflow: 'hidden',
                         }}>
                           <div style={{
@@ -3081,7 +3134,7 @@ export default function PerformanceEvidence() {
                   <div style={{ padding: '16px 24px', flex: 1 }}>
                     {allFields.map((field) => (
                       <div key={field.id} style={{
-                        border: `1.5px solid #a8dcd8`,
+                        border: `1.5px solid ${theme.borderColor || '#b8c9d9'}`,
                         borderRadius: '8px',
                         marginBottom: '12px',
                         overflow: 'hidden',
@@ -3117,7 +3170,7 @@ export default function PerformanceEvidence() {
                   <div style={{ padding: '16px 24px', flex: 1 }}>
                     {allFields.map((field) => (
                       <div key={field.id} style={{
-                        borderBottom: `1.5px solid #a8dcd8`,
+                        borderBottom: `1.5px solid ${theme.borderColor || '#b8c9d9'}`,
                         padding: '14px 0',
                         display: 'flex',
                         gap: '16px',
@@ -3167,7 +3220,7 @@ export default function PerformanceEvidence() {
                           lineHeight: '1.9',
                           whiteSpace: 'pre-wrap' as const,
                           padding: '8px 0',
-                          borderBottom: '1.5px dotted #a8dcd8',
+                          borderBottom: `1.5px dotted ${theme.borderColor || '#b8c9d9'}`,
                         }}>
                           {field.value || '....................'}
                         </div>
@@ -3179,7 +3232,7 @@ export default function PerformanceEvidence() {
                 // نمط الجدول الافتراضي (table)
                 return (
                   <div style={{ padding: '16px 24px', flex: 1, display: 'flex', flexDirection: 'column' as const }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse' as const, border: '2px solid #a8dcd8', flex: 1 }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse' as const, border: `2px solid ${theme.borderColor || '#b8c9d9'}`, flex: 1 }}>
                       <tbody>
                         {shortFields.length > 0 && (() => {
                           const rows: typeof shortFields[] = [];
@@ -3189,19 +3242,19 @@ export default function PerformanceEvidence() {
                               {row.map((field) => (
                                 <React.Fragment key={field.id}>
                                   <td style={{
-                                    border: '1.5px solid #a8dcd8',
+                                    border: `1.5px solid ${theme.borderColor || '#b8c9d9'}`,
                                     padding: '12px 16px',
                                     fontWeight: 700,
                                     fontSize: '14px',
                                     color: '#fff',
                                     background: theme.accent,
-                                    width: '17%',
+                                    width: '15%',
                                     textAlign: 'center',
                                   }}>
                                     {field.label}
                                   </td>
                                   <td style={{
-                                    border: '1.5px solid #a8dcd8',
+                                    border: `1.5px solid ${theme.borderColor || '#b8c9d9'}`,
                                     padding: '12px 16px',
                                     fontSize: '15px',
                                     color: '#1a1a1a',
@@ -3214,8 +3267,8 @@ export default function PerformanceEvidence() {
                               ))}
                               {row.length < 3 && Array.from({ length: 3 - row.length }).map((_, i) => (
                                 <React.Fragment key={`empty-${i}`}>
-                                  <td style={{ border: '1.5px solid #a8dcd8', padding: '12px 16px', background: theme.accent, width: '17%' }}></td>
-                                  <td style={{ border: '1.5px solid #a8dcd8', padding: '12px 16px', background: '#fff' }}></td>
+                                  <td style={{ border: `1.5px solid ${theme.borderColor || '#b8c9d9'}`, padding: '12px 16px', background: theme.accent, width: '17%' }}></td>
+                                  <td style={{ border: `1.5px solid ${theme.borderColor || '#b8c9d9'}`, padding: '12px 16px', background: '#fff' }}></td>
                                 </React.Fragment>
                               ))}
                             </tr>
@@ -3224,20 +3277,20 @@ export default function PerformanceEvidence() {
                         {longFields.map((field) => (
                           <tr key={field.id} style={{ height: longFields.length <= 2 ? '120px' : undefined }}>
                             <td style={{
-                              border: '1.5px solid #a8dcd8',
+                              border: `1.5px solid ${theme.borderColor || '#b8c9d9'}`,
                               padding: '12px 16px',
                               fontWeight: 700,
                               fontSize: '14px',
                               color: '#fff',
                               background: theme.accent,
-                              width: '17%',
+                              width: '15%',
                               textAlign: 'center',
                               verticalAlign: 'top',
                             }}>
                               {field.label}
                             </td>
                             <td colSpan={5} style={{
-                              border: '1.5px solid #a8dcd8',
+                              border: `1.5px solid ${theme.borderColor || '#b8c9d9'}`,
                               padding: '14px 18px',
                               fontSize: '15px',
                               lineHeight: '2.0',
@@ -3270,7 +3323,42 @@ export default function PerformanceEvidence() {
                       </Button>
                       <Button size="sm" variant="outline" className="gap-1 text-xs h-7" onClick={async () => {
                         try {
-                          await exportToDocx(`single-preview-${previewSubId}`, `شاهد_${previewSubId}.docx`);
+                          // تجميع بيانات الشاهد لتصدير Word منظم
+                          if (prevCrit && prevSub) {
+                            const docxData = {
+                              personalInfo: {
+                                name: personalInfo.name || '',
+                                school: personalInfo.school || '',
+                                department: personalInfo.department || '',
+                                year: personalInfo.year || '',
+                                semester: personalInfo.semester || '',
+                                evaluator: personalInfo.evaluator || '',
+                                evaluatorRole: personalInfo.evaluatorRole || 'مدير المدرسة',
+                                date: personalInfo.date || '',
+                                reportTitle: personalInfo.reportTitle || 'شواهد الأداء الوظيفي',
+                              },
+                              criteria: [{
+                                title: prevCrit.title,
+                                subEvidences: [{
+                                  title: prevSub.title,
+                                  fields: allFields.map(f => ({ label: f.label, value: f.value || '' })),
+                                  evidences: allMediaEvidences.map((ev: any) => ({
+                                    type: ev.type || 'file',
+                                    fileName: ev.fileName || ev.name,
+                                    fileUrl: ev.fileData || ev.link,
+                                    text: ev.text,
+                                    link: ev.link,
+                                  })),
+                                }],
+                              }],
+                              themeColor: selectedTheme.accent || '#1a3a5c',
+                              mode: 'single' as const,
+                              singleTitle: `${prevCrit.title} - ${prevSub.title}`,
+                            };
+                            await exportToDocxStructured(docxData, `شاهد_${previewSubId}.docx`);
+                          } else {
+                            await exportToDocx(`single-preview-${previewSubId}`, `شاهد_${previewSubId}.docx`);
+                          }
                           toast.success('تم تصدير Word بنجاح');
                         } catch { toast.error('فشل تصدير Word'); }
                       }}>
@@ -3280,7 +3368,7 @@ export default function PerformanceEvidence() {
                         <Printer className="w-3 h-3" />طباعة
                       </Button>
                       <select value={selectedTheme.id} onChange={(e) => { const t = allThemes.find(th => th.id === e.target.value); if (t) setSelectedTheme(t); }}
-                        className="text-xs h-7 px-2 rounded border border-gray-300 bg-white">
+                        className="text-xs h-7 px-2 rounded border border-gray-300 bg-white focus:ring-1 focus:ring-[#1a3a5c] focus:border-[#1a3a5c] outline-none">
                         {allThemes.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
                       </select>
                       {/* أزرار التكبير/التصغير */}
@@ -3327,7 +3415,7 @@ export default function PerformanceEvidence() {
                     <div className="pdf-page" style={{
                       background: '#ffffff',
                       margin: '0 auto',
-                      border: `2px solid #0d7377`,
+                      border: `2px solid ${theme.accent || '#1a3a5c'}`,
                       position: 'relative' as const,
                       boxSizing: 'border-box' as const,
                       display: 'flex',
@@ -3342,8 +3430,8 @@ export default function PerformanceEvidence() {
                       {/* ========== الترويسة الرسمية - 4 أنماط ========== */}
                       {(() => {
                         const hv = theme.headerVariant || 'right-text-center-logo-left-info';
-                        const hBg = isDarkHeader ? (theme.headerBg || 'linear-gradient(135deg, #0d7377 0%, #1a9a7a 50%, #2ea87a 100%)') : '#ffffff';
-                        const hTextColor = isDarkHeader ? '#ffffff' : (theme.headerText || theme.borderColor || '#0d7377');
+                        const hBg = isDarkHeader ? (theme.headerBg || 'linear-gradient(135deg, #1a3a5c 0%, #1a5f3f 50%, #2ea87a 100%)') : '#ffffff';
+                        const hTextColor = isDarkHeader ? '#ffffff' : (theme.headerText || theme.borderColor || '#1a3a5c');
                         const allDeptLines = (personalInfo.department || '').split('\n').filter((l: string) => l.trim());
 
                         // نمط 1: كتابة يمين + شعار وسط + معلومات/شعار يسار
@@ -3352,7 +3440,7 @@ export default function PerformanceEvidence() {
                             <>
                               {/* شريط علوي رفيع بتدرج - مطابق للهوية البصرية */}
                               {!isDarkHeader && (
-                                <div style={{ height: '5px', background: 'linear-gradient(to left, #1a4d5e, #0d7377, #2ea87a)' }} />
+                                <div style={{ height: '5px', background: 'linear-gradient(to left, #1a3a5c, #1a5f3f, #2ea87a)' }} />
                               )}
                               <div style={{ background: hBg, padding: isDarkHeader ? '16px 24px 12px' : '18px 24px 14px' }}>
                                 <table style={{ width: '100%', borderCollapse: 'collapse' as const }}>
@@ -3395,17 +3483,17 @@ export default function PerformanceEvidence() {
                           return (
                             <>
                               {/* شريط علوي رفيع بتدرج */}
-                              <div style={{ height: '5px', background: 'linear-gradient(to left, #1a4d5e, #0d7377, #2ea87a)' }} />
+                              <div style={{ height: '5px', background: 'linear-gradient(to left, #1a3a5c, #1a5f3f, #2ea87a)' }} />
                               <div style={{ background: '#ffffff', padding: '20px 28px 16px' }}>
                                 <table style={{ width: '100%', borderCollapse: 'collapse' as const }}>
                                   <tbody>
                                     <tr>
                                       <td style={{ width: '50%', verticalAlign: 'middle', textAlign: 'right', padding: '0' }}>
                                         {allDeptLines.map((line: string, i: number) => (
-                                          <div key={i} style={{ fontSize: '14px', color: theme.headerText || '#0d7377', fontWeight: 700, lineHeight: '2.2', letterSpacing: '0.3px' }}>{line}</div>
+                                          <div key={i} style={{ fontSize: '14px', color: theme.headerText || '#1a3a5c', fontWeight: 700, lineHeight: '2.2', letterSpacing: '0.3px' }}>{line}</div>
                                         ))}
                                         {personalInfo.school && (
-                                          <div style={{ fontSize: '14px', color: theme.headerText || '#0d7377', fontWeight: 700, lineHeight: '2.2' }}>{personalInfo.school}</div>
+                                          <div style={{ fontSize: '14px', color: theme.headerText || '#1a3a5c', fontWeight: 700, lineHeight: '2.2' }}>{personalInfo.school}</div>
                                         )}
                                       </td>
                                       {/* خط فاصل عمودي أخضر */}
@@ -3420,8 +3508,8 @@ export default function PerformanceEvidence() {
                                           )}
                                         </div>
                                         <div style={{ textAlign: 'left', marginTop: '4px' }}>
-                                          {personalInfo.semester && <div style={{ fontSize: '11px', color: theme.headerText || '#0d7377', fontWeight: 600, lineHeight: '1.7' }}>الفصل الدراسي: {personalInfo.semester}</div>}
-                                          {personalInfo.year && <div style={{ fontSize: '11px', color: theme.headerText || '#0d7377', fontWeight: 600, lineHeight: '1.7' }}>العام الدراسي: {personalInfo.year}</div>}
+                                          {personalInfo.semester && <div style={{ fontSize: '11px', color: theme.headerText || '#1a3a5c', fontWeight: 600, lineHeight: '1.7' }}>الفصل الدراسي: {personalInfo.semester}</div>}
+                                          {personalInfo.year && <div style={{ fontSize: '11px', color: theme.headerText || '#1a3a5c', fontWeight: 600, lineHeight: '1.7' }}>العام الدراسي: {personalInfo.year}</div>}
                                         </div>
                                       </td>
                                     </tr>
@@ -3437,18 +3525,18 @@ export default function PerformanceEvidence() {
                           return (
                             <>
                               {/* شريط علوي رفيع بتدرج */}
-                              <div style={{ height: '5px', background: 'linear-gradient(to left, #1a4d5e, #0d7377, #2ea87a)' }} />
+                              <div style={{ height: '5px', background: 'linear-gradient(to left, #1a3a5c, #1a5f3f, #2ea87a)' }} />
                               <div style={{ background: '#ffffff', padding: '14px 24px 10px' }}>
                                 <table style={{ width: '100%', borderCollapse: 'collapse' as const }}>
                                   <tbody>
                                     <tr>
                                       <td style={{ width: '48%', verticalAlign: 'middle', textAlign: 'right', padding: '0' }}>
-                                        <div style={{ fontSize: '13px', color: theme.headerText || '#0d7377', fontWeight: 700, lineHeight: '2.0' }}>وزارة التعليم</div>
+                                        <div style={{ fontSize: '13px', color: theme.headerText || '#1a3a5c', fontWeight: 700, lineHeight: '2.0' }}>وزارة التعليم</div>
                                         {filteredDeptLines.map((line: string, i: number) => (
-                                          <div key={i} style={{ fontSize: '12px', color: theme.headerText || '#0d7377', fontWeight: 600, lineHeight: '1.9' }}>{line}</div>
+                                          <div key={i} style={{ fontSize: '12px', color: theme.headerText || '#1a3a5c', fontWeight: 600, lineHeight: '1.9' }}>{line}</div>
                                         ))}
                                         {personalInfo.school && (
-                                          <div style={{ fontSize: '12px', color: theme.headerText || '#0d7377', fontWeight: 600, lineHeight: '1.9' }}>مدرسة: {personalInfo.school}</div>
+                                          <div style={{ fontSize: '12px', color: theme.headerText || '#1a3a5c', fontWeight: 600, lineHeight: '1.9' }}>مدرسة: {personalInfo.school}</div>
                                         )}
                                       </td>
                                       {/* خط فاصل عمودي أخضر */}
@@ -3463,8 +3551,8 @@ export default function PerformanceEvidence() {
                                           )}
                                         </div>
                                         <div style={{ textAlign: 'left', marginTop: '4px' }}>
-                                          {personalInfo.semester && <div style={{ fontSize: '11px', color: theme.headerText || '#0d7377', fontWeight: 600, lineHeight: '1.7' }}>الفصل الدراسي: {personalInfo.semester}</div>}
-                                          {personalInfo.year && <div style={{ fontSize: '11px', color: theme.headerText || '#0d7377', fontWeight: 600, lineHeight: '1.7' }}>العام الدراسي: {personalInfo.year}</div>}
+                                          {personalInfo.semester && <div style={{ fontSize: '11px', color: theme.headerText || '#1a3a5c', fontWeight: 600, lineHeight: '1.7' }}>الفصل الدراسي: {personalInfo.semester}</div>}
+                                          {personalInfo.year && <div style={{ fontSize: '11px', color: theme.headerText || '#1a3a5c', fontWeight: 600, lineHeight: '1.7' }}>العام الدراسي: {personalInfo.year}</div>}
                                         </div>
                                       </td>
                                     </tr>
@@ -3485,17 +3573,17 @@ export default function PerformanceEvidence() {
                         return (
                           <>
                             {/* شريط علوي رفيع بتدرج */}
-                            <div style={{ height: '5px', background: 'linear-gradient(to left, #1a4d5e, #0d7377, #2ea87a)' }} />
+                            <div style={{ height: '5px', background: 'linear-gradient(to left, #1a3a5c, #1a5f3f, #2ea87a)' }} />
                             <div style={{ background: '#ffffff', padding: '14px 24px 10px' }}>
                               <table style={{ width: '100%', borderCollapse: 'collapse' as const }}>
                                 <tbody>
                                   <tr>
                                     <td style={{ width: '34%', verticalAlign: 'middle', textAlign: 'right', padding: '0' }}>
                                       {allDeptLines.map((line: string, i: number) => (
-                                        <div key={i} style={{ fontSize: '13px', color: theme.headerText || '#0d7377', fontWeight: 700, lineHeight: '2.0' }}>{line}</div>
+                                        <div key={i} style={{ fontSize: '13px', color: theme.headerText || '#1a3a5c', fontWeight: 700, lineHeight: '2.0' }}>{line}</div>
                                       ))}
                                       {personalInfo.school && (
-                                        <div style={{ fontSize: '13px', color: theme.headerText || '#0d7377', fontWeight: 700, lineHeight: '2.0' }}>{personalInfo.school}</div>
+                                        <div style={{ fontSize: '13px', color: theme.headerText || '#1a3a5c', fontWeight: 700, lineHeight: '2.0' }}>{personalInfo.school}</div>
                                       )}
                                     </td>
                                     {/* خط فاصل عمودي أخضر */}
@@ -3597,7 +3685,7 @@ export default function PerformanceEvidence() {
                             الشواهد والأدلة ({allMediaEvidences.length})
                           </div>
                           <div style={{
-                            border: '2px solid #a8dcd8',
+                            border: `2px solid ${theme.borderColor || '#b8c9d9'}`,
                             borderTop: `2.5px solid ${theme.accent}`,
                             padding: '16px',
                             display: 'flex',
@@ -3693,19 +3781,21 @@ export default function PerformanceEvidence() {
                       )}
 
                       {/* ========== التوقيعات - مطابق للهوية البصرية ========== */}
-                      <div style={{ padding: '20px 32px 28px', marginTop: '16px' }}>
+                      <div style={{ padding: '28px 32px 20px', marginTop: '20px' }}>
                         <table style={{ width: '100%', borderCollapse: 'collapse' as const }}>
                           <tbody>
                             <tr>
-                              <td style={{ width: '50%', textAlign: 'right', padding: '0 20px', verticalAlign: 'bottom' }}>
-                                <div style={{ fontSize: '15px', fontWeight: 800, color: '#1a1a1a', marginBottom: '6px' }}>التنفيذ: أ/ {personalInfo.name || '..............................'}</div>
-                                <div style={{ fontSize: '13px', color: '#666', marginBottom: '4px' }}>التوقيع:</div>
-                                <div style={{ width: '200px', borderBottom: `2.5px dotted ${theme.accent}`, marginTop: '18px' }} />
+                              <td style={{ width: '50%', textAlign: 'center', padding: '0 20px', verticalAlign: 'top' }}>
+                                <div style={{ fontSize: '14px', fontWeight: 800, color: theme.accent || '#1a3a5c', marginBottom: '10px', textAlign: 'center' }}>التنفيذ:</div>
+                                <div style={{ fontSize: '14px', fontWeight: 700, color: '#1a1a1a', marginBottom: '4px', textAlign: 'center' }}>أ/ {personalInfo.name || '..............................'}</div>
+                                <div style={{ fontSize: '13px', color: '#555', marginBottom: '4px', textAlign: 'center' }}>التوقيع:</div>
+                                <div style={{ width: '180px', borderBottom: `2px dotted ${theme.accent || '#1a3a5c'}`, margin: '4px auto 0' }} />
                               </td>
-                              <td style={{ width: '50%', textAlign: 'left', padding: '0 20px', verticalAlign: 'bottom' }}>
-                                <div style={{ fontSize: '15px', fontWeight: 800, color: '#1a1a1a', marginBottom: '6px' }}>{personalInfo.evaluatorRole || 'مديرة المدرسة'}: أ/ {personalInfo.evaluator || '..............................'}</div>
-                                <div style={{ fontSize: '13px', color: '#666', marginBottom: '4px' }}>التوقيع:</div>
-                                <div style={{ width: '200px', borderBottom: `2.5px dotted ${theme.accent}`, marginTop: '18px', marginLeft: 'auto' }} />
+                              <td style={{ width: '50%', textAlign: 'center', padding: '0 20px', verticalAlign: 'top' }}>
+                                <div style={{ fontSize: '14px', fontWeight: 800, color: theme.accent || '#1a3a5c', marginBottom: '10px', textAlign: 'center' }}>{personalInfo.evaluatorRole || 'مدير المدرسة'}:</div>
+                                <div style={{ fontSize: '14px', fontWeight: 700, color: '#1a1a1a', marginBottom: '4px', textAlign: 'center' }}>أ/ {personalInfo.evaluator || '..............................'}</div>
+                                <div style={{ fontSize: '13px', color: '#555', marginBottom: '4px', textAlign: 'center' }}>التوقيع:</div>
+                                <div style={{ width: '180px', borderBottom: `2px dotted ${theme.accent || '#1a3a5c'}`, margin: '4px auto 0' }} />
                               </td>
                             </tr>
                           </tbody>
@@ -3721,14 +3811,14 @@ export default function PerformanceEvidence() {
                           <defs>
                             <linearGradient id="footerGradSingle" x1="0" y1="0" x2="1" y2="0">
                               <stop offset="0%" stopColor="#2ea87a" />
-                              <stop offset="50%" stopColor="#0d7377" />
-                              <stop offset="100%" stopColor="#1a4d5e" />
+                              <stop offset="50%" stopColor="#1a5f3f" />
+                              <stop offset="100%" stopColor="#1a3a5c" />
                             </linearGradient>
                           </defs>
                           <path d="M0,50 L0,35 C150,8 400,2 800,18 L800,50 Z" fill="url(#footerGradSingle)" />
                         </svg>
                         <div style={{
-                          background: 'linear-gradient(to left, #1a4d5e, #0d7377, #2ea87a)',
+                          background: 'linear-gradient(to left, #1a3a5c, #1a5f3f, #2ea87a)',
                           padding: '6px 28px 10px',
                           fontSize: '11px',
                           color: '#fff',
@@ -3975,7 +4065,7 @@ export default function PerformanceEvidence() {
                           const td = ut.themeData || {};
                           return (
                             <div key={ut.id} className="flex items-center gap-1 bg-muted/50 rounded-lg px-2 py-1">
-                              <span className="inline-block w-2.5 h-2.5 rounded-full" style={{ backgroundColor: td.accent || '#0d7377' }} />
+                              <span className="inline-block w-2.5 h-2.5 rounded-full" style={{ backgroundColor: td.accent || '#1a3a5c' }} />
                               <Button variant="ghost" size="sm" className="text-xs h-6 px-1.5"
                                 onClick={() => {
                                   setSelectedTheme({ ...DEFAULT_THEME, ...td });
@@ -4362,7 +4452,7 @@ export default function PerformanceEvidence() {
               <div style={{ flex: 1, padding: '2rem 2.5rem' }}>
               {/* ترويسة الصفحة - مطابقة لـ edu-forms.com */}
               <div style={{ marginBottom: '1rem' }}>
-                <div style={{ background: 'linear-gradient(135deg, #1a4d4e 0%, #0d5f61 50%, #0d7377 100%)', padding: '10px 20px 8px', borderRadius: '0 0 8px 8px' }}>
+                <div style={{ background: 'linear-gradient(135deg, #1a3a5c 0%, #1a5f3f 50%, #2ea87a 100%)', padding: '10px 20px 8px', borderRadius: '0 0 8px 8px' }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse' as const }}>
                     <tbody>
                       <tr>
@@ -4385,7 +4475,7 @@ export default function PerformanceEvidence() {
                   </table>
                 </div>
                 {personalInfo.school && (
-                  <div style={{ background: 'linear-gradient(to left, #0d7377, #0f8a6e, #2ea87a)', color: 'white', padding: '5px 16px', textAlign: 'center', fontWeight: 700, fontSize: '10px', letterSpacing: '0.3px', borderRadius: '0 0 6px 6px', margin: '0 16px' }}>
+                  <div style={{ background: 'linear-gradient(to left, #1a3a5c, #1a5f3f, #2ea87a)', color: 'white', padding: '5px 16px', textAlign: 'center', fontWeight: 700, fontSize: '10px', letterSpacing: '0.3px', borderRadius: '0 0 6px 6px', margin: '0 16px' }}>
                     {personalInfo.school}
                   </div>
                 )}
@@ -4457,9 +4547,9 @@ export default function PerformanceEvidence() {
                 <div style={{ marginTop: 'auto' }}>
                   <svg viewBox="0 0 800 20" preserveAspectRatio="none" style={{ width: '100%', height: '20px', display: 'block' }}>
                     <path d="M0,20 C200,0 600,0 800,20 L800,20 L0,20 Z" fill="url(#footerGradP2)" />
-                    <defs><linearGradient id="footerGradP2" x1="1" y1="0" x2="0" y2="0"><stop offset="0%" stopColor="#0a5c5f" /><stop offset="50%" stopColor="#0d7377" /><stop offset="100%" stopColor="#2ea87a" /></linearGradient></defs>
+                    <defs><linearGradient id="footerGradP2" x1="1" y1="0" x2="0" y2="0"><stop offset="0%" stopColor="#1a3a5c" /><stop offset="50%" stopColor="#1a5f3f" /><stop offset="100%" stopColor="#2ea87a" /></linearGradient></defs>
                   </svg>
-                  <div style={{ background: 'linear-gradient(to right, #2ea87a, #0d7377, #0a5c5f)', padding: '8px 28px', fontSize: '11px', color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div style={{ background: 'linear-gradient(to right, #2ea87a, #1a5f3f, #1a3a5c)', padding: '8px 28px', fontSize: '11px', color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <span style={{ fontWeight: 700 }}>SERS - نظام السجلات التعليمية الذكي</span>
                     <span style={{ opacity: 0.9 }}>صفحة 2</span>
                   </div>
@@ -4478,7 +4568,7 @@ export default function PerformanceEvidence() {
               <div style={{ flex: 1, padding: '2rem 2.5rem' }}>
               {/* ترويسة - مطابقة لـ edu-forms.com */}
               <div style={{ marginBottom: '1rem' }}>
-                <div style={{ background: 'linear-gradient(135deg, #1a4d4e 0%, #0d5f61 50%, #0d7377 100%)', padding: '10px 20px 8px', borderRadius: '0 0 8px 8px' }}>
+                <div style={{ background: 'linear-gradient(135deg, #1a3a5c 0%, #1a5f3f 50%, #2ea87a 100%)', padding: '10px 20px 8px', borderRadius: '0 0 8px 8px' }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse' as const }}>
                     <tbody>
                       <tr>
@@ -4501,7 +4591,7 @@ export default function PerformanceEvidence() {
                   </table>
                 </div>
                 {personalInfo.school && (
-                  <div style={{ background: 'linear-gradient(to left, #0d7377, #0f8a6e, #2ea87a)', color: 'white', padding: '5px 16px', textAlign: 'center', fontWeight: 700, fontSize: '10px', letterSpacing: '0.3px', borderRadius: '0 0 6px 6px', margin: '0 16px' }}>
+                  <div style={{ background: 'linear-gradient(to left, #1a3a5c, #1a5f3f, #2ea87a)', color: 'white', padding: '5px 16px', textAlign: 'center', fontWeight: 700, fontSize: '10px', letterSpacing: '0.3px', borderRadius: '0 0 6px 6px', margin: '0 16px' }}>
                     {personalInfo.school}
                   </div>
                 )}
@@ -4565,9 +4655,9 @@ export default function PerformanceEvidence() {
                 <div style={{ marginTop: 'auto' }}>
                   <svg viewBox="0 0 800 20" preserveAspectRatio="none" style={{ width: '100%', height: '20px', display: 'block' }}>
                     <path d="M0,20 C200,0 600,0 800,20 L800,20 L0,20 Z" fill="url(#footerGradToc)" />
-                    <defs><linearGradient id="footerGradToc" x1="1" y1="0" x2="0" y2="0"><stop offset="0%" stopColor="#0a5c5f" /><stop offset="50%" stopColor="#0d7377" /><stop offset="100%" stopColor="#2ea87a" /></linearGradient></defs>
+                    <defs><linearGradient id="footerGradToc" x1="1" y1="0" x2="0" y2="0"><stop offset="0%" stopColor="#1a3a5c" /><stop offset="50%" stopColor="#1a5f3f" /><stop offset="100%" stopColor="#2ea87a" /></linearGradient></defs>
                   </svg>
-                  <div style={{ background: 'linear-gradient(to right, #2ea87a, #0d7377, #0a5c5f)', padding: '8px 28px', fontSize: '11px', color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div style={{ background: 'linear-gradient(to right, #2ea87a, #1a5f3f, #1a3a5c)', padding: '8px 28px', fontSize: '11px', color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <span style={{ fontWeight: 700 }}>SERS - نظام السجلات التعليمية الذكي</span>
                     <span style={{ opacity: 0.9 }}>صفحة 3</span>
                   </div>
@@ -4744,7 +4834,7 @@ export default function PerformanceEvidence() {
                     <div style={{ flex: 1, padding: '2rem 2.5rem' }}>
                     {/* ترويسة - مطابقة لـ edu-forms.com */}
                     <div style={{ marginBottom: '1rem' }}>
-                      <div style={{ background: 'linear-gradient(135deg, #1a4d4e 0%, #0d5f61 50%, #0d7377 100%)', padding: '10px 20px 8px', borderRadius: '0 0 8px 8px' }}>
+                      <div style={{ background: 'linear-gradient(135deg, #1a3a5c 0%, #1a5f3f 50%, #2ea87a 100%)', padding: '10px 20px 8px', borderRadius: '0 0 8px 8px' }}>
                         <table style={{ width: '100%', borderCollapse: 'collapse' as const }}>
                           <tbody>
                             <tr>
@@ -4767,7 +4857,7 @@ export default function PerformanceEvidence() {
                         </table>
                       </div>
                       {personalInfo.school && (
-                        <div style={{ background: 'linear-gradient(to left, #0d7377, #0f8a6e, #2ea87a)', color: 'white', padding: '5px 16px', textAlign: 'center', fontWeight: 700, fontSize: '10px', letterSpacing: '0.3px', borderRadius: '0 0 6px 6px', margin: '0 16px' }}>
+                        <div style={{ background: 'linear-gradient(to left, #1a3a5c, #1a5f3f, #2ea87a)', color: 'white', padding: '5px 16px', textAlign: 'center', fontWeight: 700, fontSize: '10px', letterSpacing: '0.3px', borderRadius: '0 0 6px 6px', margin: '0 16px' }}>
                           {personalInfo.school}
                         </div>
                       )}
@@ -4884,9 +4974,9 @@ export default function PerformanceEvidence() {
                       <div style={{ marginTop: 'auto' }}>
                         <svg viewBox="0 0 800 20" preserveAspectRatio="none" style={{ width: '100%', height: '20px', display: 'block' }}>
                           <path d="M0,20 C200,0 600,0 800,20 L800,20 L0,20 Z" fill={`url(#footerGradEv${contentPage})`} />
-                          <defs><linearGradient id={`footerGradEv${contentPage}`} x1="1" y1="0" x2="0" y2="0"><stop offset="0%" stopColor="#0a5c5f" /><stop offset="50%" stopColor="#0d7377" /><stop offset="100%" stopColor="#2ea87a" /></linearGradient></defs>
+                          <defs><linearGradient id={`footerGradEv${contentPage}`} x1="1" y1="0" x2="0" y2="0"><stop offset="0%" stopColor="#1a3a5c" /><stop offset="50%" stopColor="#1a5f3f" /><stop offset="100%" stopColor="#2ea87a" /></linearGradient></defs>
                         </svg>
-                        <div style={{ background: 'linear-gradient(to right, #2ea87a, #0d7377, #0a5c5f)', padding: '8px 28px', fontSize: '11px', color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div style={{ background: 'linear-gradient(to right, #2ea87a, #1a5f3f, #1a3a5c)', padding: '8px 28px', fontSize: '11px', color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                           <span style={{ fontWeight: 700 }}>SERS - نظام السجلات التعليمية الذكي</span>
                           <span style={{ opacity: 0.9 }}>صفحة {contentPage}</span>
                         </div>
@@ -4914,7 +5004,7 @@ export default function PerformanceEvidence() {
                   {/* ترويسة - مطابقة لـ edu-forms.com */}
                   <div style={{ position: 'absolute', top: '2rem', left: '2.5rem', right: '2.5rem' }}>
                     <div style={{ marginBottom: '0.5rem' }}>
-                      <div style={{ background: 'linear-gradient(135deg, #1a4d4e 0%, #0d5f61 50%, #0d7377 100%)', padding: '10px 20px 8px', borderRadius: '0 0 8px 8px' }}>
+                      <div style={{ background: 'linear-gradient(135deg, #1a3a5c 0%, #1a5f3f 50%, #2ea87a 100%)', padding: '10px 20px 8px', borderRadius: '0 0 8px 8px' }}>
                         <table style={{ width: '100%', borderCollapse: 'collapse' as const }}>
                           <tbody>
                             <tr>
@@ -4937,7 +5027,7 @@ export default function PerformanceEvidence() {
                         </table>
                       </div>
                       {personalInfo.school && (
-                        <div style={{ background: 'linear-gradient(to left, #0d7377, #0f8a6e, #2ea87a)', color: 'white', padding: '5px 16px', textAlign: 'center', fontWeight: 700, fontSize: '10px', letterSpacing: '0.3px', borderRadius: '0 0 6px 6px', margin: '0 16px' }}>
+                        <div style={{ background: 'linear-gradient(to left, #1a3a5c, #1a5f3f, #2ea87a)', color: 'white', padding: '5px 16px', textAlign: 'center', fontWeight: 700, fontSize: '10px', letterSpacing: '0.3px', borderRadius: '0 0 6px 6px', margin: '0 16px' }}>
                           {personalInfo.school}
                         </div>
                       )}
@@ -4976,9 +5066,9 @@ export default function PerformanceEvidence() {
                     <div style={{ marginTop: 'auto' }}>
                       <svg viewBox="0 0 800 20" preserveAspectRatio="none" style={{ width: '100%', height: '20px', display: 'block' }}>
                         <path d="M0,20 C200,0 600,0 800,20 L800,20 L0,20 Z" fill="url(#footerGradSig)" />
-                        <defs><linearGradient id="footerGradSig" x1="1" y1="0" x2="0" y2="0"><stop offset="0%" stopColor="#0a5c5f" /><stop offset="50%" stopColor="#0d7377" /><stop offset="100%" stopColor="#2ea87a" /></linearGradient></defs>
+                        <defs><linearGradient id="footerGradSig" x1="1" y1="0" x2="0" y2="0"><stop offset="0%" stopColor="#1a3a5c" /><stop offset="50%" stopColor="#1a5f3f" /><stop offset="100%" stopColor="#2ea87a" /></linearGradient></defs>
                       </svg>
-                      <div style={{ background: 'linear-gradient(to right, #2ea87a, #0d7377, #0a5c5f)', padding: '8px 28px', fontSize: '11px', color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div style={{ background: 'linear-gradient(to right, #2ea87a, #1a5f3f, #1a3a5c)', padding: '8px 28px', fontSize: '11px', color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <span style={{ fontWeight: 700 }}>SERS - نظام السجلات التعليمية الذكي</span>
                         <span style={{ opacity: 0.9 }}>{personalInfo.name} • {selectedJob?.title}</span>
                       </div>

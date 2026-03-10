@@ -47,7 +47,7 @@ export function OfficialHeader({
   variant = "full",
   pageTitle,
   accentColor = "#0097A7",
-  headerBg = "linear-gradient(135deg, #1a4d4e 0%, #0d5f61 50%, #0d7377 100%)",
+  headerBg = "linear-gradient(135deg, #1a3a5c 0%, #1a5f3f 50%, #2ea87a 100%)",
   headerText = "#ffffff",
   borderColor = "#004D5A",
 }: OfficialHeaderProps) {
@@ -56,7 +56,7 @@ export function OfficialHeader({
   const separatorColor = dark ? "rgba(255,255,255,0.4)" : "rgba(0,77,90,0.3)";
   const logoFilter = dark ? "brightness(0) invert(1)" : "none";
   const schoolBg = dark
-    ? "linear-gradient(to left, #0d7377, #0f8a6e, #2ea87a)"
+    ? "linear-gradient(to left, #1a3a5c, #1a5f3f, #2ea87a)"
     : `linear-gradient(to left, ${accentColor}dd, ${accentColor})`;
 
   const isCompact = variant === "compact";

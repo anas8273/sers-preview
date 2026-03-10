@@ -75,7 +75,7 @@ interface DocxExportData {
 // ===== Helper functions =====
 function hexToRgb(hex: string): string {
   const h = hex.replace('#', '');
-  return h.length === 6 ? h : '0d7377';
+  return h.length === 6 ? h : '1a3a5c';
 }
 
 function lightenHex(hex: string): string {
@@ -101,7 +101,7 @@ function createBorder(color: string, size = 6) {
 
 // ===== تصدير شاهد مفرد =====
 function buildSingleEvidenceDoc(data: DocxExportData): Document {
-  const color = hexToRgb(data.themeColor || '#0d7377');
+  const color = hexToRgb(data.themeColor || '#1a3a5c');
   const pi = data.personalInfo;
   const criterion = data.criteria[0];
   const sub = criterion?.subEvidences[0];
@@ -352,7 +352,7 @@ function buildSingleEvidenceDoc(data: DocxExportData): Document {
 
 // ===== تصدير تقرير كامل =====
 function buildFullReportDoc(data: DocxExportData): Document {
-  const color = hexToRgb(data.themeColor || '#0d7377');
+  const color = hexToRgb(data.themeColor || '#1a3a5c');
   const pi = data.personalInfo;
 
   const children: (Paragraph | Table)[] = [];

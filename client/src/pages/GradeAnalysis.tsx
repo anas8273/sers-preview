@@ -89,7 +89,7 @@ export default function GradeAnalysis() {
   const getGradeColor = (score: number) => {
     const pct = (score / (subjectInfo.maxScore || 100)) * 100;
     if (pct >= 90) return "#059669";
-    if (pct >= 80) return "#0d7377";
+    if (pct >= 80) return "#1a5f3f";
     if (pct >= 70) return "#d97706";
     if (pct >= 60) return "#ea580c";
     return "#dc2626";
@@ -112,13 +112,13 @@ export default function GradeAnalysis() {
 
   // ألوان الهوية البصرية
   const C = {
-    tealDark: "#1a4d5e",
-    teal: "#0d7377",
+    tealDark: "#1a3a5c",
+    teal: "#1a5f3f",
     green: "#2ea87a",
     greenLight: "#7ECDC0",
     separator: "#5bb784",
-    bg: "#f0faf9",
-    border: "#0d737720",
+    bg: "#f0f4f8",
+    border: "#1a3a5c20",
   };
 
   return (
@@ -382,7 +382,7 @@ export default function GradeAnalysis() {
                 logoUrl="https://d2xsxph8kpxj0f.cloudfront.net/310519663047121386/h34s4aPNVyHXdtjgZ7eNNf/moe-logo_b9fec681.png"
                 variant="full"
                 accentColor={C.teal}
-                headerBg={`linear-gradient(135deg, ${C.tealDark} 0%, #0d5f61 50%, ${C.teal} 100%)`}
+                headerBg={`linear-gradient(135deg, ${C.tealDark} 0%, ${C.teal} 50%, ${C.green} 100%)`}
                 headerText="#ffffff"
                 borderColor={C.tealDark}
               />

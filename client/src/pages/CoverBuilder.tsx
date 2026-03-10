@@ -26,12 +26,12 @@ const COVER_THEMES = [
   {
     id: "sers-official",
     name: "الهوية الرسمية",
-    primary: "#0d7377",
-    secondary: "#f0faf9",
+    primary: "#1a3a5c",
+    secondary: "#f0f4f8",
     accent: "#2ea87a",
     bg: "#ffffff",
-    gradientStart: "#1a4d5e",
-    gradientMid: "#0d7377",
+    gradientStart: "#1a3a5c",
+    gradientMid: "#1a5f3f",
     gradientEnd: "#2ea87a",
   },
   {
