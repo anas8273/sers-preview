@@ -356,6 +356,62 @@ export function applyTemplateToElement(element: HTMLElement, template: PdfTempla
 }
 
 /**
+ * تصدير PDF متعدد التقارير - يجمع عدة عناصر HTML في ملف PDF واحد
+ * يتيح للمستخدم تصدير عدة تقارير (شواهد مختلفة) دفعة واحدة
+ */
+export async function exportMultipleReportsToPDF(
+  elementIds: string[],
+  filename: string = "تقارير_متعددة.pdf",
+  onProgress?: (current: number, total: number) => void
+): Promise<boolean> {
+  if (elementIds.length === 0) throw new Error("No elements to export");
+
+  try {
+    const total = elementIds.length + 2;
+    let combinedHtml = '';
+
+    for (let i = 0; i < elementIds.length; i++) {
+      onProgress?.(i + 1, total);
+      const element = document.getElementById(elementIds[i]);
+      if (!element) continue;
+      const htmlContent = await extractHtmlForExport(element);
+      combinedHtml += htmlContent;
+    }
+
+    if (!combinedHtml) throw new Error("No content to export");
+
+    onProgress?.(elementIds.length + 1, total);
+
+    const response = await fetch('/api/export-pdf', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ html: combinedHtml, filename }),
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ error: 'Unknown error' }));
+      throw new Error(error.error || 'PDF export failed');
+    }
+
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    onProgress?.(total, total);
+    return true;
+  } catch (err) {
+    console.error("Multi-PDF export error:", err);
+    throw err;
+  }
+}
+
+/**
  * طباعة عنصر HTML في نافذة جديدة
  * محسّن لجودة طباعة عالية
  */

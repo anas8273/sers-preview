@@ -18,7 +18,7 @@ const A4_WIDTH_PX = 793.7; // 210mm in px
 import { saveFileToIDB, getFileFromIDB, deleteFileFromIDB, cleanOldFiles } from "@/hooks/useIndexedDB";
 import { getLoginUrl } from "@/const";
 import { generateQRDataURL } from "@/lib/qr-utils";
-import { exportToPDF, printElement } from "@/lib/pdf-export";
+import { exportToPDF, exportMultipleReportsToPDF, printElement } from "@/lib/pdf-export";
 import { exportToDocx, exportToDocxStructured } from "@/lib/docx-export";
 import type { DocxExportData } from "@/lib/docx-export";
 import { getMoeLogoDataUrl, getMoeLogoUrl, getMoeDotsUrl, getMoeLogoFilter } from "@/components/MoeLogo";
@@ -448,8 +448,10 @@ export default function PerformanceEvidence() {
   const [shareUrl, setShareUrl] = useState<string | null>(null);
   const [showColorPicker, setShowColorPicker] = useState(false);
 
-  // Preview scaling - responsive
+  // Preview scaling - responsive (للمعاينة المفردة)
   const { containerRef: previewContainerRef, pageRef: previewPageRef, previewScale, wrapperWidth, wrapperHeight, recalculate: recalcPreview, zoomLevel, zoomIn, zoomOut, resetZoom } = usePreviewScale();
+  // Preview scaling - responsive (للمعاينة الكاملة)
+  const { containerRef: fullPreviewContainerRef, previewScale: fullPreviewScale, wrapperWidth: fullWrapperWidth, recalculate: recalcFullPreview, zoomLevel: fullZoomLevel, zoomIn: fullZoomIn, zoomOut: fullZoomOut, resetZoom: fullResetZoom } = usePreviewScale();
 
   // Lightbox state
   const [lightboxImage, setLightboxImage] = useState<string | null>(null);
@@ -1404,6 +1406,51 @@ export default function PerformanceEvidence() {
     } finally {
       setIsExporting(false);
       setPdfProgress({ current: 0, total: 0 });
+    }
+  };
+
+  // === تصدير PDF متعدد التقارير ===
+  const [showMultiExport, setShowMultiExport] = useState(false);
+  const [multiExportSelected, setMultiExportSelected] = useState<Set<string>>(new Set());
+  const [isMultiExporting, setIsMultiExporting] = useState(false);
+  const [multiExportProgress, setMultiExportProgress] = useState({ current: 0, total: 0 });
+
+  const handleMultiExportPDF = async () => {
+    if (multiExportSelected.size === 0) {
+      toast.error('يرجى اختيار تقرير واحد على الأقل');
+      return;
+    }
+    setIsMultiExporting(true);
+    setMultiExportProgress({ current: 0, total: 0 });
+    try {
+      // بناء قائمة element IDs من البنود المختارة
+      const elementIds: string[] = [];
+      for (const criterionId of Array.from(multiExportSelected)) {
+        const criterion = allCriteria.find(c => c.id === criterionId);
+        if (!criterion) continue;
+        for (const sub of criterion.subEvidences) {
+          const elId = `single-preview-${sub.id}`;
+          if (document.getElementById(elId)) {
+            elementIds.push(elId);
+          }
+        }
+      }
+      if (elementIds.length === 0) {
+        toast.error('لا توجد تقارير متاحة للتصدير');
+        return;
+      }
+      await exportMultipleReportsToPDF(
+        elementIds,
+        `تقارير_متعددة_${personalInfo.name || 'مستند'}.pdf`,
+        (current, total) => setMultiExportProgress({ current, total })
+      );
+      toast.success(`تم تصدير ${elementIds.length} تقرير بنجاح`);
+      setShowMultiExport(false);
+    } catch (err) {
+      toast.error('فشل التصدير المتعدد - حاول مرة أخرى');
+    } finally {
+      setIsMultiExporting(false);
+      setMultiExportProgress({ current: 0, total: 0 });
     }
   };
 
@@ -4351,6 +4398,49 @@ export default function PerformanceEvidence() {
                 <span className="hidden sm:inline">{isExportingDocx ? 'جاري التصدير...' : 'تحميل Word'}</span>
                 <span className="sm:hidden">Word</span>
               </Button>
+              {/* زر تصدير متعدد */}
+              <div className="relative">
+                <Button size="sm" variant="outline" onClick={() => setShowMultiExport(!showMultiExport)} disabled={isMultiExporting} className="gap-1 sm:gap-1.5 text-xs sm:text-sm h-8 sm:h-9">
+                  {isMultiExporting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Layers className="w-3.5 h-3.5 sm:w-4 sm:h-4" />}
+                  <span className="hidden sm:inline">{isMultiExporting ? `تصدير ${multiExportProgress.current}/${multiExportProgress.total}` : 'تصدير متعدد'}</span>
+                  <span className="sm:hidden">متعدد</span>
+                </Button>
+                {showMultiExport && (
+                  <div className="absolute top-10 left-0 z-50 bg-white rounded-xl shadow-2xl border p-4 w-80 max-h-96 overflow-y-auto" dir="rtl">
+                    <div className="flex items-center justify-between mb-3">
+                      <h4 className="text-sm font-bold text-gray-800">تصدير متعدد التقارير</h4>
+                      <button onClick={() => setShowMultiExport(false)} className="p-1 hover:bg-gray-100 rounded"><X className="w-3.5 h-3.5" /></button>
+                    </div>
+                    <p className="text-[10px] text-gray-400 mb-3">اختر البنود المراد تصديرها في ملف PDF واحد</p>
+                    <div className="flex gap-2 mb-3">
+                      <Button size="sm" variant="outline" className="text-xs h-7" onClick={() => setMultiExportSelected(new Set(allCriteria.map(c => c.id)))}>تحديد الكل</Button>
+                      <Button size="sm" variant="outline" className="text-xs h-7" onClick={() => setMultiExportSelected(new Set())}>إلغاء الكل</Button>
+                    </div>
+                    <div className="space-y-1.5 mb-3">
+                      {allCriteria.map((c, i) => {
+                        const evCount = criteriaData[c.id]?.evidences.length || 0;
+                        return (
+                          <label key={c.id} className="flex items-center gap-2 p-2 rounded-lg hover:bg-gray-50 cursor-pointer">
+                            <input type="checkbox" checked={multiExportSelected.has(c.id)}
+                              onChange={(e) => {
+                                const next = new Set(multiExportSelected);
+                                if (e.target.checked) next.add(c.id); else next.delete(c.id);
+                                setMultiExportSelected(next);
+                              }}
+                              className="w-4 h-4 rounded border-gray-300 text-teal-600 focus:ring-teal-500" />
+                            <span className="text-xs text-gray-700 flex-1 leading-relaxed">{i + 1}. {c.title}</span>
+                            <span className="text-[10px] text-gray-400">{evCount} شاهد</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                    <Button size="sm" className="w-full gap-1.5" onClick={handleMultiExportPDF} disabled={isMultiExporting || multiExportSelected.size === 0}>
+                      {isMultiExporting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+                      تصدير {multiExportSelected.size} بند في PDF واحد
+                    </Button>
+                  </div>
+                )}
+              </div>
               <Button size="sm" variant="outline" onClick={() => printElement('preview-content')} className="gap-1 sm:gap-1.5 text-xs sm:text-sm h-8 sm:h-9">
                 <Printer className="w-3.5 h-3.5 sm:w-4 sm:h-4" /><span className="hidden sm:inline">طباعة</span>
               </Button>
@@ -4384,8 +4474,16 @@ export default function PerformanceEvidence() {
             </div>
           )}
 
-          <div className="preview-wrapper">
-          <div id="preview-content" style={{ fontFamily: "'Cairo', sans-serif" }}>
+          {/* أزرار التكبير/التصغير */}
+          <div className="flex items-center justify-center gap-2 mb-3" data-no-print>
+            <Button size="sm" variant="outline" onClick={fullZoomOut} className="h-7 w-7 p-0 text-xs">-</Button>
+            <span className="text-xs text-muted-foreground min-w-[3rem] text-center">{fullZoomLevel}%</span>
+            <Button size="sm" variant="outline" onClick={fullZoomIn} className="h-7 w-7 p-0 text-xs">+</Button>
+            <Button size="sm" variant="ghost" onClick={fullResetZoom} className="h-7 text-xs px-2">إعادة ضبط</Button>
+          </div>
+          <div ref={fullPreviewContainerRef} className="preview-wrapper" style={{ overflow: 'hidden' }}>
+          <div style={{ width: fullWrapperWidth, margin: '0 auto', transformOrigin: 'top center' }}>
+          <div id="preview-content" style={{ fontFamily: "'Cairo', sans-serif", width: `${A4_WIDTH_PX}px`, transformOrigin: 'top right', transform: `scale(${fullPreviewScale})` }}>
             {/* === صفحة الغلاف - تتغير حسب coverStyle === */}
             {(() => {
               const cs = theme.coverStyle || 'gradient-center';
@@ -5340,8 +5438,9 @@ export default function PerformanceEvidence() {
                 </div>
               );
             })()}
-          </div>
-          </div>{/* إغلاق preview-wrapper */}
+          </div>{/* إغلاق preview-content */}
+          </div>{/* إغلاق wrapper width */}
+          </div>{/* إغلاق fullPreviewContainerRef */}
         </div>
       </div>
     );
