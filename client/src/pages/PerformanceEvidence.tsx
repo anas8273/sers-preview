@@ -238,12 +238,12 @@ const DEFAULT_THEME: ThemeConfig = {
   headerSeparator: false,
 };
 
-// قوالب مدمجة - كل قالب بتنسيق مختلف فعلاً
+// قوالب مدمجة - كل قالب بتنسيق مختلف فعلاً (5 قوالب متنوعة)
 const BUILTIN_THEMES: ThemeConfig[] = [
   DEFAULT_THEME,
   {
-    // القالب 2: ترويسة داكنة + بطاقات جدول (PDF صفحة 5+7) - عناوين بخلفية داكنة + حقول بيضاء
-    id: 'builtin-dark-cards', name: 'بطاقات داكنة',
+    // القالب 2: ترويسة داكنة + جدول رسمي - عناوين بخلفية داكنة + حقول جدول منظمة
+    id: 'builtin-dark-table', name: 'جدول رسمي',
     layoutType: 'dark-header-table',
     headerBg: '#1a6b6a', headerText: '#ffffff',
     accent: '#1a6b6a', borderColor: '#2ea87a',
@@ -256,8 +256,8 @@ const BUILTIN_THEMES: ThemeConfig[] = [
     bodyBg: '#ffffff',
   },
   {
-    // القالب 3: خط عمودي + خطوط أفقية (PDF صفحة 2+4) - ترويسة بخط عمودي فاصل + حقول بخط سفلي
-    id: 'builtin-lined', name: 'خطوط أفقية',
+    // القالب 3: خطوط أفقية - ترويسة بيضاء + حقول بخط سفلي أنيق
+    id: 'builtin-lined', name: 'خطوط أنيقة',
     layoutType: 'white-header-classic',
     headerBg: '#ffffff', headerText: '#1a6b6a',
     accent: '#1a6b6a', borderColor: '#2ea87a',
@@ -268,6 +268,36 @@ const BUILTIN_THEMES: ThemeConfig[] = [
     coverStyle: 'split-left', sectionCoverStyle: 'left-stripe', coverAccent2: '#5bb784',
     headerVariant: 'right-text-center-logo-left-info',
     headerSeparator: true,
+    bodyBg: '#ffffff',
+  },
+  {
+    // القالب 4: بطاقات حديثة - ترويسة بيضاء + حقول ببطاقات ملونة + غلاف أنيق
+    id: 'builtin-cards', name: 'بطاقات حديثة',
+    layoutType: 'white-header-cards',
+    headerBg: '#ffffff', headerText: '#1a6b6a',
+    accent: '#1a6b6a', borderColor: '#2ea87a',
+    titleBg: '#1a6b6a', fieldLabelBg: '#f0f7f4',
+    footerBg: '#1a6b6a',
+    tableStyle: false, titleStyle: 'badge', showTopLine: false, showBottomBar: true,
+    fieldStyle: 'cards', signatureStyle: 'stamped',
+    coverStyle: 'framed-elegant', sectionCoverStyle: 'card-center', coverAccent2: '#5bb784',
+    headerVariant: 'right-text-left-logo',
+    headerSeparator: false,
+    bodyBg: '#ffffff',
+  },
+  {
+    // القالب 5: تصميم نظيف - ترويسة بيضاء مع شريط جانبي + حقول بسيطة
+    id: 'builtin-minimal', name: 'تصميم نظيف',
+    layoutType: 'minimal-clean',
+    headerBg: '#ffffff', headerText: '#1a6b6a',
+    accent: '#1a6b6a', borderColor: '#2ea87a',
+    titleBg: '#1a6b6a', fieldLabelBg: '#f0f4f8',
+    footerBg: '#1a6b6a',
+    tableStyle: false, titleStyle: 'simple', showTopLine: false, showBottomBar: false,
+    fieldStyle: 'minimal', signatureStyle: 'dotted',
+    coverStyle: 'minimal-line', sectionCoverStyle: 'clean-divider', coverAccent2: '#5bb784',
+    headerVariant: 'center-logo-banner',
+    headerSeparator: false,
     bodyBg: '#ffffff',
   },
 ];
@@ -1475,53 +1505,37 @@ export default function PerformanceEvidence() {
   const handleExportDocx = async () => {
     setIsExportingDocx(true);
     try {
-      // بناء بيانات منظمة للتقرير الكامل
-      const docxCriteria = allCriteria.map(c => {
-        const cData = criteriaData[c.id];
-        const allSubs = [...c.subEvidences, ...(cData?.customSubEvidences || [])];
-        return {
-          title: c.title,
-          subEvidences: allSubs.map(sub => {
-            const subEvs = (cData?.evidences || []).filter(e => e.subEvidenceId === sub.id);
-            const formEv = subEvs.find(e => e.formData !== undefined);
-            const staticFields = (sub.formFields || []).map(f => ({ label: f.label, value: formEv?.formData?.[f.id] || '' }));
-            const dynamicFields = formEv?.formData ? Object.keys(formEv.formData).filter(k => k.startsWith('dynamic_') && !k.startsWith('__label_')).map(k => ({ label: formEv.formData?.[`__label_${k}`] || 'حقل إضافي', value: formEv.formData?.[k] || '' })) : [];
-            return {
-              title: sub.title,
-              fields: [...staticFields, ...dynamicFields],
-              evidences: subEvs.filter(e => e.type !== 'text' || e.formData === undefined).map(ev => ({
-                type: ev.type || 'file',
-                fileName: ev.fileName,
-                fileUrl: ev.fileData || ev.link,
-                text: ev.text,
-                link: ev.link,
-              })),
-            };
-          }),
-        };
+      // استخدام نفس نهج PDF - إرسال HTML للسيرفر → Puppeteer screenshot → Word
+      const element = document.getElementById('preview-content');
+      if (!element) throw new Error('Preview content not found');
+
+      // استخراج HTML بنفس طريقة PDF
+      const { extractHtmlForExport } = await import('@/lib/pdf-export');
+      const htmlContent = await extractHtmlForExport(element);
+
+      const filename = `${personalInfo.reportTitle || 'شواهد_الأداء'}_${personalInfo.name || 'مستند'}.docx`;
+
+      const response = await fetch('/api/export-docx', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ html: htmlContent, filename }),
       });
 
-      const docxData = {
-        personalInfo: {
-          name: personalInfo.name || '',
-          school: personalInfo.school || '',
-          department: personalInfo.department || '',
-          year: personalInfo.year || '',
-          semester: personalInfo.semester || '',
-          evaluator: personalInfo.evaluator || '',
-          evaluatorRole: personalInfo.evaluatorRole || 'مدير المدرسة',
-          date: personalInfo.date || '',
-          reportTitle: personalInfo.reportTitle || 'شواهد الأداء الوظيفي',
-        },
-        criteria: docxCriteria,
-        themeColor: selectedTheme.accent || '#1a3a5c',
-        mode: 'full' as const,
-      };
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({ error: 'Unknown error' }));
+        throw new Error(error.error || 'DOCX export failed');
+      }
 
-      await exportToDocxStructured(
-        docxData,
-        `${personalInfo.reportTitle || 'شواهد_الأداء'}_${personalInfo.name || 'مستند'}.docx`
-      );
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
       toast.success('تم تصدير Word بنجاح');
     } catch (err) {
       console.error('DOCX export error:', err);
@@ -3399,9 +3413,16 @@ export default function PerformanceEvidence() {
                               </div>
                               <div>
                                 <label className="text-xs font-medium text-gray-600 mb-1.5 block">ألوان سريعة</label>
+                                {/* لون تدرج الهوية البصرية */}
+                                <button
+                                  title="تدرج الهوية البصرية"
+                                  onClick={() => { setSelectedTheme(prev => ({ ...prev, accent: '#1a6b6a', borderColor: '#2ea87a', titleBg: '#1a6b6a', fieldLabelBg: prev.fieldLabelBg === '#f0f4f8' || prev.fieldLabelBg === '#f0f7f4' ? prev.fieldLabelBg : '#1a6b6a', footerBg: '#1a6b6a', headerBg: prev.headerBg === '#ffffff' || prev.headerBg === '#f8f9fa' ? prev.headerBg : '#1a6b6a', headerText: prev.headerBg === '#ffffff' || prev.headerBg === '#f8f9fa' ? '#1a6b6a' : '#ffffff', coverAccent2: '#5bb784' })); }}
+                                  className={`w-full mb-2 h-8 rounded-lg border-2 shadow-sm hover:scale-[1.02] transition-transform ${selectedTheme.accent === '#1a6b6a' && selectedTheme.coverAccent2 === '#5bb784' ? 'border-gray-800 ring-2 ring-offset-1 ring-gray-400' : 'border-white'}`}
+                                  style={{ background: 'linear-gradient(to left, #1a6b6a, #2ea87a, #5bb784)' }}
+                                />
+                                <p className="text-[9px] text-gray-400 mb-2 text-center">تدرج الهوية البصرية (3 ألوان)</p>
                                 <div className="flex gap-1.5 flex-wrap">
                                   {[
-                                    { name: 'الهوية البصرية', accent: '#1a5f3f' },
                                     { name: 'أزرق داكن', accent: '#1a3a5c' },
                                     { name: 'تيل', accent: '#0d7377' },
                                     { name: 'كحلي', accent: '#1e3a5f' },
@@ -3908,28 +3929,28 @@ export default function PerformanceEvidence() {
     return (
       <div className="min-h-screen bg-background p-4 md:p-6" dir="rtl">
         <div className="max-w-4xl mx-auto">
-          <div className="flex items-center justify-between mb-5">
-            <Button variant="outline" size="sm" onClick={() => setStep('dashboard')}>
-              <ArrowRight className="w-4 h-4 ml-1" />العودة للبنود
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 sm:mb-5 gap-2">
+            <Button variant="outline" size="sm" onClick={() => setStep('dashboard')} className="text-xs sm:text-sm h-8 sm:h-9">
+              <ArrowRight className="w-3.5 h-3.5 sm:w-4 sm:h-4 ml-0.5 sm:ml-1" /><span className="hidden sm:inline">العودة للبنود</span><span className="sm:hidden">رجوع</span>
             </Button>
-            <div className="flex gap-2">
-              <Button variant="outline" size="sm" onClick={saveReport} disabled={isSaving} className="gap-1.5">
-                {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                {isSaving ? "جاري الحفظ..." : "حفظ"}
+            <div className="flex gap-1.5 sm:gap-2 flex-wrap">
+              <Button variant="outline" size="sm" onClick={saveReport} disabled={isSaving} className="gap-1 sm:gap-1.5 text-xs sm:text-sm h-8 sm:h-9">
+                {isSaving ? <Loader2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 animate-spin" /> : <Save className="w-3.5 h-3.5 sm:w-4 sm:h-4" />}
+                {isSaving ? "جاري..." : "حفظ"}
               </Button>
               {isAuthenticated && portfolio.id && (
-                <Button variant="outline" size="sm" onClick={portfolio.submitForReview} className="gap-1.5 text-teal-600 border-teal-200 hover:bg-teal-50">
-                  <CheckCircle className="w-4 h-4" />تقديم للمراجعة
+                <Button variant="outline" size="sm" onClick={portfolio.submitForReview} className="gap-1 sm:gap-1.5 text-xs sm:text-sm h-8 sm:h-9 text-teal-600 border-teal-200 hover:bg-teal-50">
+                  <CheckCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4" /><span className="hidden sm:inline">تقديم للمراجعة</span><span className="sm:hidden">تقديم</span>
                 </Button>
               )}
-              <Button size="sm" onClick={() => setStep('preview')} className="gap-1.5">
-                <Eye className="w-4 h-4" />معاينة وتصدير
+              <Button size="sm" onClick={() => setStep('preview')} className="gap-1 sm:gap-1.5 text-xs sm:text-sm h-8 sm:h-9">
+                <Eye className="w-3.5 h-3.5 sm:w-4 sm:h-4" /><span className="hidden sm:inline">معاينة وتصدير</span><span className="sm:hidden">معاينة</span>
               </Button>
               <div className="relative">
                 <div className="flex items-center gap-1">
-                  <Button size="sm" variant="outline" onClick={handleShareLink} disabled={isSharing} className="gap-1.5 text-blue-600 border-blue-200 hover:bg-blue-50">
-                    {isSharing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Share2 className="w-4 h-4" />}
-                    {isSharing ? 'جاري...' : 'مشاركة كرابط'}
+                  <Button size="sm" variant="outline" onClick={handleShareLink} disabled={isSharing} className="gap-1 sm:gap-1.5 text-xs sm:text-sm h-8 sm:h-9 text-blue-600 border-blue-200 hover:bg-blue-50">
+                    {isSharing ? <Loader2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 animate-spin" /> : <Share2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />}
+                    <span className="hidden sm:inline">{isSharing ? 'جاري...' : 'مشاركة'}</span>
                   </Button>
                   <Button size="sm" variant="ghost" onClick={() => setShowShareSettings(!showShareSettings)} className="h-8 w-8 p-0">
                     <Settings className="w-3.5 h-3.5" />
@@ -3956,19 +3977,19 @@ export default function PerformanceEvidence() {
 
           {/* ملخص التقييم */}
           <Card className="mb-5">
-            <CardContent className="p-6 text-center">
-              <h1 className="text-2xl font-black text-foreground mb-4" style={{ fontFamily: "var(--font-heading)" }}>ملخص التقييم النهائي</h1>
-              <div className="flex items-center justify-center gap-8">
+            <CardContent className="p-4 sm:p-6 text-center">
+              <h1 className="text-lg sm:text-2xl font-black text-foreground mb-3 sm:mb-4" style={{ fontFamily: "var(--font-heading)" }}>ملخص التقييم النهائي</h1>
+              <div className="flex flex-col sm:flex-row items-center justify-center gap-4 sm:gap-8">
                 <div>
-                  <div className="text-5xl font-black" style={{ color: grade.color }}>{percentage}%</div>
-                  <div className="text-lg font-bold mt-1" style={{ color: grade.color }}>{grade.label}</div>
+                  <div className="text-3xl sm:text-5xl font-black" style={{ color: grade.color }}>{percentage}%</div>
+                  <div className="text-base sm:text-lg font-bold mt-1" style={{ color: grade.color }}>{grade.label}</div>
                 </div>
                 <div className="text-right space-y-1">
-                  <p className="text-sm text-muted-foreground">المجموع: <strong className="text-foreground">{totalScore}</strong> من <strong className="text-foreground">{maxScore}</strong></p>
-                  <p className="text-sm text-muted-foreground">الوظيفة: <strong className="text-foreground">{selectedJob?.title}</strong></p>
-                  <p className="text-sm text-muted-foreground">الاسم: <strong className="text-foreground">{personalInfo.name || '—'}</strong></p>
+                  <p className="text-xs sm:text-sm text-muted-foreground">المجموع: <strong className="text-foreground">{totalScore}</strong> من <strong className="text-foreground">{maxScore}</strong></p>
+                  <p className="text-xs sm:text-sm text-muted-foreground">الوظيفة: <strong className="text-foreground">{selectedJob?.title}</strong></p>
+                  <p className="text-xs sm:text-sm text-muted-foreground">الاسم: <strong className="text-foreground">{personalInfo.name || '—'}</strong></p>
                   {indicatorsCoverage && (
-                    <p className="text-sm text-muted-foreground">المؤشرات: <strong className="text-foreground">{indicatorsCoverage.covered}/{indicatorsCoverage.total}</strong></p>
+                    <p className="text-xs sm:text-sm text-muted-foreground">المؤشرات: <strong className="text-foreground">{indicatorsCoverage.covered}/{indicatorsCoverage.total}</strong></p>
                   )}
                 </div>
               </div>
@@ -3977,14 +3998,15 @@ export default function PerformanceEvidence() {
 
           {/* جدول البنود */}
           <Card className="mb-5 overflow-hidden">
-            <table className="w-full">
+            <div className="overflow-x-auto">
+            <table className="w-full" style={{ minWidth: '500px' }}>
               <thead className="bg-muted">
                 <tr>
-                  <th className="text-right text-xs font-bold text-muted-foreground p-3">م</th>
-                  <th className="text-right text-xs font-bold text-muted-foreground p-3">البند</th>
-                  <th className="text-center text-xs font-bold text-muted-foreground p-3">الدرجة</th>
-                  <th className="text-center text-xs font-bold text-muted-foreground p-3">الشواهد</th>
-                  <th className="text-center text-xs font-bold text-muted-foreground p-3">الحالة</th>
+                  <th className="text-right text-xs font-bold text-muted-foreground p-2 sm:p-3 whitespace-nowrap" style={{ width: '40px' }}>م</th>
+                  <th className="text-right text-xs font-bold text-muted-foreground p-2 sm:p-3">البند</th>
+                  <th className="text-center text-xs font-bold text-muted-foreground p-2 sm:p-3 whitespace-nowrap" style={{ width: '70px' }}>الدرجة</th>
+                  <th className="text-center text-xs font-bold text-muted-foreground p-2 sm:p-3 whitespace-nowrap" style={{ width: '65px' }}>الشواهد</th>
+                  <th className="text-center text-xs font-bold text-muted-foreground p-2 sm:p-3 whitespace-nowrap" style={{ width: '60px' }}>الحالة</th>
                 </tr>
               </thead>
               <tbody>
@@ -3995,24 +4017,25 @@ export default function PerformanceEvidence() {
                   return (
                     <tr key={c.id} className="border-t border-border hover:bg-muted/30 cursor-pointer transition-colors"
                       onClick={() => { setCurrentCriterionIndex(i); setStep('criterion-detail'); }}>
-                      <td className="p-3 text-sm text-muted-foreground">{i + 1}</td>
-                      <td className="p-3 text-sm font-medium text-foreground">{c.title}</td>
-                      <td className="p-3 text-center">
-                        <Badge variant={((d?.score || 0) >= 4) ? "default" : ((d?.score || 0) >= 3) ? "secondary" : "outline"}>
+                      <td className="p-2 sm:p-3 text-xs sm:text-sm text-muted-foreground">{i + 1}</td>
+                      <td className="p-2 sm:p-3 text-xs sm:text-sm font-medium text-foreground leading-relaxed">{c.title}</td>
+                      <td className="p-2 sm:p-3 text-center">
+                        <Badge variant={((d?.score || 0) >= 4) ? "default" : ((d?.score || 0) >= 3) ? "secondary" : "outline"} className="text-[10px] sm:text-xs">
                           {d?.score || 0}/{c.maxScore}
                         </Badge>
                       </td>
-                      <td className="p-3 text-center text-sm text-muted-foreground">{evCount}</td>
-                      <td className="p-3 text-center">
-                        {status === "complete" && <CheckCircle className="w-4 h-4 text-teal-500 mx-auto" />}
-                        {status === "partial" && <AlertTriangle className="w-4 h-4 text-amber-500 mx-auto" />}
-                        {status === "missing" && <XCircle className="w-4 h-4 text-red-400 mx-auto" />}
+                      <td className="p-2 sm:p-3 text-center text-xs sm:text-sm text-muted-foreground">{evCount}</td>
+                      <td className="p-2 sm:p-3 text-center">
+                        {status === "complete" && <CheckCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-teal-500 mx-auto" />}
+                        {status === "partial" && <AlertTriangle className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-500 mx-auto" />}
+                        {status === "missing" && <XCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-red-400 mx-auto" />}
                       </td>
                     </tr>
                   );
                 })}
               </tbody>
             </table>
+            </div>
           </Card>
 
           {/* اختيار الثيم */}
@@ -4291,9 +4314,16 @@ export default function PerformanceEvidence() {
                       </div>
                       <div>
                         <label className="text-xs font-medium text-gray-600 mb-1.5 block">ألوان سريعة</label>
+                        {/* لون تدرج الهوية البصرية */}
+                        <button
+                          title="تدرج الهوية البصرية"
+                          onClick={() => { setSelectedTheme(prev => ({ ...prev, accent: '#1a6b6a', borderColor: '#2ea87a', titleBg: '#1a6b6a', fieldLabelBg: prev.fieldLabelBg === '#f0f4f8' || prev.fieldLabelBg === '#f0f7f4' ? prev.fieldLabelBg : '#1a6b6a', footerBg: '#1a6b6a', headerBg: prev.headerBg === '#ffffff' || prev.headerBg === '#f8f9fa' ? prev.headerBg : '#1a6b6a', headerText: prev.headerBg === '#ffffff' || prev.headerBg === '#f8f9fa' ? '#1a6b6a' : '#ffffff', coverAccent2: '#5bb784' })); }}
+                          className={`w-full mb-2 h-8 rounded-lg border-2 shadow-sm hover:scale-[1.02] transition-transform ${selectedTheme.accent === '#1a6b6a' && selectedTheme.coverAccent2 === '#5bb784' ? 'border-gray-800 ring-2 ring-offset-1 ring-gray-400' : 'border-white'}`}
+                          style={{ background: 'linear-gradient(to left, #1a6b6a, #2ea87a, #5bb784)' }}
+                        />
+                        <p className="text-[9px] text-gray-400 mb-2 text-center">تدرج الهوية البصرية (3 ألوان)</p>
                         <div className="flex gap-1.5 flex-wrap">
                           {[
-                            { name: 'الهوية البصرية', accent: '#1a5f3f' },
                             { name: 'أزرق داكن', accent: '#1a3a5c' },
                             { name: 'تيل', accent: '#0d7377' },
                             { name: 'كحلي', accent: '#1e3a5f' },
@@ -4360,33 +4390,35 @@ export default function PerformanceEvidence() {
             {(() => {
               const cs = theme.coverStyle || 'gradient-center';
               const a2 = theme.coverAccent2 || theme.accent;
-              // ترويسة رسمية للغلاف - مطابقة للتقارير
+              // ترويسة رسمية للغلاف - مطابقة للصفحات الداخلية (المملكة + وزارة التعليم + الإدارة + شعار)
               const coverOfficialHeader = (
                 <div style={{ background: `linear-gradient(to left, ${theme.accent}, ${a2})`, padding: '14px 24px 10px', borderRadius: '0 0 8px 8px' }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse' as const }}>
                     <tbody>
                       <tr>
                         <td style={{ width: '35%', verticalAlign: 'middle', textAlign: 'right', padding: '0' }}>
+                          <div style={{ fontSize: '12px', color: '#ffffff', fontWeight: 700, lineHeight: '2.0' }}>المملكة العربية السعودية</div>
+                          <div style={{ fontSize: '12px', color: '#ffffff', fontWeight: 700, lineHeight: '2.0' }}>وزارة التعليم</div>
                           {filteredDeptLines.map((line: string, i: number) => (
-                            <div key={i} style={{ fontSize: '12px', color: '#ffffff', fontWeight: 700, lineHeight: '2.0', letterSpacing: '0.3px' }}>{line}</div>
+                            <div key={i} style={{ fontSize: '11px', color: '#ffffff', fontWeight: 600, lineHeight: '2.0', letterSpacing: '0.3px' }}>{line}</div>
                           ))}
                           {personalInfo.school && (
-                            <div style={{ fontSize: '12px', color: '#ffffff', fontWeight: 700, lineHeight: '2.0' }}>{personalInfo.school}</div>
+                            <div style={{ fontSize: '11px', color: '#ffffff', fontWeight: 600, lineHeight: '2.0' }}>{personalInfo.school}</div>
                           )}
                         </td>
                         <td style={{ width: '2%', verticalAlign: 'middle', textAlign: 'center', padding: '0 4px' }}>
-                          <div style={{ width: '2px', height: '50px', background: 'rgba(255,255,255,0.35)', margin: '0 auto' }} />
+                          <div style={{ width: '2px', height: '55px', background: 'rgba(255,255,255,0.35)', margin: '0 auto' }} />
                         </td>
                         <td style={{ width: '28%', verticalAlign: 'middle', textAlign: 'center', padding: '0' }}>
-                          <img src={MOE_LOGO} alt="\u0634\u0639\u0627\u0631 \u0648\u0632\u0627\u0631\u0629 \u0627\u0644\u062a\u0639\u0644\u064a\u0645" style={{ height: '65px', objectFit: 'contain' as const, margin: '0 auto', display: 'block', filter: 'brightness(0) invert(1)' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                          <img src={MOE_LOGO} alt="شعار وزارة التعليم" style={{ height: '60px', objectFit: 'contain' as const, margin: '0 auto', display: 'block', filter: 'brightness(0) invert(1)' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
                         </td>
                         <td style={{ width: '35%', verticalAlign: 'middle', textAlign: 'left', padding: '0' }}>
                           {personalInfo.extraLogo && (
-                            <img src={personalInfo.extraLogo} alt="\u0634\u0639\u0627\u0631 \u0625\u0636\u0627\u0641\u064a" style={{ height: '50px', objectFit: 'contain' as const, display: 'block', marginBottom: '4px' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                            <img src={personalInfo.extraLogo} alt="شعار إضافي" style={{ height: '50px', objectFit: 'contain' as const, display: 'block', marginBottom: '4px' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
                           )}
                           <div style={{ textAlign: 'left' }}>
-                            {personalInfo.semester && <div style={{ fontSize: '11px', color: '#ffffff', fontWeight: 600, lineHeight: '1.8' }}>{`\u0627\u0644\u0641\u0635\u0644 \u0627\u0644\u062f\u0631\u0627\u0633\u064a: ${personalInfo.semester}`}</div>}
-                            {personalInfo.year && <div style={{ fontSize: '11px', color: '#ffffff', fontWeight: 600, lineHeight: '1.8' }}>{`\u0627\u0644\u0639\u0627\u0645 \u0627\u0644\u062f\u0631\u0627\u0633\u064a: ${personalInfo.year}`}</div>}
+                            {personalInfo.semester && <div style={{ fontSize: '11px', color: '#ffffff', fontWeight: 600, lineHeight: '1.8' }}>{`الفصل الدراسي: ${personalInfo.semester}`}</div>}
+                            {personalInfo.year && <div style={{ fontSize: '11px', color: '#ffffff', fontWeight: 600, lineHeight: '1.8' }}>{`العام الدراسي: ${personalInfo.year}`}</div>}
                           </div>
                         </td>
                       </tr>
@@ -4640,6 +4672,65 @@ export default function PerformanceEvidence() {
                 })}
               </div>
 
+              </div>{/* إغلاق flex:1 للفهرس */}
+              {/* الشريط السفلي المتدرج */}
+              {theme.showBottomBar !== false && (
+                <div style={{ marginTop: 'auto' }}>
+                  <div style={{ height: '3px', background: `linear-gradient(to left, ${theme.accent}, ${theme.coverAccent2 || theme.accent})`, margin: '0 2.5rem' }} />
+                  <div style={{ padding: '8px 2.5rem', fontSize: '10px', color: theme.accent, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontWeight: 700 }}>SERS - نظام السجلات التعليمية الذكي</span>
+                    <span style={{ opacity: 0.7 }}>صفحة 2</span>
+                  </div>
+                </div>
+              )}
+              {theme.showBottomBar === false && (
+                <div style={{ padding: '0.5rem 2.5rem', borderTop: `1px solid ${theme.borderColor}`, display: 'flex', justifyContent: 'space-between', fontSize: '0.6rem', color: '#9CA3AF' }}>
+                  <span>نظام SERS - السجلات التعليمية الذكية</span>
+                  <span>صفحة 2</span>
+                </div>
+              )}
+            </div>
+
+            {/* === صفحة البيانات الشخصية (منفصلة) === */}
+            <div className="bg-white shadow-lg mx-auto mb-6" style={{ width: '210mm', minHeight: '297mm', maxWidth: '100%', position: 'relative', pageBreakAfter: 'always', display: 'flex', flexDirection: 'column' as const, boxSizing: 'border-box' as const, border: `2px solid ${theme.accent}` }}>
+              <div style={{ flex: 1, padding: '2rem 2.5rem' }}>
+{/* ترويسة الصفحة */}
+                <div style={{ marginBottom: '16px' }}>
+                <div style={{ background: `linear-gradient(to left, ${theme.accent}, ${theme.coverAccent2 || theme.accent})`, padding: '12px 24px 10px', borderRadius: '0 0 8px 8px' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse' as const }}>
+                    <tbody>
+                      <tr>
+                        <td style={{ width: '35%', verticalAlign: 'middle', textAlign: 'right', padding: '0' }}>
+                          <div style={{ fontSize: '10px', color: '#ffffff', fontWeight: 700, lineHeight: '2.0' }}>المملكة العربية السعودية</div>
+                          <div style={{ fontSize: '10px', color: '#ffffff', fontWeight: 700, lineHeight: '2.0' }}>وزارة التعليم</div>
+                          {filteredDeptLines.map((line: string, li: number) => (
+                            <div key={li} style={{ fontSize: '10px', color: '#ffffff', fontWeight: 600, lineHeight: '2.0' }}>{line}</div>
+                          ))}
+                          {personalInfo.school && (
+                            <div style={{ fontSize: '10px', color: '#ffffff', fontWeight: 600, lineHeight: '2.0' }}>{personalInfo.school}</div>
+                          )}
+                        </td>
+                        <td style={{ width: '2%', verticalAlign: 'middle', textAlign: 'center', padding: '0 4px' }}>
+                          <div style={{ width: '2px', height: '50px', background: 'rgba(255,255,255,0.35)', margin: '0 auto' }} />
+                        </td>
+                        <td style={{ width: '28%', verticalAlign: 'middle', textAlign: 'center', padding: '0' }}>
+                          <img src={MOE_LOGO} alt="شعار وزارة التعليم" style={{ height: '55px', objectFit: 'contain' as const, margin: '0 auto', display: 'block', filter: 'brightness(0) invert(1)' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                        </td>
+                        <td style={{ width: '35%', verticalAlign: 'middle', textAlign: 'left', padding: '0' }}>
+                          {personalInfo.extraLogo && (
+                            <img src={personalInfo.extraLogo} alt="شعار إضافي" style={{ height: '45px', objectFit: 'contain' as const, display: 'block', marginBottom: '4px' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                          )}
+                          <div style={{ textAlign: 'left' }}>
+                            {personalInfo.semester && <div style={{ fontSize: '10px', color: '#ffffff', fontWeight: 600, lineHeight: '1.8' }}>{`الفصل الدراسي: ${personalInfo.semester}`}</div>}
+                            {personalInfo.year && <div style={{ fontSize: '10px', color: '#ffffff', fontWeight: 600, lineHeight: '1.8' }}>{`العام الدراسي: ${personalInfo.year}`}</div>}
+                          </div>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
               {/* البيانات الشخصية */}
               <h2 style={{ fontSize: '1rem', fontWeight: 800, color: theme.accent, fontFamily: "'Cairo', sans-serif", marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                 <span style={{ width: '4px', height: '20px', borderRadius: '2px', backgroundColor: theme.accent, display: 'inline-block' }} />
@@ -4676,14 +4767,14 @@ export default function PerformanceEvidence() {
                   <div style={{ height: '3px', background: `linear-gradient(to left, ${theme.accent}, ${theme.coverAccent2 || theme.accent})`, margin: '0 2.5rem' }} />
                   <div style={{ padding: '8px 2.5rem', fontSize: '10px', color: theme.accent, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <span style={{ fontWeight: 700 }}>SERS - نظام السجلات التعليمية الذكي</span>
-                    <span style={{ opacity: 0.7 }}>صفحة 2</span>
+                    <span style={{ opacity: 0.7 }}>صفحة 3</span>
                   </div>
                 </div>
               )}
               {theme.showBottomBar === false && (
                 <div style={{ padding: '0.5rem 2.5rem', borderTop: `1px solid ${theme.borderColor}`, display: 'flex', justifyContent: 'space-between', fontSize: '0.6rem', color: '#9CA3AF' }}>
                   <span>نظام SERS - السجلات التعليمية الذكية</span>
-                  <span>صفحة 2</span>
+                  <span>صفحة 3</span>
                 </div>
               )}
             </div>
@@ -4799,14 +4890,14 @@ export default function PerformanceEvidence() {
                   <div style={{ height: '3px', background: `linear-gradient(to left, ${theme.accent}, ${theme.coverAccent2 || theme.accent})`, margin: '0 2.5rem' }} />
                   <div style={{ padding: '8px 2.5rem', fontSize: '10px', color: theme.accent, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <span style={{ fontWeight: 700 }}>SERS - نظام السجلات التعليمية الذكي</span>
-                    <span style={{ opacity: 0.7 }}>صفحة 3</span>
+                    <span style={{ opacity: 0.7 }}>صفحة 4</span>
                   </div>
                 </div>
               )}
               {theme.showBottomBar === false && (
                 <div style={{ padding: '0.5rem 2.5rem', borderTop: `1px solid ${theme.borderColor}`, display: 'flex', justifyContent: 'space-between', fontSize: '0.6rem', color: '#9CA3AF' }}>
                   <span>نظام SERS - السجلات التعليمية الذكية</span>
-                  <span>صفحة 3</span>
+                  <span>صفحة 4</span>
                 </div>
               )}
             </div>
@@ -4825,7 +4916,7 @@ export default function PerformanceEvidence() {
 
             {/* === صفحات الشواهد - كل بند في صفحة منفصلة === */}
             {(() => {
-              let pageCounter = 4;
+              let pageCounter = 5;
               // فقط البنود التي أضيف لها شواهد
               const criteriaWithEvidence = allCriteria.filter(c => {
                 const d = criteriaData[c.id];

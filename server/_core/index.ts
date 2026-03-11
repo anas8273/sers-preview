@@ -69,17 +69,18 @@ async function startServer() {
       const { data, html, imageBase64, filename, width, height } = req.body;
       let docxBuffer: Buffer;
       
-      if (imageBase64) {
-        // New: image from html2canvas → Word with image
+      if (html) {
+        // New: HTML → Puppeteer screenshot → Word (مطابق 100% للمعاينة)
+        const { renderHtmlToDocxPuppeteer } = await import('../pdf-renderer');
+        docxBuffer = await renderHtmlToDocxPuppeteer(html);
+      } else if (imageBase64) {
+        // Fallback: image from html2canvas → Word with image
         const { renderImageToDocx } = await import('../docx-renderer');
         docxBuffer = await renderImageToDocx(imageBase64, width, height);
       } else if (data) {
         // Structured data → editable Word
         const { renderStructuredDocx } = await import('../docx-renderer');
         docxBuffer = await renderStructuredDocx(data);
-      } else if (html) {
-        // Legacy: HTML → screenshot Word
-        docxBuffer = await renderHtmlToDocx(html);
       } else {
         res.status(400).json({ error: 'Missing data, imageBase64, or html content' });
         return;

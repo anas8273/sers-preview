@@ -85,6 +85,13 @@ export async function exportToPDF(
 }
 
 /**
+ * استخراج HTML للتصدير (يستخدم من PDF و Word)
+ */
+export async function extractHtmlForExport(element: HTMLElement): Promise<string> {
+  return extractHtmlWithStyles(element);
+}
+
+/**
  * استخراج HTML مع تحويل الأنماط المحسوبة إلى inline styles
  * هذا ضروري لأن Puppeteer لن يكون لديه وصول إلى CSS الأصلي
  */
@@ -121,10 +128,24 @@ async function extractHtmlWithStyles(element: HTMLElement): Promise<string> {
   const pages = clone.querySelectorAll(":scope > div");
   if (pages.length > 0) {
     pages.forEach(page => {
-      (page as HTMLElement).classList.add('pdf-page');
+      const el = page as HTMLElement;
+      // إخفاء الفواصل الفنية (print:hidden)
+      if (el.classList.contains('print:hidden') || el.className.includes('print:hidden')) {
+        el.style.display = 'none';
+        return;
+      }
+      el.classList.add('pdf-page');
       // إزالة box-shadow و margin-bottom
-      (page as HTMLElement).style.boxShadow = 'none';
-      (page as HTMLElement).style.marginBottom = '0';
+      el.style.boxShadow = 'none';
+      el.style.marginBottom = '0';
+      // ضمان حجم A4 ثابت
+      el.style.width = '210mm';
+      el.style.height = '297mm';
+      el.style.maxHeight = '297mm';
+      el.style.overflow = 'hidden';
+      el.style.pageBreakAfter = 'always';
+      el.style.pageBreakInside = 'avoid';
+      el.style.boxSizing = 'border-box';
     });
   }
 

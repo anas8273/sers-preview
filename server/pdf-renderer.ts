@@ -1,4 +1,8 @@
 import puppeteer from "puppeteer";
+import { execSync } from "child_process";
+import * as fs from "fs";
+import * as path from "path";
+import * as os from "os";
 
 let browserInstance: Awaited<ReturnType<typeof puppeteer.launch>> | null = null;
 
@@ -140,23 +144,34 @@ function wrapWithFonts(html: string): string {
     }
     .pdf-page {
       width: 210mm;
-      min-height: 297mm;
+      height: 297mm;
+      max-height: 297mm;
       page-break-after: always;
-      page-break-inside: auto;
+      page-break-inside: avoid;
       position: relative;
-      overflow: visible;
+      overflow: hidden;
       background: white;
+      box-sizing: border-box;
     }
     .pdf-page:last-child {
       page-break-after: auto;
     }
-    /* السماح بتقسيم المحتوى الطويل على صفحات متعددة */
-    [style*="page-break-inside: avoid"] {
-      page-break-inside: auto !important;
-    }
-    /* لكن الشواهد الفردية تبقى في صفحة واحدة */
-    [style*="pageBreakInside"] {
+    /* ضمان أن كل صفحة تأخذ حجم A4 بالضبط */
+    body > div > div {
+      width: 210mm;
+      height: 297mm;
+      max-height: 297mm;
+      page-break-after: always;
       page-break-inside: avoid;
+      overflow: hidden;
+      box-sizing: border-box;
+    }
+    body > div > div:last-child {
+      page-break-after: auto;
+    }
+    /* الفواصل الفنية بين الصفحات - إخفاؤها في PDF */
+    [class*="print:hidden"], .print\:hidden {
+      display: none !important;
     }
     button, [data-no-print] {
       display: none !important;
@@ -219,6 +234,88 @@ function wrapWithFonts(html: string): string {
 ${html}
 </body>
 </html>`;
+}
+
+/**
+ * تحويل HTML إلى Word عبر PDF كوسيط
+ * ينشئ PDF أولاً ثم يحول كل صفحة إلى صورة PNG عبر pdftoppm ويضعها في Word
+ * هذا يضمن تطابق 100% مع المعاينة
+ */
+export async function renderHtmlToDocxPuppeteer(htmlContent: string): Promise<Buffer> {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'docx-export-'));
+  
+  try {
+    // الخطوة 1: إنشاء PDF من HTML
+    const pdfBuffer = await renderHtmlToPdf(htmlContent, {
+      format: 'A4',
+      printBackground: true,
+      margin: { top: '0', right: '0', bottom: '0', left: '0' },
+      scale: 1,
+    });
+
+    // حفظ PDF مؤقتاً
+    const pdfPath = path.join(tmpDir, 'export.pdf');
+    fs.writeFileSync(pdfPath, pdfBuffer);
+
+    // الخطوة 2: تحويل PDF إلى صور PNG عبر pdftoppm (جودة عالية 300 DPI)
+    const outputPrefix = path.join(tmpDir, 'page');
+    execSync(`pdftoppm -png -r 300 "${pdfPath}" "${outputPrefix}"`, { timeout: 120000 });
+
+    // قراءة جميع الصور المنتجة
+    const pngFiles = fs.readdirSync(tmpDir)
+      .filter(f => f.startsWith('page-') && f.endsWith('.png'))
+      .sort();
+
+    if (pngFiles.length === 0) {
+      throw new Error('pdftoppm لم ينتج أي صور');
+    }
+
+    const pageImages: Buffer[] = pngFiles.map(f => fs.readFileSync(path.join(tmpDir, f)));
+
+    // الخطوة 3: بناء مستند Word مع صورة لكل صفحة
+    const {
+      Document: Doc,
+      Packer: Pack,
+      Paragraph: Para,
+      ImageRun: ImgRun,
+      AlignmentType: Align,
+      PageOrientation: Orient,
+    } = await import("docx");
+
+    const sections = pageImages.map((imgBuf) => ({
+      properties: {
+        page: {
+          size: { width: 11906, height: 16838, orientation: Orient.PORTRAIT },
+          margin: { top: 0, right: 0, bottom: 0, left: 0 },
+        },
+      },
+      children: [
+        new Para({
+          alignment: Align.CENTER,
+          spacing: { before: 0, after: 0 },
+          children: [
+            new ImgRun({
+              data: imgBuf,
+              transformation: { width: 595, height: 842 },
+              type: "png",
+            }),
+          ],
+        }),
+      ],
+    }));
+
+    const doc = new Doc({ sections });
+    const buffer = await Pack.toBuffer(doc);
+    return Buffer.from(buffer);
+  } catch (err) {
+    console.error('[renderHtmlToDocxPuppeteer] Error:', err);
+    throw err;
+  } finally {
+    // تنظيف الملفات المؤقتة
+    try {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    } catch (_) {}
+  }
 }
 
 /**
