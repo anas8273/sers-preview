@@ -1266,3 +1266,6 @@
 - [x] تحليل سبب الخطأ في pdf-export.ts:24 (Chrome/Puppeteer غير متوفر في الإنتاج)
 - [x] إصلاح الخطأ - تحويل من Puppeteer (server-side) إلى html2canvas-pro + jsPDF (client-side)
 - [x] اختبار التصدير - 12 اختبار ناجح
+
+## 102. إصلاح خطأ proxy في html2canvas-pro - "Invalid URL format"
+- [x] إصلاح خيار proxy - إزالة proxy واستخدام useCORS + allowTaint بدلاً منه

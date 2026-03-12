@@ -58,12 +58,8 @@ async function elementToCanvas(element: HTMLElement, scale: number = 2): Promise
       allowTaint: true,
       logging: false,
       backgroundColor: "#ffffff",
-      // تحسين جودة الصور
       imageTimeout: 15000,
-      // proxy للصور الخارجية
-      proxy: "/api/image-proxy",
       removeContainer: true,
-      // تحسين الأداء
       windowWidth: element.scrollWidth,
       windowHeight: element.scrollHeight,
     });
