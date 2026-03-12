@@ -11,7 +11,8 @@ async function getBrowser() {
     return browserInstance;
   }
   browserInstance = await puppeteer.launch({
-    headless: true,
+    headless: true as any,
+    timeout: 60000,
     args: [
       "--no-sandbox",
       "--disable-setuid-sandbox",

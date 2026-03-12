@@ -1269,3 +1269,9 @@
 
 ## 102. إصلاح خطأ proxy في html2canvas-pro - "Invalid URL format"
 - [x] إصلاح خيار proxy - إزالة proxy واستخدام useCORS + allowTaint بدلاً منه
+
+## 103. إرجاع تصدير PDF للطريقة السابقة (server-side Puppeteer) بجودة عالية
+- [x] إرجاع pdf-export.ts للطريقة السابقة (server-side مع Puppeteer)
+- [x] إصلاح import Puppeteer في السيرفر
+- [x] تثبيت Chrome/Chromium وإضافة postinstall script
+- [x] اختبار التصدير - 424 اختبار ناجح بما فيها pdf-renderer

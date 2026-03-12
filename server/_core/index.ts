@@ -8,8 +8,7 @@ import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
 import { seedDefaultTemplates } from "../db";
-// PDF renderer is lazy-loaded to avoid crash when Chrome/Puppeteer is not available
-// import { renderHtmlToPdf, closeBrowser } from "../pdf-renderer";
+import { renderHtmlToPdf, closeBrowser } from "../pdf-renderer";
 import { renderHtmlToDocx } from "../docx-renderer";
 
 function isPortAvailable(port: number): Promise<boolean> {
@@ -40,7 +39,7 @@ async function startServer() {
   // OAuth callback under /api/oauth/callback
   registerOAuthRoutes(app);
 
-  // Server-side PDF export endpoint (fallback - requires Puppeteer/Chrome)
+  // Server-side PDF export endpoint using Puppeteer
   app.post('/api/export-pdf', async (req, res) => {
     try {
       const { html, filename } = req.body;
@@ -48,8 +47,6 @@ async function startServer() {
         res.status(400).json({ error: 'Missing html content' });
         return;
       }
-      // Lazy import to avoid crash when Chrome is not available
-      const { renderHtmlToPdf } = await import('../pdf-renderer');
       const pdfBuffer = await renderHtmlToPdf(html, {
         format: 'A4',
         printBackground: true,
@@ -61,7 +58,7 @@ async function startServer() {
       res.send(pdfBuffer);
     } catch (err) {
       console.error('[export-pdf] Error:', err);
-      res.status(500).json({ error: 'PDF generation failed. Client-side export is recommended.' });
+      res.status(500).json({ error: 'PDF generation failed' });
     }
   });
 
