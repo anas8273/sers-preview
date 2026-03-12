@@ -237,7 +237,7 @@ const DEFAULT_THEME: ThemeConfig = {
   headerSeparator: false,
 };
 
-// قوالب مدمجة - كل قالب بتنسيق مختلف فعلاً (5 قوالب متنوعة)
+// قوالب مدمجة - كل قالب بتنسيق مختلف فعلاً (8 قوالب متنوعة)
 const BUILTIN_THEMES: ThemeConfig[] = [
   DEFAULT_THEME,
   {
@@ -298,6 +298,51 @@ const BUILTIN_THEMES: ThemeConfig[] = [
     headerVariant: 'center-logo-banner',
     headerSeparator: false,
     bodyBg: '#ffffff',
+  },
+  {
+    // القالب 6: النموذج الرسمي المتقدم - ترويسة داكنة + جدول مع خلفية فاتحة + غلاف قطري
+    id: 'builtin-official-pro', name: 'النموذج الرسمي',
+    layoutType: 'dark-header-table',
+    headerBg: '#0d4f4f', headerText: '#ffffff',
+    accent: '#0d4f4f', borderColor: '#1a8a7a',
+    titleBg: '#0d4f4f', fieldLabelBg: '#0d4f4f',
+    footerBg: '#0d4f4f',
+    tableStyle: true, titleStyle: 'full-width', showTopLine: true, showBottomBar: true,
+    fieldStyle: 'table', signatureStyle: 'boxed',
+    coverStyle: 'diagonal', sectionCoverStyle: 'numbered-bar', coverAccent2: '#1a8a7a',
+    headerVariant: 'full-header-sections',
+    headerSeparator: true,
+    bodyBg: '#f9fafb',
+  },
+  {
+    // القالب 7: توفير حبر - تصميم بسيط بألوان فاتحة للطباعة الاقتصادية
+    id: 'builtin-ink-saver', name: 'توفير حبر',
+    layoutType: 'white-header-classic',
+    headerBg: '#ffffff', headerText: '#374151',
+    accent: '#6B7280', borderColor: '#D1D5DB',
+    titleBg: '#F3F4F6', fieldLabelBg: '#F9FAFB',
+    footerBg: '#F3F4F6',
+    tableStyle: false, titleStyle: 'underlined', showTopLine: false, showBottomBar: false,
+    fieldStyle: 'underlined', signatureStyle: 'dotted',
+    coverStyle: 'minimal-line', sectionCoverStyle: 'clean-divider', coverAccent2: '#9CA3AF',
+    headerVariant: 'right-text-center-logo-left-info',
+    headerSeparator: false,
+    bodyBg: '#ffffff',
+  },
+  {
+    // القالب 8: الهوية الذهبية - ترويسة داكنة مع لمسات ذهبية فاخرة
+    id: 'builtin-gold-accent', name: 'الهوية الذهبية',
+    layoutType: 'dark-header-table',
+    headerBg: '#1a3a4a', headerText: '#ffffff',
+    accent: '#1a3a4a', borderColor: '#C8A951',
+    titleBg: '#1a3a4a', fieldLabelBg: '#1a3a4a',
+    footerBg: '#1a3a4a',
+    tableStyle: true, titleStyle: 'full-width', showTopLine: true, showBottomBar: true,
+    fieldStyle: 'cards', signatureStyle: 'stamped',
+    coverStyle: 'gradient-center', sectionCoverStyle: 'card-center', coverAccent2: '#C8A951',
+    headerVariant: 'right-text-left-logo',
+    headerSeparator: true,
+    bodyBg: '#FFFDF5',
   },
 ];
 
@@ -915,7 +960,7 @@ export default function PerformanceEvidence() {
 
   // ===== رفع ذكي مع تصنيف AI تلقائي =====
   const [isSmartUploading, setIsSmartUploading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState<{ stage: string; percent: number } | null>(null);
+  const [uploadProgress, setUploadProgress] = useState<{ stage: string; percent: number; framePreview?: string } | null>(null);
   const isUploadingRef = useRef(false); // flag لمنع حفظ localStorage أثناء الرفع
 
   // ===== ضغط الصورة قبل إرسالها للـ AI =====
@@ -1023,10 +1068,103 @@ export default function PerformanceEvidence() {
   }, []);
 
   // ===== معالجة ملف واحد للتصنيف الذكي =====
+  // ===== ضغط الفيديو قبل الرفع =====
+  const compressVideoForStorage = useCallback(async (file: File): Promise<{ blob: Blob; base64: string }> => {
+    // إذا كان الفيديو أقل من 5MB لا حاجة للضغط
+    if (file.size <= 5 * 1024 * 1024) {
+      return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve({ blob: file, base64: reader.result as string });
+        reader.readAsDataURL(file);
+      });
+    }
+    
+    // للفيديوهات الكبيرة: نستخدم canvas + MediaRecorder للضغط
+    return new Promise((resolve) => {
+      try {
+        const video = document.createElement('video');
+        video.preload = 'auto';
+        video.muted = true;
+        video.playsInline = true;
+        const url = URL.createObjectURL(file);
+        video.src = url;
+        
+        video.onloadedmetadata = async () => {
+          // تقليل الدقة إذا كانت عالية
+          const maxDim = 720;
+          const scale = Math.min(maxDim / Math.max(video.videoWidth, video.videoHeight), 1);
+          const canvas = document.createElement('canvas');
+          canvas.width = video.videoWidth * scale;
+          canvas.height = video.videoHeight * scale;
+          const ctx = canvas.getContext('2d');
+          
+          if (!ctx || !('MediaRecorder' in window)) {
+            // fallback: إرجاع الفيديو الأصلي
+            URL.revokeObjectURL(url);
+            const reader = new FileReader();
+            reader.onload = () => resolve({ blob: file, base64: reader.result as string });
+            reader.readAsDataURL(file);
+            return;
+          }
+          
+          const stream = canvas.captureStream(15); // 15fps
+          const recorder = new MediaRecorder(stream, { mimeType: 'video/webm;codecs=vp8', videoBitsPerSecond: 500000 });
+          const chunks: Blob[] = [];
+          
+          recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
+          recorder.onstop = () => {
+            URL.revokeObjectURL(url);
+            const blob = new Blob(chunks, { type: 'video/webm' });
+            const reader = new FileReader();
+            reader.onload = () => resolve({ blob, base64: reader.result as string });
+            reader.readAsDataURL(blob);
+          };
+          
+          recorder.start();
+          video.currentTime = 0;
+          video.play();
+          
+          const drawFrame = () => {
+            if (video.ended || video.paused) {
+              recorder.stop();
+              return;
+            }
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            requestAnimationFrame(drawFrame);
+          };
+          
+          video.onplay = drawFrame;
+          
+          // حد أقصى 30 ثانية للضغط
+          setTimeout(() => {
+            if (recorder.state === 'recording') {
+              video.pause();
+              recorder.stop();
+            }
+          }, Math.min(video.duration * 1000, 30000));
+        };
+        
+        video.onerror = () => {
+          URL.revokeObjectURL(url);
+          const reader = new FileReader();
+          reader.onload = () => resolve({ blob: file, base64: reader.result as string });
+          reader.readAsDataURL(file);
+        };
+      } catch {
+        const reader = new FileReader();
+        reader.onload = () => resolve({ blob: file, base64: reader.result as string });
+        reader.readAsDataURL(file);
+      }
+    });
+  }, []);
+
   const processSmartFile = useCallback(async (file: File, fileIndex: number, totalFiles: number): Promise<{ success: boolean; criterion?: string; indicator?: string }> => {
     const isImage = file.type.startsWith("image/");
     const isVideo = file.type.startsWith("video/");
     const batchPrefix = totalFiles > 1 ? `[ملف ${fileIndex + 1}/${totalFiles}] ` : "";
+
+    // === مرحلة 1: قراءة الملف ===
+    setUploadProgress({ stage: `${batchPrefix}جاري قراءة الملف...`, percent: Math.round(5 + (80 * fileIndex / totalFiles)) });
 
     return new Promise((resolve) => {
       const reader = new FileReader();
@@ -1037,13 +1175,31 @@ export default function PerformanceEvidence() {
           let aiImageUrl: string | undefined;
           
           if (isImage) {
+            // === مرحلة 2: ضغط الصورة ===
+            setUploadProgress({ stage: `${batchPrefix}جاري ضغط الصورة...`, percent: Math.round(15 + (80 * fileIndex / totalFiles)) });
             storageBase64 = await compressImageForStorage(rawBase64, 1200, 0.7);
             aiImageUrl = await compressImage(rawBase64, 800, 0.5);
           } else if (isVideo) {
-            // استخراج إطار من الفيديو للتصنيف الذكي
+            // === مرحلة 2: استخراج إطار + ضغط الفيديو ===
+            setUploadProgress({ stage: `${batchPrefix}جاري استخراج إطار من الفيديو...`, percent: Math.round(15 + (80 * fileIndex / totalFiles)) });
             const videoFrame = await extractVideoFrame(file);
             if (videoFrame) {
               aiImageUrl = videoFrame;
+              // عرض معاينة الإطار المستخرج
+              setUploadProgress({ stage: `${batchPrefix}تم استخراج الإطار - جاري الضغط...`, percent: Math.round(25 + (80 * fileIndex / totalFiles)), framePreview: videoFrame });
+            }
+            
+            // ضغط الفيديو إذا كان كبيراً
+            if (file.size > 5 * 1024 * 1024) {
+              setUploadProgress({ stage: `${batchPrefix}جاري ضغط الفيديو (${(file.size / 1024 / 1024).toFixed(1)}MB)...`, percent: Math.round(30 + (80 * fileIndex / totalFiles)), framePreview: videoFrame || undefined });
+              try {
+                const compressed = await compressVideoForStorage(file);
+                storageBase64 = compressed.base64;
+                setUploadProgress({ stage: `${batchPrefix}تم ضغط الفيديو بنجاح`, percent: Math.round(40 + (80 * fileIndex / totalFiles)), framePreview: videoFrame || undefined });
+              } catch {
+                // فشل الضغط - نستخدم الأصلي
+                console.warn('Video compression failed, using original');
+              }
             }
           }
 
@@ -1053,6 +1209,9 @@ export default function PerformanceEvidence() {
           let classificationSuccess = false;
           let criterionTitle = "";
           let indicatorText = "";
+          
+          // === مرحلة 3: التصنيف الذكي ===
+          setUploadProgress(prev => ({ stage: `${batchPrefix}جاري التصنيف الذكي...`, percent: Math.round(45 + (80 * fileIndex / totalFiles)), framePreview: prev?.framePreview }));
           
           try {
             const result = await classifyMutation.mutateAsync({
@@ -1069,13 +1228,73 @@ export default function PerformanceEvidence() {
               );
               if (targetCriterion && criteriaData[targetCriterion.id]) {
                 const subs = [...targetCriterion.subEvidences, ...(criteriaData[targetCriterion.id]?.customSubEvidences || [])];
-                const targetSub = (cls.indicatorIndex > 0 && subs[cls.indicatorIndex - 1]) ? subs[cls.indicatorIndex - 1] : subs[0];
+                
+                // === مطابقة ذكية للبند الفرعي الصحيح ===
+                let targetSub = subs[0]; // fallback
+                
+                // 1. محاولة المطابقة بالنص (الأكثر دقة)
+                if (cls.subIndicatorText) {
+                  const textMatch = subs.find(s => 
+                    s.title === cls.subIndicatorText || 
+                    s.title.includes(cls.subIndicatorText) || 
+                    cls.subIndicatorText.includes(s.title)
+                  );
+                  if (textMatch) targetSub = textMatch;
+                }
+                // 2. إذا لم ينجح، محاولة المطابقة بنص البند الرئيسي
+                if (targetSub === subs[0] && cls.indicatorText) {
+                  const indicatorMatch = subs.find(s => 
+                    s.title === cls.indicatorText || 
+                    s.title.includes(cls.indicatorText) || 
+                    cls.indicatorText.includes(s.title)
+                  );
+                  if (indicatorMatch) targetSub = indicatorMatch;
+                }
+                // 3. إذا لم ينجح، محاولة المطابقة بالفهرس (indicatorIndex + subIndicatorIndex)
+                if (targetSub === subs[0] && cls.indicatorIndex > 0) {
+                  // حساب الفهرس الصحيح في القائمة المسطحة:
+                  // كل بند (item) يأخذ مكان واحد + بنوده الفرعية
+                  // indicatorIndex = رقم البند، subIndicatorIndex = رقم البند الفرعي
+                  let flatIndex = 0;
+                  for (let itemIdx = 1; itemIdx < cls.indicatorIndex; itemIdx++) {
+                    // نحسب عدد العناصر لكل بند سابق (البند نفسه + بنوده الفرعية)
+                    const itemSubs = subs.filter(s => s.id.startsWith(`${targetCriterion.id.replace('std-', 'std-')}-item-${itemIdx}`) || s.id.startsWith(`${targetCriterion.id.replace('std-', 'std-')}-${itemIdx}-`));
+                    flatIndex += Math.max(itemSubs.length, 1);
+                  }
+                  // إضافة البند الرئيسي
+                  if (cls.subIndicatorIndex > 0) {
+                    flatIndex += cls.subIndicatorIndex; // البند الفرعي (بعد البند الرئيسي)
+                  }
+                  if (flatIndex > 0 && flatIndex < subs.length) {
+                    targetSub = subs[flatIndex];
+                  } else if (cls.indicatorIndex > 0 && cls.indicatorIndex <= subs.length) {
+                    // fallback بسيط بالفهرس
+                    targetSub = subs[cls.indicatorIndex - 1];
+                  }
+                }
+                // 4. مطابقة بالكلمات المفتاحية (fuzzy match)
+                if (targetSub === subs[0] && (cls.indicatorText || cls.subIndicatorText)) {
+                  const searchText = (cls.subIndicatorText || cls.indicatorText || '').toLowerCase();
+                  const words = searchText.split(/\s+/).filter((w: string) => w.length > 2);
+                  let bestMatch = subs[0];
+                  let bestScore = 0;
+                  for (const sub of subs) {
+                    const subTitle = sub.title.toLowerCase();
+                    const score = words.reduce((acc: number, w: string) => acc + (subTitle.includes(w) ? 1 : 0), 0);
+                    if (score > bestScore) {
+                      bestScore = score;
+                      bestMatch = sub;
+                    }
+                  }
+                  if (bestScore > 0) targetSub = bestMatch;
+                }
+                
                 targetCriterionId = targetCriterion.id;
                 targetSubId = targetSub?.id || "";
                 contentDesc = cls.contentDescription || file.name;
                 classificationSuccess = true;
                 criterionTitle = targetCriterion.title;
-                indicatorText = cls.indicatorText;
+                indicatorText = cls.indicatorText + (cls.subIndicatorText ? ` → ${cls.subIndicatorText}` : '');
               }
             }
           } catch (aiErr) {
@@ -1090,6 +1309,9 @@ export default function PerformanceEvidence() {
               criterionTitle = firstCriterion.title;
             }
           }
+          
+          // === مرحلة 4: إضافة الشاهد ===
+          setUploadProgress(prev => ({ stage: `${batchPrefix}جاري حفظ الشاهد...`, percent: Math.round(75 + (80 * fileIndex / totalFiles)), framePreview: prev?.framePreview }));
           
           if (targetCriterionId) {
             const evId = `ev_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
@@ -1145,7 +1367,7 @@ export default function PerformanceEvidence() {
       reader.onerror = () => resolve({ success: false });
       reader.readAsDataURL(file);
     });
-  }, [allCriteria, criteriaData, classifyMutation, compressImage, compressImageForStorage, addEvidenceToCriterion, uploadFileMutation, extractVideoFrame]);
+  }, [allCriteria, criteriaData, classifyMutation, compressImage, compressImageForStorage, addEvidenceToCriterion, uploadFileMutation, extractVideoFrame, compressVideoForStorage]);
 
   const handleSmartUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     e.preventDefault();
@@ -2138,59 +2360,76 @@ export default function PerformanceEvidence() {
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -10 }}
                   className="mb-3 sm:mb-4 bg-gradient-to-r from-violet-50 to-indigo-50 dark:from-violet-950/30 dark:to-indigo-950/30 rounded-xl p-4 border border-violet-200/50 shadow-sm">
-                  {/* مراحل التقدم */}
-                  <div className="flex items-center justify-between mb-3">
-                    {[
-                      { label: "قراءة", threshold: 10, icon: Upload },
-                      { label: "ضغط", threshold: 40, icon: Image },
-                      { label: "تصنيف", threshold: 60, icon: Sparkles },
-                      { label: "إضافة", threshold: 85, icon: CheckCircle },
-                    ].map((phase, i) => {
-                      const isActive = uploadProgress.percent >= phase.threshold;
-                      const isCurrent = uploadProgress.percent >= phase.threshold && (i === 3 || uploadProgress.percent < [10, 40, 60, 85, 100][i + 1]);
-                      const PhaseIcon = phase.icon;
-                      return (
-                        <div key={phase.label} className="flex flex-col items-center gap-1 flex-1">
-                          <div className={`w-8 h-8 rounded-full flex items-center justify-center transition-all duration-500 ${
-                            isCurrent ? 'bg-violet-600 text-white shadow-lg shadow-violet-600/30 scale-110' :
-                            isActive ? 'bg-violet-500 text-white' :
-                            'bg-violet-100 text-violet-400 dark:bg-violet-900/50'
-                          }`}>
-                            {isCurrent ? <Loader2 className="w-4 h-4 animate-spin" /> : <PhaseIcon className="w-4 h-4" />}
+                  
+                  <div className="flex gap-3">
+                    {/* معاينة الإطار المستخرج من الفيديو */}
+                    {uploadProgress.framePreview && (
+                      <motion.div
+                        initial={{ opacity: 0, scale: 0.8 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        className="shrink-0 w-16 h-16 sm:w-20 sm:h-20 rounded-lg overflow-hidden border-2 border-violet-300 shadow-md">
+                        <img src={uploadProgress.framePreview} alt="إطار الفيديو" className="w-full h-full object-cover" />
+                        <div className="absolute inset-0 bg-black/20 flex items-center justify-center">
+                          <div className="w-5 h-5 rounded-full bg-white/80 flex items-center justify-center">
+                            <div className="w-0 h-0 border-t-[4px] border-t-transparent border-b-[4px] border-b-transparent border-r-[6px] border-r-violet-600 rotate-180 mr-0.5" />
                           </div>
-                          <span className={`text-[9px] font-medium transition-colors ${
-                            isActive ? 'text-violet-700 dark:text-violet-300' : 'text-violet-400 dark:text-violet-600'
-                          }`}>{phase.label}</span>
-                          {i < 3 && (
-                            <div className="absolute" style={{ display: 'none' }} />
-                          )}
                         </div>
-                      );
-                    })}
+                      </motion.div>
+                    )}
+                    
+                    <div className="flex-1 min-w-0">
+                      {/* مراحل التقدم */}
+                      <div className="flex items-center justify-between mb-3">
+                        {[
+                          { label: "قراءة", threshold: 10, icon: Upload },
+                          { label: "ضغط", threshold: 30, icon: Image },
+                          { label: "تصنيف", threshold: 50, icon: Sparkles },
+                          { label: "حفظ", threshold: 75, icon: CheckCircle },
+                        ].map((phase, i) => {
+                          const isActive = uploadProgress.percent >= phase.threshold;
+                          const isCurrent = uploadProgress.percent >= phase.threshold && (i === 3 || uploadProgress.percent < [10, 30, 50, 75, 100][i + 1]);
+                          const PhaseIcon = phase.icon;
+                          return (
+                            <div key={phase.label} className="flex flex-col items-center gap-1 flex-1">
+                              <div className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center transition-all duration-500 ${
+                                isCurrent ? 'bg-violet-600 text-white shadow-lg shadow-violet-600/30 scale-110' :
+                                isActive ? 'bg-violet-500 text-white' :
+                                'bg-violet-100 text-violet-400 dark:bg-violet-900/50'
+                              }`}>
+                                {isCurrent ? <Loader2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 animate-spin" /> : <PhaseIcon className="w-3.5 h-3.5 sm:w-4 sm:h-4" />}
+                              </div>
+                              <span className={`text-[8px] sm:text-[9px] font-medium transition-colors ${
+                                isActive ? 'text-violet-700 dark:text-violet-300' : 'text-violet-400 dark:text-violet-600'
+                              }`}>{phase.label}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                      {/* شريط التقدم الرئيسي */}
+                      <div className="flex items-center justify-between text-xs mb-1.5">
+                        <span className="font-medium text-violet-700 dark:text-violet-400 truncate ml-2">{uploadProgress.stage}</span>
+                        <span className="font-bold text-violet-600 shrink-0">{uploadProgress.percent}%</span>
+                      </div>
+                      <div className="w-full bg-violet-200/30 dark:bg-violet-800/30 rounded-full h-2.5 overflow-hidden">
+                        <motion.div
+                          initial={{ width: 0 }}
+                          animate={{ width: `${uploadProgress.percent}%` }}
+                          transition={{ duration: 0.5, ease: 'easeOut' }}
+                          className={`h-full rounded-full ${
+                            uploadProgress.percent === 100
+                              ? 'bg-gradient-to-r from-teal-500 to-teal-400'
+                              : 'bg-gradient-to-r from-violet-600 to-indigo-500'
+                          }`}
+                        />
+                      </div>
+                      {uploadProgress.percent === 100 && (
+                        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex items-center gap-1.5 mt-2 text-teal-600">
+                          <CheckCircle className="w-3.5 h-3.5" />
+                          <span className="text-xs font-medium">تم بنجاح!</span>
+                        </motion.div>
+                      )}
+                    </div>
                   </div>
-                  {/* شريط التقدم الرئيسي */}
-                  <div className="flex items-center justify-between text-xs mb-1.5">
-                    <span className="font-medium text-violet-700 dark:text-violet-400">{uploadProgress.stage}</span>
-                    <span className="font-bold text-violet-600">{uploadProgress.percent}%</span>
-                  </div>
-                  <div className="w-full bg-violet-200/30 dark:bg-violet-800/30 rounded-full h-2.5 overflow-hidden">
-                    <motion.div
-                      initial={{ width: 0 }}
-                      animate={{ width: `${uploadProgress.percent}%` }}
-                      transition={{ duration: 0.5, ease: 'easeOut' }}
-                      className={`h-full rounded-full ${
-                        uploadProgress.percent === 100
-                          ? 'bg-gradient-to-r from-teal-500 to-teal-400'
-                          : 'bg-gradient-to-r from-violet-600 to-indigo-500'
-                      }`}
-                    />
-                  </div>
-                  {uploadProgress.percent === 100 && (
-                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex items-center gap-1.5 mt-2 text-teal-600">
-                      <CheckCircle className="w-3.5 h-3.5" />
-                      <span className="text-xs font-medium">تم بنجاح!</span>
-                    </motion.div>
-                  )}
                 </motion.div>
               )}
 
@@ -3168,37 +3407,39 @@ export default function PerformanceEvidence() {
             // === دالة رسم الحقول حسب نمط القالب ===
             const renderFields = () => {
               if (fStyle === 'cards') {
-                // نمط البطاقات - بألوان الهوية البصرية
+                // نمط البطاقات - تصميم احترافي بظلال خفيفة وحواف متناسقة
                 return (
                   <div style={{ padding: '16px 24px', flex: 1 }}>
-                    <div style={{ display: 'flex', flexWrap: 'wrap' as const, gap: '10px' }}>
-                      {allFields.map((field) => (
+                    <div style={{ display: 'flex', flexWrap: 'wrap' as const, gap: '12px' }}>
+                      {allFields.map((field, fi) => (
                         <div key={field.id} style={{
-                          flex: (field.value?.length || 0) >= 80 ? '1 1 100%' : '1 1 calc(50% - 5px)',
+                          flex: (field.value?.length || 0) >= 80 ? '1 1 100%' : '1 1 calc(50% - 6px)',
                           background: '#fff',
-                          borderRadius: '8px',
-                          border: `2px solid ${theme.borderColor || '#b8c9d9'}`,
+                          borderRadius: '10px',
+                          border: `1.5px solid ${theme.borderColor || '#e2e8f0'}`,
                           overflow: 'hidden',
+                          boxShadow: '0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04)',
                         }}>
                           <div style={{
-                            background: `linear-gradient(135deg, ${theme.accent}, ${theme.borderColor || theme.accent})`,
+                            background: `linear-gradient(135deg, ${theme.accent}, ${theme.accent}dd)`,
                             color: '#fff',
-                            padding: '8px 16px',
-                            fontSize: '13px',
+                            padding: '9px 16px',
+                            fontSize: '12.5px',
                             fontWeight: 700,
                             textAlign: 'center',
-                            letterSpacing: '0.3px',
+                            letterSpacing: '0.4px',
+                            borderBottom: `1px solid ${theme.accent}`,
                           }}>
                             {field.label}
                           </div>
                           <div style={{
                             padding: '12px 16px',
-                            fontSize: '14px',
-                            color: '#1a1a1a',
+                            fontSize: '13.5px',
+                            color: '#1e293b',
                             lineHeight: '1.9',
                             whiteSpace: 'pre-wrap' as const,
                             minHeight: '45px',
-                            background: '#ffffff',
+                            background: fi % 2 === 0 ? '#ffffff' : '#fafbfc',
                           }}>
                             {field.value || '....................'}
                           </div>
@@ -3208,34 +3449,39 @@ export default function PerformanceEvidence() {
                   </div>
                 );
               } else if (fStyle === 'fieldset') {
-                // نمط الحقول بإطار - مطابق لصفحات 8,11 من الهوية البصرية
+                // نمط الحقول بإطار - تصميم احترافي بظلال وتدرجات
                 return (
                   <div style={{ padding: '16px 24px', flex: 1 }}>
-                    {allFields.map((field) => (
+                    {allFields.map((field, fi) => (
                       <div key={field.id} style={{
-                        border: `1.5px solid ${theme.borderColor || '#b8c9d9'}`,
-                        borderRadius: '8px',
-                        marginBottom: '12px',
+                        border: `1.5px solid ${theme.borderColor || '#e2e8f0'}`,
+                        borderRadius: '10px',
+                        marginBottom: '10px',
                         overflow: 'hidden',
+                        boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
                       }}>
                         <div style={{
-                          background: theme.accent,
-                          padding: '10px 18px',
-                          fontSize: '14px',
+                          background: `linear-gradient(90deg, ${theme.accent}, ${theme.accent}ee)`,
+                          padding: '9px 18px',
+                          fontSize: '13px',
                           fontWeight: 700,
                           color: '#ffffff',
-                          letterSpacing: '0.3px',
+                          letterSpacing: '0.4px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px',
                         }}>
+                          <span style={{ width: '4px', height: '4px', borderRadius: '50%', background: 'rgba(255,255,255,0.6)' }} />
                           {field.label}
                         </div>
                         <div style={{
-                          padding: '14px 18px',
-                          fontSize: '14px',
-                          color: '#1a1a1a',
+                          padding: '12px 18px',
+                          fontSize: '13.5px',
+                          color: '#1e293b',
                           lineHeight: '1.9',
                           whiteSpace: 'pre-wrap' as const,
                           minHeight: '45px',
-                          background: '#ffffff',
+                          background: fi % 2 === 0 ? '#ffffff' : '#fafbfc',
                         }}>
                           {field.value || '....................'}
                         </div>
@@ -3244,30 +3490,36 @@ export default function PerformanceEvidence() {
                   </div>
                 );
               } else if (fStyle === 'underlined') {
-                // نمط الخط السفلي - مطابق لصفحات 9,10 من الهوية البصرية
+                // نمط الخط السفلي - تصميم أنيق بخطوط متناسقة
                 return (
                   <div style={{ padding: '16px 24px', flex: 1 }}>
-                    {allFields.map((field) => (
+                    {allFields.map((field, fi) => (
                       <div key={field.id} style={{
-                        borderBottom: `1.5px solid ${theme.borderColor || '#b8c9d9'}`,
-                        padding: '14px 0',
+                        borderBottom: `1.5px solid ${theme.borderColor || '#e2e8f0'}`,
+                        padding: '12px 8px',
                         display: 'flex',
-                        gap: '16px',
+                        gap: '14px',
                         alignItems: (field.value?.length || 0) >= 80 ? 'flex-start' : 'center',
                         flexDirection: (field.value?.length || 0) >= 80 ? 'column' as const : 'row' as const,
+                        background: fi % 2 === 0 ? 'transparent' : `${theme.accent}04`,
+                        borderRadius: '4px',
                       }}>
                         <div style={{
-                          fontSize: '14px',
+                          fontSize: '13px',
                           fontWeight: 700,
                           color: theme.accent,
-                          minWidth: '120px',
+                          minWidth: '110px',
                           flexShrink: 0,
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px',
                         }}>
+                          <span style={{ width: '3px', height: '14px', borderRadius: '2px', background: theme.accent, opacity: 0.7 }} />
                           {field.label}:
                         </div>
                         <div style={{
-                          fontSize: '14px',
-                          color: '#1a1a1a',
+                          fontSize: '13.5px',
+                          color: '#1e293b',
                           lineHeight: '1.9',
                           whiteSpace: 'pre-wrap' as const,
                           flex: 1,
@@ -3279,27 +3531,35 @@ export default function PerformanceEvidence() {
                   </div>
                 );
               } else if (fStyle === 'minimal') {
-                // نمط بسيط
+                // نمط بسيط - تصميم نظيف وأنيق
                 return (
                   <div style={{ padding: '16px 24px', flex: 1 }}>
-                    {allFields.map((field) => (
-                      <div key={field.id} style={{ marginBottom: '14px' }}>
+                    {allFields.map((field, fi) => (
+                      <div key={field.id} style={{ marginBottom: '12px', padding: '4px 0' }}>
                         <div style={{
-                          fontSize: '13px',
+                          fontSize: '12px',
                           fontWeight: 700,
                           color: theme.accent,
                           letterSpacing: '0.5px',
-                          marginBottom: '5px',
+                          marginBottom: '4px',
+                          textTransform: 'uppercase' as const,
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '5px',
                         }}>
+                          <span style={{ width: '6px', height: '2px', borderRadius: '1px', background: theme.accent, opacity: 0.5 }} />
                           {field.label}
                         </div>
                         <div style={{
-                          fontSize: '14px',
-                          color: '#1a1a1a',
+                          fontSize: '13.5px',
+                          color: '#1e293b',
                           lineHeight: '1.9',
                           whiteSpace: 'pre-wrap' as const,
-                          padding: '8px 0',
-                          borderBottom: `1.5px dotted ${theme.borderColor || '#b8c9d9'}`,
+                          padding: '8px 10px',
+                          borderBottom: `1.5px dotted ${theme.borderColor || '#e2e8f0'}`,
+                          borderRight: `2px solid ${theme.accent}20`,
+                          background: fi % 2 === 0 ? 'transparent' : '#fafbfc',
+                          borderRadius: '2px',
                         }}>
                           {field.value || '....................'}
                         </div>
@@ -3308,12 +3568,18 @@ export default function PerformanceEvidence() {
                   </div>
                 );
               } else {
-                // نمط الجدول الرسمي (table) - تصميم محسّن
-                // الحقول القصيرة في صفوف من 2 لتوزيع أفضل
-                const colsPerRow = shortFields.length <= 4 ? 2 : 3;
+                // نمط الجدول الرسمي (table) - تصميم احترافي متكامل
+                // الحقول القصيرة في صفين لتوزيع متوازن
+                const colsPerRow = 2;
                 return (
-                  <div style={{ padding: '16px 24px', flex: 1, display: 'flex', flexDirection: 'column' as const }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse' as const, border: `2px solid ${theme.borderColor || '#b8c9d9'}`, flex: 1, tableLayout: 'fixed' as const }}>
+                  <div style={{ padding: '12px 20px', flex: 1, display: 'flex', flexDirection: 'column' as const }}>
+                    <table style={{ 
+                      width: '100%', 
+                      borderCollapse: 'collapse' as const, 
+                      border: `2px solid ${theme.borderColor || '#b8c9d9'}`, 
+                      flex: 1, 
+                      tableLayout: 'fixed' as const,
+                    }}>
                       <tbody>
                         {shortFields.length > 0 && (() => {
                           const rows: typeof shortFields[] = [];
@@ -3324,63 +3590,67 @@ export default function PerformanceEvidence() {
                                 <React.Fragment key={field.id}>
                                   <td style={{
                                     border: `1.5px solid ${theme.borderColor || '#b8c9d9'}`,
-                                    padding: '10px 14px',
+                                    padding: '8px 12px',
                                     fontWeight: 700,
-                                    fontSize: '13px',
+                                    fontSize: '12px',
                                     color: '#fff',
-                                    background: theme.accent,
-                                    width: colsPerRow === 2 ? '18%' : '15%',
+                                    background: `linear-gradient(135deg, ${theme.accent}, ${theme.headerBg || theme.accent})`,
+                                    width: '20%',
                                     textAlign: 'center',
-                                    whiteSpace: 'nowrap' as const,
+                                    verticalAlign: 'middle',
+                                    letterSpacing: '0.3px',
                                   }}>
                                     {field.label}
                                   </td>
                                   <td style={{
                                     border: `1.5px solid ${theme.borderColor || '#b8c9d9'}`,
-                                    padding: '10px 14px',
-                                    fontSize: '14px',
+                                    padding: '8px 14px',
+                                    fontSize: '13px',
                                     color: '#1a1a1a',
-                                    background: '#fff',
+                                    background: ri % 2 === 0 ? '#fff' : '#f8fafb',
+                                    width: '30%',
+                                    verticalAlign: 'middle',
                                   }}>
-                                    {field.value || '.....................'}
+                                    {field.value || '\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022'}
                                   </td>
                                 </React.Fragment>
                               ))}
                               {row.length < colsPerRow && Array.from({ length: colsPerRow - row.length }).map((_, i) => (
                                 <React.Fragment key={`empty-${i}`}>
-                                  <td style={{ border: `1.5px solid ${theme.borderColor || '#b8c9d9'}`, padding: '10px 14px', background: theme.accent, width: colsPerRow === 2 ? '18%' : '15%' }}></td>
-                                  <td style={{ border: `1.5px solid ${theme.borderColor || '#b8c9d9'}`, padding: '10px 14px', background: '#fff' }}></td>
+                                  <td style={{ border: `1.5px solid ${theme.borderColor || '#b8c9d9'}`, padding: '8px 12px', background: `linear-gradient(135deg, ${theme.accent}, ${theme.headerBg || theme.accent})`, width: '20%' }}></td>
+                                  <td style={{ border: `1.5px solid ${theme.borderColor || '#b8c9d9'}`, padding: '8px 14px', background: ri % 2 === 0 ? '#fff' : '#f8fafb', width: '30%' }}></td>
                                 </React.Fragment>
                               ))}
                             </tr>
                           ));
                         })()}
-                        {longFields.map((field) => (
+                        {longFields.map((field, fi) => (
                           <tr key={field.id}>
                             <td style={{
                               border: `1.5px solid ${theme.borderColor || '#b8c9d9'}`,
-                              padding: '10px 14px',
+                              padding: '8px 12px',
                               fontWeight: 700,
-                              fontSize: '13px',
+                              fontSize: '12px',
                               color: '#fff',
-                              background: theme.accent,
-                              width: colsPerRow === 2 ? '18%' : '15%',
+                              background: `linear-gradient(135deg, ${theme.accent}, ${theme.headerBg || theme.accent})`,
+                              width: '20%',
                               textAlign: 'center',
                               verticalAlign: 'top',
+                              letterSpacing: '0.3px',
                             }}>
                               {field.label}
                             </td>
                             <td colSpan={colsPerRow * 2 - 1} style={{
                               border: `1.5px solid ${theme.borderColor || '#b8c9d9'}`,
-                              padding: '12px 16px',
-                              fontSize: '14px',
-                              lineHeight: '2.0',
+                              padding: '10px 14px',
+                              fontSize: '13px',
+                              lineHeight: '1.9',
                               color: '#1a1a1a',
-                              background: '#fff',
+                              background: (shortFields.length + fi) % 2 === 0 ? '#fff' : '#f8fafb',
                               whiteSpace: 'pre-wrap' as const,
                               verticalAlign: 'top',
                             }}>
-                              {field.value || '.....................'}
+                              {field.value || '\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022'}
                             </td>
                           </tr>
                         ))}
@@ -3406,10 +3676,45 @@ export default function PerformanceEvidence() {
                       <Button size="sm" variant="outline" className="gap-1 text-xs h-7" onClick={() => { const el = document.getElementById(`single-preview-${previewSubId}`); if (el) printElement(`single-preview-${previewSubId}`); }}>
                         <Printer className="w-3 h-3" />طباعة
                       </Button>
-                      <select value={selectedTheme.id} onChange={(e) => { const t = allThemes.find(th => th.id === e.target.value); if (t) setSelectedTheme(t); }}
-                        className="text-xs h-7 px-2 rounded border border-gray-300 bg-white focus:ring-1 focus:ring-[#1a3a5c] focus:border-[#1a3a5c] outline-none">
-                        {allThemes.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-                      </select>
+                      <div className="relative group">
+                        <button className="flex items-center gap-1.5 text-xs h-7 px-2 rounded border border-gray-300 bg-white hover:bg-gray-50 transition-colors"
+                          onClick={(e) => { const el = e.currentTarget.nextElementSibling; if (el) el.classList.toggle('hidden'); }}>
+                          <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: selectedTheme.accent }} />
+                          <span>{selectedTheme.name}</span>
+                          <ChevronDown className="w-3 h-3 text-gray-400" />
+                        </button>
+                        <div className="hidden absolute top-8 right-0 z-50 bg-white rounded-xl shadow-2xl border p-2 w-64 max-h-72 overflow-y-auto">
+                          <p className="text-[9px] text-gray-400 px-1 mb-1">اختر القالب:</p>
+                          <div className="grid grid-cols-2 gap-1.5">
+                            {allThemes.map(t => {
+                              const isSel = selectedTheme.id === t.id;
+                              return (
+                                <button key={t.id} onClick={(e) => { setSelectedTheme(t); const parent = (e.currentTarget as HTMLElement).closest('.grid')?.parentElement; if (parent) parent.classList.add('hidden'); }}
+                                  className={`rounded-md border overflow-hidden text-right transition-all ${isSel ? 'border-primary ring-1 ring-primary/30 shadow-sm' : 'border-gray-200 hover:border-gray-400'}`}>
+                                  <div className="h-10 w-full relative" style={{ background: t.headerBg === '#ffffff' ? '#f8fafb' : t.headerBg }}>
+                                    <div className="h-3 w-full flex items-center justify-center gap-0.5" style={{ background: t.headerBg === '#ffffff' ? '#f0f4f8' : t.headerBg }}>
+                                      <div className="w-1.5 h-1.5 rounded-full bg-white/60" />
+                                      <div className="w-5 h-0.5 rounded-full" style={{ background: t.headerText === '#ffffff' ? 'rgba(255,255,255,0.5)' : `${t.accent}40` }} />
+                                    </div>
+                                    <div className="px-1 pt-0.5">
+                                      <div className="h-1 rounded-full mb-0.5" style={{ background: t.titleBg, width: '50%' }} />
+                                      <div className="flex gap-0.5">
+                                        <div className="flex-1 h-0.5 rounded-full" style={{ background: `${t.accent}20` }} />
+                                        <div className="flex-1 h-0.5 rounded-full" style={{ background: `${t.accent}15` }} />
+                                      </div>
+                                    </div>
+                                    {t.showBottomBar && <div className="absolute bottom-0 left-0 right-0 h-0.5" style={{ background: t.footerBg }} />}
+                                  </div>
+                                  <div className={`px-1.5 py-1 text-[9px] font-medium flex items-center gap-1 ${isSel ? 'bg-primary/5 text-primary' : 'text-gray-700'}`}>
+                                    <span className="truncate">{t.name}</span>
+                                    {isSel && <span className="mr-auto text-primary text-[8px]">✓</span>}
+                                  </div>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      </div>
                       {/* زر تخصيص الألوان */}
                       <div className="relative">
                         <Button size="sm" variant="outline" className={`gap-1 text-xs h-7 ${showColorPicker ? 'bg-[#1a3a5c] text-white' : ''}`} onClick={() => setShowColorPicker(!showColorPicker)}>
@@ -3462,16 +3767,19 @@ export default function PerformanceEvidence() {
                           </div>
                         )}
                       </div>
-                      {/* أزرار التكبير/التصغير */}
-                      <div className="flex items-center gap-1 border rounded-lg px-1 bg-white">
-                        <button onClick={zoomOut} className="p-1 hover:bg-gray-100 rounded" title="تصغير">
+                      {/* أزرار التكبير/التصغير - تصميم احترافي */}
+                      <div className="flex items-center gap-0.5 bg-white/90 backdrop-blur-sm border border-gray-200 rounded-lg shadow-sm px-1 py-0.5">
+                        <button onClick={zoomOut} className="p-1.5 hover:bg-gray-100 rounded-md transition-colors active:scale-95" title="تصغير">
                           <ZoomOut className="w-3.5 h-3.5 text-gray-600" />
                         </button>
-                        <span className="text-[10px] font-mono text-gray-500 min-w-[32px] text-center">{zoomLevel}%</span>
-                        <button onClick={zoomIn} className="p-1 hover:bg-gray-100 rounded" title="تكبير">
+                        <div className="px-1.5 min-w-[2.5rem] text-center">
+                          <span className="text-[10px] font-mono text-gray-700 font-medium">{zoomLevel}%</span>
+                        </div>
+                        <button onClick={zoomIn} className="p-1.5 hover:bg-gray-100 rounded-md transition-colors active:scale-95" title="تكبير">
                           <ZoomIn className="w-3.5 h-3.5 text-gray-600" />
                         </button>
-                        <button onClick={resetZoom} className="p-1 hover:bg-gray-100 rounded" title="إعادة الحجم الأصلي">
+                        <div className="w-px h-4 bg-gray-200 mx-0.5" />
+                        <button onClick={resetZoom} className="p-1.5 hover:bg-gray-100 rounded-md transition-colors active:scale-95" title="إعادة الحجم الأصلي">
                           <RotateCcw className="w-3 h-3 text-gray-500" />
                         </button>
                       </div>
@@ -4069,14 +4377,52 @@ export default function PerformanceEvidence() {
               {/* القوالب الأساسية */}
               <div>
                 <p className="text-[10px] text-muted-foreground mb-2 font-medium">القوالب المتاحة:</p>
-                <div className="flex flex-wrap gap-2">
-                  {allThemes.map((t) => (
-                    <Button key={t.id} variant={selectedTheme.id === t.id ? "default" : "outline"} size="sm"
-                      onClick={() => setSelectedTheme(t)}>
-                      {t.id.startsWith('db-') && <span className="inline-block w-2 h-2 rounded-full ml-1" style={{ backgroundColor: t.accent }} />}
-                      {t.name}
-                    </Button>
-                  ))}
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+                  {allThemes.map((t) => {
+                    const isSelected = selectedTheme.id === t.id;
+                    const isInkSaver = t.id === 'builtin-ink-saver';
+                    return (
+                      <button key={t.id}
+                        onClick={() => setSelectedTheme(t)}
+                        className={`relative group rounded-lg border-2 p-0 overflow-hidden transition-all duration-200 text-right ${
+                          isSelected ? 'border-primary shadow-md ring-2 ring-primary/20' : 'border-border hover:border-primary/40 hover:shadow-sm'
+                        }`}
+                      >
+                        {/* معاينة مصغرة للقالب */}
+                        <div className="h-16 w-full relative" style={{ background: t.headerBg === '#ffffff' ? '#f8fafb' : t.headerBg }}>
+                          {/* شريط علوي يمثل الترويسة */}
+                          <div className="h-5 w-full flex items-center justify-center gap-1" style={{ background: t.headerBg === '#ffffff' ? '#f0f4f8' : t.headerBg }}>
+                            <div className="w-2.5 h-2.5 rounded-full bg-white/60" />
+                            <div className="w-8 h-1 rounded-full" style={{ background: t.headerText === '#ffffff' ? 'rgba(255,255,255,0.5)' : `${t.accent}40` }} />
+                          </div>
+                          {/* عنوان التقرير */}
+                          <div className="px-1.5 pt-1">
+                            <div className="h-1.5 rounded-full mb-1" style={{ background: t.titleBg, width: '60%' }} />
+                            {/* حقول مصغرة */}
+                            <div className="flex gap-0.5">
+                              <div className="flex-1 h-1 rounded-full" style={{ background: `${t.accent}20` }} />
+                              <div className="flex-1 h-1 rounded-full" style={{ background: `${t.accent}15` }} />
+                            </div>
+                            <div className="flex gap-0.5 mt-0.5">
+                              <div className="flex-1 h-1 rounded-full" style={{ background: `${t.accent}20` }} />
+                              <div className="flex-1 h-1 rounded-full" style={{ background: `${t.accent}15` }} />
+                            </div>
+                          </div>
+                          {/* شريط سفلي */}
+                          {t.showBottomBar && <div className="absolute bottom-0 left-0 right-0 h-1" style={{ background: t.footerBg }} />}
+                        </div>
+                        {/* اسم القالب */}
+                        <div className={`px-2 py-1.5 text-[10px] font-semibold flex items-center gap-1 ${
+                          isSelected ? 'bg-primary/5 text-primary' : 'bg-background text-foreground'
+                        }`}>
+                          {t.id.startsWith('db-') && <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: t.accent }} />}
+                          {isInkSaver && <span className="text-[8px]">🖨️</span>}
+                          <span className="truncate">{t.name}</span>
+                          {isSelected && <span className="mr-auto text-primary">✓</span>}
+                        </div>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 
@@ -4307,10 +4653,46 @@ export default function PerformanceEvidence() {
             </Button>
             <div className="flex gap-1.5 sm:gap-2 flex-wrap justify-end items-center">
               {/* قائمة القوالب */}
-              <select value={selectedTheme.id} onChange={(e) => { const t = allThemes.find(th => th.id === e.target.value); if (t) setSelectedTheme(t); }}
-                className="text-xs h-8 sm:h-9 px-2 rounded-lg border border-gray-300 bg-white focus:ring-1 focus:ring-[#1a5f3f] focus:border-[#1a5f3f] outline-none">
-                {allThemes.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-              </select>
+              <div className="relative">
+                <button className="flex items-center gap-1.5 text-xs h-8 sm:h-9 px-2.5 rounded-lg border border-gray-300 bg-white hover:bg-gray-50 transition-colors"
+                  onClick={(e) => { const el = e.currentTarget.nextElementSibling; if (el) el.classList.toggle('hidden'); }}>
+                  <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: selectedTheme.accent }} />
+                  <span className="hidden sm:inline">{selectedTheme.name}</span>
+                  <span className="sm:hidden">القالب</span>
+                  <ChevronDown className="w-3 h-3 text-gray-400" />
+                </button>
+                <div className="hidden absolute top-10 left-0 sm:left-auto sm:right-0 z-50 bg-white rounded-xl shadow-2xl border p-2 w-72 max-h-80 overflow-y-auto">
+                  <p className="text-[9px] text-gray-400 px-1 mb-1.5">اختر القالب:</p>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {allThemes.map(t => {
+                      const isSel = selectedTheme.id === t.id;
+                      return (
+                        <button key={t.id} onClick={(e) => { setSelectedTheme(t); const parent = (e.currentTarget as HTMLElement).closest('.grid')?.parentElement; if (parent) parent.classList.add('hidden'); }}
+                          className={`rounded-md border overflow-hidden text-right transition-all ${isSel ? 'border-primary ring-1 ring-primary/30 shadow-sm' : 'border-gray-200 hover:border-gray-400'}`}>
+                          <div className="h-12 w-full relative" style={{ background: t.headerBg === '#ffffff' ? '#f8fafb' : t.headerBg }}>
+                            <div className="h-3.5 w-full flex items-center justify-center gap-0.5" style={{ background: t.headerBg === '#ffffff' ? '#f0f4f8' : t.headerBg }}>
+                              <div className="w-2 h-2 rounded-full bg-white/60" />
+                              <div className="w-6 h-0.5 rounded-full" style={{ background: t.headerText === '#ffffff' ? 'rgba(255,255,255,0.5)' : `${t.accent}40` }} />
+                            </div>
+                            <div className="px-1 pt-0.5">
+                              <div className="h-1 rounded-full mb-0.5" style={{ background: t.titleBg, width: '55%' }} />
+                              <div className="flex gap-0.5">
+                                <div className="flex-1 h-0.5 rounded-full" style={{ background: `${t.accent}20` }} />
+                                <div className="flex-1 h-0.5 rounded-full" style={{ background: `${t.accent}15` }} />
+                              </div>
+                            </div>
+                            {t.showBottomBar && <div className="absolute bottom-0 left-0 right-0 h-0.5" style={{ background: t.footerBg }} />}
+                          </div>
+                          <div className={`px-1.5 py-1 text-[9px] font-medium flex items-center gap-1 ${isSel ? 'bg-primary/5 text-primary' : 'text-gray-700'}`}>
+                            <span className="truncate">{t.name}</span>
+                            {isSel && <span className="mr-auto text-primary text-[8px]">✓</span>}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
               {/* زر لوحة الألوان */}
               <div className="relative">
                 <Button size="sm" variant="outline" className={`gap-1 text-xs h-8 sm:h-9 ${showColorPicker ? 'bg-[#1a5f3f] text-white' : ''}`} onClick={() => setShowColorPicker(!showColorPicker)}>
