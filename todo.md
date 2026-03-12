@@ -1261,3 +1261,8 @@
 ## 100. إصلاح الترويسة في صفحة التوقيعات
 - [x] تحويل الترويسة من position: absolute إلى flow عادي
 - [x] منع قص الترويسة في صفحة التوقيعات
+
+## 101. إصلاح خطأ تصدير PDF - "PDF generation failed"
+- [x] تحليل سبب الخطأ في pdf-export.ts:24 (Chrome/Puppeteer غير متوفر في الإنتاج)
+- [x] إصلاح الخطأ - تحويل من Puppeteer (server-side) إلى html2canvas-pro + jsPDF (client-side)
+- [x] اختبار التصدير - 12 اختبار ناجح

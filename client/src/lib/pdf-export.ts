@@ -1,14 +1,19 @@
 /**
- * نظام تصدير PDF - يستخدم Server-Side Rendering عبر Puppeteer
- * يحل مشكلة الحروف العربية المفككة في html2canvas بشكل نهائي
- * محسّن ليطابق جودة edu-forms.com
+ * نظام تصدير PDF - Client-Side باستخدام html2canvas-pro + jsPDF
+ * يعمل بالكامل في المتصفح بدون حاجة لسيرفر أو Puppeteer
+ * 
+ * html2canvas-pro يدعم oklch colors وألوان CSS الحديثة
+ * jsPDF ينشئ ملف PDF من الصور المولدة
  * 
  * الآلية:
- * 1. يأخذ HTML من العنصر المحدد
- * 2. يرسله إلى السيرفر عبر /api/export-pdf
- * 3. السيرفر يستخدم Puppeteer (Chromium) لتحويل HTML إلى PDF
- * 4. النتيجة: PDF بجودة عالية مع نصوص عربية مثالية
+ * 1. يأخذ العنصر HTML المحدد
+ * 2. يحوله إلى canvas عبر html2canvas-pro (يدعم العربية)
+ * 3. يحول كل صفحة (div) إلى صورة PNG عالية الجودة
+ * 4. يجمع الصور في ملف PDF عبر jsPDF
  */
+
+import html2canvas from "html2canvas-pro";
+import { jsPDF } from "jspdf";
 
 export interface PdfTemplate {
   headerBg: string;
@@ -30,9 +35,50 @@ export const DEFAULT_TEMPLATE: PdfTemplate = {
   fontFamily: "Cairo",
 };
 
+// A4 dimensions in mm
+const A4_WIDTH_MM = 210;
+const A4_HEIGHT_MM = 297;
+
 /**
- * تصدير PDF عبر Server-Side Rendering
- * يرسل HTML إلى السيرفر الذي يستخدم Puppeteer لتحويله إلى PDF
+ * تحويل عنصر HTML إلى canvas عالي الجودة
+ */
+async function elementToCanvas(element: HTMLElement, scale: number = 2): Promise<HTMLCanvasElement> {
+  // إخفاء الأزرار مؤقتاً
+  const buttons = element.querySelectorAll("button, [data-no-print]");
+  const buttonDisplays: string[] = [];
+  buttons.forEach((btn, i) => {
+    buttonDisplays[i] = (btn as HTMLElement).style.display;
+    (btn as HTMLElement).style.display = "none";
+  });
+
+  try {
+    const canvas = await html2canvas(element, {
+      scale,
+      useCORS: true,
+      allowTaint: true,
+      logging: false,
+      backgroundColor: "#ffffff",
+      // تحسين جودة الصور
+      imageTimeout: 15000,
+      // proxy للصور الخارجية
+      proxy: "/api/image-proxy",
+      removeContainer: true,
+      // تحسين الأداء
+      windowWidth: element.scrollWidth,
+      windowHeight: element.scrollHeight,
+    });
+    return canvas;
+  } finally {
+    // استعادة الأزرار
+    buttons.forEach((btn, i) => {
+      (btn as HTMLElement).style.display = buttonDisplays[i];
+    });
+  }
+}
+
+/**
+ * تصدير عنصر HTML إلى PDF
+ * يحول كل صفحة (div مباشر) إلى صورة ويجمعها في PDF
  */
 export async function exportToPDF(
   elementId: string,
@@ -43,40 +89,52 @@ export async function exportToPDF(
   if (!element) throw new Error("Element not found: " + elementId);
 
   try {
-    onProgress?.(1, 4);
+    // البحث عن الصفحات (divs المباشرة)
+    const pages = Array.from(element.children).filter(child => {
+      const el = child as HTMLElement;
+      // تخطي العناصر المخفية و print:hidden
+      if (el.style.display === 'none') return false;
+      if (el.classList.contains('print:hidden') || el.className?.includes?.('print:hidden')) return false;
+      if (el.tagName !== 'DIV') return false;
+      return true;
+    }) as HTMLElement[];
 
-    // Step 1: استخراج HTML من العنصر مع تحويل الأنماط المحسوبة إلى inline styles
-    const htmlContent = await extractHtmlWithStyles(element);
-    
-    onProgress?.(2, 4);
-
-    // Step 2: تحويل الصور إلى data URLs (خطوة منفصلة لتحسين الأداء)
-    onProgress?.(3, 4);
-
-    // Step 3: إرسال HTML إلى السيرفر لتحويله إلى PDF
-    const response = await fetch('/api/export-pdf', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ html: htmlContent, filename }),
-    });
-
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({ error: 'Unknown error' }));
-      throw new Error(error.error || 'PDF export failed');
+    if (pages.length === 0) {
+      // إذا لم تكن هناك صفحات فرعية، استخدم العنصر كله كصفحة واحدة
+      return await exportSingleElementToPDF(element, filename, onProgress);
     }
 
-    // Step 4: تحميل الملف
-    const blob = await response.blob();
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    const total = pages.length + 1; // pages + final save
+    onProgress?.(0, total);
 
-    onProgress?.(4, 4);
+    const pdf = new jsPDF({
+      orientation: "portrait",
+      unit: "mm",
+      format: "a4",
+      compress: true,
+    });
+
+    for (let i = 0; i < pages.length; i++) {
+      onProgress?.(i + 1, total);
+
+      const page = pages[i];
+      
+      // تحويل الصفحة إلى canvas
+      const canvas = await elementToCanvas(page, 2);
+      const imgData = canvas.toDataURL("image/jpeg", 0.92);
+
+      if (i > 0) {
+        pdf.addPage("a4", "portrait");
+      }
+
+      // إضافة الصورة بحجم A4
+      pdf.addImage(imgData, "JPEG", 0, 0, A4_WIDTH_MM, A4_HEIGHT_MM);
+    }
+
+    onProgress?.(total, total);
+
+    // تحميل الملف
+    pdf.save(filename);
     return true;
   } catch (err) {
     console.error("PDF export error:", err);
@@ -85,17 +143,38 @@ export async function exportToPDF(
 }
 
 /**
- * استخراج HTML للتصدير (يستخدم من PDF و Word)
+ * تصدير عنصر واحد كصفحة PDF واحدة
  */
-export async function extractHtmlForExport(element: HTMLElement): Promise<string> {
-  return extractHtmlWithStyles(element);
+async function exportSingleElementToPDF(
+  element: HTMLElement,
+  filename: string,
+  onProgress?: (current: number, total: number) => void
+): Promise<boolean> {
+  onProgress?.(1, 3);
+
+  const canvas = await elementToCanvas(element, 2);
+  
+  onProgress?.(2, 3);
+
+  const imgData = canvas.toDataURL("image/jpeg", 0.92);
+  const pdf = new jsPDF({
+    orientation: "portrait",
+    unit: "mm",
+    format: "a4",
+    compress: true,
+  });
+
+  pdf.addImage(imgData, "JPEG", 0, 0, A4_WIDTH_MM, A4_HEIGHT_MM);
+  pdf.save(filename);
+
+  onProgress?.(3, 3);
+  return true;
 }
 
 /**
- * استخراج HTML مع تحويل الأنماط المحسوبة إلى inline styles
- * هذا ضروري لأن Puppeteer لن يكون لديه وصول إلى CSS الأصلي
+ * استخراج HTML للتصدير (يستخدم من Word export)
  */
-async function extractHtmlWithStyles(element: HTMLElement): Promise<string> {
+export async function extractHtmlForExport(element: HTMLElement): Promise<string> {
   // إخفاء الأزرار مؤقتاً
   const buttons = element.querySelectorAll("button, [data-no-print]");
   const buttonDisplays: string[] = [];
@@ -115,220 +194,85 @@ async function extractHtmlWithStyles(element: HTMLElement): Promise<string> {
   // حذف الأزرار من النسخة
   clone.querySelectorAll("button, [data-no-print]").forEach(el => el.remove());
 
-  // تحويل الأنماط المحسوبة إلى inline styles للعناصر الرئيسية
-  await inlineComputedStyles(element, clone);
-
-  // تحويل الصور الخارجية إلى data URLs
-  await convertImagesToDataUrls(clone);
-
-  // تحويل oklch colors
-  convertOklchInClone(clone);
-
-  // إعداد الصفحات
-  const pages = clone.querySelectorAll(":scope > div");
-  if (pages.length > 0) {
-    pages.forEach(page => {
-      const el = page as HTMLElement;
-      // إخفاء الفواصل الفنية (print:hidden)
-      if (el.classList.contains('print:hidden') || el.className.includes('print:hidden')) {
-        el.style.display = 'none';
-        return;
-      }
-      el.classList.add('pdf-page');
-      // إزالة box-shadow و margin-bottom
-      el.style.boxShadow = 'none';
-      el.style.marginBottom = '0';
-      // ضمان حجم A4 ثابت
-      el.style.width = '210mm';
-      el.style.height = '297mm';
-      el.style.maxHeight = '297mm';
-      el.style.overflow = 'hidden';
-      el.style.pageBreakAfter = 'always';
-      el.style.pageBreakInside = 'avoid';
-      el.style.boxSizing = 'border-box';
-    });
-  }
-
   return clone.innerHTML;
 }
 
 /**
- * تحويل الأنماط المحسوبة إلى inline styles
- * محسّن لنقل جميع الخصائص المهمة بدقة عالية
+ * تصدير PDF متعدد التقارير - يجمع عدة عناصر HTML في ملف PDF واحد
+ * يتيح للمستخدم تصدير عدة تقارير (شواهد مختلفة) دفعة واحدة
  */
-async function inlineComputedStyles(original: HTMLElement, clone: HTMLElement): Promise<void> {
-  const origElements = [original, ...Array.from(original.querySelectorAll("*"))] as HTMLElement[];
-  const cloneElements = [clone, ...Array.from(clone.querySelectorAll("*"))] as HTMLElement[];
+export async function exportMultipleReportsToPDF(
+  elementIds: string[],
+  filename: string = "تقارير_متعددة.pdf",
+  onProgress?: (current: number, total: number) => void
+): Promise<boolean> {
+  if (elementIds.length === 0) throw new Error("No elements to export");
 
-  // الخصائص المهمة التي نحتاج نسخها
-  const importantProps = [
-    'color', 'backgroundColor', 'background', 'backgroundImage',
-    'borderTop', 'borderRight', 'borderBottom', 'borderLeft',
-    'borderTopColor', 'borderRightColor', 'borderBottomColor', 'borderLeftColor',
-    'borderTopWidth', 'borderRightWidth', 'borderBottomWidth', 'borderLeftWidth',
-    'borderTopStyle', 'borderRightStyle', 'borderBottomStyle', 'borderLeftStyle',
-    'fontSize', 'fontWeight', 'fontFamily', 'lineHeight', 'letterSpacing',
-    'textAlign', 'direction', 'display', 'flexDirection', 'justifyContent', 'alignItems',
-    'padding', 'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft',
-    'margin', 'marginTop', 'marginRight', 'marginBottom', 'marginLeft',
-    'width', 'maxWidth', 'minWidth', 'height', 'minHeight', 'maxHeight',
-    'position', 'top', 'right', 'bottom', 'left', 'zIndex',
-    'overflow', 'whiteSpace', 'wordBreak', 'textDecoration',
-    'borderRadius', 'boxShadow', 'opacity', 'filter',
-    'gridTemplateColumns', 'gridTemplateRows', 'gap',
-    'flex', 'flexGrow', 'flexShrink', 'flexBasis', 'flexWrap',
-    'tableLayout', 'borderCollapse', 'borderSpacing',
-    'verticalAlign', 'textIndent',
-    'clipPath', 'objectFit', 'objectPosition',
-    'textOverflow', 'overflowWrap',
-  ];
-
-  for (let i = 0; i < Math.min(origElements.length, cloneElements.length); i++) {
-    const origEl = origElements[i];
-    const cloneEl = cloneElements[i];
-    
-    // تخطي العناصر المخفية
-    if (origEl.offsetParent === null && origEl !== original) continue;
-
-    const computed = window.getComputedStyle(origEl);
-    
-    for (const prop of importantProps) {
-      const cssProp = prop.replace(/([A-Z])/g, '-$1').toLowerCase();
-      const value = computed.getPropertyValue(cssProp);
-      if (value && value !== '' && value !== 'none' && value !== 'normal' && value !== 'auto') {
-        // تحويل oklch إلى RGB
-        if (value.includes('oklch')) {
-          const rgb = oklchToRgb(value);
-          if (rgb) {
-            cloneEl.style.setProperty(cssProp, rgb);
-            continue;
-          }
-        }
-        cloneEl.style.setProperty(cssProp, value);
-      }
-    }
-
-    // تأكد من أن الخط العربي مطبق
-    cloneEl.style.fontFamily = "'Cairo', 'Tajawal', 'Arial', sans-serif";
-  }
-}
-
-/**
- * تحويل الصور الخارجية إلى data URLs
- */
-async function convertImagesToDataUrls(element: HTMLElement): Promise<void> {
-  const images = element.querySelectorAll("img");
-  
-  const promises = Array.from(images).map(async (img) => {
-    const src = img.getAttribute("src") || img.src;
-    if (src && !src.startsWith("data:") && !src.startsWith("blob:")) {
-      try {
-        // محاولة مباشرة أولاً
-        let dataUrl: string | null = null;
-        try {
-          const resp = await fetch(src, { mode: "cors" });
-          if (resp.ok) {
-            const blob = await resp.blob();
-            dataUrl = await blobToDataUrl(blob);
-          }
-        } catch {
-          // استخدام proxy
-        }
-        
-        if (!dataUrl) {
-          try {
-            const proxyUrl = `/api/image-proxy?url=${encodeURIComponent(src)}`;
-            const resp = await fetch(proxyUrl);
-            if (resp.ok) {
-              const blob = await resp.blob();
-              dataUrl = await blobToDataUrl(blob);
-            }
-          } catch {
-            // تخطي الصورة
-          }
-        }
-        
-        if (dataUrl) {
-          img.src = dataUrl;
-          img.setAttribute("src", dataUrl);
-        }
-      } catch {
-        // تخطي الصورة
-      }
-    }
-  });
-
-  await Promise.all(promises);
-
-  // تحويل background images أيضاً
-  const allElements = [element, ...Array.from(element.querySelectorAll("*"))] as HTMLElement[];
-  for (const el of allElements) {
-    const bgImage = el.style.backgroundImage;
-    if (bgImage && bgImage.includes("url(")) {
-      const urlMatch = bgImage.match(/url\(['"]?(https?:\/\/[^'")\s]+)['"]?\)/);
-      if (urlMatch) {
-        try {
-          const proxyUrl = `/api/image-proxy?url=${encodeURIComponent(urlMatch[1])}`;
-          const resp = await fetch(proxyUrl);
-          if (resp.ok) {
-            const blob = await resp.blob();
-            const dataUrl = await blobToDataUrl(blob);
-            el.style.backgroundImage = `url(${dataUrl})`;
-          }
-        } catch {
-          // تخطي
-        }
-      }
-    }
-  }
-}
-
-function blobToDataUrl(blob: Blob): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onloadend = () => resolve(reader.result as string);
-    reader.onerror = reject;
-    reader.readAsDataURL(blob);
-  });
-}
-
-/**
- * تحويل ألوان oklch إلى RGB في النسخة المستنسخة
- */
-function convertOklchInClone(element: HTMLElement): void {
-  const allElements = [element, ...Array.from(element.querySelectorAll("*"))] as HTMLElement[];
-  const colorProps = [
-    "color", "background-color", "border-color", "border-top-color",
-    "border-right-color", "border-bottom-color", "border-left-color",
-    "background",
-  ];
-
-  for (const el of allElements) {
-    for (const prop of colorProps) {
-      const value = el.style.getPropertyValue(prop);
-      if (value && value.includes("oklch")) {
-        const rgb = oklchToRgb(value);
-        if (rgb) el.style.setProperty(prop, rgb);
-      }
-    }
-  }
-}
-
-function oklchToRgb(oklchValue: string): string | null {
   try {
-    const canvas = document.createElement("canvas");
-    canvas.width = 1;
-    canvas.height = 1;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return null;
-    ctx.fillStyle = oklchValue;
-    ctx.fillRect(0, 0, 1, 1);
-    const d = ctx.getImageData(0, 0, 1, 1).data;
-    return d[3] < 255
-      ? `rgba(${d[0]},${d[1]},${d[2]},${(d[3] / 255).toFixed(3)})`
-      : `rgb(${d[0]},${d[1]},${d[2]})`;
-  } catch {
-    return null;
+    // حساب العدد الإجمالي للصفحات
+    let totalPages = 0;
+    const elementPages: { element: HTMLElement; pages: HTMLElement[] }[] = [];
+
+    for (const elId of elementIds) {
+      const element = document.getElementById(elId);
+      if (!element) continue;
+
+      const pages = Array.from(element.children).filter(child => {
+        const el = child as HTMLElement;
+        if (el.style.display === 'none') return false;
+        if (el.classList.contains('print:hidden') || el.className?.includes?.('print:hidden')) return false;
+        if (el.tagName !== 'DIV') return false;
+        return true;
+      }) as HTMLElement[];
+
+      if (pages.length > 0) {
+        elementPages.push({ element, pages });
+        totalPages += pages.length;
+      } else {
+        // العنصر نفسه كصفحة واحدة
+        elementPages.push({ element, pages: [element] });
+        totalPages += 1;
+      }
+    }
+
+    if (totalPages === 0) throw new Error("No content to export");
+
+    const total = totalPages + 1; // pages + final save
+    let currentPage = 0;
+    onProgress?.(0, total);
+
+    const pdf = new jsPDF({
+      orientation: "portrait",
+      unit: "mm",
+      format: "a4",
+      compress: true,
+    });
+
+    let isFirstPage = true;
+
+    for (const { pages } of elementPages) {
+      for (const page of pages) {
+        currentPage++;
+        onProgress?.(currentPage, total);
+
+        const canvas = await elementToCanvas(page, 2);
+        const imgData = canvas.toDataURL("image/jpeg", 0.92);
+
+        if (!isFirstPage) {
+          pdf.addPage("a4", "portrait");
+        }
+        isFirstPage = false;
+
+        pdf.addImage(imgData, "JPEG", 0, 0, A4_WIDTH_MM, A4_HEIGHT_MM);
+      }
+    }
+
+    onProgress?.(total, total);
+    pdf.save(filename);
+    return true;
+  } catch (err) {
+    console.error("Multi-PDF export error:", err);
+    throw err;
   }
 }
 
@@ -353,62 +297,6 @@ export function applyTemplateToElement(element: HTMLElement, template: PdfTempla
   });
 
   element.style.fontFamily = `'${template.fontFamily}', sans-serif`;
-}
-
-/**
- * تصدير PDF متعدد التقارير - يجمع عدة عناصر HTML في ملف PDF واحد
- * يتيح للمستخدم تصدير عدة تقارير (شواهد مختلفة) دفعة واحدة
- */
-export async function exportMultipleReportsToPDF(
-  elementIds: string[],
-  filename: string = "تقارير_متعددة.pdf",
-  onProgress?: (current: number, total: number) => void
-): Promise<boolean> {
-  if (elementIds.length === 0) throw new Error("No elements to export");
-
-  try {
-    const total = elementIds.length + 2;
-    let combinedHtml = '';
-
-    for (let i = 0; i < elementIds.length; i++) {
-      onProgress?.(i + 1, total);
-      const element = document.getElementById(elementIds[i]);
-      if (!element) continue;
-      const htmlContent = await extractHtmlForExport(element);
-      combinedHtml += htmlContent;
-    }
-
-    if (!combinedHtml) throw new Error("No content to export");
-
-    onProgress?.(elementIds.length + 1, total);
-
-    const response = await fetch('/api/export-pdf', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ html: combinedHtml, filename }),
-    });
-
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({ error: 'Unknown error' }));
-      throw new Error(error.error || 'PDF export failed');
-    }
-
-    const blob = await response.blob();
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-
-    onProgress?.(total, total);
-    return true;
-  } catch (err) {
-    console.error("Multi-PDF export error:", err);
-    throw err;
-  }
 }
 
 /**
