@@ -1229,64 +1229,114 @@ export default function PerformanceEvidence() {
               if (targetCriterion && criteriaData[targetCriterion.id]) {
                 const subs = [...targetCriterion.subEvidences, ...(criteriaData[targetCriterion.id]?.customSubEvidences || [])];
                 
-                // === مطابقة ذكية للبند الفرعي الصحيح ===
+                // === خوارزمية توجيه ذكية متعددة المستويات ===
+                // تستخدم نظام نقاط (scoring) لاختيار أفضل بند فرعي مطابق
                 let targetSub = subs[0]; // fallback
+                let matched = false;
                 
-                // 1. محاولة المطابقة بالنص (الأكثر دقة)
-                if (cls.subIndicatorText) {
-                  const textMatch = subs.find(s => 
-                    s.title === cls.subIndicatorText || 
-                    s.title.includes(cls.subIndicatorText) || 
-                    cls.subIndicatorText.includes(s.title)
-                  );
-                  if (textMatch) targetSub = textMatch;
-                }
-                // 2. إذا لم ينجح، محاولة المطابقة بنص البند الرئيسي
-                if (targetSub === subs[0] && cls.indicatorText) {
-                  const indicatorMatch = subs.find(s => 
-                    s.title === cls.indicatorText || 
-                    s.title.includes(cls.indicatorText) || 
-                    cls.indicatorText.includes(s.title)
-                  );
-                  if (indicatorMatch) targetSub = indicatorMatch;
-                }
-                // 3. إذا لم ينجح، محاولة المطابقة بالفهرس (indicatorIndex + subIndicatorIndex)
-                if (targetSub === subs[0] && cls.indicatorIndex > 0) {
-                  // حساب الفهرس الصحيح في القائمة المسطحة:
-                  // كل بند (item) يأخذ مكان واحد + بنوده الفرعية
-                  // indicatorIndex = رقم البند، subIndicatorIndex = رقم البند الفرعي
-                  let flatIndex = 0;
-                  for (let itemIdx = 1; itemIdx < cls.indicatorIndex; itemIdx++) {
-                    // نحسب عدد العناصر لكل بند سابق (البند نفسه + بنوده الفرعية)
-                    const itemSubs = subs.filter(s => s.id.startsWith(`${targetCriterion.id.replace('std-', 'std-')}-item-${itemIdx}`) || s.id.startsWith(`${targetCriterion.id.replace('std-', 'std-')}-${itemIdx}-`));
-                    flatIndex += Math.max(itemSubs.length, 1);
+                // دالة مساعدة لتنظيف النص العربي للمقارنة
+                const normalize = (t: string) => t.replace(/[\u0640\u064B-\u065F]/g, '').replace(/[إأآا]/g, 'ا').replace(/[ىئ]/g, 'ي').replace(/ة/g, 'ه').replace(/\s+/g, ' ').trim().toLowerCase();
+                
+                // === المستوى 1: مطابقة دقيقة بنص البند الفرعي ===
+                if (cls.subIndicatorText && cls.subIndicatorText.length > 3) {
+                  const normalizedSub = normalize(cls.subIndicatorText);
+                  // أولاً: تطابق تام
+                  let exactMatch = subs.find(s => normalize(s.title) === normalizedSub);
+                  if (exactMatch) { targetSub = exactMatch; matched = true; }
+                  // ثانياً: احتواء
+                  if (!matched) {
+                    const containMatch = subs.find(s => normalize(s.title).includes(normalizedSub) || normalizedSub.includes(normalize(s.title)));
+                    if (containMatch) { targetSub = containMatch; matched = true; }
                   }
-                  // إضافة البند الرئيسي
+                }
+                
+                // === المستوى 2: مطابقة بنص البند الرئيسي ===
+                if (!matched && cls.indicatorText && cls.indicatorText.length > 3) {
+                  const normalizedInd = normalize(cls.indicatorText);
+                  const exactMatch = subs.find(s => normalize(s.title) === normalizedInd);
+                  if (exactMatch) { targetSub = exactMatch; matched = true; }
+                  if (!matched) {
+                    const containMatch = subs.find(s => normalize(s.title).includes(normalizedInd) || normalizedInd.includes(normalize(s.title)));
+                    if (containMatch) { targetSub = containMatch; matched = true; }
+                  }
+                }
+                
+                // === المستوى 3: مطابقة بالفهرس الهيكلي ===
+                if (!matched && cls.indicatorIndex > 0) {
+                  // بناء خريطة الفهرس: البنود الرئيسية وبنودها الفرعية
+                  const stdPrefix = targetCriterion.id; // مثل std-1
+                  const targetItemId = `${stdPrefix}-item-${cls.indicatorIndex}`;
+                  
                   if (cls.subIndicatorIndex > 0) {
-                    flatIndex += cls.subIndicatorIndex; // البند الفرعي (بعد البند الرئيسي)
+                    // البحث عن البند الفرعي المحدد
+                    const subItemId = `${stdPrefix}-${cls.indicatorIndex}-${cls.subIndicatorIndex}`;
+                    const subMatch = subs.find(s => s.id === subItemId);
+                    if (subMatch) { targetSub = subMatch; matched = true; }
                   }
-                  if (flatIndex > 0 && flatIndex < subs.length) {
-                    targetSub = subs[flatIndex];
-                  } else if (cls.indicatorIndex > 0 && cls.indicatorIndex <= subs.length) {
-                    // fallback بسيط بالفهرس
-                    targetSub = subs[cls.indicatorIndex - 1];
+                  
+                  if (!matched) {
+                    // البحث عن البند الرئيسي
+                    const itemMatch = subs.find(s => s.id === targetItemId);
+                    if (itemMatch) { targetSub = itemMatch; matched = true; }
+                  }
+                  
+                  if (!matched) {
+                    // fallback: البحث بالفهرس في القائمة المسطحة
+                    let flatIndex = 0;
+                    const items = targetCriterion.subEvidences.filter(s => !s.isSubItem);
+                    for (let i = 0; i < Math.min(cls.indicatorIndex - 1, items.length); i++) {
+                      flatIndex++; // البند الرئيسي
+                      // عدد البنود الفرعية لهذا البند
+                      const itemSubCount = targetCriterion.subEvidences.filter(s => s.isSubItem && s.parentTitle === items[i].title).length;
+                      flatIndex += itemSubCount;
+                    }
+                    if (cls.subIndicatorIndex > 0) flatIndex += cls.subIndicatorIndex;
+                    if (flatIndex >= 0 && flatIndex < subs.length) {
+                      targetSub = subs[flatIndex];
+                      matched = true;
+                    }
                   }
                 }
-                // 4. مطابقة بالكلمات المفتاحية (fuzzy match)
-                if (targetSub === subs[0] && (cls.indicatorText || cls.subIndicatorText)) {
-                  const searchText = (cls.subIndicatorText || cls.indicatorText || '').toLowerCase();
-                  const words = searchText.split(/\s+/).filter((w: string) => w.length > 2);
+                
+                // === المستوى 4: مطابقة ذكية بالكلمات المفتاحية (Fuzzy Scoring) ===
+                if (!matched && (cls.indicatorText || cls.subIndicatorText)) {
+                  const searchTexts = [cls.subIndicatorText, cls.indicatorText, cls.contentDescription].filter(Boolean).map(t => normalize(t!));
+                  const allWords = searchTexts.flatMap(t => t.split(/\s+/).filter((w: string) => w.length > 2));
+                  // إزالة الكلمات الشائعة التي لا تفيد في المطابقة
+                  const stopWords = new Set(['من', 'في', 'على', 'إلى', 'عن', 'مع', 'هذا', 'هذه', 'التي', 'الذي', 'بين', 'عند', 'حول']);
+                  const keywords = allWords.filter(w => !stopWords.has(w));
+                  
                   let bestMatch = subs[0];
                   let bestScore = 0;
                   for (const sub of subs) {
-                    const subTitle = sub.title.toLowerCase();
-                    const score = words.reduce((acc: number, w: string) => acc + (subTitle.includes(w) ? 1 : 0), 0);
+                    const subNorm = normalize(sub.title);
+                    const descNorm = sub.description ? normalize(sub.description) : '';
+                    let score = 0;
+                    for (const kw of keywords) {
+                      if (subNorm.includes(kw)) score += 3; // تطابق في العنوان = 3 نقاط
+                      if (descNorm.includes(kw)) score += 1; // تطابق في الوصف = 1 نقطة
+                    }
+                    // مكافأة للبنود الفرعية (أكثر تحديداً)
+                    if (sub.isSubItem && score > 0) score += 1;
                     if (score > bestScore) {
                       bestScore = score;
                       bestMatch = sub;
                     }
                   }
-                  if (bestScore > 0) targetSub = bestMatch;
+                  if (bestScore >= 2) { // حد أدنى نقطتين للقبول
+                    targetSub = bestMatch;
+                    matched = true;
+                  }
+                }
+                
+                // === المستوى 5: إذا لم يتم التطابق، إدراج تحت البند الرئيسي الأقرب ===
+                if (!matched && cls.indicatorIndex > 0) {
+                  // البحث عن أقرب بند رئيسي (غير فرعي)
+                  const mainItems = subs.filter(s => !s.isSubItem);
+                  const idx = Math.min(cls.indicatorIndex - 1, mainItems.length - 1);
+                  if (idx >= 0) {
+                    targetSub = mainItems[idx];
+                  }
                 }
                 
                 targetCriterionId = targetCriterion.id;
@@ -5055,8 +5105,8 @@ export default function PerformanceEvidence() {
             {/* === صفحة فهرس المحتويات + البيانات الشخصية === */}
             <div className="bg-white shadow-lg mx-auto mb-6" style={{ width: '210mm', minHeight: '297mm', maxWidth: '100%', position: 'relative', pageBreakAfter: 'always', display: 'flex', flexDirection: 'column' as const, boxSizing: 'border-box' as const, border: `2px solid ${theme.accent}` }}>
               <div style={{ flex: 1, padding: '2rem 2.5rem' }}>
-{/* ترويسة الصفحة - مطابقة للتقارير (المملكة + وزارة التعليم + الإدارة + شعار) */}
-                <div style={{ marginBottom: '16px' }}>
+{/* ترويسة الصفحة - Full Width من الحافة للحافة */}
+                <div style={{ marginBottom: '16px', margin: '0 -2.5rem 16px -2.5rem', marginTop: '-2rem' }}>
                 <div style={{ background: `linear-gradient(to left, ${theme.accent}, ${theme.coverAccent2 || theme.accent})`, padding: '12px 24px 10px' }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse' as const }}>
                     <tbody>
@@ -5145,8 +5195,8 @@ export default function PerformanceEvidence() {
             {/* === صفحة البيانات الشخصية (منفصلة) === */}
             <div className="bg-white shadow-lg mx-auto mb-6" style={{ width: '210mm', minHeight: '297mm', maxWidth: '100%', position: 'relative', pageBreakAfter: 'always', display: 'flex', flexDirection: 'column' as const, boxSizing: 'border-box' as const, border: `2px solid ${theme.accent}` }}>
               <div style={{ flex: 1, padding: '2rem 2.5rem' }}>
-{/* ترويسة الصفحة */}
-                <div style={{ marginBottom: '16px' }}>
+{/* ترويسة الصفحة - Full Width */}
+                <div style={{ marginBottom: '16px', margin: '0 -2.5rem 16px -2.5rem', marginTop: '-2rem' }}>
                 <div style={{ background: `linear-gradient(to left, ${theme.accent}, ${theme.coverAccent2 || theme.accent})`, padding: '12px 24px 10px' }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse' as const }}>
                     <tbody>
@@ -5245,8 +5295,8 @@ export default function PerformanceEvidence() {
             {/* === صفحة جدول التقييم === */}
             <div className="bg-white shadow-lg mx-auto mb-6" style={{ width: '210mm', minHeight: '297mm', maxWidth: '100%', position: 'relative', pageBreakAfter: 'always', display: 'flex', flexDirection: 'column' as const, boxSizing: 'border-box' as const, border: `2px solid ${theme.accent}` }}>
               <div style={{ flex: 1, padding: '2rem 2.5rem' }}>
-{/* ترويسة - مطابقة للتقارير (المملكة + وزارة التعليم + الإدارة + شعار) */}
-                <div style={{ marginBottom: '16px' }}>
+{/* ترويسة - Full Width من الحافة للحافة */}
+                <div style={{ marginBottom: '16px', margin: '0 -2.5rem 16px -2.5rem', marginTop: '-2rem' }}>
                 <div style={{ background: `linear-gradient(to left, ${theme.accent}, ${theme.coverAccent2 || theme.accent})`, padding: '12px 24px 10px' }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse' as const }}>
                     <tbody>
@@ -5526,8 +5576,8 @@ export default function PerformanceEvidence() {
                     {/* === صفحة الشواهد === */}
                   <div className="bg-white shadow-lg mx-auto mb-6" style={{ width: '210mm', minHeight: '297mm', maxWidth: '100%', position: 'relative', pageBreakAfter: 'always', display: 'flex', flexDirection: 'column' as const, boxSizing: 'border-box' as const, border: `2px solid ${theme.accent}` }}>
                     <div style={{ flex: 1, padding: '2rem 2.5rem' }}>
-                    {/* ترويسة - مطابقة للتقارير (المملكة + وزارة التعليم + الإدارة + شعار) */}
-                    <div style={{ marginBottom: '1rem' }}>
+                    {/* ترويسة - Full Width من الحافة للحافة */}
+                    <div style={{ marginBottom: '1rem', margin: '0 -2.5rem 1rem -2.5rem', marginTop: '-2rem' }}>
                       <div style={{ background: `linear-gradient(to left, ${theme.accent}, ${theme.coverAccent2 || theme.accent})`, padding: '12px 24px 10px' }}>
                         <table style={{ width: '100%', borderCollapse: 'collapse' as const }}>
                           <tbody>
@@ -5710,8 +5760,8 @@ export default function PerformanceEvidence() {
               return (
                 <div className="bg-white shadow-lg mx-auto mb-6" style={{ width: '210mm', minHeight: '297mm', maxWidth: '100%', position: 'relative', display: 'flex', flexDirection: 'column' as const, boxSizing: 'border-box' as const, border: `2px solid ${theme.accent}` }}>
                   <div style={{ flex: 1, padding: '2rem 2.5rem', display: 'flex', flexDirection: 'column' as const, justifyContent: 'center' }}>
-                  {/* ترويسة - مطابقة لـ edu-forms.com */}
-                  <div style={{ position: 'absolute', top: '2rem', left: '2.5rem', right: '2.5rem' }}>
+                  {/* ترويسة - Full Width من الحافة للحافة */}
+                  <div style={{ margin: '0 -2.5rem 0.5rem -2.5rem', marginTop: '-2rem' }}>
                     <div style={{ marginBottom: '0.5rem' }}>
                       <div style={{ background: `linear-gradient(to left, ${theme.accent}, ${theme.coverAccent2 || theme.accent})`, padding: '12px 24px 10px' }}>
                         <table style={{ width: '100%', borderCollapse: 'collapse' as const }}>

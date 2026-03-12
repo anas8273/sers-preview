@@ -1,0 +1,60 @@
+{
+  "query": "SELECT id, name, COUNT(*) OVER (PARTITION BY name) as cnt FROM pdf_templates ORDER BY name;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 6C7x6f29RX1BcFf.7325488fde9e --database h34s4aPNVyHXdtjgZ7eNNf --execute SELECT id, name, COUNT(*) OVER (PARTITION BY name) as cnt FROM pdf_templates ORDER BY name;",
+  "rows": [
+    {
+      "id": "420003",
+      "name": "بطاقات - شريط جانبي",
+      "cnt": "1"
+    },
+    {
+      "id": "600010",
+      "name": "قالب اختبار",
+      "cnt": "3"
+    },
+    {
+      "id": "720010",
+      "name": "قالب اختبار",
+      "cnt": "3"
+    },
+    {
+      "id": "720014",
+      "name": "قالب اختبار",
+      "cnt": "3"
+    },
+    {
+      "id": "600009",
+      "name": "قالب اختبار جديد",
+      "cnt": "3"
+    },
+    {
+      "id": "720009",
+      "name": "قالب اختبار جديد",
+      "cnt": "3"
+    },
+    {
+      "id": "720013",
+      "name": "قالب اختبار جديد",
+      "cnt": "3"
+    },
+    {
+      "id": "600003",
+      "name": "قالب معدّل",
+      "cnt": "3"
+    },
+    {
+      "id": "720011",
+      "name": "قالب معدّل",
+      "cnt": "3"
+    },
+    {
+      "id": "720015",
+      "name": "قالب معدّل",
+      "cnt": "3"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tname\tcnt\n420003\tبطاقات - شريط جانبي\t1\n600010\tقالب اختبار\t3\n720010\tقالب اختبار\t3\n720014\tقالب اختبار\t3\n600009\tقالب اختبار جديد\t3\n720009\tقالب اختبار جديد\t3\n720013\tقالب اختبار جديد\t3\n600003\tقالب معدّل\t3\n720011\tقالب معدّل\t3\n720015\tقالب معدّل\t3\n",
+  "stderr": "",
+  "execution_time_ms": 63
+}
