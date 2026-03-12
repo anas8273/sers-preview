@@ -19,8 +19,7 @@ import { saveFileToIDB, getFileFromIDB, deleteFileFromIDB, cleanOldFiles } from 
 import { getLoginUrl } from "@/const";
 import { generateQRDataURL } from "@/lib/qr-utils";
 import { exportToPDF, exportMultipleReportsToPDF, printElement } from "@/lib/pdf-export";
-import { exportToDocx, exportToDocxStructured } from "@/lib/docx-export";
-import type { DocxExportData } from "@/lib/docx-export";
+// تم حذف تصدير Word لأن التنسيق مدمر - الاكتفاء بـ PDF
 import { getMoeLogoDataUrl, getMoeLogoUrl, getMoeDotsUrl, getMoeLogoFilter } from "@/components/MoeLogo";
 import { STANDARDS, type Standard, type Indicator } from "@/lib/standards-data";
 import {
@@ -972,6 +971,57 @@ export default function PerformanceEvidence() {
     });
   }, []);
 
+  // ===== استخراج إطار من الفيديو للتصنيف الذكي =====
+  const extractVideoFrame = useCallback(async (file: File): Promise<string | null> => {
+    return new Promise((resolve) => {
+      try {
+        const video = document.createElement('video');
+        video.preload = 'metadata';
+        video.muted = true;
+        video.playsInline = true;
+        const url = URL.createObjectURL(file);
+        video.src = url;
+        
+        const cleanup = () => { URL.revokeObjectURL(url); video.remove(); };
+        
+        video.onloadeddata = () => {
+          // الانتقال للثانية 1 أو ربع المدة (أيهما أقل)
+          video.currentTime = Math.min(1, video.duration * 0.25);
+        };
+        
+        video.onseeked = () => {
+          try {
+            const canvas = document.createElement('canvas');
+            // حجم مناسب للتصنيف (800px عرض كحد أقصى)
+            const maxW = 800;
+            const scale = Math.min(maxW / video.videoWidth, 1);
+            canvas.width = video.videoWidth * scale;
+            canvas.height = video.videoHeight * scale;
+            const ctx = canvas.getContext('2d');
+            if (ctx) {
+              ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+              const dataUrl = canvas.toDataURL('image/jpeg', 0.6);
+              cleanup();
+              resolve(dataUrl);
+            } else {
+              cleanup();
+              resolve(null);
+            }
+          } catch {
+            cleanup();
+            resolve(null);
+          }
+        };
+        
+        video.onerror = () => { cleanup(); resolve(null); };
+        // timeout بعد 10 ثواني
+        setTimeout(() => { cleanup(); resolve(null); }, 10000);
+      } catch {
+        resolve(null);
+      }
+    });
+  }, []);
+
   // ===== معالجة ملف واحد للتصنيف الذكي =====
   const processSmartFile = useCallback(async (file: File, fileIndex: number, totalFiles: number): Promise<{ success: boolean; criterion?: string; indicator?: string }> => {
     const isImage = file.type.startsWith("image/");
@@ -989,6 +1039,12 @@ export default function PerformanceEvidence() {
           if (isImage) {
             storageBase64 = await compressImageForStorage(rawBase64, 1200, 0.7);
             aiImageUrl = await compressImage(rawBase64, 800, 0.5);
+          } else if (isVideo) {
+            // استخراج إطار من الفيديو للتصنيف الذكي
+            const videoFrame = await extractVideoFrame(file);
+            if (videoFrame) {
+              aiImageUrl = videoFrame;
+            }
           }
 
           let targetCriterionId: string | null = null;
@@ -1089,7 +1145,7 @@ export default function PerformanceEvidence() {
       reader.onerror = () => resolve({ success: false });
       reader.readAsDataURL(file);
     });
-  }, [allCriteria, criteriaData, classifyMutation, compressImage, compressImageForStorage, addEvidenceToCriterion, uploadFileMutation]);
+  }, [allCriteria, criteriaData, classifyMutation, compressImage, compressImageForStorage, addEvidenceToCriterion, uploadFileMutation, extractVideoFrame]);
 
   const handleSmartUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     e.preventDefault();
@@ -1454,9 +1510,9 @@ export default function PerformanceEvidence() {
     }
   };
 
-  const [isExportingDocx, setIsExportingDocx] = useState(false);
-  const buildDocxData = (mode: 'full' | 'single', criterionId?: string, subId?: string): DocxExportData => {
-    const criteriaForExport: DocxExportData['criteria'] = [];
+  // تم حذف تصدير Word بالكامل - التنسيق غير مدعوم بشكل كافي
+  const buildDocxData = (mode: 'full' | 'single', criterionId?: string, subId?: string): any => {
+    const criteriaForExport: any[] = [];
 
     if (mode === 'single' && criterionId && subId) {
       const criterion = allCriteria.find(c => c.id === criterionId);
@@ -1496,7 +1552,7 @@ export default function PerformanceEvidence() {
       for (const criterion of allCriteria) {
         const data = criteriaData[criterion.id];
         if (!data) continue;
-        const subs: DocxExportData['criteria'][0]['subEvidences'] = [];
+        const subs: any[] = [];
         for (const sub of criterion.subEvidences) {
           const evidences = data.evidences.filter(e => e.subEvidenceId === sub.id);
           if (evidences.length === 0) continue;
@@ -1549,48 +1605,7 @@ export default function PerformanceEvidence() {
     };
   };
 
-  const handleExportDocx = async () => {
-    setIsExportingDocx(true);
-    try {
-      // استخدام نفس نهج PDF - إرسال HTML للسيرفر → Puppeteer screenshot → Word
-      const element = document.getElementById('preview-content');
-      if (!element) throw new Error('Preview content not found');
-
-      // استخراج HTML بنفس طريقة PDF
-      const { extractHtmlForExport } = await import('@/lib/pdf-export');
-      const htmlContent = await extractHtmlForExport(element);
-
-      const filename = `${personalInfo.reportTitle || 'شواهد_الأداء'}_${personalInfo.name || 'مستند'}.docx`;
-
-      const response = await fetch('/api/export-docx', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ html: htmlContent, filename }),
-      });
-
-      if (!response.ok) {
-        const error = await response.json().catch(() => ({ error: 'Unknown error' }));
-        throw new Error(error.error || 'DOCX export failed');
-      }
-
-      const blob = await response.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-
-      toast.success('تم تصدير Word بنجاح');
-    } catch (err) {
-      console.error('DOCX export error:', err);
-      toast.error('فشل تصدير Word - حاول مرة أخرى');
-    } finally {
-      setIsExportingDocx(false);
-    }
-  };
+  // handleExportDocx تم حذفه - الاكتفاء بـ PDF
 
   const handleShareLink = async () => {
     if (!isAuthenticated) {
@@ -3293,70 +3308,72 @@ export default function PerformanceEvidence() {
                   </div>
                 );
               } else {
-                // نمط الجدول الافتراضي (table)
+                // نمط الجدول الرسمي (table) - تصميم محسّن
+                // الحقول القصيرة في صفوف من 2 لتوزيع أفضل
+                const colsPerRow = shortFields.length <= 4 ? 2 : 3;
                 return (
                   <div style={{ padding: '16px 24px', flex: 1, display: 'flex', flexDirection: 'column' as const }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse' as const, border: `2px solid ${theme.borderColor || '#b8c9d9'}`, flex: 1 }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse' as const, border: `2px solid ${theme.borderColor || '#b8c9d9'}`, flex: 1, tableLayout: 'fixed' as const }}>
                       <tbody>
                         {shortFields.length > 0 && (() => {
                           const rows: typeof shortFields[] = [];
-                          for (let i = 0; i < shortFields.length; i += 3) rows.push(shortFields.slice(i, i + 3));
+                          for (let i = 0; i < shortFields.length; i += colsPerRow) rows.push(shortFields.slice(i, i + colsPerRow));
                           return rows.map((row, ri) => (
                             <tr key={`short-${ri}`}>
                               {row.map((field) => (
                                 <React.Fragment key={field.id}>
                                   <td style={{
                                     border: `1.5px solid ${theme.borderColor || '#b8c9d9'}`,
-                                    padding: '12px 16px',
+                                    padding: '10px 14px',
                                     fontWeight: 700,
-                                    fontSize: '14px',
+                                    fontSize: '13px',
                                     color: '#fff',
                                     background: theme.accent,
-                                    width: '15%',
+                                    width: colsPerRow === 2 ? '18%' : '15%',
                                     textAlign: 'center',
+                                    whiteSpace: 'nowrap' as const,
                                   }}>
                                     {field.label}
                                   </td>
                                   <td style={{
                                     border: `1.5px solid ${theme.borderColor || '#b8c9d9'}`,
-                                    padding: '12px 16px',
-                                    fontSize: '15px',
+                                    padding: '10px 14px',
+                                    fontSize: '14px',
                                     color: '#1a1a1a',
                                     background: '#fff',
-                                    width: ri === 0 && row.length <= 3 ? `${(100 - 17 * row.length) / row.length}%` : undefined,
                                   }}>
                                     {field.value || '.....................'}
                                   </td>
                                 </React.Fragment>
                               ))}
-                              {row.length < 3 && Array.from({ length: 3 - row.length }).map((_, i) => (
+                              {row.length < colsPerRow && Array.from({ length: colsPerRow - row.length }).map((_, i) => (
                                 <React.Fragment key={`empty-${i}`}>
-                                  <td style={{ border: `1.5px solid ${theme.borderColor || '#b8c9d9'}`, padding: '12px 16px', background: theme.accent, width: '17%' }}></td>
-                                  <td style={{ border: `1.5px solid ${theme.borderColor || '#b8c9d9'}`, padding: '12px 16px', background: '#fff' }}></td>
+                                  <td style={{ border: `1.5px solid ${theme.borderColor || '#b8c9d9'}`, padding: '10px 14px', background: theme.accent, width: colsPerRow === 2 ? '18%' : '15%' }}></td>
+                                  <td style={{ border: `1.5px solid ${theme.borderColor || '#b8c9d9'}`, padding: '10px 14px', background: '#fff' }}></td>
                                 </React.Fragment>
                               ))}
                             </tr>
                           ));
                         })()}
                         {longFields.map((field) => (
-                          <tr key={field.id} style={{ height: longFields.length <= 2 ? '120px' : undefined }}>
+                          <tr key={field.id}>
                             <td style={{
                               border: `1.5px solid ${theme.borderColor || '#b8c9d9'}`,
-                              padding: '12px 16px',
+                              padding: '10px 14px',
                               fontWeight: 700,
-                              fontSize: '14px',
+                              fontSize: '13px',
                               color: '#fff',
                               background: theme.accent,
-                              width: '15%',
+                              width: colsPerRow === 2 ? '18%' : '15%',
                               textAlign: 'center',
                               verticalAlign: 'top',
                             }}>
                               {field.label}
                             </td>
-                            <td colSpan={5} style={{
+                            <td colSpan={colsPerRow * 2 - 1} style={{
                               border: `1.5px solid ${theme.borderColor || '#b8c9d9'}`,
-                              padding: '14px 18px',
-                              fontSize: '15px',
+                              padding: '12px 16px',
+                              fontSize: '14px',
                               lineHeight: '2.0',
                               color: '#1a1a1a',
                               background: '#fff',
@@ -3385,49 +3402,7 @@ export default function PerformanceEvidence() {
                       <Button size="sm" variant="outline" className="gap-1 text-xs h-7" onClick={() => exportSingleEvidence(previewCriterionId, previewSubId)}>
                         <Download className="w-3 h-3" />PDF
                       </Button>
-                      <Button size="sm" variant="outline" className="gap-1 text-xs h-7" onClick={async () => {
-                        try {
-                          // تجميع بيانات الشاهد لتصدير Word منظم
-                          if (prevCrit && prevSub) {
-                            const docxData = {
-                              personalInfo: {
-                                name: personalInfo.name || '',
-                                school: personalInfo.school || '',
-                                department: personalInfo.department || '',
-                                year: personalInfo.year || '',
-                                semester: personalInfo.semester || '',
-                                evaluator: personalInfo.evaluator || '',
-                                evaluatorRole: personalInfo.evaluatorRole || 'مدير المدرسة',
-                                date: personalInfo.date || '',
-                                reportTitle: personalInfo.reportTitle || 'شواهد الأداء الوظيفي',
-                              },
-                              criteria: [{
-                                title: prevCrit.title,
-                                subEvidences: [{
-                                  title: prevSub.title,
-                                  fields: allFields.map(f => ({ label: f.label, value: f.value || '' })),
-                                  evidences: allMediaEvidences.map((ev: any) => ({
-                                    type: ev.type || 'file',
-                                    fileName: ev.fileName || ev.name,
-                                    fileUrl: ev.fileData || ev.link,
-                                    text: ev.text,
-                                    link: ev.link,
-                                  })),
-                                }],
-                              }],
-                              themeColor: selectedTheme.accent || '#1a3a5c',
-                              mode: 'single' as const,
-                              singleTitle: `${prevCrit.title} - ${prevSub.title}`,
-                            };
-                            await exportToDocxStructured(docxData, `شاهد_${previewSubId}.docx`);
-                          } else {
-                            await exportToDocx(`single-preview-${previewSubId}`, `شاهد_${previewSubId}.docx`);
-                          }
-                          toast.success('تم تصدير Word بنجاح');
-                        } catch { toast.error('فشل تصدير Word'); }
-                      }}>
-                        <FileText className="w-3 h-3" />Word
-                      </Button>
+
                       <Button size="sm" variant="outline" className="gap-1 text-xs h-7" onClick={() => { const el = document.getElementById(`single-preview-${previewSubId}`); if (el) printElement(`single-preview-${previewSubId}`); }}>
                         <Printer className="w-3 h-3" />طباعة
                       </Button>
@@ -3441,7 +3416,7 @@ export default function PerformanceEvidence() {
                           <Palette className="w-3 h-3" />الألوان
                         </Button>
                         {showColorPicker && (
-                          <div className="absolute top-9 right-0 z-50 bg-white rounded-xl shadow-2xl border p-4 w-72" dir="rtl">
+                          <div className="absolute top-9 right-0 z-50 bg-white rounded-xl shadow-2xl border p-3 sm:p-4 w-[calc(100vw-2rem)] sm:w-72 max-w-72" dir="rtl" style={{ maxHeight: '70vh', overflowY: 'auto' }}>
                             <div className="flex items-center justify-between mb-3">
                               <h4 className="text-sm font-bold text-gray-800">تخصيص الألوان</h4>
                               <button onClick={() => setShowColorPicker(false)} className="p-1 hover:bg-gray-100 rounded"><X className="w-3.5 h-3.5" /></button>
@@ -4342,7 +4317,7 @@ export default function PerformanceEvidence() {
                   <Palette className="w-3.5 h-3.5" /><span className="hidden sm:inline">الألوان</span>
                 </Button>
                 {showColorPicker && (
-                  <div className="absolute top-10 left-0 z-50 bg-white rounded-xl shadow-2xl border p-4 w-72" dir="rtl">
+                  <div className="absolute top-10 left-0 sm:left-auto sm:right-0 z-50 bg-white rounded-xl shadow-2xl border p-3 sm:p-4 w-[calc(100vw-2rem)] sm:w-72 max-w-72" dir="rtl" style={{ maxHeight: '70vh', overflowY: 'auto' }}>
                     <div className="flex items-center justify-between mb-3">
                       <h4 className="text-sm font-bold text-gray-800">تخصيص الألوان</h4>
                       <button onClick={() => setShowColorPicker(false)} className="p-1 hover:bg-gray-100 rounded"><X className="w-3.5 h-3.5" /></button>
@@ -4393,11 +4368,7 @@ export default function PerformanceEvidence() {
                 <span className="hidden sm:inline">{isExporting ? (pdfProgress.total > 0 ? `تصدير ${pdfProgress.current}/${pdfProgress.total}` : 'جاري التصدير...') : 'تحميل PDF'}</span>
                 <span className="sm:hidden">PDF</span>
               </Button>
-              <Button size="sm" variant="outline" onClick={handleExportDocx} disabled={isExportingDocx} className="gap-1 sm:gap-1.5 text-xs sm:text-sm h-8 sm:h-9">
-                {isExportingDocx ? <Loader2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 animate-spin" /> : <FileText className="w-3.5 h-3.5 sm:w-4 sm:h-4" />}
-                <span className="hidden sm:inline">{isExportingDocx ? 'جاري التصدير...' : 'تحميل Word'}</span>
-                <span className="sm:hidden">Word</span>
-              </Button>
+
               {/* زر تصدير متعدد */}
               <div className="relative">
                 <Button size="sm" variant="outline" onClick={() => setShowMultiExport(!showMultiExport)} disabled={isMultiExporting} className="gap-1 sm:gap-1.5 text-xs sm:text-sm h-8 sm:h-9">
@@ -4475,11 +4446,22 @@ export default function PerformanceEvidence() {
           )}
 
           {/* أزرار التكبير/التصغير */}
-          <div className="flex items-center justify-center gap-2 mb-3" data-no-print>
-            <Button size="sm" variant="outline" onClick={fullZoomOut} className="h-7 w-7 p-0 text-xs">-</Button>
-            <span className="text-xs text-muted-foreground min-w-[3rem] text-center">{fullZoomLevel}%</span>
-            <Button size="sm" variant="outline" onClick={fullZoomIn} className="h-7 w-7 p-0 text-xs">+</Button>
-            <Button size="sm" variant="ghost" onClick={fullResetZoom} className="h-7 text-xs px-2">إعادة ضبط</Button>
+          <div className="flex items-center justify-center gap-1.5 mb-3" data-no-print>
+            <div className="flex items-center gap-0.5 bg-white border border-gray-200 rounded-lg shadow-sm px-1 py-0.5">
+              <button onClick={fullZoomOut} className="p-1.5 hover:bg-gray-100 rounded-md transition-colors" title="تصغير">
+                <ZoomOut className="w-4 h-4 text-gray-600" />
+              </button>
+              <div className="px-2 min-w-[3.5rem] text-center">
+                <span className="text-xs font-mono text-gray-700 font-medium">{fullZoomLevel}%</span>
+              </div>
+              <button onClick={fullZoomIn} className="p-1.5 hover:bg-gray-100 rounded-md transition-colors" title="تكبير">
+                <ZoomIn className="w-4 h-4 text-gray-600" />
+              </button>
+              <div className="w-px h-5 bg-gray-200 mx-0.5" />
+              <button onClick={fullResetZoom} className="p-1.5 hover:bg-gray-100 rounded-md transition-colors" title="إعادة الحجم الأصلي">
+                <RotateCcw className="w-3.5 h-3.5 text-gray-500" />
+              </button>
+            </div>
           </div>
           <div ref={fullPreviewContainerRef} className="preview-wrapper" style={{ overflow: 'hidden' }}>
           <div style={{ width: fullWrapperWidth, margin: '0 auto', transformOrigin: 'top center' }}>
@@ -4490,7 +4472,7 @@ export default function PerformanceEvidence() {
               const a2 = theme.coverAccent2 || theme.accent;
               // ترويسة رسمية للغلاف - مطابقة للصفحات الداخلية (المملكة + وزارة التعليم + الإدارة + شعار)
               const coverOfficialHeader = (
-                <div style={{ background: `linear-gradient(to left, ${theme.accent}, ${a2})`, padding: '14px 24px 10px', borderRadius: '0 0 8px 8px' }}>
+                <div style={{ background: `linear-gradient(to left, ${theme.accent}, ${a2})`, padding: '14px 24px 10px' }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse' as const }}>
                     <tbody>
                       <tr>
@@ -4569,11 +4551,9 @@ export default function PerformanceEvidence() {
                     <div style={{ position: 'absolute', top: 0, right: 0, width: '4px', background: `linear-gradient(to bottom, ${a2}, ${theme.accent})`, height: '100%' }} />
                     <div style={{ fontSize: '4rem', fontWeight: 900, opacity: 0.15, position: 'absolute', top: '3rem', fontFamily: "'Cairo'" }}>SERS</div>
                     <div style={{ textAlign: 'center', position: 'relative', zIndex: 1 }}>
-                      <div style={{ fontSize: '0.75rem', opacity: 0.6, letterSpacing: '0.15em', marginBottom: '1rem' }}>المملكة العربية السعودية</div>
-                      <div style={{ fontSize: '0.85rem', opacity: 0.8, fontWeight: 600 }}>وزارة التعليم</div>
-                      {personalInfo.department && <p style={{ fontSize: '0.75rem', opacity: 0.7, marginTop: '0.5rem', lineHeight: 1.7, whiteSpace: 'pre-line' as const }}>{personalInfo.department}</p>}
                       <div style={{ width: '40px', height: '2px', background: 'rgba(255,255,255,0.3)', margin: '1.5rem auto' }} />
-                      <div style={{ fontSize: '0.7rem', opacity: 0.5 }}>{personalInfo.year}</div>
+                      <div style={{ fontSize: '0.85rem', opacity: 0.8, fontWeight: 600 }}>{personalInfo.year}</div>
+                      <div style={{ fontSize: '0.7rem', opacity: 0.5, marginTop: '0.5rem' }}>{personalInfo.semester}</div>
                     </div>
                   </div>
                   <div style={{ width: '65%', display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '4rem 3rem', color: theme.borderColor }}>
@@ -4597,10 +4577,7 @@ export default function PerformanceEvidence() {
                   {coverOfficialHeader}
                   <div style={{ background: theme.headerBg, height: '40%', position: 'absolute', top: '80px', left: 0, right: 0, clipPath: 'polygon(0 0, 100% 0, 100% 75%, 0 100%)' }} />
                   <div style={{ position: 'relative', zIndex: 1, minHeight: '297mm', display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '4rem 3rem', textAlign: 'center' }}>
-                    <div style={{ color: theme.headerText, marginBottom: '4rem' }}>
-                      <div style={{ fontSize: '0.8rem', opacity: 0.7, letterSpacing: '0.2em', marginBottom: '0.3rem' }}>المملكة العربية السعودية</div>
-                      <div style={{ fontSize: '0.95rem', opacity: 0.85, fontWeight: 600 }}>وزارة التعليم</div>
-                      {personalInfo.department && <p style={{ fontSize: '0.85rem', opacity: 0.8, marginTop: '0.5rem', lineHeight: 1.7, whiteSpace: 'pre-line' as const }}>{personalInfo.department}</p>}
+                    <div style={{ marginBottom: '4rem' }}>
                     </div>
                     <div style={{ background: 'white', borderRadius: '16px', padding: '3rem', boxShadow: '0 8px 32px rgba(0,0,0,0.1)', border: `2px solid ${theme.accent}20`, maxWidth: '500px', margin: '0 auto' }}>
                       <div style={{ width: '60px', height: '4px', background: `linear-gradient(to left, ${theme.accent}, ${a2})`, margin: '0 auto 1.5rem', borderRadius: '2px' }} />
@@ -4652,10 +4629,6 @@ export default function PerformanceEvidence() {
               if (cs === 'top-bar') return (
                 <div className="bg-white shadow-lg mx-auto mb-6" style={{ width: '210mm', minHeight: '297mm', maxWidth: '100%', position: 'relative', overflow: 'hidden', pageBreakAfter: 'always', border: `2px solid ${theme.accent}` }}>
                   {coverOfficialHeader}
-                  <div style={{ background: theme.headerBg, padding: '1.5rem 3rem', color: theme.headerText, textAlign: 'center' }}>
-                    <div style={{ fontSize: '0.8rem', opacity: 0.7, letterSpacing: '0.15em' }}>المملكة العربية السعودية · وزارة التعليم</div>
-                    {personalInfo.department && <p style={{ fontSize: '0.8rem', opacity: 0.7, marginTop: '0.3rem', whiteSpace: 'pre-line' as const }}>{personalInfo.department}</p>}
-                  </div>
                   <div style={{ height: '4px', background: `linear-gradient(to left, ${theme.accent}, ${a2})` }} />
                   <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', padding: '5rem 3rem', minHeight: 'calc(297mm - 120px)', textAlign: 'center' }}>
                     <div style={{ width: '80px', height: '3px', background: theme.accent, marginBottom: '2rem', borderRadius: '2px' }} />
@@ -4682,8 +4655,6 @@ export default function PerformanceEvidence() {
                 <div className="bg-white shadow-lg mx-auto mb-6" style={{ width: '210mm', minHeight: '297mm', maxWidth: '100%', position: 'relative', overflow: 'hidden', pageBreakAfter: 'always', border: `2px solid ${theme.accent}` }}>
                   {coverOfficialHeader}
                   <div style={{ minHeight: 'calc(297mm - 80px)', display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '4rem 4rem', textAlign: 'center' }}>
-                    <div style={{ fontSize: '0.8rem', color: '#9CA3AF', letterSpacing: '0.15em', marginBottom: '0.3rem' }}>المملكة العربية السعودية · وزارة التعليم</div>
-                    {personalInfo.department && <p style={{ fontSize: '0.8rem', color: '#9CA3AF', marginBottom: '1rem', whiteSpace: 'pre-line' as const }}>{personalInfo.department}</p>}
                     <div style={{ width: '1px', height: '60px', background: theme.accent, margin: '1.5rem auto' }} />
                     <h1 style={{ fontSize: '2rem', fontWeight: 900, color: theme.accent, fontFamily: "'Cairo', sans-serif", marginBottom: '0.75rem' }}>{personalInfo.reportTitle || 'شواهد الأداء الوظيفي'}</h1>
                     <p style={{ fontSize: '1.1rem', fontWeight: 600, color: '#6B7280', marginBottom: '1rem' }}>{selectedJob?.title}</p>
@@ -4704,7 +4675,7 @@ export default function PerformanceEvidence() {
               <div style={{ flex: 1, padding: '2rem 2.5rem' }}>
 {/* ترويسة الصفحة - مطابقة للتقارير (المملكة + وزارة التعليم + الإدارة + شعار) */}
                 <div style={{ marginBottom: '16px' }}>
-                <div style={{ background: `linear-gradient(to left, ${theme.accent}, ${theme.coverAccent2 || theme.accent})`, padding: '12px 24px 10px', borderRadius: '0 0 8px 8px' }}>
+                <div style={{ background: `linear-gradient(to left, ${theme.accent}, ${theme.coverAccent2 || theme.accent})`, padding: '12px 24px 10px' }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse' as const }}>
                     <tbody>
                       <tr>
@@ -4794,7 +4765,7 @@ export default function PerformanceEvidence() {
               <div style={{ flex: 1, padding: '2rem 2.5rem' }}>
 {/* ترويسة الصفحة */}
                 <div style={{ marginBottom: '16px' }}>
-                <div style={{ background: `linear-gradient(to left, ${theme.accent}, ${theme.coverAccent2 || theme.accent})`, padding: '12px 24px 10px', borderRadius: '0 0 8px 8px' }}>
+                <div style={{ background: `linear-gradient(to left, ${theme.accent}, ${theme.coverAccent2 || theme.accent})`, padding: '12px 24px 10px' }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse' as const }}>
                     <tbody>
                       <tr>
@@ -4894,7 +4865,7 @@ export default function PerformanceEvidence() {
               <div style={{ flex: 1, padding: '2rem 2.5rem' }}>
 {/* ترويسة - مطابقة للتقارير (المملكة + وزارة التعليم + الإدارة + شعار) */}
                 <div style={{ marginBottom: '16px' }}>
-                <div style={{ background: `linear-gradient(to left, ${theme.accent}, ${theme.coverAccent2 || theme.accent})`, padding: '12px 24px 10px', borderRadius: '0 0 8px 8px' }}>
+                <div style={{ background: `linear-gradient(to left, ${theme.accent}, ${theme.coverAccent2 || theme.accent})`, padding: '12px 24px 10px' }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse' as const }}>
                     <tbody>
                       <tr>
@@ -5175,7 +5146,7 @@ export default function PerformanceEvidence() {
                     <div style={{ flex: 1, padding: '2rem 2.5rem' }}>
                     {/* ترويسة - مطابقة للتقارير (المملكة + وزارة التعليم + الإدارة + شعار) */}
                     <div style={{ marginBottom: '1rem' }}>
-                      <div style={{ background: `linear-gradient(to left, ${theme.accent}, ${theme.coverAccent2 || theme.accent})`, padding: '12px 24px 10px', borderRadius: '0 0 8px 8px' }}>
+                      <div style={{ background: `linear-gradient(to left, ${theme.accent}, ${theme.coverAccent2 || theme.accent})`, padding: '12px 24px 10px' }}>
                         <table style={{ width: '100%', borderCollapse: 'collapse' as const }}>
                           <tbody>
                             <tr>
@@ -5360,7 +5331,7 @@ export default function PerformanceEvidence() {
                   {/* ترويسة - مطابقة لـ edu-forms.com */}
                   <div style={{ position: 'absolute', top: '2rem', left: '2.5rem', right: '2.5rem' }}>
                     <div style={{ marginBottom: '0.5rem' }}>
-                      <div style={{ background: `linear-gradient(to left, ${theme.accent}, ${theme.coverAccent2 || theme.accent})`, padding: '12px 24px 10px', borderRadius: '0 0 8px 8px' }}>
+                      <div style={{ background: `linear-gradient(to left, ${theme.accent}, ${theme.coverAccent2 || theme.accent})`, padding: '12px 24px 10px' }}>
                         <table style={{ width: '100%', borderCollapse: 'collapse' as const }}>
                           <tbody>
                             <tr>

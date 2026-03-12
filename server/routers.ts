@@ -523,13 +523,13 @@ export const appRouter = router({
 10. تحليل نتائج المتعلمين وتشخيص مستوياتهم (std-10)
 11. تنوع أساليب التقويم (std-11)`;
 
-        // تحليل بصري للصور
-        if (input.fileUrl && (input.fileType?.startsWith('image/') || input.fileUrl.startsWith('data:image'))) {
+        // تحليل بصري للصور والفيديوهات (الفيديو يُرسل كإطار مستخرج)
+        if (input.fileUrl && (input.fileType?.startsWith('image/') || input.fileType?.startsWith('video/') || input.fileUrl.startsWith('data:image'))) {
           messages.push({
             role: "user",
             content: [
               { type: "image_url", image_url: { url: input.fileUrl, detail: "high" } },
-              { type: "text", text: `حلل هذه الصورة بعمق وصنفها ضمن أحد المعايير:\n${STANDARDS_LIST}\n\nتعليمات التحليل:\n- اقرأ كل النصوص الظاهرة في الصورة (عربي/إنجليزي)\n- حدد نوع الوثيقة (شهادة، تقرير، خطاب، صورة نشاط، لقطة شاشة)\n- حلل السياق التعليمي\n- استخرج التاريخ والجهة والموضوع إن وجد\n${input.description ? `وصف إضافي: ${input.description}` : ""}\n${input.fileName ? `اسم الملف: ${input.fileName}` : ""}` },
+              { type: "text", text: `حلل هذه ${input.fileType?.startsWith('video/') ? 'الصورة المستخرجة من مقطع فيديو' : 'الصورة'} بعمق وصنفها ضمن أحد المعايير:\n${STANDARDS_LIST}\n\nتعليمات التحليل:\n- اقرأ كل النصوص الظاهرة في الصورة (عربي/إنجليزي)\n- حدد نوع الوثيقة (شهادة، تقرير، خطاب، صورة نشاط، لقطة شاشة، مقطع فيديو)\n- حلل السياق التعليمي\n- استخرج التاريخ والجهة والموضوع إن وجد\n${input.description ? `وصف إضافي: ${input.description}` : ""}\n${input.fileName ? `اسم الملف: ${input.fileName}` : ""}` },
             ],
           });
         }

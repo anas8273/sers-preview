@@ -1,0 +1,22 @@
+{
+  "query": "SELECT name, COUNT(*) as cnt FROM pdf_templates GROUP BY name HAVING COUNT(*) > 1 ORDER BY cnt DESC;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 6C7x6f29RX1BcFf.7325488fde9e --database h34s4aPNVyHXdtjgZ7eNNf --execute SELECT name, COUNT(*) as cnt FROM pdf_templates GROUP BY name HAVING COUNT(*) > 1 ORDER BY cnt DESC;",
+  "rows": [
+    {
+      "name": "قالب معدّل",
+      "cnt": "13"
+    },
+    {
+      "name": "قالب اختبار",
+      "cnt": "12"
+    },
+    {
+      "name": "قالب اختبار جديد",
+      "cnt": "12"
+    }
+  ],
+  "messages": [],
+  "stdout": "name\tcnt\nقالب معدّل\t13\nقالب اختبار\t12\nقالب اختبار جديد\t12\n",
+  "stderr": "",
+  "execution_time_ms": 54
+}
