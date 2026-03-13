@@ -699,6 +699,204 @@ ${hasDynamicCriteria ? dynamicStandardsList : `لم يتم تزويد بنود �
         return { recommendations: (typeof c === 'string' ? c : "").trim() };
       }),
   }),
+
+  // ─── General AI Services (Reports, Radio, CV, Exams) ────────────────
+  genAI: router({
+    // تعبئة نموذج تقرير بالذكاء الاصطناعي
+    fillReport: publicProcedure
+      .input(z.object({
+        templateName: z.string(),
+        fields: z.array(z.object({ id: z.string(), label: z.string(), type: z.string() })),
+        context: z.string().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const fieldsDesc = input.fields.map(f => `- ${f.label} (${f.type})`).join("\n");
+        const response = await invokeLLM({
+          messages: [
+            { role: "system", content: "أنت مساعد تعليمي متخصص في كتابة التقارير والنماذج التعليمية السعودية. أنشئ محتوى احترافي ومفصل باللغة العربية. أجب بصيغة JSON فقط." },
+            { role: "user", content: `نوع النموذج: ${input.templateName}\n${input.context ? `سياق إضافي: ${input.context}\n` : ""}\nالحقول المطلوبة:\n${fieldsDesc}\n\nأعطني قيم مقترحة احترافية بصيغة JSON. المفاتيح: ${input.fields.map(f => f.id).join(", ")}` }
+          ],
+          response_format: {
+            type: "json_schema",
+            json_schema: {
+              name: "report_fill",
+              strict: true,
+              schema: {
+                type: "object",
+                properties: Object.fromEntries(input.fields.map(f => [f.id, { type: "string", description: f.label }])),
+                required: input.fields.map(f => f.id),
+                additionalProperties: false,
+              },
+            },
+          },
+        });
+        const raw = response.choices?.[0]?.message?.content;
+        const content = typeof raw === 'string' ? raw : '{}';
+        try { return { filledData: JSON.parse(content), success: true }; }
+        catch { return { filledData: {}, success: false }; }
+      }),
+
+    // توليد إذاعة مدرسية كاملة
+    generateRadio: publicProcedure
+      .input(z.object({
+        theme: z.string(),
+        segments: z.array(z.string()),
+        additionalNotes: z.string().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const segmentsList = input.segments.map((s, i) => `${i + 1}. ${s}`).join("\n");
+        const response = await invokeLLM({
+          messages: [
+            { role: "system", content: `أنت كاتب إذاعة مدرسية محترف. أنشئ محتوى إذاعة مدرسية كاملة ومتكاملة باللغة العربية الفصحى. لكل فقرة اكتب محتوى غني ومفيد (3-5 أسطر على الأقل). تأكد أن المحتوى تربوي ومناسب للبيئة المدرسية. أجب بصيغة JSON فقط.` },
+            { role: "user", content: `موضوع الإذاعة: ${input.theme}\n${input.additionalNotes ? `ملاحظات: ${input.additionalNotes}\n` : ""}\nالفقرات المطلوبة:\n${segmentsList}\n\nأنشئ محتوى كامل لكل فقرة. أجب بصيغة JSON مع مفتاح "segments" يحتوي مصفوفة من الكائنات بالشكل: {"title": "عنوان الفقرة", "content": "محتوى الفقرة الكامل"}` }
+          ],
+          response_format: {
+            type: "json_schema",
+            json_schema: {
+              name: "radio_content",
+              strict: true,
+              schema: {
+                type: "object",
+                properties: {
+                  segments: {
+                    type: "array",
+                    items: {
+                      type: "object",
+                      properties: {
+                        title: { type: "string", description: "عنوان الفقرة" },
+                        content: { type: "string", description: "محتوى الفقرة الكامل" },
+                      },
+                      required: ["title", "content"],
+                      additionalProperties: false,
+                    },
+                  },
+                },
+                required: ["segments"],
+                additionalProperties: false,
+              },
+            },
+          },
+        });
+        const raw = response.choices?.[0]?.message?.content;
+        const content = typeof raw === 'string' ? raw : '{"segments":[]}';
+        try { return { ...JSON.parse(content), success: true }; }
+        catch { return { segments: [], success: false }; }
+      }),
+
+    // توليد سيرة ذاتية بالذكاء الاصطناعي
+    generateCV: publicProcedure
+      .input(z.object({
+        name: z.string(),
+        jobTitle: z.string(),
+        experience: z.string().optional(),
+        education: z.string().optional(),
+        skills: z.string().optional(),
+        additionalInfo: z.string().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const response = await invokeLLM({
+          messages: [
+            { role: "system", content: `أنت كاتب سير ذاتية محترف متخصص في المجال التعليمي السعودي. أنشئ سيرة ذاتية احترافية ومفصلة باللغة العربية. أجب بصيغة JSON فقط.` },
+            { role: "user", content: `الاسم: ${input.name}\nالمسمى الوظيفي: ${input.jobTitle}\n${input.experience ? `الخبرات: ${input.experience}\n` : ""}${input.education ? `التعليم: ${input.education}\n` : ""}${input.skills ? `المهارات: ${input.skills}\n` : ""}${input.additionalInfo ? `معلومات إضافية: ${input.additionalInfo}\n` : ""}\nأنشئ سيرة ذاتية احترافية تشمل: ملخص مهني، خبرات عمل مفصلة، تعليم، مهارات، دورات تدريبية، إنجازات. أجب بصيغة JSON.` }
+          ],
+          response_format: {
+            type: "json_schema",
+            json_schema: {
+              name: "cv_data",
+              strict: true,
+              schema: {
+                type: "object",
+                properties: {
+                  summary: { type: "string", description: "ملخص مهني" },
+                  experience: { type: "array", items: { type: "object", properties: { title: { type: "string" }, organization: { type: "string" }, period: { type: "string" }, description: { type: "string" } }, required: ["title", "organization", "period", "description"], additionalProperties: false } },
+                  education: { type: "array", items: { type: "object", properties: { title: { type: "string" }, organization: { type: "string" }, period: { type: "string" }, description: { type: "string" } }, required: ["title", "organization", "period", "description"], additionalProperties: false } },
+                  skills: { type: "array", items: { type: "string" } },
+                  courses: { type: "array", items: { type: "object", properties: { title: { type: "string" }, organization: { type: "string" }, period: { type: "string" }, description: { type: "string" } }, required: ["title", "organization", "period", "description"], additionalProperties: false } },
+                  achievements: { type: "array", items: { type: "string" } },
+                },
+                required: ["summary", "experience", "education", "skills", "courses", "achievements"],
+                additionalProperties: false,
+              },
+            },
+          },
+        });
+        const raw = response.choices?.[0]?.message?.content;
+        const content = typeof raw === 'string' ? raw : '{}';
+        try { return { cvData: JSON.parse(content), success: true }; }
+        catch { return { cvData: null, success: false }; }
+      }),
+
+    // توليد أسئلة اختبار بالذكاء الاصطناعي
+    generateExamQuestions: publicProcedure
+      .input(z.object({
+        subject: z.string(),
+        grade: z.string(),
+        topic: z.string().optional(),
+        questionTypes: z.array(z.string()),
+        count: z.number().min(1).max(30),
+        difficulty: z.string().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const response = await invokeLLM({
+          messages: [
+            { role: "system", content: `أنت معلم خبير في إعداد الاختبارات وفق المنهج السعودي. أنشئ أسئلة اختبار متنوعة ودقيقة باللغة العربية. تأكد من صحة الإجابات. أجب بصيغة JSON فقط.` },
+            { role: "user", content: `المادة: ${input.subject}\nالصف: ${input.grade}\n${input.topic ? `الموضوع: ${input.topic}\n` : ""}أنواع الأسئلة: ${input.questionTypes.join(", ")}\nعدد الأسئلة: ${input.count}\n${input.difficulty ? `مستوى الصعوبة: ${input.difficulty}\n` : ""}\nأنشئ ${input.count} سؤال متنوع. لكل سؤال اختيار من متعدد أضف 4 خيارات مع تحديد الإجابة الصحيحة. لأسئلة صح/خطأ حدد الإجابة. للمقالي اكتب نموذج إجابة.` }
+          ],
+          response_format: {
+            type: "json_schema",
+            json_schema: {
+              name: "exam_questions",
+              strict: true,
+              schema: {
+                type: "object",
+                properties: {
+                  questions: {
+                    type: "array",
+                    items: {
+                      type: "object",
+                      properties: {
+                        type: { type: "string", description: "نوع السؤال: multiple-choice, true-false, essay, fill-blank" },
+                        text: { type: "string", description: "نص السؤال" },
+                        options: { type: "array", items: { type: "string" }, description: "الخيارات (للاختيار من متعدد)" },
+                        correctAnswer: { type: "string", description: "الإجابة الصحيحة" },
+                        points: { type: "integer", description: "عدد الدرجات" },
+                        explanation: { type: "string", description: "شرح الإجابة" },
+                      },
+                      required: ["type", "text", "options", "correctAnswer", "points", "explanation"],
+                      additionalProperties: false,
+                    },
+                  },
+                },
+                required: ["questions"],
+                additionalProperties: false,
+              },
+            },
+          },
+        });
+        const raw = response.choices?.[0]?.message?.content;
+        const content = typeof raw === 'string' ? raw : '{"questions":[]}';
+        try { return { ...JSON.parse(content), success: true }; }
+        catch { return { questions: [], success: false }; }
+      }),
+
+    // توليد محتوى ملف إنجاز بالذكاء الاصطناعي
+    generatePortfolioContent: publicProcedure
+      .input(z.object({
+        section: z.string(),
+        jobTitle: z.string(),
+        existingData: z.string().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const response = await invokeLLM({
+          messages: [
+            { role: "system", content: "أنت مساعد تعليمي متخصص في إنشاء ملفات الإنجاز المهنية للمعلمين والإداريين السعوديين. أنشئ محتوى احترافي ومفصل باللغة العربية." },
+            { role: "user", content: `القسم: ${input.section}\nالوظيفة: ${input.jobTitle}\n${input.existingData ? `البيانات الحالية: ${input.existingData}\n` : ""}\nأنشئ محتوى احترافي لهذا القسم من ملف الإنجاز.` }
+          ],
+        });
+        const c = response.choices?.[0]?.message?.content;
+        return { content: (typeof c === 'string' ? c : "").trim() };
+      }),
+  }),
 });
 
 export type AppRouter = typeof appRouter;

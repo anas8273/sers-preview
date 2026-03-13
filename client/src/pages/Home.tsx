@@ -1,8 +1,8 @@
-/*
+/**
  * SERS Platform - الصفحة الرئيسية
  * منصة شاملة للخدمات التعليمية
  * Design: Material Design 3 Arabic - Teal + Warm accents
- * Layout: Top nav + Hero + Role filter + Section grid
+ * Layout: Sidebar + Top nav + Hero + Role filter + Section grid
  */
 import { useState, useMemo, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -14,13 +14,14 @@ import {
   Search, X, Sparkles, ShoppingBag, UserCircle,
   Download, Globe, ShoppingCart, Eye, Menu, ArrowLeft, ArrowRight,
   LayoutGrid, Building2, HeartHandshake, Trophy, Baby, Accessibility,
-  Clock, Star, ChevronDown, Filter, ExternalLink, Play
+  Clock, Star, ChevronDown, Filter, ExternalLink, Play, Home as HomeIcon
 } from "lucide-react";
 import {
   sections, getTotalServicesCount, getInteractiveCount, getPaidCount, getFreeCount,
   getStoreCount, searchServices, getSectionsByRole, getServicesByRole,
   USER_ROLES, type Section, type Service, type UserRole
 } from "@/lib/data";
+import AppSidebar from "@/components/AppSidebar";
 
 // Icon map for sections
 const iconMap: Record<string, React.ComponentType<any>> = {
@@ -302,167 +303,178 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-[#F8FAFC]" dir="rtl">
-      {/* ═══ Top Navigation Bar ═══ */}
-      <header className="sticky top-0 z-50 bg-white/90 backdrop-blur-md border-b border-gray-100 shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6">
-          <div className="flex items-center gap-4 h-14">
-            {/* Logo */}
-            <div className="flex items-center gap-2.5 shrink-0">
-              <div className="w-8 h-8 rounded-lg bg-teal-600 flex items-center justify-center">
-                <Sparkles className="w-4 h-4 text-white" />
-              </div>
-              <div className="hidden sm:block">
-                <h1 className="text-base font-bold text-gray-900 leading-none" style={{ fontFamily: "'Tajawal', sans-serif" }}>SERS</h1>
-                <p className="text-[9px] text-gray-500 leading-none mt-0.5">نظام السجلات التعليمية الذكي</p>
-              </div>
-            </div>
+      {/* القائمة الجانبية */}
+      <AppSidebar currentPath="/" />
 
-            {/* Search */}
-            <div className="relative flex-1 max-w-lg">
-              <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-              <input
-                type="text"
-                placeholder="ابحث في الخدمات والأقسام..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pr-10 pl-4 py-2 rounded-xl bg-gray-50 border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-400 transition-all"
-              />
-              {searchQuery && (
-                <button type="button" onClick={() => setSearchQuery("")} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
-                  <X className="w-4 h-4" />
-                </button>
-              )}
-            </div>
-
-            {/* Stats badges */}
-            <div className="hidden lg:flex items-center gap-2 text-xs text-gray-500">
-              <span className="bg-teal-50 text-teal-700 px-2.5 py-1 rounded-full font-medium">{totalServices} خدمة</span>
-              <span className="bg-gray-100 px-2.5 py-1 rounded-full">{sections.length} قسم</span>
-              <span className="bg-pink-50 text-pink-700 px-2.5 py-1 rounded-full">{storeCount} منتج</span>
-            </div>
-          </div>
-        </div>
-      </header>
-
-      {/* ═══ Main Content ═══ */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
-        {/* Search results mode */}
-        {searchQuery ? (
-          <SearchResults query={searchQuery} results={searchResults} onNavigate={handleNavigate} />
-        ) : (
-          <>
-            {/* ═══ Hero Section ═══ */}
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="relative rounded-2xl overflow-hidden mb-8"
-              style={{ minHeight: 300 }}
-            >
-              <img src={HERO_BG} alt="" className="absolute inset-0 w-full h-full object-cover" />
-              <div className="absolute inset-0 bg-gradient-to-l from-teal-900/85 via-teal-800/70 to-teal-700/50" />
-              <div className="relative z-10 p-8 md:p-12 flex flex-col justify-center h-full" style={{ minHeight: 300 }}>
-                <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-6">
-                  <div className="max-w-xl">
-                    <div className="inline-flex items-center gap-2 bg-white/15 backdrop-blur-sm rounded-full px-4 py-1.5 mb-4">
-                      <Sparkles className="w-4 h-4 text-yellow-300" />
-                      <span className="text-white text-xs font-medium">نظام السجلات التعليمية الذكي</span>
-                    </div>
-                    <h1 className="text-3xl md:text-4xl font-black text-white mb-3 leading-tight" style={{ fontFamily: "'Tajawal', sans-serif" }}>
-                      منصة شاملة لجميع
-                      <br />
-                      <span className="text-teal-200">الخدمات التعليمية</span>
-                    </h1>
-                    <p className="text-white/80 text-sm md:text-base leading-relaxed max-w-md">
-                      {sections.length} قسم رئيسي يضم {totalServices} خدمة تفاعلية وقوالب جاهزة مع دعم الذكاء الاصطناعي والباركودات التفاعلية وثيمات متعددة
-                    </p>
-                  </div>
-                  {/* Stats in hero */}
-                  <div className="flex flex-wrap gap-3">
-                    <StatBadge value={interactiveCount} label="خدمة تفاعلية" icon={Play} color="#5EEAD4" />
-                    <StatBadge value={storeCount} label="منتج رقمي" icon={ShoppingBag} color="#F9A8D4" />
-                    <StatBadge value={freeCount} label="خدمة مجانية" icon={Star} color="#FDE047" />
-                  </div>
+      {/* المحتوى الرئيسي - مع هامش للقائمة الجانبية */}
+      <div className="lg:mr-72">
+        {/* ═══ Top Navigation Bar ═══ */}
+        <header className="sticky top-0 z-30 bg-white/90 backdrop-blur-md border-b border-gray-100 shadow-sm">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6">
+            <div className="flex items-center gap-4 h-14">
+              {/* Logo - hidden on desktop since sidebar shows it */}
+              <div className="flex items-center gap-2.5 shrink-0 lg:hidden">
+                <div className="w-8 h-8 rounded-lg bg-teal-600 flex items-center justify-center">
+                  <Sparkles className="w-4 h-4 text-white" />
+                </div>
+                <div>
+                  <h1 className="text-base font-bold text-gray-900 leading-none" style={{ fontFamily: "'Tajawal', sans-serif" }}>SERS</h1>
+                  <p className="text-[9px] text-gray-500 leading-none mt-0.5">نظام السجلات التعليمية الذكي</p>
                 </div>
               </div>
-            </motion.div>
 
-            {/* ═══ Role Filter ═══ */}
-            <div className="mb-6">
-              <div className="flex items-center gap-2 mb-3">
-                <Filter className="w-4 h-4 text-gray-400" />
-                <span className="text-sm font-medium text-gray-600">تصفية حسب الوظيفة:</span>
+              {/* Search */}
+              <div className="relative flex-1 max-w-lg">
+                <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="ابحث في الخدمات والأقسام..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full pr-10 pl-4 py-2 rounded-xl bg-gray-50 border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-400 transition-all"
+                />
+                {searchQuery && (
+                  <button type="button" onClick={() => setSearchQuery("")} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
               </div>
-              <RoleFilterBar selectedRole={selectedRole} onRoleChange={setSelectedRole} />
-            </div>
 
-            {/* ═══ Quick Access - Interactive Services ═══ */}
-            <div className="mb-8">
-              <div className="flex items-center gap-2 mb-4">
-                <Zap className="w-5 h-5 text-teal-600" />
-                <h2 className="text-lg font-bold text-gray-900" style={{ fontFamily: "'Tajawal', sans-serif" }}>
-                  الخدمات التفاعلية الجاهزة
-                </h2>
-                <span className="text-[10px] bg-teal-50 text-teal-600 px-2 py-0.5 rounded-full font-medium">جاهزة الآن</span>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
-                <QuickAccessCard route="/performance-evidence" title="شواهد الأداء الوظيفي" icon="📋" color="#059669" desc="فورم كامل → تصنيف ذكي AI → معاينة → PDF" onNavigate={handleNavigate} delay={0} />
-                <QuickAccessCard route="/certificates" title="صانع الشهادات" icon="🏆" color="#D97706" desc="6 أنواع × 5 ثيمات → معاينة → PDF" onNavigate={handleNavigate} delay={1} />
-                <QuickAccessCard route="/grade-analysis" title="تحليل النتائج" icon="📊" color="#2563EB" desc="إدخال درجات → رسوم بيانية → تقارير" onNavigate={handleNavigate} delay={2} />
-                <QuickAccessCard route="/covers" title="أغلفة وفواصل" icon="📁" color="#6366F1" desc="6 أنواع × 5 ألوان → PDF احترافي" onNavigate={handleNavigate} delay={3} />
-                <QuickAccessCard route="/treatment-plans" title="الخطط العلاجية" icon="📝" color="#DC2626" desc="6 أنواع خطط → تخصيص → PDF" onNavigate={handleNavigate} delay={4} />
+              {/* Stats badges */}
+              <div className="hidden lg:flex items-center gap-2 text-xs text-gray-500">
+                <span className="bg-teal-50 text-teal-700 px-2.5 py-1 rounded-full font-medium">{totalServices} خدمة</span>
+                <span className="bg-gray-100 px-2.5 py-1 rounded-full">{sections.length} قسم</span>
+                <span className="bg-pink-50 text-pink-700 px-2.5 py-1 rounded-full">{storeCount} منتج</span>
               </div>
             </div>
+          </div>
+        </header>
 
-            {/* ═══ All Sections Grid ═══ */}
-            <div className="mb-4">
-              <div className="flex items-center justify-between mb-1">
-                <h2 className="text-xl font-bold text-gray-900" style={{ fontFamily: "'Tajawal', sans-serif" }}>
-                  {selectedRole === "all" ? "جميع الأقسام" : `أقسام ${USER_ROLES.find(r => r.id === selectedRole)?.label || ""}`}
-                </h2>
-                <span className="text-sm text-gray-500">{filteredSections.length} قسم</span>
+        {/* ═══ Main Content ═══ */}
+        <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
+          {/* Search results mode */}
+          {searchQuery ? (
+            <SearchResults query={searchQuery} results={searchResults} onNavigate={handleNavigate} />
+          ) : (
+            <>
+              {/* ═══ Hero Section ═══ */}
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="relative rounded-2xl overflow-hidden mb-8"
+                style={{ minHeight: 300 }}
+              >
+                <img src={HERO_BG} alt="" className="absolute inset-0 w-full h-full object-cover" />
+                <div className="absolute inset-0 bg-gradient-to-l from-teal-900/85 via-teal-800/70 to-teal-700/50" />
+                <div className="relative z-10 p-8 md:p-12 flex flex-col justify-center h-full" style={{ minHeight: 300 }}>
+                  <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-6">
+                    <div className="max-w-xl">
+                      <div className="inline-flex items-center gap-2 bg-white/15 backdrop-blur-sm rounded-full px-4 py-1.5 mb-4">
+                        <Sparkles className="w-4 h-4 text-yellow-300" />
+                        <span className="text-white text-xs font-medium">نظام السجلات التعليمية الذكي</span>
+                      </div>
+                      <h1 className="text-3xl md:text-4xl font-black text-white mb-3 leading-tight" style={{ fontFamily: "'Tajawal', sans-serif" }}>
+                        منصة شاملة لجميع
+                        <br />
+                        <span className="text-teal-200">الخدمات التعليمية</span>
+                      </h1>
+                      <p className="text-white/80 text-sm md:text-base leading-relaxed max-w-md">
+                        {sections.length} قسم رئيسي يضم {totalServices} خدمة تفاعلية وقوالب جاهزة مع دعم الذكاء الاصطناعي والباركودات التفاعلية وثيمات متعددة
+                      </p>
+                    </div>
+                    {/* Stats in hero */}
+                    <div className="flex flex-wrap gap-3">
+                      <StatBadge value={interactiveCount} label="خدمة تفاعلية" icon={Play} color="#5EEAD4" />
+                      <StatBadge value={storeCount} label="منتج رقمي" icon={ShoppingBag} color="#F9A8D4" />
+                      <StatBadge value={freeCount} label="خدمة مجانية" icon={Star} color="#FDE047" />
+                    </div>
+                  </div>
+                </div>
+              </motion.div>
+
+              {/* ═══ Role Filter ═══ */}
+              <div className="mb-6">
+                <div className="flex items-center gap-2 mb-3">
+                  <Filter className="w-4 h-4 text-gray-400" />
+                  <span className="text-sm font-medium text-gray-600">تصفية حسب الوظيفة:</span>
+                </div>
+                <RoleFilterBar selectedRole={selectedRole} onRoleChange={setSelectedRole} />
               </div>
-              <p className="text-sm text-gray-500 mb-6">
-                {selectedRole === "all"
-                  ? `${sections.length} قسم رئيسي يغطي جميع احتياجات شاغلي الوظائف التعليمية`
-                  : `الأقسام المتاحة لـ ${USER_ROLES.find(r => r.id === selectedRole)?.label || ""}`
-                }
-              </p>
-            </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 mb-10">
-              <AnimatePresence mode="popLayout">
-                {filteredSections.map((section, i) => (
-                  <SectionCard key={section.id} section={section} onNavigate={handleNavigate} delay={i} />
-                ))}
-              </AnimatePresence>
-            </div>
-
-            {/* ═══ Footer Summary ═══ */}
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.3 }}
-              className="bg-white rounded-2xl p-8 border border-gray-100 text-center"
-            >
-              <h3 className="text-xl font-bold text-gray-900 mb-2" style={{ fontFamily: "'Tajawal', sans-serif" }}>
-                {totalServices} خدمة في {sections.length} قسم
-              </h3>
-              <p className="text-sm text-gray-500 mb-4">
-                {freeCount} خدمة مجانية · {paidCount} منتج مدفوع · {interactiveCount} خدمة تفاعلية · {storeCount} منتج رقمي
-              </p>
-              <div className="flex flex-wrap justify-center gap-2">
-                {[
-                  "نماذج تفاعلية حية", "تصنيف ذكي بالـ AI", "باركودات QR تلقائية",
-                  "ثيمات متعددة للتصدير", "دعم جميع الوظائف التعليمية",
-                  "متجر رقمي متكامل", "قابل للتعديل من الإدارة"
-                ].map((tag) => (
-                  <span key={tag} className="px-3 py-1 rounded-full text-xs bg-teal-50 text-teal-700 border border-teal-200">{tag}</span>
-                ))}
+              {/* ═══ Quick Access - Interactive Services ═══ */}
+              <div className="mb-8">
+                <div className="flex items-center gap-2 mb-4">
+                  <Zap className="w-5 h-5 text-teal-600" />
+                  <h2 className="text-lg font-bold text-gray-900" style={{ fontFamily: "'Tajawal', sans-serif" }}>
+                    الخدمات التفاعلية الجاهزة
+                  </h2>
+                  <span className="text-[10px] bg-teal-50 text-teal-600 px-2 py-0.5 rounded-full font-medium">جاهزة الآن</span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3">
+                  <QuickAccessCard route="/performance-evidence" title="شواهد الأداء الوظيفي" icon="📋" color="#059669" desc="فورم كامل → تصنيف ذكي AI → معاينة → PDF" onNavigate={handleNavigate} delay={0} />
+                  <QuickAccessCard route="/certificates" title="صانع الشهادات" icon="🏆" color="#D97706" desc="6 أنواع × 5 ثيمات → معاينة → PDF" onNavigate={handleNavigate} delay={1} />
+                  <QuickAccessCard route="/reports" title="مركز التقارير" icon="📝" color="#2563EB" desc="تقارير تربوية متنوعة → AI → PDF" onNavigate={handleNavigate} delay={2} />
+                  <QuickAccessCard route="/school-radio" title="الإذاعة المدرسية" icon="📻" color="#DC2626" desc="إذاعات جاهزة → AI → طباعة" onNavigate={handleNavigate} delay={3} />
+                  <QuickAccessCard route="/smart-cv" title="السيرة الذاتية" icon="👤" color="#7C3AED" desc="سيرة ذاتية احترافية → AI → PDF" onNavigate={handleNavigate} delay={4} />
+                  <QuickAccessCard route="/exams" title="منصة الاختبارات" icon="📝" color="#EA580C" desc="بنك أسئلة → AI → PDF" onNavigate={handleNavigate} delay={5} />
+                  <QuickAccessCard route="/portfolio" title="ملف الإنجاز" icon="📁" color="#0891B2" desc="ملف إنجاز رقمي شامل → AI → PDF" onNavigate={handleNavigate} delay={6} />
+                  <QuickAccessCard route="/grade-analysis" title="تحليل النتائج" icon="📊" color="#2563EB" desc="إدخال درجات → رسوم بيانية → تقارير" onNavigate={handleNavigate} delay={7} />
+                  <QuickAccessCard route="/covers" title="أغلفة وفواصل" icon="📁" color="#6366F1" desc="6 أنواع × 5 ألوان → PDF احترافي" onNavigate={handleNavigate} delay={8} />
+                  <QuickAccessCard route="/treatment-plans" title="الخطط العلاجية" icon="📝" color="#DC2626" desc="6 أنواع خطط → تخصيص → PDF" onNavigate={handleNavigate} delay={9} />
+                </div>
               </div>
-            </motion.div>
-          </>
-        )}
-      </main>
+
+              {/* ═══ All Sections Grid ═══ */}
+              <div className="mb-4">
+                <div className="flex items-center justify-between mb-1">
+                  <h2 className="text-xl font-bold text-gray-900" style={{ fontFamily: "'Tajawal', sans-serif" }}>
+                    {selectedRole === "all" ? "جميع الأقسام" : `أقسام ${USER_ROLES.find(r => r.id === selectedRole)?.label || ""}`}
+                  </h2>
+                  <span className="text-sm text-gray-500">{filteredSections.length} قسم</span>
+                </div>
+                <p className="text-sm text-gray-500 mb-6">
+                  {selectedRole === "all"
+                    ? `${sections.length} قسم رئيسي يغطي جميع احتياجات شاغلي الوظائف التعليمية`
+                    : `الأقسام المتاحة لـ ${USER_ROLES.find(r => r.id === selectedRole)?.label || ""}`
+                  }
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 mb-10">
+                <AnimatePresence mode="popLayout">
+                  {filteredSections.map((section, i) => (
+                    <SectionCard key={section.id} section={section} onNavigate={handleNavigate} delay={i} />
+                  ))}
+                </AnimatePresence>
+              </div>
+
+              {/* ═══ Footer Summary ═══ */}
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.3 }}
+                className="bg-white rounded-2xl p-8 border border-gray-100 text-center"
+              >
+                <h3 className="text-xl font-bold text-gray-900 mb-2" style={{ fontFamily: "'Tajawal', sans-serif" }}>
+                  {totalServices} خدمة في {sections.length} قسم
+                </h3>
+                <p className="text-sm text-gray-500 mb-4">
+                  {freeCount} خدمة مجانية · {paidCount} منتج مدفوع · {interactiveCount} خدمة تفاعلية · {storeCount} منتج رقمي
+                </p>
+                <div className="flex flex-wrap justify-center gap-2">
+                  {[
+                    "نماذج تفاعلية حية", "تصنيف ذكي بالـ AI", "باركودات QR تلقائية",
+                    "ثيمات متعددة للتصدير", "دعم جميع الوظائف التعليمية",
+                    "متجر رقمي متكامل", "قابل للتعديل من الإدارة"
+                  ].map((tag) => (
+                    <span key={tag} className="px-3 py-1 rounded-full text-xs bg-teal-50 text-teal-700 border border-teal-200">{tag}</span>
+                  ))}
+                </div>
+              </motion.div>
+            </>
+          )}
+        </main>
+      </div>
     </div>
   );
 }

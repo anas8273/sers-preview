@@ -1,22 +1,42 @@
-/*
- * مركز التقارير الشامل
- * يتيح إنشاء تقارير متنوعة: أداء الطلاب، تقارير إدارية، تقارير الأنشطة
- * مع قوالب جاهزة وتصدير PDF
+/**
+ * مركز التقارير الشامل - SERS
+ * يتيح إنشاء تقارير متنوعة مع:
+ * - تعبئة بالذكاء الاصطناعي
+ * - معاينة حية بتصميم احترافي
+ * - تصدير PDF
+ * - 6 ثيمات/قوالب مختلفة
+ * - اختيار الخط
  */
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ArrowLeft, FileText, Plus, Trash2, Download, Eye, Save,
-  BarChart3, Users, Calendar, ClipboardCheck, TrendingUp,
-  Building2, BookOpen, Star, Filter, Search, X, Edit3,
-  ChevronDown, ChevronUp, Sparkles, Clock
+  Users, Building2, BookOpen, Star, Search, X, Edit3,
+  Sparkles, Loader2, Printer, FileDown, Maximize2, Minimize2,
+  ClipboardCheck, ChevronLeft
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
+import { trpc } from "@/lib/trpc";
+import TemplateSelector, { THEMES, FONT_OPTIONS, type ThemeConfig } from "@/components/TemplateSelector";
+import { exportToPDF, printElement } from "@/lib/pdf-export";
+import OfficialHeader from "@/components/OfficialHeader";
 
-// Report types
+// ═══════════════════════════════════════════════════════════════
+// Types & Data
+// ═══════════════════════════════════════════════════════════════
+
 type ReportType = "student-performance" | "teacher-activity" | "admin-weekly" | "department" | "custom";
+
+interface ReportField {
+  id: string;
+  label: string;
+  type: "text" | "textarea" | "select" | "date" | "number";
+  placeholder?: string;
+  options?: string[];
+  required?: boolean;
+}
 
 interface ReportTemplate {
   id: ReportType;
@@ -27,20 +47,13 @@ interface ReportTemplate {
   fields: ReportField[];
 }
 
-interface ReportField {
-  id: string;
-  label: string;
-  type: "text" | "textarea" | "select" | "date" | "number" | "table";
-  placeholder?: string;
-  options?: string[];
-  required?: boolean;
-}
-
 interface SavedReport {
   id: string;
   templateId: ReportType;
   title: string;
   data: Record<string, string>;
+  themeId: string;
+  fontFamily: string;
   createdAt: number;
   updatedAt: number;
 }
@@ -130,138 +143,331 @@ const REPORT_TEMPLATES: ReportTemplate[] = [
 ];
 
 const STORAGE_KEY = "sers-reports";
-
 function loadReports(): SavedReport[] {
-  try {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) return JSON.parse(saved);
-  } catch {}
-  return [];
+  try { const s = localStorage.getItem(STORAGE_KEY); if (s) return JSON.parse(s); } catch {} return [];
 }
-
-function saveReports(reports: SavedReport[]) {
+function saveReportsToStorage(reports: SavedReport[]) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(reports));
 }
+function generateId() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
 
-function generateId() {
-  return Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+// ═══════════════════════════════════════════════════════════════
+// Preview Component - معاينة التقرير بتصميم احترافي
+// ═══════════════════════════════════════════════════════════════
+
+function ReportPreview({
+  template, data, theme, fontFamily,
+}: {
+  template: ReportTemplate;
+  data: Record<string, string>;
+  theme: ThemeConfig;
+  fontFamily: string;
+}) {
+  const Icon = template.icon;
+  const today = new Date().toLocaleDateString("ar-SA", { year: "numeric", month: "long", day: "numeric" });
+
+  return (
+    <div
+      className="bg-white shadow-lg"
+      style={{
+        width: "210mm",
+        minHeight: "297mm",
+        fontFamily: `'${fontFamily}', sans-serif`,
+        direction: "rtl",
+        padding: "0",
+      }}
+    >
+      {/* Header */}
+      <div
+        data-pdf-header
+        style={{
+          background: `linear-gradient(135deg, ${theme.primaryColor}, ${theme.secondaryColor})`,
+          color: theme.headerText,
+          padding: "24px 32px",
+        }}
+      >
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div>
+            <h1 style={{ fontSize: "22px", fontWeight: "800", margin: "0 0 4px 0", fontFamily: `'Tajawal', '${fontFamily}', sans-serif` }}>
+              {template.title}
+            </h1>
+            <p style={{ fontSize: "12px", opacity: 0.85, margin: 0 }}>
+              نظام السجلات التعليمية الذكي - SERS
+            </p>
+          </div>
+          <div style={{ textAlign: "left", fontSize: "11px", opacity: 0.8 }}>
+            <div>{today}</div>
+            <div style={{ marginTop: "4px" }}>
+              {data.year || data.period || data.weekDate || ""}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Body */}
+      <div style={{ padding: "24px 32px" }}>
+        {/* Info Summary Bar */}
+        <div
+          style={{
+            display: "flex",
+            gap: "12px",
+            flexWrap: "wrap",
+            marginBottom: "24px",
+            padding: "12px 16px",
+            backgroundColor: theme.primaryColor + "08",
+            borderRadius: "8px",
+            border: `1px solid ${theme.borderColor}`,
+          }}
+        >
+          {template.fields
+            .filter((f) => f.type !== "textarea" && data[f.id])
+            .map((field) => (
+              <div key={field.id} style={{ flex: "1 1 auto", minWidth: "120px" }}>
+                <div style={{ fontSize: "10px", color: "#6b7280", marginBottom: "2px" }}>{field.label}</div>
+                <div style={{ fontSize: "13px", fontWeight: "600", color: "#1f2937" }}>{data[field.id]}</div>
+              </div>
+            ))}
+        </div>
+
+        {/* Content Sections */}
+        {template.fields
+          .filter((f) => f.type === "textarea" && data[f.id])
+          .map((field, idx) => (
+            <div key={field.id} style={{ marginBottom: "20px" }}>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "8px",
+                  marginBottom: "8px",
+                  paddingBottom: "6px",
+                  borderBottom: `2px solid ${theme.borderColor}`,
+                }}
+              >
+                <div
+                  style={{
+                    width: "6px",
+                    height: "6px",
+                    borderRadius: "50%",
+                    backgroundColor: theme.primaryColor,
+                  }}
+                />
+                <h3
+                  data-pdf-accent
+                  style={{
+                    fontSize: "14px",
+                    fontWeight: "700",
+                    color: theme.primaryColor,
+                    margin: 0,
+                    fontFamily: `'Tajawal', '${fontFamily}', sans-serif`,
+                  }}
+                >
+                  {field.label}
+                </h3>
+              </div>
+              <p
+                style={{
+                  fontSize: "13px",
+                  lineHeight: "1.8",
+                  color: "#374151",
+                  margin: 0,
+                  whiteSpace: "pre-wrap",
+                  paddingRight: "14px",
+                }}
+              >
+                {data[field.id]}
+              </p>
+            </div>
+          ))}
+
+        {/* Empty state */}
+        {template.fields.filter((f) => f.type === "textarea" && data[f.id]).length === 0 && (
+          <div style={{ textAlign: "center", padding: "40px 0", color: "#9ca3af" }}>
+            <p style={{ fontSize: "14px" }}>لم يتم إدخال محتوى بعد</p>
+            <p style={{ fontSize: "12px" }}>قم بملء الحقول أو استخدم التعبئة بالذكاء الاصطناعي</p>
+          </div>
+        )}
+      </div>
+
+      {/* Footer */}
+      <div
+        style={{
+          borderTop: `2px solid ${theme.borderColor}`,
+          padding: "12px 32px",
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          fontSize: "10px",
+          color: "#9ca3af",
+          marginTop: "auto",
+        }}
+      >
+        <span>تم إنشاؤه بواسطة منصة SERS</span>
+        <span>{today}</span>
+      </div>
+    </div>
+  );
 }
+
+// ═══════════════════════════════════════════════════════════════
+// Main Component
+// ═══════════════════════════════════════════════════════════════
 
 export default function ReportCenter() {
   const [, navigate] = useLocation();
-  const [view, setView] = useState<"templates" | "editor" | "saved">("templates");
+  const [view, setView] = useState<"templates" | "editor" | "preview" | "saved">("templates");
   const [selectedTemplate, setSelectedTemplate] = useState<ReportTemplate | null>(null);
   const [currentReport, setCurrentReport] = useState<SavedReport | null>(null);
   const [formData, setFormData] = useState<Record<string, string>>({});
   const [savedReports, setSavedReports] = useState<SavedReport[]>(loadReports);
   const [searchQuery, setSearchQuery] = useState("");
+  const [selectedTheme, setSelectedTheme] = useState<ThemeConfig>(THEMES[0]);
+  const [selectedFont, setSelectedFont] = useState("Cairo");
+  const [aiLoading, setAiLoading] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [fullscreen, setFullscreen] = useState(false);
 
-  const startNewReport = (template: ReportTemplate) => {
+  const fillReportMutation = trpc.genAI.fillReport.useMutation();
+
+  const startNewReport = useCallback((template: ReportTemplate) => {
     setSelectedTemplate(template);
     setFormData({});
     setCurrentReport(null);
     setView("editor");
-  };
+  }, []);
 
-  const editReport = (report: SavedReport) => {
+  const editReport = useCallback((report: SavedReport) => {
     const template = REPORT_TEMPLATES.find((t) => t.id === report.templateId);
     if (!template) return;
     setSelectedTemplate(template);
     setFormData(report.data);
     setCurrentReport(report);
+    const theme = THEMES.find((t) => t.id === report.themeId);
+    if (theme) setSelectedTheme(theme);
+    if (report.fontFamily) setSelectedFont(report.fontFamily);
     setView("editor");
-  };
+  }, []);
 
-  const handleSave = () => {
+  const handleSave = useCallback(() => {
     if (!selectedTemplate) return;
     const title = formData.title || formData.subject || formData.teacherName || formData.school || formData.deptName || selectedTemplate.title;
     const now = Date.now();
 
     if (currentReport) {
-      // Update existing
       const updated = savedReports.map((r) =>
-        r.id === currentReport.id ? { ...r, title, data: formData, updatedAt: now } : r
+        r.id === currentReport.id ? { ...r, title, data: formData, themeId: selectedTheme.id, fontFamily: selectedFont, updatedAt: now } : r
       );
       setSavedReports(updated);
-      saveReports(updated);
-      setCurrentReport({ ...currentReport, title, data: formData, updatedAt: now });
+      saveReportsToStorage(updated);
+      setCurrentReport({ ...currentReport, title, data: formData, themeId: selectedTheme.id, fontFamily: selectedFont, updatedAt: now });
       toast.success("تم تحديث التقرير بنجاح");
     } else {
-      // Create new
       const newReport: SavedReport = {
-        id: generateId(),
-        templateId: selectedTemplate.id,
-        title,
-        data: formData,
-        createdAt: now,
-        updatedAt: now,
+        id: generateId(), templateId: selectedTemplate.id, title, data: formData,
+        themeId: selectedTheme.id, fontFamily: selectedFont, createdAt: now, updatedAt: now,
       };
       const updated = [newReport, ...savedReports];
       setSavedReports(updated);
-      saveReports(updated);
+      saveReportsToStorage(updated);
       setCurrentReport(newReport);
       toast.success("تم حفظ التقرير بنجاح");
     }
-  };
+  }, [selectedTemplate, formData, currentReport, savedReports, selectedTheme, selectedFont]);
 
-  const handleDelete = (id: string) => {
+  const handleDelete = useCallback((id: string) => {
     const updated = savedReports.filter((r) => r.id !== id);
     setSavedReports(updated);
-    saveReports(updated);
+    saveReportsToStorage(updated);
     toast.success("تم حذف التقرير");
-  };
+  }, [savedReports]);
 
-  const handleExportPDF = () => {
-    toast.info("التصدير قيد التطوير", { description: "سيتوفر تصدير PDF قريباً إن شاء الله" });
-  };
+  const handleAIFill = useCallback(async () => {
+    if (!selectedTemplate) return;
+    setAiLoading(true);
+    try {
+      const result = await fillReportMutation.mutateAsync({
+        templateName: selectedTemplate.title,
+        fields: selectedTemplate.fields.map((f) => ({ id: f.id, label: f.label, type: f.type })),
+        context: Object.entries(formData).filter(([, v]) => v).map(([k, v]) => `${k}: ${v}`).join("\n") || undefined,
+      });
+      if (result.success && result.filledData) {
+        setFormData((prev) => {
+          const merged = { ...prev };
+          for (const [key, value] of Object.entries(result.filledData)) {
+            if (!merged[key] || merged[key].trim() === "") {
+              merged[key] = value as string;
+            }
+          }
+          return merged;
+        });
+        toast.success("تم التعبئة بالذكاء الاصطناعي بنجاح");
+      } else {
+        toast.error("لم تنجح التعبئة، حاول مرة أخرى");
+      }
+    } catch (err) {
+      toast.error("حدث خطأ أثناء التعبئة بالذكاء الاصطناعي");
+    } finally {
+      setAiLoading(false);
+    }
+  }, [selectedTemplate, formData, fillReportMutation]);
+
+  const handleExportPDF = useCallback(async () => {
+    setExporting(true);
+    try {
+      await exportToPDF("report-preview-content", `${selectedTemplate?.title || "تقرير"}.pdf`);
+      toast.success("تم تصدير PDF بنجاح");
+    } catch (err) {
+      toast.error("حدث خطأ أثناء التصدير");
+    } finally {
+      setExporting(false);
+    }
+  }, [selectedTemplate]);
+
+  const handlePrint = useCallback(() => {
+    try { printElement("report-preview-content"); } catch { toast.error("حدث خطأ أثناء الطباعة"); }
+  }, []);
 
   const filteredReports = useMemo(() => {
     if (!searchQuery.trim()) return savedReports;
     const q = searchQuery.toLowerCase();
-    return savedReports.filter((r) =>
-      r.title.toLowerCase().includes(q) || r.templateId.includes(q)
-    );
+    return savedReports.filter((r) => r.title.toLowerCase().includes(q) || r.templateId.includes(q));
   }, [savedReports, searchQuery]);
+
+  const filledFieldsCount = selectedTemplate
+    ? selectedTemplate.fields.filter((f) => formData[f.id] && formData[f.id].trim() !== "").length
+    : 0;
 
   return (
     <div className="min-h-screen bg-[#F8FAFC]" dir="rtl">
       {/* Header */}
       <div className="w-full bg-gradient-to-l from-blue-700 via-blue-600 to-blue-500">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8">
-          <button type="button" onClick={() => navigate("/")} className="flex items-center gap-2 text-white/70 hover:text-white mb-4 transition-colors">
-            <ArrowLeft className="w-4 h-4" />
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6">
+          <button type="button" onClick={() => navigate("/")} className="flex items-center gap-2 text-white/70 hover:text-white mb-3 transition-colors">
+            <ChevronLeft className="w-4 h-4" />
             <span className="text-sm">العودة للرئيسية</span>
           </button>
           <div className="flex items-center gap-4">
-            <div className="w-16 h-16 rounded-2xl bg-white/15 backdrop-blur-sm flex items-center justify-center">
-              <FileText className="w-8 h-8 text-white" />
+            <div className="w-14 h-14 rounded-2xl bg-white/15 backdrop-blur-sm flex items-center justify-center">
+              <FileText className="w-7 h-7 text-white" />
             </div>
             <div>
               <h1 className="text-2xl md:text-3xl font-black text-white" style={{ fontFamily: "'Tajawal', sans-serif" }}>
                 مركز التقارير
               </h1>
-              <p className="text-white/80 text-sm mt-1">إنشاء وإدارة التقارير التعليمية والإدارية</p>
+              <p className="text-white/80 text-sm mt-1">إنشاء وإدارة التقارير التعليمية والإدارية مع دعم الذكاء الاصطناعي</p>
             </div>
           </div>
-          {/* View tabs */}
-          <div className="flex items-center gap-2 mt-4">
+          <div className="flex items-center gap-2 mt-4 flex-wrap">
             {[
               { id: "templates" as const, label: "قوالب جديدة", icon: Plus },
-              { id: "saved" as const, label: `التقارير المحفوظة (${savedReports.length})`, icon: FileText },
+              { id: "saved" as const, label: `المحفوظة (${savedReports.length})`, icon: FileText },
             ].map((tab) => {
               const Icon = tab.icon;
+              const isActive = view === tab.id || (view === "editor" && tab.id === "templates") || (view === "preview" && tab.id === "templates");
               return (
-                <button
-                  key={tab.id}
-                  onClick={() => setView(tab.id)}
-                  className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                    view === tab.id || (view === "editor" && tab.id === "templates")
-                      ? "bg-white text-blue-700"
-                      : "bg-white/15 text-white hover:bg-white/25"
-                  }`}
-                >
-                  <Icon className="w-4 h-4" />
-                  {tab.label}
+                <button key={tab.id} onClick={() => setView(tab.id)}
+                  className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-all ${isActive ? "bg-white text-blue-700" : "bg-white/15 text-white hover:bg-white/25"}`}>
+                  <Icon className="w-4 h-4" /> {tab.label}
                 </button>
               );
             })}
@@ -271,31 +477,26 @@ export default function ReportCenter() {
 
       <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6">
         <AnimatePresence mode="wait">
-          {/* Templates View */}
+          {/* ═══ Templates View ═══ */}
           {view === "templates" && (
             <motion.div key="templates" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}>
-              <h2 className="text-lg font-bold text-gray-900 mb-4" style={{ fontFamily: "'Tajawal', sans-serif" }}>
-                اختر نوع التقرير
-              </h2>
+              <h2 className="text-lg font-bold text-gray-900 mb-4" style={{ fontFamily: "'Tajawal', sans-serif" }}>اختر نوع التقرير</h2>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {REPORT_TEMPLATES.map((template) => {
                   const Icon = template.icon;
                   return (
-                    <motion.button
-                      key={template.id}
-                      whileHover={{ y: -3, boxShadow: "0 10px 25px rgba(0,0,0,0.08)" }}
-                      onClick={() => startNewReport(template)}
-                      className="bg-white rounded-xl border border-gray-100 p-5 text-right transition-all group"
-                    >
+                    <motion.button key={template.id} whileHover={{ y: -3, boxShadow: "0 10px 25px rgba(0,0,0,0.08)" }}
+                      onClick={() => startNewReport(template)} className="bg-white rounded-xl border border-gray-100 p-5 text-right transition-all group">
                       <div className="w-12 h-12 rounded-xl flex items-center justify-center mb-3" style={{ backgroundColor: template.color + "12" }}>
                         <Icon className="w-6 h-6" style={{ color: template.color }} />
                       </div>
-                      <h3 className="font-bold text-gray-800 text-sm mb-1 group-hover:text-gray-900" style={{ fontFamily: "'Tajawal', sans-serif" }}>
-                        {template.title}
-                      </h3>
+                      <h3 className="font-bold text-gray-800 text-sm mb-1 group-hover:text-gray-900" style={{ fontFamily: "'Tajawal', sans-serif" }}>{template.title}</h3>
                       <p className="text-xs text-gray-500 leading-relaxed">{template.description}</p>
-                      <div className="mt-3 text-xs font-medium flex items-center gap-1" style={{ color: template.color }}>
-                        <Plus className="w-3 h-3" /> إنشاء تقرير جديد
+                      <div className="mt-3 flex items-center justify-between">
+                        <span className="text-xs text-gray-400">{template.fields.length} حقل</span>
+                        <span className="text-xs font-medium flex items-center gap-1" style={{ color: template.color }}>
+                          <Plus className="w-3 h-3" /> إنشاء
+                        </span>
                       </div>
                     </motion.button>
                   );
@@ -304,33 +505,50 @@ export default function ReportCenter() {
             </motion.div>
           )}
 
-          {/* Editor View */}
+          {/* ═══ Editor View ═══ */}
           {view === "editor" && selectedTemplate && (
             <motion.div key="editor" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}>
-              <div className="flex items-center justify-between mb-4">
+              {/* Toolbar */}
+              <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
                 <div className="flex items-center gap-3">
                   <button onClick={() => setView("templates")} className="text-gray-400 hover:text-gray-600">
                     <ArrowLeft className="w-5 h-5" />
                   </button>
-                  <h2 className="text-lg font-bold text-gray-900" style={{ fontFamily: "'Tajawal', sans-serif" }}>
-                    {selectedTemplate.title}
-                  </h2>
+                  <h2 className="text-lg font-bold text-gray-900" style={{ fontFamily: "'Tajawal', sans-serif" }}>{selectedTemplate.title}</h2>
+                  <span className="text-xs bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full">{filledFieldsCount}/{selectedTemplate.fields.length} حقل</span>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Button onClick={handleAIFill} variant="outline" size="sm" disabled={aiLoading}
+                    className="gap-1.5 border-purple-200 text-purple-600 hover:bg-purple-50">
+                    {aiLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+                    {aiLoading ? "جاري التوليد..." : "تعبئة بالذكاء الاصطناعي"}
+                  </Button>
                   <Button onClick={handleSave} variant="outline" size="sm" className="gap-1">
                     <Save className="w-4 h-4" /> حفظ
                   </Button>
-                  <Button onClick={handleExportPDF} size="sm" className="gap-1 bg-blue-600 hover:bg-blue-700">
-                    <Download className="w-4 h-4" /> تصدير PDF
+                  <Button onClick={() => setView("preview")} size="sm" className="gap-1 bg-blue-600 hover:bg-blue-700 text-white">
+                    <Eye className="w-4 h-4" /> معاينة وتصدير
                   </Button>
                 </div>
               </div>
 
+              {/* Theme Selector */}
+              <div className="mb-4">
+                <TemplateSelector
+                  selectedTheme={selectedTheme}
+                  onThemeChange={setSelectedTheme}
+                  selectedFont={selectedFont}
+                  onFontChange={setSelectedFont}
+                  compact
+                />
+              </div>
+
+              {/* Form Fields */}
               <div className="bg-white rounded-xl border border-gray-200 p-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {selectedTemplate.fields.map((field) => (
                     <div key={field.id} className={field.type === "textarea" ? "md:col-span-2" : ""}>
-                      <label className="block text-xs font-medium text-gray-600 mb-1">
+                      <label className="block text-xs font-medium text-gray-600 mb-1.5">
                         {field.label} {field.required && <span className="text-red-500">*</span>}
                       </label>
                       {field.type === "textarea" ? (
@@ -338,19 +556,18 @@ export default function ReportCenter() {
                           value={formData[field.id] || ""}
                           onChange={(e) => setFormData({ ...formData, [field.id]: e.target.value })}
                           placeholder={field.placeholder}
-                          rows={3}
-                          className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
+                          rows={4}
+                          className="w-full px-3 py-2.5 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-all resize-y"
+                          style={{ fontFamily: `'${selectedFont}', sans-serif` }}
                         />
                       ) : field.type === "select" ? (
                         <select
                           value={formData[field.id] || ""}
                           onChange={(e) => setFormData({ ...formData, [field.id]: e.target.value })}
-                          className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                          className="w-full px-3 py-2.5 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 bg-white"
                         >
                           <option value="">اختر...</option>
-                          {field.options?.map((opt) => (
-                            <option key={opt} value={opt}>{opt}</option>
-                          ))}
+                          {field.options?.map((opt) => <option key={opt} value={opt}>{opt}</option>)}
                         </select>
                       ) : (
                         <input
@@ -358,7 +575,7 @@ export default function ReportCenter() {
                           value={formData[field.id] || ""}
                           onChange={(e) => setFormData({ ...formData, [field.id]: e.target.value })}
                           placeholder={field.placeholder}
-                          className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
+                          className="w-full px-3 py-2.5 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-all"
                         />
                       )}
                     </div>
@@ -368,25 +585,53 @@ export default function ReportCenter() {
             </motion.div>
           )}
 
-          {/* Saved Reports View */}
-          {view === "saved" && (
-            <motion.div key="saved" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}>
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-lg font-bold text-gray-900" style={{ fontFamily: "'Tajawal', sans-serif" }}>
-                  التقارير المحفوظة
-                </h2>
-                <div className="relative w-64">
-                  <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                  <input
-                    type="text"
-                    placeholder="بحث..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full pr-10 pl-4 py-2 rounded-lg bg-white border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-                  />
+          {/* ═══ Preview View ═══ */}
+          {view === "preview" && selectedTemplate && (
+            <motion.div key="preview" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}
+              className={fullscreen ? "fixed inset-0 z-50 bg-gray-100 overflow-auto" : ""}>
+              {/* Preview Toolbar */}
+              <div className={`bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between ${fullscreen ? "sticky top-0 z-10 shadow-sm" : "rounded-t-xl border border-gray-200"}`}>
+                <div className="flex items-center gap-3">
+                  <button onClick={() => { setView("editor"); setFullscreen(false); }} className="text-gray-400 hover:text-gray-600">
+                    <ArrowLeft className="w-5 h-5" />
+                  </button>
+                  <Eye className="w-4 h-4 text-gray-500" />
+                  <span className="text-sm font-semibold text-gray-800" style={{ fontFamily: "'Tajawal', sans-serif" }}>معاينة التقرير</span>
+                </div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Button variant="outline" size="sm" onClick={handlePrint} className="gap-1.5 text-xs">
+                    <Printer className="w-3.5 h-3.5" /> طباعة
+                  </Button>
+                  <Button size="sm" onClick={handleExportPDF} disabled={exporting} className="gap-1.5 text-xs bg-teal-600 hover:bg-teal-700 text-white">
+                    {exporting ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> جاري التصدير...</> : <><FileDown className="w-3.5 h-3.5" /> تصدير PDF</>}
+                  </Button>
+                  <Button variant="ghost" size="sm" onClick={() => setFullscreen(!fullscreen)} className="p-1.5">
+                    {fullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+                  </Button>
                 </div>
               </div>
+              {/* Preview Content */}
+              <div className={`bg-gray-100 overflow-auto ${fullscreen ? "h-[calc(100vh-52px)]" : "max-h-[75vh] rounded-b-xl border-x border-b border-gray-200"} p-6`}>
+                <div className="mx-auto" style={{ maxWidth: "210mm" }}>
+                  <div id="report-preview-content">
+                    <ReportPreview template={selectedTemplate} data={formData} theme={selectedTheme} fontFamily={selectedFont} />
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          )}
 
+          {/* ═══ Saved Reports View ═══ */}
+          {view === "saved" && (
+            <motion.div key="saved" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}>
+              <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
+                <h2 className="text-lg font-bold text-gray-900" style={{ fontFamily: "'Tajawal', sans-serif" }}>التقارير المحفوظة</h2>
+                <div className="relative w-64">
+                  <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                  <input type="text" placeholder="بحث..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full pr-10 pl-4 py-2 rounded-lg bg-white border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20" />
+                </div>
+              </div>
               {filteredReports.length === 0 ? (
                 <div className="text-center py-16 bg-white rounded-2xl border border-gray-100">
                   <FileText className="w-12 h-12 text-gray-300 mx-auto mb-4" />
@@ -401,12 +646,10 @@ export default function ReportCenter() {
                     const template = REPORT_TEMPLATES.find((t) => t.id === report.templateId);
                     const Icon = template?.icon || FileText;
                     const color = template?.color || "#64748b";
+                    const theme = THEMES.find((t) => t.id === report.themeId);
                     return (
-                      <motion.div
-                        key={report.id}
-                        whileHover={{ y: -1 }}
-                        className="bg-white rounded-xl border border-gray-100 p-4 flex items-center justify-between group"
-                      >
+                      <motion.div key={report.id} whileHover={{ y: -1 }}
+                        className="bg-white rounded-xl border border-gray-100 p-4 flex items-center justify-between group">
                         <div className="flex items-center gap-4">
                           <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ backgroundColor: color + "12" }}>
                             <Icon className="w-5 h-5" style={{ color }} />
@@ -417,6 +660,15 @@ export default function ReportCenter() {
                               <span>{template?.title}</span>
                               <span>·</span>
                               <span>{new Date(report.updatedAt).toLocaleDateString("ar-SA")}</span>
+                              {theme && (
+                                <>
+                                  <span>·</span>
+                                  <span className="flex items-center gap-1">
+                                    <span className="w-2 h-2 rounded-full" style={{ backgroundColor: theme.primaryColor }} />
+                                    {theme.name}
+                                  </span>
+                                </>
+                              )}
                             </p>
                           </div>
                         </div>
