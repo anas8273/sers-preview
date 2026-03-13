@@ -5,7 +5,6 @@ import React from 'react';
  * باقي الوظائف → النظام العادي (البنود) مع ميزات معياري
  */
 import { useState, useMemo, useRef, useCallback, useEffect } from "react";
-import { motion, AnimatePresence } from "framer-motion";
 import { useLocation } from "wouter";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
@@ -2116,7 +2115,7 @@ export default function PerformanceEvidence() {
     const hasFormFields = linkedSub?.formFields && linkedSub.formFields.length > 0;
     const isFormDataEmpty = !ev.formData || Object.keys(ev.formData).length === 0 || !Object.values(ev.formData).some(v => v && v.trim());
     return (
-    <motion.div key={ev.id} initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }}
+    <div key={ev.id}
       draggable
       onDragStart={() => handleDragStart(ev, criterionId, ev.subEvidenceId)}
       onDragEnd={handleDragEnd}
@@ -2299,7 +2298,7 @@ export default function PerformanceEvidence() {
           </button>
         )}
       </div>
-    </motion.div>
+    </div>
   );
   };
 
@@ -2344,7 +2343,7 @@ export default function PerformanceEvidence() {
               const indicatorsCount = standards.reduce((sum, s) => sum + s.items.reduce((si, item) => si + (item.subItems?.length || 0) + 1, 0), 0);
               const isTeacher = job.id === "teacher";
               return (
-                <motion.div key={job.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.04 }}
+                <div key={job.id}
                   className={isTeacher ? "sm:col-span-2" : ""}>
                   <Card className={`cursor-pointer hover:shadow-xl transition-all duration-300 overflow-hidden relative group h-full ${
                     isTeacher ? 'border-teal-200 bg-gradient-to-l from-teal-50/80 to-background hover:border-teal-300' : 'border-border/60 hover:border-opacity-100'
@@ -2392,7 +2391,7 @@ export default function PerformanceEvidence() {
                       </div>
                     </CardContent>
                   </Card>
-                </motion.div>
+                </div>
               );
             })}
           </div>
@@ -2506,18 +2505,13 @@ export default function PerformanceEvidence() {
 
               {/* شريط تقدم التصنيف الذكي */}
               {uploadProgress && (
-                <motion.div
-                  initial={{ opacity: 0, y: -10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -10 }}
+                <div
                   className="mb-3 sm:mb-4 bg-gradient-to-r from-violet-50 to-indigo-50 dark:from-violet-950/30 dark:to-indigo-950/30 rounded-xl p-4 border border-violet-200/50 shadow-sm">
                   
                   <div className="flex gap-3">
                     {/* معاينة الإطار المستخرج من الفيديو */}
                     {uploadProgress.framePreview && (
-                      <motion.div
-                        initial={{ opacity: 0, scale: 0.8 }}
-                        animate={{ opacity: 1, scale: 1 }}
+                      <div
                         className="shrink-0 w-16 h-16 sm:w-20 sm:h-20 rounded-lg overflow-hidden border-2 border-violet-300 shadow-md">
                         <img src={uploadProgress.framePreview} alt="إطار الفيديو" className="w-full h-full object-cover" />
                         <div className="absolute inset-0 bg-black/20 flex items-center justify-center">
@@ -2525,7 +2519,7 @@ export default function PerformanceEvidence() {
                             <div className="w-0 h-0 border-t-[4px] border-t-transparent border-b-[4px] border-b-transparent border-r-[6px] border-r-violet-600 rotate-180 mr-0.5" />
                           </div>
                         </div>
-                      </motion.div>
+                      </div>
                     )}
                     
                     <div className="flex-1 min-w-0">
@@ -2562,10 +2556,8 @@ export default function PerformanceEvidence() {
                         <span className="font-bold text-violet-600 shrink-0">{uploadProgress.percent}%</span>
                       </div>
                       <div className="w-full bg-violet-200/30 dark:bg-violet-800/30 rounded-full h-2.5 overflow-hidden">
-                        <motion.div
-                          initial={{ width: 0 }}
-                          animate={{ width: `${uploadProgress.percent}%` }}
-                          transition={{ duration: 0.5, ease: 'easeOut' }}
+                        <div
+                          style={{ width: `${uploadProgress.percent}%`, transition: 'width 0.3s ease' }}
                           className={`h-full rounded-full ${
                             uploadProgress.percent === 100
                               ? 'bg-gradient-to-r from-teal-500 to-teal-400'
@@ -2574,14 +2566,14 @@ export default function PerformanceEvidence() {
                         />
                       </div>
                       {uploadProgress.percent === 100 && (
-                        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex items-center gap-1.5 mt-2 text-teal-600">
+                        <div className="flex items-center gap-1.5 mt-2 text-teal-600">
                           <CheckCircle className="w-3.5 h-3.5" />
                           <span className="text-xs font-medium">تم بنجاح!</span>
-                        </motion.div>
+                        </div>
                       )}
                     </div>
                   </div>
-                </motion.div>
+                </div>
               )}
 
               {/* شريط التقدم العام */}
@@ -3024,9 +3016,9 @@ export default function PerformanceEvidence() {
       <div className="min-h-screen bg-background p-3 sm:p-4 md:p-6" dir="rtl">
         <input type="file" ref={fileInputRef} className="hidden" accept="image/*,video/*,.pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx" multiple onChange={handleFileUpload} />
         {/* Lightbox Overlay */}
-        <AnimatePresence>
+        <>
           {lightboxImage && <LightboxOverlay src={lightboxImage} onClose={() => setLightboxImage(null)} />}
-        </AnimatePresence>
+        </>
         <div className="max-w-4xl mx-auto">
 
           {/* Header - Mobile Optimized */}
@@ -3065,7 +3057,7 @@ export default function PerformanceEvidence() {
                   <span className="text-foreground font-bold">بند {currentCriterionIndex + 1}</span>
                 </div>
               )}
-              {/* Mobile: Stack layout */}
+              {/* Mobile: Stack */}
               <div className="flex flex-col gap-3">
                 <div className="flex items-start gap-2.5 sm:gap-3">
                   <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-lg sm:rounded-xl flex items-center justify-center text-base sm:text-lg shrink-0"
@@ -3143,9 +3135,9 @@ export default function PerformanceEvidence() {
                     {isExpanded ? <ChevronUp className="w-4 h-4 sm:w-5 sm:h-5 text-muted-foreground shrink-0" /> : <ChevronDown className="w-4 h-4 sm:w-5 sm:h-5 text-muted-foreground shrink-0" />}
                   </div>
 
-                  <AnimatePresence>
+                  <>
                     {isExpanded && (
-                      <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }}
+                      <div
                         className="border-t border-border overflow-hidden">
                         <div className="p-4 space-y-4">
                           {/* Form Fields */}
@@ -3248,11 +3240,11 @@ export default function PerformanceEvidence() {
 
                           {/* Drop Indicator */}
                           {isDropTarget && draggedEvidence && (
-                            <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }}
+                            <div
                               className="bg-primary/10 border-2 border-dashed border-primary rounded-xl p-4 text-center">
                               <Move className="w-5 h-5 text-primary mx-auto mb-1" />
                               <p className="text-xs font-medium text-primary">أفلت هنا لنقل الشاهد</p>
-                            </motion.div>
+                            </div>
                           )}
 
                           {/* Evidences List - تخطي الشواهد من نوع text التي تحتوي على formData لأنها تُعرض في نموذج التقرير */}
@@ -3298,9 +3290,9 @@ export default function PerformanceEvidence() {
                             </div>
                           </div>
                         </div>
-                      </motion.div>
+                      </div>
                     )}
-                  </AnimatePresence>
+                  </>
                 </Card>
               );
             })}
@@ -3325,8 +3317,8 @@ export default function PerformanceEvidence() {
 
           {/* Move Evidence Dialog */}
           {showMoveDialog && (
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setShowMoveDialog(null)}>
-              <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
+            <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setShowMoveDialog(null)}>
+              <div
                 className="bg-background rounded-2xl shadow-2xl max-w-md w-full max-h-[80vh] overflow-hidden" onClick={(e) => e.stopPropagation()}>
                 <div className="p-4 border-b border-border flex items-center justify-between">
                   <h3 className="font-bold text-foreground flex items-center gap-2">
@@ -3380,17 +3372,17 @@ export default function PerformanceEvidence() {
                     );
                   })}
                 </div>
-              </motion.div>
-            </motion.div>
+              </div>
+            </div>
           )}
 
           {/* ===== تقرير التغطية Dialog ===== */}
           {showCoverageReport && (() => {
             const reportGrade = getGrade(percentage);
             return (
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            <div
               className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={() => setShowCoverageReport(false)}>
-              <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
+              <div
                 className="bg-card rounded-2xl shadow-2xl border border-border max-w-2xl w-full max-h-[85vh] overflow-y-auto p-6" onClick={e => e.stopPropagation()}>
                 <div className="flex items-center justify-between mb-6">
                   <div className="flex items-center gap-3">
@@ -3537,8 +3529,8 @@ export default function PerformanceEvidence() {
                     </div>
                   )}
                 </div>
-              </motion.div>
-            </motion.div>
+              </div>
+            </div>
           );
           })()}
 
@@ -3833,9 +3825,9 @@ export default function PerformanceEvidence() {
             };
 
             return (
-              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 bg-black/60 z-50" style={{ overflowY: 'auto', WebkitOverflowScrolling: 'touch' }}>
+              <div className="fixed inset-0 bg-black/60 z-50" style={{ overflowY: 'auto', WebkitOverflowScrolling: 'touch' }}>
                 <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'flex-start', padding: '8px 4px 60px 4px', minHeight: '100%' }}>
-                <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}
+                <div
                   className="bg-white rounded-xl sm:rounded-2xl shadow-2xl w-full" style={{ maxWidth: '860px' }}>
                   {/* شريط الأدوات العلوي */}
                   <div className="flex items-center justify-between p-2 sm:p-3 bg-gray-50 border-b flex-wrap gap-1 sm:gap-2 sticky top-0 z-10" data-no-print>
@@ -4393,9 +4385,9 @@ export default function PerformanceEvidence() {
                   </div>{/* إغلاق wrapper بارتفاع محسوب */}
                   </div>{/* إغلاق حاوية العرض */}
 
-                </motion.div>
+                </div>
                 </div>{/* إغلاق div المركزي */}
-              </motion.div>
+              </div>
             );
           })()}
 
@@ -5977,10 +5969,7 @@ export default function PerformanceEvidence() {
 function LightboxOverlay({ src, onClose }: { src: string; onClose: () => void }) {
   return (
     <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4" onClick={onClose}>
-      <motion.div
-        initial={{ opacity: 0, scale: 0.9 }}
-        animate={{ opacity: 1, scale: 1 }}
-        exit={{ opacity: 0, scale: 0.9 }}
+      <div
         className="relative max-w-4xl max-h-[90vh] w-full flex items-center justify-center"
         onClick={(e) => e.stopPropagation()}
       >
@@ -5991,7 +5980,7 @@ function LightboxOverlay({ src, onClose }: { src: string; onClose: () => void })
         >
           <X className="w-5 h-5 text-foreground" />
         </button>
-      </motion.div>
+      </div>
     </div>
   );
 }

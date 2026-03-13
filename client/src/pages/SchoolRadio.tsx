@@ -8,7 +8,6 @@
  */
 import { useState, useMemo, useCallback } from "react";
 import { useLocation } from "wouter";
-import { motion, AnimatePresence } from "framer-motion";
 import {
   ArrowLeft, Radio, Plus, Trash2, Save, Edit3,
   ChevronDown, ChevronUp, Sparkles, BookOpen,
@@ -334,10 +333,10 @@ export default function SchoolRadio() {
       </div>
 
       <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6">
-        <AnimatePresence mode="wait">
+        <>
           {/* ═══ List View ═══ */}
           {view === "list" && (
-            <motion.div key="list" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}>
+            <div key="list">
               <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
                 <h2 className="text-lg font-bold text-gray-900" style={{ fontFamily: "'Tajawal', sans-serif" }}>برامج الإذاعة</h2>
                 <div className="flex items-center gap-2">
@@ -360,7 +359,7 @@ export default function SchoolRadio() {
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {filteredPrograms.map((prog) => (
-                    <motion.div key={prog.id} whileHover={{ y: -2 }} className="bg-white rounded-xl border border-gray-100 p-5 group">
+                    <div key={prog.id} className="bg-white rounded-xl border border-gray-100 p-5 group">
                       <div className="flex items-start justify-between mb-3">
                         <div>
                           <h3 className="font-bold text-gray-800 text-sm">{prog.title}</h3>
@@ -378,16 +377,16 @@ export default function SchoolRadio() {
                         })}
                         {prog.segments.length > 5 && <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-gray-100 text-gray-500">+{prog.segments.length - 5}</span>}
                       </div>
-                    </motion.div>
+                    </div>
                   ))}
                 </div>
               )}
-            </motion.div>
+            </div>
           )}
 
           {/* ═══ Editor View ═══ */}
           {view === "editor" && (
-            <motion.div key="editor" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}>
+            <div key="editor">
               <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
                 <button onClick={() => setView("list")} className="flex items-center gap-2 text-gray-500 hover:text-gray-700">
                   <ArrowLeft className="w-4 h-4" /><span className="text-sm">العودة للقائمة</span>
@@ -440,7 +439,7 @@ export default function SchoolRadio() {
                   const Icon = segType?.icon || Edit3;
                   const color = segType?.color || "#64748b";
                   return (
-                    <motion.div key={seg.id} layout initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
+                    <div key={seg.id}
                       className="bg-white rounded-xl border border-gray-200 overflow-hidden">
                       <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-100" style={{ backgroundColor: color + "06" }}>
                         <div className="flex flex-col gap-0.5">
@@ -468,7 +467,7 @@ export default function SchoolRadio() {
                           </button>
                         )}
                       </div>
-                    </motion.div>
+                    </div>
                   );
                 })}
               </div>
@@ -489,12 +488,12 @@ export default function SchoolRadio() {
                   })}
                 </div>
               </div>
-            </motion.div>
+            </div>
           )}
 
           {/* ═══ Preview View ═══ */}
           {view === "preview" && (
-            <motion.div key="preview" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}
+            <div key="preview"
               className={fullscreen ? "fixed inset-0 z-50 bg-gray-100 overflow-auto" : ""}>
               <div className={`bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between ${fullscreen ? "sticky top-0 z-10 shadow-sm" : "rounded-t-xl border border-gray-200"}`}>
                 <div className="flex items-center gap-3">
@@ -519,9 +518,9 @@ export default function SchoolRadio() {
                   </div>
                 </div>
               </div>
-            </motion.div>
+            </div>
           )}
-        </AnimatePresence>
+        </>
       </div>
     </div>
   );

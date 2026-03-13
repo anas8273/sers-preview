@@ -3,7 +3,6 @@
  */
 import { useRef, useState } from "react";
 import { Upload, Link as LinkIcon, X, Image, FileText, Video, Loader2 } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
 import type { Evidence } from "@/lib/standards-data";
 
 interface Props {
@@ -87,12 +86,9 @@ export default function EvidenceUploader({ standardId, indicatorId, onAdd, isCla
         </button>
       </div>
 
-      <AnimatePresence>
+      <>
         {showLinkInput && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: "auto", opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
+          <div
             className="overflow-hidden"
           >
             <div className="bg-purple-50 rounded-xl p-3 border border-purple-200 space-y-2">
@@ -127,9 +123,9 @@ export default function EvidenceUploader({ standardId, indicatorId, onAdd, isCla
                 </button>
               </div>
             </div>
-          </motion.div>
+          </div>
         )}
-      </AnimatePresence>
+      </>
     </div>
   );
 }

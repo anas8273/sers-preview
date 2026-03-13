@@ -9,7 +9,6 @@
  */
 import { useState, useMemo, useCallback } from "react";
 import { useLocation } from "wouter";
-import { motion, AnimatePresence } from "framer-motion";
 import {
   ArrowLeft, FileText, Plus, Trash2, Download, Eye, Save,
   Users, Building2, BookOpen, Star, Search, X, Edit3,
@@ -476,16 +475,16 @@ export default function ReportCenter() {
       </div>
 
       <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6">
-        <AnimatePresence mode="wait">
+        <>
           {/* ═══ Templates View ═══ */}
           {view === "templates" && (
-            <motion.div key="templates" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}>
+            <div key="templates">
               <h2 className="text-lg font-bold text-gray-900 mb-4" style={{ fontFamily: "'Tajawal', sans-serif" }}>اختر نوع التقرير</h2>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {REPORT_TEMPLATES.map((template) => {
                   const Icon = template.icon;
                   return (
-                    <motion.button key={template.id} whileHover={{ y: -3, boxShadow: "0 10px 25px rgba(0,0,0,0.08)" }}
+                    <button key={template.id}
                       onClick={() => startNewReport(template)} className="bg-white rounded-xl border border-gray-100 p-5 text-right transition-all group">
                       <div className="w-12 h-12 rounded-xl flex items-center justify-center mb-3" style={{ backgroundColor: template.color + "12" }}>
                         <Icon className="w-6 h-6" style={{ color: template.color }} />
@@ -498,16 +497,16 @@ export default function ReportCenter() {
                           <Plus className="w-3 h-3" /> إنشاء
                         </span>
                       </div>
-                    </motion.button>
+                    </button>
                   );
                 })}
               </div>
-            </motion.div>
+            </div>
           )}
 
           {/* ═══ Editor View ═══ */}
           {view === "editor" && selectedTemplate && (
-            <motion.div key="editor" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}>
+            <div key="editor">
               {/* Toolbar */}
               <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
                 <div className="flex items-center gap-3">
@@ -582,12 +581,12 @@ export default function ReportCenter() {
                   ))}
                 </div>
               </div>
-            </motion.div>
+            </div>
           )}
 
           {/* ═══ Preview View ═══ */}
           {view === "preview" && selectedTemplate && (
-            <motion.div key="preview" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}
+            <div key="preview"
               className={fullscreen ? "fixed inset-0 z-50 bg-gray-100 overflow-auto" : ""}>
               {/* Preview Toolbar */}
               <div className={`bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between ${fullscreen ? "sticky top-0 z-10 shadow-sm" : "rounded-t-xl border border-gray-200"}`}>
@@ -618,12 +617,12 @@ export default function ReportCenter() {
                   </div>
                 </div>
               </div>
-            </motion.div>
+            </div>
           )}
 
           {/* ═══ Saved Reports View ═══ */}
           {view === "saved" && (
-            <motion.div key="saved" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}>
+            <div key="saved">
               <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
                 <h2 className="text-lg font-bold text-gray-900" style={{ fontFamily: "'Tajawal', sans-serif" }}>التقارير المحفوظة</h2>
                 <div className="relative w-64">
@@ -648,7 +647,7 @@ export default function ReportCenter() {
                     const color = template?.color || "#64748b";
                     const theme = THEMES.find((t) => t.id === report.themeId);
                     return (
-                      <motion.div key={report.id} whileHover={{ y: -1 }}
+                      <div key={report.id}
                         className="bg-white rounded-xl border border-gray-100 p-4 flex items-center justify-between group">
                         <div className="flex items-center gap-4">
                           <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ backgroundColor: color + "12" }}>
@@ -680,14 +679,14 @@ export default function ReportCenter() {
                             <Trash2 className="w-3 h-3" /> حذف
                           </Button>
                         </div>
-                      </motion.div>
+                      </div>
                     );
                   })}
                 </div>
               )}
-            </motion.div>
+            </div>
           )}
-        </AnimatePresence>
+        </>
       </div>
     </div>
   );

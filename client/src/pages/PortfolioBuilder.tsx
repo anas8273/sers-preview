@@ -8,7 +8,6 @@
  */
 import { useState, useCallback, useMemo } from "react";
 import { useLocation } from "wouter";
-import { motion, AnimatePresence } from "framer-motion";
 import {
   ArrowLeft, User, GraduationCap, Award, Briefcase,
   Target, Plus, Trash2, Save, Eye,
@@ -485,10 +484,10 @@ export default function PortfolioBuilder() {
 
           {/* Main content */}
           <div className="flex-1">
-            <AnimatePresence mode="wait">
+            <>
               {/* Personal Info Tab */}
               {activeTab === "personal" && (
-                <motion.div key="personal" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
+                <div key="personal">
                   <div className="bg-white rounded-xl border border-gray-200 p-6">
                     <h2 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2" style={{ fontFamily: "'Tajawal', sans-serif" }}>
                       <User className="w-5 h-5 text-violet-600" /> البيانات الشخصية
@@ -512,12 +511,12 @@ export default function PortfolioBuilder() {
                       ))}
                     </div>
                   </div>
-                </motion.div>
+                </div>
               )}
 
               {/* Certificates Tab */}
               {activeTab === "certificates" && (
-                <motion.div key="certificates" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
+                <div key="certificates">
                   <div className="bg-white rounded-xl border border-gray-200 p-6">
                     <div className="flex items-center justify-between mb-4">
                       <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2" style={{ fontFamily: "'Tajawal', sans-serif" }}>
@@ -562,12 +561,12 @@ export default function PortfolioBuilder() {
                       </div>
                     )}
                   </div>
-                </motion.div>
+                </div>
               )}
 
               {/* Achievements Tab */}
               {activeTab === "achievements" && (
-                <motion.div key="achievements" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
+                <div key="achievements">
                   <div className="bg-white rounded-xl border border-gray-200 p-6">
                     <div className="flex items-center justify-between mb-4">
                       <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2" style={{ fontFamily: "'Tajawal', sans-serif" }}>
@@ -610,12 +609,12 @@ export default function PortfolioBuilder() {
                       </div>
                     )}
                   </div>
-                </motion.div>
+                </div>
               )}
 
               {/* Activities Tab */}
               {activeTab === "activities" && (
-                <motion.div key="activities" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
+                <div key="activities">
                   <div className="bg-white rounded-xl border border-gray-200 p-6">
                     <div className="flex items-center justify-between mb-4">
                       <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2" style={{ fontFamily: "'Tajawal', sans-serif" }}>
@@ -657,12 +656,12 @@ export default function PortfolioBuilder() {
                       </div>
                     )}
                   </div>
-                </motion.div>
+                </div>
               )}
 
               {/* Goals Tab */}
               {activeTab === "goals" && (
-                <motion.div key="goals" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
+                <div key="goals">
                   <div className="bg-white rounded-xl border border-gray-200 p-6">
                     <div className="flex items-center justify-between mb-4">
                       <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2" style={{ fontFamily: "'Tajawal', sans-serif" }}>
@@ -688,12 +687,12 @@ export default function PortfolioBuilder() {
                         rows={4} className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/20 resize-y" />
                     </div>
                   </div>
-                </motion.div>
+                </div>
               )}
 
               {/* Preview Tab */}
               {activeTab === "preview" && (
-                <motion.div key="preview" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}
+                <div key="preview"
                   className={fullscreen ? "fixed inset-0 z-50 bg-gray-100 overflow-auto" : ""}>
                   <div className={`bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between ${fullscreen ? "sticky top-0 z-10 shadow-sm" : "rounded-t-xl border border-gray-200"}`}>
                     <div className="flex items-center gap-3">
@@ -718,9 +717,9 @@ export default function PortfolioBuilder() {
                       </div>
                     </div>
                   </div>
-                </motion.div>
+                </div>
               )}
-            </AnimatePresence>
+            </>
           </div>
         </div>
       </div>

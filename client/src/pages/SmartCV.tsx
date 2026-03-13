@@ -5,7 +5,6 @@
  */
 import { useState, useCallback } from "react";
 import { useLocation } from "wouter";
-import { motion, AnimatePresence } from "framer-motion";
 import {
   ArrowLeft, User, Plus, Trash2, Save, Edit3,
   Briefcase, GraduationCap, Award, Phone, Mail, MapPin,
@@ -331,10 +330,10 @@ export default function SmartCV() {
       </div>
 
       <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6">
-        <AnimatePresence mode="wait">
+        <>
           {/* ═══ Editor View ═══ */}
           {view === "editor" && (
-            <motion.div key="editor" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}>
+            <div key="editor">
               {/* Theme Selector */}
               <div className="mb-4">
                 <TemplateSelector selectedTheme={selectedTheme} onThemeChange={setSelectedTheme} selectedFont={selectedFont} onFontChange={setSelectedFont} compact />
@@ -356,8 +355,8 @@ export default function SmartCV() {
               </div>
 
               {/* Section content */}
-              <AnimatePresence mode="wait">
-                <motion.div key={activeSection} initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -5 }}
+              <>
+                <div key={activeSection}
                   className="bg-white rounded-xl border border-gray-200 p-5">
                   {activeSection === "personal" && (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -466,14 +465,14 @@ export default function SmartCV() {
                       </div>
                     </div>
                   )}
-                </motion.div>
-              </AnimatePresence>
-            </motion.div>
+                </div>
+              </>
+            </div>
           )}
 
           {/* ═══ Preview View ═══ */}
           {view === "preview" && (
-            <motion.div key="preview" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}
+            <div key="preview"
               className={fullscreen ? "fixed inset-0 z-50 bg-gray-100 overflow-auto" : ""}>
               <div className={`bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between ${fullscreen ? "sticky top-0 z-10 shadow-sm" : "rounded-t-xl border border-gray-200"}`}>
                 <div className="flex items-center gap-3">
@@ -498,9 +497,9 @@ export default function SmartCV() {
                   </div>
                 </div>
               </div>
-            </motion.div>
+            </div>
           )}
-        </AnimatePresence>
+        </>
       </div>
     </div>
   );

@@ -5,7 +5,6 @@
  * Layout: Sidebar + Top nav + Hero + Role filter + Section grid
  */
 import { useState, useMemo, useCallback } from "react";
-import { motion, AnimatePresence } from "framer-motion";
 import { useLocation } from "wouter";
 import {
   Award, FolderOpen, FileText, BarChart3, TrendingUp, HeartPulse,
@@ -96,11 +95,7 @@ function SectionCard({ section, onNavigate, delay = 0 }: { section: Section; onN
   const isComingSoon = section.comingSoon;
 
   return (
-    <motion.button
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: delay * 0.04, duration: 0.3 }}
-      whileHover={!isComingSoon ? { y: -4, boxShadow: "0 12px 30px rgba(0,0,0,0.1)" } : undefined}
+    <button
       onClick={() => {
         if (isComingSoon) {
           import("sonner").then(({ toast }) => {
@@ -178,7 +173,7 @@ function SectionCard({ section, onNavigate, delay = 0 }: { section: Section; onN
           <ArrowLeft className="w-3 h-3 mr-auto transition-transform group-hover:-translate-x-1" />
         </div>
       )}
-    </motion.button>
+    </button>
   );
 }
 
@@ -186,11 +181,7 @@ function QuickAccessCard({ route, title, icon, color, desc, onNavigate, delay = 
   route: string; title: string; icon: string; color: string; desc: string; onNavigate: (path: string) => void; delay?: number;
 }) {
   return (
-    <motion.button
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: delay * 0.06 }}
-      whileHover={{ y: -3, boxShadow: "0 10px 25px rgba(0,0,0,0.1)" }}
+    <button
       onClick={() => onNavigate(route)}
       className="bg-white rounded-xl p-4 border border-gray-100 text-right transition-all group hover:border-gray-200"
     >
@@ -201,7 +192,7 @@ function QuickAccessCard({ route, title, icon, color, desc, onNavigate, delay = 
         <Zap className="w-3 h-3" />
         جاهز للاستخدام
       </div>
-    </motion.button>
+    </button>
   );
 }
 
@@ -224,11 +215,8 @@ function SearchResults({ query, results, onNavigate }: {
           {results.map(({ section, service }) => {
             const route = section.route || INTERACTIVE_ROUTES[section.id];
             return (
-              <motion.div
+              <div
                 key={service.id}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                whileHover={{ y: -2 }}
                 className="bg-white rounded-xl border border-gray-100 p-4 hover:border-gray-200 transition-all cursor-pointer relative"
                 onClick={() => {
                   if (route && !service.comingSoon) {
@@ -264,7 +252,7 @@ function SearchResults({ query, results, onNavigate }: {
                     <span className="text-[10px] font-bold text-green-600">مجاني</span>
                   )}
                 </div>
-              </motion.div>
+              </div>
             );
           })}
         </div>
@@ -358,9 +346,7 @@ export default function Home() {
           ) : (
             <>
               {/* ═══ Hero Section ═══ */}
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
+              <div
                 className="relative rounded-2xl overflow-hidden mb-8"
                 style={{ minHeight: 300 }}
               >
@@ -390,7 +376,7 @@ export default function Home() {
                     </div>
                   </div>
                 </div>
-              </motion.div>
+              </div>
 
               {/* ═══ Role Filter ═══ */}
               <div className="mb-6">
@@ -441,18 +427,15 @@ export default function Home() {
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 mb-10">
-                <AnimatePresence mode="popLayout">
+                <>
                   {filteredSections.map((section, i) => (
                     <SectionCard key={section.id} section={section} onNavigate={handleNavigate} delay={i} />
                   ))}
-                </AnimatePresence>
+                </>
               </div>
 
               {/* ═══ Footer Summary ═══ */}
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.3 }}
+              <div
                 className="bg-white rounded-2xl p-8 border border-gray-100 text-center"
               >
                 <h3 className="text-xl font-bold text-gray-900 mb-2" style={{ fontFamily: "'Tajawal', sans-serif" }}>
@@ -470,7 +453,7 @@ export default function Home() {
                     <span key={tag} className="px-3 py-1 rounded-full text-xs bg-teal-50 text-teal-700 border border-teal-200">{tag}</span>
                   ))}
                 </div>
-              </motion.div>
+              </div>
             </>
           )}
         </main>

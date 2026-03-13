@@ -5,7 +5,6 @@
  */
 import { useState, useMemo } from "react";
 import { useParams, useLocation } from "wouter";
-import { motion, AnimatePresence } from "framer-motion";
 import {
   ArrowLeft, FileText, Zap, ShoppingBag, Play, Clock,
   Award, FolderOpen, BarChart3, TrendingUp, HeartPulse,
@@ -156,10 +155,7 @@ export default function SectionPage() {
 
         {/* Interactive CTA */}
         {sectionRoute && section.hasInteractive && (
-          <motion.button
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            whileHover={{ y: -2, boxShadow: "0 8px 25px rgba(0,0,0,0.12)" }}
+          <button
             onClick={() => navigate(sectionRoute)}
             className="w-full bg-white rounded-2xl border-2 p-6 mb-6 text-right transition-all group"
             style={{ borderColor: section.color + "40" }}
@@ -181,25 +177,20 @@ export default function SectionPage() {
                 ابدأ الآن
               </div>
             </div>
-          </motion.button>
+          </button>
         )}
 
         {/* Services grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          <AnimatePresence mode="popLayout">
+          <>
             {filteredServices.map((service, index) => {
               const isInteractive = service.mode === "interactive" || service.mode === "both";
               const isStore = service.mode === "store" || service.mode === "both";
               const isComingSoon = service.comingSoon;
 
               return (
-                <motion.div
+                <div
                   key={service.id}
-                  initial={{ opacity: 0, y: 15 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, scale: 0.95 }}
-                  transition={{ delay: index * 0.03 }}
-                  whileHover={!isComingSoon ? { y: -3, boxShadow: "0 10px 25px rgba(0,0,0,0.08)" } : undefined}
                   className={`bg-white rounded-xl border p-5 transition-all group ${
                     isComingSoon ? "border-dashed border-gray-300 opacity-70" : "border-gray-100 hover:border-gray-200 cursor-pointer"
                   }`}
@@ -258,10 +249,10 @@ export default function SectionPage() {
                       </span>
                     )}
                   </div>
-                </motion.div>
+                </div>
               );
             })}
-          </AnimatePresence>
+          </>
         </div>
       </div>
     </div>

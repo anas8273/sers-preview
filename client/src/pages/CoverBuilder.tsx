@@ -5,7 +5,6 @@
  * حذف الثيمات المكررة - 3 ثيمات فقط مختلفة تماماً
  */
 import { useState, useMemo } from "react";
-import { motion } from "framer-motion";
 import { ArrowLeft, Download, Printer, Palette } from "lucide-react";
 import { useLocation } from "wouter";
 import { exportToPDF, printElement } from "@/lib/pdf-export";

@@ -4,7 +4,6 @@
  * المستخدم يدخل بيانات المادة والطلاب → رسوم بيانية تلقائية → تقرير → تصدير PDF
  */
 import { useState, useMemo } from "react";
-import { motion } from "framer-motion";
 import { ArrowLeft, Download, Printer, Plus, Trash2, BarChart3, PieChart, TrendingUp, Users, Eye } from "lucide-react";
 import { useLocation } from "wouter";
 import { exportToPDF, printElement } from "@/lib/pdf-export";
@@ -269,10 +268,8 @@ export default function GradeAnalysis() {
                     {students.map((student, index) => {
                       const pct = subjectInfo.maxScore > 0 ? ((student.score / subjectInfo.maxScore) * 100) : 0;
                       return (
-                        <motion.tr
+                        <tr
                           key={student.id}
-                          initial={{ opacity: 0 }}
-                          animate={{ opacity: 1 }}
                           className={`border-b border-gray-100 hover:bg-gray-50 ${index % 2 === 1 ? "bg-gray-50/50" : ""}`}
                         >
                           <td className="p-2 text-center text-gray-500 font-medium">{index + 1}</td>
@@ -320,7 +317,7 @@ export default function GradeAnalysis() {
                               </button>
                             )}
                           </td>
-                        </motion.tr>
+                        </tr>
                       );
                     })}
                   </tbody>

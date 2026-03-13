@@ -4,7 +4,6 @@
  * تنسيق مختلف: حقول ملونة حسب نوع الخطة + بطاقات طلاب + جدول تفصيلي
  */
 import { useState } from "react";
-import { motion } from "framer-motion";
 import { ArrowLeft, Download, Printer, Plus, Trash2, Eye } from "lucide-react";
 import { useLocation } from "wouter";
 import { exportToPDF, printElement } from "@/lib/pdf-export";
@@ -410,7 +409,7 @@ export default function TreatmentPlan() {
 
           <div className="space-y-3">
             {students.map((student, index) => (
-              <motion.div key={student.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="bg-gray-50 rounded-lg p-4 border border-gray-100">
+              <div key={student.id} className="bg-gray-50 rounded-lg p-4 border border-gray-100">
                 <div className="flex items-center justify-between mb-3">
                   <span className="text-sm font-bold flex items-center gap-2" style={{ color: selectedType.color }}>
                     <div className="w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-bold" style={{ backgroundColor: selectedType.color }}>
@@ -444,7 +443,7 @@ export default function TreatmentPlan() {
                     </div>
                   ))}
                 </div>
-              </motion.div>
+              </div>
             ))}
           </div>
         </div>

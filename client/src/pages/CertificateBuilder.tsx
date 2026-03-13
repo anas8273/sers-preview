@@ -5,7 +5,6 @@
  * كل نوع شهادة له تنسيق مختلف
  */
 import { useState, useMemo } from "react";
-import { motion } from "framer-motion";
 import { ArrowLeft, Download, Printer, Palette, Type } from "lucide-react";
 import { useLocation } from "wouter";
 import { exportToPDF, printElement } from "@/lib/pdf-export";

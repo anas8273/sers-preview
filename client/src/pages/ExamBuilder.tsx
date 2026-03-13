@@ -8,7 +8,6 @@
  */
 import { useState, useMemo, useCallback } from "react";
 import { useLocation } from "wouter";
-import { motion, AnimatePresence } from "framer-motion";
 import {
   ArrowLeft, ClipboardCheck, Plus, Trash2, Save, Edit3,
   Search, ChevronDown, ChevronUp, Sparkles,
@@ -369,10 +368,10 @@ export default function ExamBuilder() {
       </div>
 
       <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6">
-        <AnimatePresence mode="wait">
+        <>
           {/* ═══ List View ═══ */}
           {view === "list" && (
-            <motion.div key="list" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}>
+            <div key="list">
               <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
                 <h2 className="text-lg font-bold text-gray-900" style={{ fontFamily: "'Tajawal', sans-serif" }}>الاختبارات</h2>
                 <div className="flex items-center gap-2">
@@ -395,7 +394,7 @@ export default function ExamBuilder() {
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {filteredExams.map((exam) => (
-                    <motion.div key={exam.id} whileHover={{ y: -2 }} className="bg-white rounded-xl border border-gray-100 p-5 group">
+                    <div key={exam.id} className="bg-white rounded-xl border border-gray-100 p-5 group">
                       <div className="flex items-start justify-between mb-2">
                         <div>
                           <h3 className="font-bold text-gray-800 text-sm">{exam.title}</h3>
@@ -413,16 +412,16 @@ export default function ExamBuilder() {
                           return <span key={qt.id} className="px-2 py-0.5 rounded-full text-[10px] font-medium" style={{ backgroundColor: qt.color + "12", color: qt.color }}>{qt.label}: {count}</span>;
                         })}
                       </div>
-                    </motion.div>
+                    </div>
                   ))}
                 </div>
               )}
-            </motion.div>
+            </div>
           )}
 
           {/* ═══ Editor View ═══ */}
           {view === "editor" && (
-            <motion.div key="editor" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}>
+            <div key="editor">
               <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
                 <button onClick={() => setView("list")} className="flex items-center gap-2 text-gray-500 hover:text-gray-700">
                   <ArrowLeft className="w-4 h-4" /><span className="text-sm">العودة للقائمة</span>
@@ -486,7 +485,7 @@ export default function ExamBuilder() {
                   const Icon = qType?.icon || HelpCircle;
                   const color = qType?.color || "#64748b";
                   return (
-                    <motion.div key={q.id} layout className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                    <div key={q.id} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
                       <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-100" style={{ backgroundColor: color + "06" }}>
                         <div className="flex flex-col gap-0.5">
                           <button onClick={() => moveQuestion(index, "up")} disabled={index === 0} className="text-gray-400 hover:text-gray-600 disabled:opacity-30"><ChevronUp className="w-3 h-3" /></button>
@@ -557,7 +556,7 @@ export default function ExamBuilder() {
                           </div>
                         )}
                       </div>
-                    </motion.div>
+                    </div>
                   );
                 })}
               </div>
@@ -578,12 +577,12 @@ export default function ExamBuilder() {
                   })}
                 </div>
               </div>
-            </motion.div>
+            </div>
           )}
 
           {/* ═══ Preview View ═══ */}
           {view === "preview" && (
-            <motion.div key="preview" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}
+            <div key="preview"
               className={fullscreen ? "fixed inset-0 z-50 bg-gray-100 overflow-auto" : ""}>
               <div className={`bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between ${fullscreen ? "sticky top-0 z-10 shadow-sm" : "rounded-t-xl border border-gray-200"}`}>
                 <div className="flex items-center gap-3">
@@ -613,9 +612,9 @@ export default function ExamBuilder() {
                   </div>
                 </div>
               </div>
-            </motion.div>
+            </div>
           )}
-        </AnimatePresence>
+        </>
       </div>
     </div>
   );

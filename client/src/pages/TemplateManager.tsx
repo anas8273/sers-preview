@@ -4,7 +4,6 @@
  * + رفع صور مباشرة + أنماط الترويسة والحقول + نسخ القالب
  */
 import { useState, useRef, useCallback } from "react";
-import { motion, AnimatePresence } from "framer-motion";
 import { useLocation } from "wouter";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
@@ -279,19 +278,13 @@ export default function TemplateManager() {
         </div>
 
         {/* Template Editor Modal */}
-        <AnimatePresence>
+        <>
           {(editingTemplate || isCreating) && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
+            <div
               className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
               onClick={() => { setEditingTemplate(null); setIsCreating(false); }}
             >
-              <motion.div
-                initial={{ scale: 0.95, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                exit={{ scale: 0.95, opacity: 0 }}
+              <div
                 className="bg-background rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto"
                 onClick={(e) => e.stopPropagation()}
               >
@@ -303,10 +296,10 @@ export default function TemplateManager() {
                   onUploadImage={handleUploadImage}
                   isUploading={uploadMutation.isPending}
                 />
-              </motion.div>
-            </motion.div>
+              </div>
+            </div>
           )}
-        </AnimatePresence>
+        </>
 
         {/* Templates List */}
         {templatesQuery.isLoading ? (
@@ -334,7 +327,7 @@ export default function TemplateManager() {
             {templatesQuery.data.map((template: any) => {
               const layout = template.templateLayout as TemplateLayoutConfig | null;
               return (
-                <motion.div key={template.id} layout>
+                <div key={template.id}>
                   <Card className={`overflow-hidden transition-all hover:shadow-lg ${!template.isActive ? 'opacity-60' : ''}`}>
                     {/* Preview Header */}
                     <div className="h-24 relative" style={{ backgroundColor: template.headerBg }}>
@@ -427,7 +420,7 @@ export default function TemplateManager() {
                       </div>
                     </CardContent>
                   </Card>
-                </motion.div>
+                </div>
               );
             })}
           </div>

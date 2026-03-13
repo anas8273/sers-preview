@@ -5,7 +5,6 @@
  */
 import { useState, useMemo } from "react";
 import { useLocation } from "wouter";
-import { motion, AnimatePresence } from "framer-motion";
 import {
   ArrowLeft, Search, X, ShoppingBag, Filter, Star,
   Download, FileText, ShoppingCart, Tag, Eye, Clock,
@@ -277,15 +276,10 @@ export default function Store() {
               </div>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-                <AnimatePresence mode="popLayout">
+                <>
                   {filteredItems.map(({ section, service }, index) => (
-                    <motion.div
+                    <div
                       key={service.id}
-                      initial={{ opacity: 0, y: 15 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, scale: 0.95 }}
-                      transition={{ delay: index * 0.02 }}
-                      whileHover={{ y: -3, boxShadow: "0 10px 25px rgba(0,0,0,0.08)" }}
                       className="bg-white rounded-xl border border-gray-100 overflow-hidden transition-all group cursor-pointer"
                       onClick={() => {
                         import("sonner").then(({ toast }) => {
@@ -347,9 +341,9 @@ export default function Store() {
                           </span>
                         </div>
                       </div>
-                    </motion.div>
+                    </div>
                   ))}
-                </AnimatePresence>
+                </>
               </div>
             )}
           </div>
