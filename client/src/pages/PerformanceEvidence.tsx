@@ -1448,7 +1448,9 @@ export default function PerformanceEvidence() {
             const firstCriterion = allCriteria[0];
             if (firstCriterion) {
               targetCriterionId = firstCriterion.id;
-              targetSubId = firstCriterion.subEvidences[0]?.id || "";
+              // إدراج في أول بند رئيسي (غير فرعي) بدلاً من أول بند مطلقاً
+              const mainSubs = firstCriterion.subEvidences.filter(s => !s.isSubItem);
+              targetSubId = mainSubs[0]?.id || firstCriterion.subEvidences[0]?.id || "";
               criterionTitle = firstCriterion.title;
             }
           }
@@ -1482,19 +1484,21 @@ export default function PerformanceEvidence() {
               newEv.fileData = storageBase64;
             }
             
-            // رفع الملف إلى S3 للحصول على رابط عام للباركود
-            try {
-              const base64Only = storageBase64.split(',')[1] || storageBase64;
-              const uploadResult = await uploadFileMutation.mutateAsync({
-                fileName: file.name,
-                mimeType: file.type,
-                base64Data: base64Only,
-              });
-              if (uploadResult.url) {
-                newEv.uploadedUrl = uploadResult.url;
+            // رفع الملف إلى S3 للحصول على رابط عام للباركود (فقط إذا كان المستخدم مسجلاً)
+            if (isAuthenticated) {
+              try {
+                const base64Only = storageBase64.split(',')[1] || storageBase64;
+                const uploadResult = await uploadFileMutation.mutateAsync({
+                  fileName: file.name,
+                  mimeType: file.type,
+                  base64Data: base64Only,
+                });
+                if (uploadResult.url) {
+                  newEv.uploadedUrl = uploadResult.url;
+                }
+              } catch (uploadErr) {
+                console.warn("S3 upload failed, QR will use filename:", uploadErr);
               }
-            } catch (uploadErr) {
-              console.warn("S3 upload failed, QR will use filename:", uploadErr);
             }
             
             addEvidenceToCriterion(targetCriterionId, newEv);
@@ -1510,7 +1514,7 @@ export default function PerformanceEvidence() {
       reader.onerror = () => resolve({ success: false });
       reader.readAsDataURL(file);
     });
-  }, [allCriteria, criteriaData, classifyMutation, compressImage, compressImageForStorage, addEvidenceToCriterion, uploadFileMutation, extractVideoFrame, compressVideoForStorage, selectedJob]);
+  }, [allCriteria, criteriaData, classifyMutation, compressImage, compressImageForStorage, addEvidenceToCriterion, uploadFileMutation, extractVideoFrame, compressVideoForStorage, selectedJob, isAuthenticated]);
 
   const handleSmartUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     e.preventDefault();
@@ -1608,7 +1612,13 @@ export default function PerformanceEvidence() {
       setUploadProgress(null);
       setIsSmartUploading(false);
       isUploadingRef.current = false;
-    }, 1000);
+      // حفظ يدوي بعد انتهاء الرفع لضمان حفظ الشواهد المضافة
+      // لأن useEffect لا يُعاد تشغيله بعد تغيير isUploadingRef
+      setCriteriaData(prev => {
+        // نسخة جديدة من الـ state لتفعيل useEffect الحفظ
+        return { ...prev };
+      });
+    }, 1200);
   }, [processSmartFile]);
 
   // ===== رفع ملف عادي (بدون تصنيف ذكي) - يدعم رفع متعدد =====
@@ -1679,19 +1689,21 @@ export default function PerformanceEvidence() {
           newEv.fileData = processedData;
         }
         
-        // رفع الملف إلى S3 للحصول على رابط عام للباركود
-        try {
-          const base64Only = processedData.split(',')[1] || processedData;
-          const uploadResult = await uploadFileMutation.mutateAsync({
-            fileName: file.name,
-            mimeType: file.type,
-            base64Data: base64Only,
-          });
-          if (uploadResult.url) {
-            newEv.uploadedUrl = uploadResult.url;
+        // رفع الملف إلى S3 للحصول على رابط عام للباركود (فقط إذا كان المستخدم مسجلاً)
+        if (isAuthenticated) {
+          try {
+            const base64Only = processedData.split(',')[1] || processedData;
+            const uploadResult = await uploadFileMutation.mutateAsync({
+              fileName: file.name,
+              mimeType: file.type,
+              base64Data: base64Only,
+            });
+            if (uploadResult.url) {
+              newEv.uploadedUrl = uploadResult.url;
+            }
+          } catch (uploadErr) {
+            console.warn("S3 upload failed, QR will use filename:", uploadErr);
           }
-        } catch (uploadErr) {
-          console.warn("S3 upload failed, QR will use filename:", uploadErr);
         }
         
         addEvidenceToCriterion(criterionId, newEv);
@@ -1707,9 +1719,13 @@ export default function PerformanceEvidence() {
         addedCount === 1 ? "تم إضافة الشاهد بنجاح" : `تم إضافة ${addedCount} شواهد بنجاح`,
         { description: validFiles.map(f => f.name).join(', '), duration: 3000 }
       );
+      // تفعيل حفظ بعد انتهاء الرفع
+      setTimeout(() => {
+        setCriteriaData(prev => ({ ...prev }));
+      }, 200);
     }
     try { localStorage.removeItem(STORAGE_PENDING_UPLOAD); } catch {}
-  }, [compressImageForStorage, addEvidenceToCriterion, uploadFileMutation]);
+  }, [compressImageForStorage, addEvidenceToCriterion, uploadFileMutation, isAuthenticated]);
 
   const triggerFileUpload = (criterionId: string, subEvidenceId: string) => {
     activeUploadRef.current = { criterionId, subEvidenceId };
@@ -2175,6 +2191,10 @@ export default function PerformanceEvidence() {
                           const stored = await getFileFromIDB(base64Data.replace('idb://', ''));
                           if (stored?.data) base64Data = stored.data;
                           else { toast.error('لم يتم العثور على الملف', { id: 'qr-upload-' + ev.id }); return; }
+                        }
+                        if (!isAuthenticated) {
+                          toast.error('يجب تسجيل الدخول لرفع الملفات', { id: 'qr-upload-' + ev.id });
+                          return;
                         }
                         const base64Only = base64Data.split(',')[1] || base64Data;
                         const mimeType = base64Data.match(/data:([^;]+)/)?.[1] || 'image/png';
@@ -2782,7 +2802,7 @@ export default function PerformanceEvidence() {
                               <span className="text-[10px] font-bold" style={{ color: status === "complete" ? "#16A34A" : status === "partial" ? "#CA8A04" : "#9CA3AF" }}>
                                 {data.score}/{criterion.maxScore}
                               </span>
-                              <span className="text-[10px] text-muted-foreground">{evidenceCount} شاهد</span>
+                              <span className="text-[10px] text-muted-foreground">{evidenceCount > 0 ? `${evidenceCount} شاهد` : 'بدون شواهد'}</span>
                               {status === "complete" && <CheckCircle className="w-3 h-3 text-teal-500" />}
                               {status === "partial" && <AlertTriangle className="w-3 h-3 text-amber-500" />}
                               {status === "missing" && <XCircle className="w-3 h-3 text-red-400" />}
@@ -3110,9 +3130,6 @@ export default function PerformanceEvidence() {
                   className={`overflow-hidden transition-all ${sub.isSubItem ? 'mr-6 sm:mr-8 border-r-2 border-r-primary/20' : ''} ${isExpanded ? 'border-primary/30 shadow-sm' : 'border-border/50'} ${isDropTarget ? 'border-2 border-dashed border-primary bg-primary/5 shadow-lg scale-[1.01]' : ''} ${draggedEvidence ? 'hover:border-primary/50' : ''}`}>
                   <div role="button" tabIndex={0} onClick={() => {
                     setExpandedSubEvidence(isExpanded ? null : sub.id);
-                    if (!isExpanded && (sub.type === 'report' || sub.type === 'both') && sub.formFields && !hasFormEvidence) {
-                      addEvidence(currentCriterion.id, sub.id, "text");
-                    }
                   }}
                     onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setExpandedSubEvidence(isExpanded ? null : sub.id); }}
                     className={`w-full flex items-center justify-between p-3 sm:p-4 hover:bg-muted/30 transition-colors text-right cursor-pointer ${sub.isSubItem ? 'bg-muted/20' : ''}`}>
@@ -3129,7 +3146,7 @@ export default function PerformanceEvidence() {
                         </h3>
                         <p className="text-[10px] sm:text-xs text-muted-foreground truncate">
                           {sub.isSubItem && sub.parentTitle ? <span className="text-primary/60">← {sub.parentTitle} · </span> : ''}
-                          {subEvidences.length} شاهد مرفق
+                          {subEvidences.length > 0 ? `${subEvidences.length} شاهد مرفق` : 'لا توجد شواهد بعد'}
                         </p>
                       </div>
                     </div>
@@ -3472,8 +3489,8 @@ export default function PerformanceEvidence() {
                                 <StatusIcon className="w-4 h-4 shrink-0" style={{ color: barColor }} />
                                 <span className="text-xs font-medium truncate">{idx + 1}. {criterion.title}</span>
                               </div>
-                              <div className="flex items-center gap-2 shrink-0">
-                                <span className="text-[10px] text-muted-foreground">{evidenceCount} شاهد</span>
+                              <div className="flex items-center gap-2">
+                                <span className="text-[10px] text-muted-foreground">{evidenceCount > 0 ? `${evidenceCount} شاهد` : 'بدون شواهد'}</span>
                                 <span className="text-xs font-bold" style={{ color: barColor }}>{subCoverage}%</span>
                               </div>
                             </div>
@@ -4746,7 +4763,7 @@ export default function PerformanceEvidence() {
                             allImageEvs.push({ criterionId: cId, ev });
                           });
                         });
-                        if (allImageEvs.length > 0) {
+                        if (allImageEvs.length > 0 && isAuthenticated) {
                           toast.loading(`جاري رفع ${allImageEvs.length} صورة لإنشاء الباركود...`, { id: 'bulk-qr-upload' });
                           for (const { criterionId: cId, ev } of allImageEvs) {
                             try {
@@ -4770,6 +4787,8 @@ export default function PerformanceEvidence() {
                             } catch { /* skip */ }
                           }
                           toast.success(`تم رفع ${allImageEvs.length} صورة بنجاح`, { id: 'bulk-qr-upload' });
+                        } else if (allImageEvs.length > 0 && !isAuthenticated) {
+                          toast.info('سجل دخولك لرفع الصور وإنشاء الباركود');
                         }
                         setCriteriaData(prev => {
                           const updated = { ...prev };
