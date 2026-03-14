@@ -1839,6 +1839,7 @@ export default function PerformanceEvidence() {
 
   // === تصدير PDF متعدد التقارير ===
   const [showMultiExport, setShowMultiExport] = useState(false);
+  const [showTemplatePanel, setShowTemplatePanel] = useState(false);
   const [multiExportSelected, setMultiExportSelected] = useState<Set<string>>(new Set());
   const [isMultiExporting, setIsMultiExporting] = useState(false);
   const [multiExportProgress, setMultiExportProgress] = useState({ current: 0, total: 0 });
@@ -4810,27 +4811,47 @@ export default function PerformanceEvidence() {
     return (
       <div className="min-h-screen bg-muted p-2 sm:p-4" dir="rtl">
         <div className="max-w-4xl mx-auto">
-          <div className="flex items-center justify-between mb-3 sm:mb-4 bg-background rounded-xl p-2 sm:p-4 shadow-sm border border-border sticky top-2 z-10 gap-2">
-            <Button variant="outline" size="sm" className="text-xs sm:text-sm h-8 sm:h-9 shrink-0" onClick={() => setStep('final-review')}>
-              <ArrowRight className="w-3.5 h-3.5 sm:w-4 sm:h-4 ml-0.5 sm:ml-1" /><span className="hidden sm:inline">العودة</span><span className="sm:hidden">رجوع</span>
-            </Button>
-            <div className="flex gap-1.5 sm:gap-2 flex-wrap justify-end items-center">
+          {/* ═══ شريط الأدوات العلوي ═══ */}
+          <div className="mb-3 sm:mb-4 bg-background rounded-xl shadow-sm border border-border sticky top-2 z-10">
+            {/* الصف الأول: رجوع + PDF + مشاركة */}
+            <div className="flex items-center justify-between p-2 sm:p-3 gap-2">
+              <Button variant="outline" size="sm" className="text-xs sm:text-sm h-8 sm:h-9 shrink-0" onClick={() => setStep('final-review')}>
+                <ArrowRight className="w-3.5 h-3.5 sm:w-4 sm:h-4 ml-0.5 sm:ml-1" /><span className="hidden sm:inline">العودة</span><span className="sm:hidden">رجوع</span>
+              </Button>
+              <div className="flex gap-1.5 sm:gap-2 items-center">
+                <Button size="sm" onClick={handleExportPDF} disabled={isExporting} className="gap-1 sm:gap-1.5 text-xs sm:text-sm h-8 sm:h-9">
+                  {isExporting ? <Loader2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 animate-spin" /> : <Download className="w-3.5 h-3.5 sm:w-4 sm:h-4" />}
+                  <span className="hidden sm:inline">{isExporting ? (pdfProgress.total > 0 ? `تصدير ${pdfProgress.current}/${pdfProgress.total}` : 'جاري التصدير...') : 'تحميل PDF'}</span>
+                  <span className="sm:hidden">PDF</span>
+                </Button>
+                <Button size="sm" variant="outline" onClick={handleShareLink} disabled={isSharing} className="gap-1 sm:gap-1.5 text-xs sm:text-sm h-8 sm:h-9 text-blue-600 border-blue-200 hover:bg-blue-50">
+                  {isSharing ? <Loader2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 animate-spin" /> : <Share2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />}
+                  <span className="hidden sm:inline">{isSharing ? 'جاري...' : 'مشاركة'}</span>
+                </Button>
+              </div>
+            </div>
+            {/* الصف الثاني: القالب + الألوان + متعدد + طباعة */}
+            <div className="flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 pb-2 sm:pb-3 overflow-x-auto" style={{ WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none' }}>
               {/* قائمة القوالب */}
-              <div className="relative">
-                <button className="flex items-center gap-1.5 text-xs h-8 sm:h-9 px-2.5 rounded-lg border border-gray-300 bg-white hover:bg-gray-50 transition-colors"
-                  onClick={(e) => { const el = e.currentTarget.nextElementSibling; if (el) el.classList.toggle('hidden'); }}>
+              <div className="relative shrink-0">
+                <button className="flex items-center gap-1.5 text-xs h-8 sm:h-9 px-2.5 rounded-lg border border-gray-300 bg-white hover:bg-gray-50 transition-colors whitespace-nowrap"
+                  onClick={() => setShowTemplatePanel(!showTemplatePanel)}>
                   <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: selectedTheme.accent }} />
                   <span className="hidden sm:inline">{selectedTheme.name}</span>
                   <span className="sm:hidden">القالب</span>
                   <ChevronDown className="w-3 h-3 text-gray-400" />
                 </button>
-                <div className="hidden absolute top-10 left-0 sm:left-auto sm:right-0 z-50 bg-white rounded-xl shadow-2xl border p-2 w-72 max-h-80 overflow-y-auto">
-                  <p className="text-[9px] text-gray-400 px-1 mb-1.5">اختر القالب:</p>
-                  <div className="grid grid-cols-2 gap-1.5">
+                {showTemplatePanel && (
+                <div className="fixed sm:absolute inset-x-0 bottom-0 sm:inset-auto sm:top-10 sm:right-0 z-[60] bg-white sm:rounded-xl rounded-t-2xl shadow-2xl border sm:w-72 sm:max-h-80 max-h-[60vh] overflow-y-auto">
+                  <div className="sticky top-0 bg-white border-b sm:border-0 p-2 sm:p-0 sm:pt-2 sm:px-2 flex items-center justify-between">
+                    <p className="text-xs font-bold text-gray-600 px-1">اختر القالب:</p>
+                    <button onClick={() => setShowTemplatePanel(false)} className="p-1.5 hover:bg-gray-100 rounded-lg sm:hidden"><X className="w-4 h-4" /></button>
+                  </div>
+                  <div className="grid grid-cols-2 gap-1.5 p-2">
                     {allThemes.map(t => {
                       const isSel = selectedTheme.id === t.id;
                       return (
-                        <button key={t.id} onClick={(e) => { setSelectedTheme(t); const parent = (e.currentTarget as HTMLElement).closest('.grid')?.parentElement; if (parent) parent.classList.add('hidden'); }}
+                        <button key={t.id} onClick={() => { setSelectedTheme(t); setShowTemplatePanel(false); }}
                           className={`rounded-md border overflow-hidden text-right transition-all ${isSel ? 'border-primary ring-1 ring-primary/30 shadow-sm' : 'border-gray-200 hover:border-gray-400'}`}>
                           <div className="h-12 w-full relative" style={{ background: t.headerBg === '#ffffff' ? '#f8fafb' : t.headerBg }}>
                             <div className="h-3.5 w-full flex items-center justify-center gap-0.5" style={{ background: t.headerBg === '#ffffff' ? '#f0f4f8' : t.headerBg }}>
@@ -4855,14 +4876,15 @@ export default function PerformanceEvidence() {
                     })}
                   </div>
                 </div>
+                )}
               </div>
               {/* زر لوحة الألوان */}
-              <div className="relative">
+              <div className="relative shrink-0">
                 <Button size="sm" variant="outline" className={`gap-1 text-xs h-8 sm:h-9 ${showColorPicker ? 'bg-[#1a5f3f] text-white' : ''}`} onClick={() => setShowColorPicker(!showColorPicker)}>
                   <Palette className="w-3.5 h-3.5" /><span className="hidden sm:inline">الألوان</span>
                 </Button>
                 {showColorPicker && (
-                  <div className="absolute top-10 left-0 sm:left-auto sm:right-0 z-50 bg-white rounded-xl shadow-2xl border p-3 sm:p-4 w-[calc(100vw-2rem)] sm:w-72 max-w-72" dir="rtl" style={{ maxHeight: '70vh', overflowY: 'auto' }}>
+                  <div className="fixed sm:absolute inset-x-0 bottom-0 sm:inset-auto sm:top-10 sm:right-0 z-[60] bg-white sm:rounded-xl rounded-t-2xl shadow-2xl border p-3 sm:p-4 sm:w-72 max-h-[70vh] overflow-y-auto" dir="rtl">
                     <div className="flex items-center justify-between mb-3">
                       <h4 className="text-sm font-bold text-gray-800">تخصيص الألوان</h4>
                       <button onClick={() => setShowColorPicker(false)} className="p-1 hover:bg-gray-100 rounded"><X className="w-3.5 h-3.5" /></button>
@@ -4881,7 +4903,6 @@ export default function PerformanceEvidence() {
                       </div>
                       <div>
                         <label className="text-xs font-medium text-gray-600 mb-1.5 block">ألوان سريعة</label>
-                        {/* لون تدرج الهوية البصرية */}
                         <button
                           title="تدرج الهوية البصرية"
                           onClick={() => { setSelectedTheme(prev => ({ ...prev, accent: '#1a6b6a', borderColor: '#2ea87a', titleBg: '#1a6b6a', fieldLabelBg: prev.fieldLabelBg === '#f0f4f8' || prev.fieldLabelBg === '#f0f7f4' ? prev.fieldLabelBg : '#1a6b6a', footerBg: '#1a6b6a', headerBg: prev.headerBg === '#ffffff' || prev.headerBg === '#f8f9fa' ? prev.headerBg : '#1a6b6a', headerText: prev.headerBg === '#ffffff' || prev.headerBg === '#f8f9fa' ? '#1a6b6a' : '#ffffff', coverAccent2: '#5bb784' })); }}
@@ -4908,21 +4929,15 @@ export default function PerformanceEvidence() {
                   </div>
                 )}
               </div>
-              <Button size="sm" onClick={handleExportPDF} disabled={isExporting} className="gap-1 sm:gap-1.5 text-xs sm:text-sm h-8 sm:h-9">
-                {isExporting ? <Loader2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 animate-spin" /> : <Download className="w-3.5 h-3.5 sm:w-4 sm:h-4" />}
-                <span className="hidden sm:inline">{isExporting ? (pdfProgress.total > 0 ? `تصدير ${pdfProgress.current}/${pdfProgress.total}` : 'جاري التصدير...') : 'تحميل PDF'}</span>
-                <span className="sm:hidden">PDF</span>
-              </Button>
-
               {/* زر تصدير متعدد */}
-              <div className="relative">
-                <Button size="sm" variant="outline" onClick={() => setShowMultiExport(!showMultiExport)} disabled={isMultiExporting} className="gap-1 sm:gap-1.5 text-xs sm:text-sm h-8 sm:h-9">
+              <div className="relative shrink-0">
+                <Button size="sm" variant="outline" onClick={() => setShowMultiExport(!showMultiExport)} disabled={isMultiExporting} className="gap-1 sm:gap-1.5 text-xs sm:text-sm h-8 sm:h-9 whitespace-nowrap">
                   {isMultiExporting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Layers className="w-3.5 h-3.5 sm:w-4 sm:h-4" />}
                   <span className="hidden sm:inline">{isMultiExporting ? `تصدير ${multiExportProgress.current}/${multiExportProgress.total}` : 'تصدير متعدد'}</span>
                   <span className="sm:hidden">متعدد</span>
                 </Button>
                 {showMultiExport && (
-                  <div className="absolute top-10 left-0 z-50 bg-white rounded-xl shadow-2xl border p-4 w-80 max-h-96 overflow-y-auto" dir="rtl">
+                  <div className="fixed sm:absolute inset-x-0 bottom-0 sm:inset-auto sm:top-10 sm:left-0 z-[60] bg-white sm:rounded-xl rounded-t-2xl shadow-2xl border p-4 sm:w-80 max-h-[70vh] overflow-y-auto" dir="rtl">
                     <div className="flex items-center justify-between mb-3">
                       <h4 className="text-sm font-bold text-gray-800">تصدير متعدد التقارير</h4>
                       <button onClick={() => setShowMultiExport(false)} className="p-1 hover:bg-gray-100 rounded"><X className="w-3.5 h-3.5" /></button>
@@ -4957,15 +4972,15 @@ export default function PerformanceEvidence() {
                   </div>
                 )}
               </div>
-              <Button size="sm" variant="outline" onClick={() => printElement('preview-content')} className="gap-1 sm:gap-1.5 text-xs sm:text-sm h-8 sm:h-9">
+              <Button size="sm" variant="outline" onClick={() => printElement('preview-content')} className="gap-1 sm:gap-1.5 text-xs sm:text-sm h-8 sm:h-9 shrink-0">
                 <Printer className="w-3.5 h-3.5 sm:w-4 sm:h-4" /><span className="hidden sm:inline">طباعة</span>
-              </Button>
-              <Button size="sm" variant="outline" onClick={handleShareLink} disabled={isSharing} className="gap-1 sm:gap-1.5 text-xs sm:text-sm h-8 sm:h-9 text-blue-600 border-blue-200 hover:bg-blue-50">
-                {isSharing ? <Loader2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 animate-spin" /> : <Share2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />}
-                <span className="hidden sm:inline">{isSharing ? 'جاري...' : 'مشاركة'}</span>
               </Button>
             </div>
           </div>
+          {/* Overlay for mobile bottom sheets */}
+          {(showColorPicker || showMultiExport || showTemplatePanel) && (
+            <div className="fixed inset-0 bg-black/30 z-[55] sm:hidden" onClick={() => { setShowColorPicker(false); setShowMultiExport(false); setShowTemplatePanel(false); }} />
+          )}
 
           {/* رابط المشاركة */}
           {shareUrl && (

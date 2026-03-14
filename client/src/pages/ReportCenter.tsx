@@ -594,17 +594,28 @@ export default function ReportCenter() {
             <div key="preview"
               className={fullscreen ? "fixed inset-0 z-50 bg-gray-100 overflow-auto" : ""}>
               {/* Preview Toolbar */}
-              <div className={`bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between ${fullscreen ? "sticky top-0 z-10 shadow-sm" : "rounded-t-xl border border-gray-200"}`}>
-                <div className="flex items-center gap-3">
-                  <button onClick={() => { setView("editor"); setFullscreen(false); }} className="text-gray-400 hover:text-gray-600">
-                    <ArrowLeft className="w-5 h-5" />
-                  </button>
-                  <Eye className="w-4 h-4 text-teal-500" />
-                  <span className="text-sm font-semibold text-gray-800" style={{ fontFamily: "'Tajawal', sans-serif" }}>معاينة التقرير</span>
+              <div className={`bg-white border-b border-gray-200 ${fullscreen ? "sticky top-0 z-10 shadow-sm" : "rounded-t-xl border border-gray-200"}`}>
+                <div className="flex items-center justify-between px-3 sm:px-4 py-2 sm:py-3 gap-2">
+                  <div className="flex items-center gap-2 sm:gap-3">
+                    <button onClick={() => { setView("editor"); setFullscreen(false); }} className="text-gray-400 hover:text-gray-600">
+                      <ArrowLeft className="w-5 h-5" />
+                    </button>
+                    <Eye className="w-4 h-4 text-teal-500 hidden sm:block" />
+                    <span className="text-xs sm:text-sm font-semibold text-gray-800" style={{ fontFamily: "'Tajawal', sans-serif" }}>معاينة التقرير</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 sm:gap-2">
+                    <Button size="sm" onClick={handleExportPDF} disabled={exporting} className="gap-1 sm:gap-1.5 text-xs h-8 sm:h-9 bg-teal-600 hover:bg-teal-700 text-white">
+                      {exporting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileDown className="w-3.5 h-3.5" />}
+                      <span className="hidden sm:inline">{exporting ? 'جاري التصدير...' : 'تصدير PDF'}</span>
+                      <span className="sm:hidden">PDF</span>
+                    </Button>
+                    <Button variant="ghost" size="sm" onClick={() => setFullscreen(!fullscreen)} className="p-1.5 h-8 sm:h-9">
+                      {fullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+                    </Button>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2 flex-wrap">
-                  {/* أزرار التكبير/التصغير */}
-                  <div className="flex items-center gap-0.5 bg-white/90 backdrop-blur-sm border border-gray-200 rounded-lg shadow-sm px-1 py-0.5">
+                <div className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 pb-2 sm:pb-3 overflow-x-auto" style={{ WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none' }}>
+                  <div className="flex items-center gap-0.5 bg-white/90 backdrop-blur-sm border border-gray-200 rounded-lg shadow-sm px-1 py-0.5 shrink-0">
                     <button onClick={zoomOut} className="p-1.5 hover:bg-gray-100 rounded-md transition-colors active:scale-95" title="تصغير">
                       <ZoomOut className="w-3.5 h-3.5 text-gray-600" />
                     </button>
@@ -619,14 +630,8 @@ export default function ReportCenter() {
                       <RotateCcw className="w-3 h-3 text-gray-500" />
                     </button>
                   </div>
-                  <Button variant="outline" size="sm" onClick={handlePrint} className="gap-1.5 text-xs">
-                    <Printer className="w-3.5 h-3.5" /> طباعة
-                  </Button>
-                  <Button size="sm" onClick={handleExportPDF} disabled={exporting} className="gap-1.5 text-xs bg-teal-600 hover:bg-teal-700 text-white">
-                    {exporting ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> جاري التصدير...</> : <><FileDown className="w-3.5 h-3.5" /> تصدير PDF</>}
-                  </Button>
-                  <Button variant="ghost" size="sm" onClick={() => setFullscreen(!fullscreen)} className="p-1.5">
-                    {fullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+                  <Button variant="outline" size="sm" onClick={handlePrint} className="gap-1 text-xs h-8 shrink-0">
+                    <Printer className="w-3.5 h-3.5" /><span className="hidden sm:inline">طباعة</span>
                   </Button>
                 </div>
               </div>
