@@ -1856,6 +1856,7 @@ export default function PerformanceEvidence() {
   // === تصدير PDF متعدد التقارير ===
   const [showMultiExport, setShowMultiExport] = useState(false);
   const [showTemplatePanel, setShowTemplatePanel] = useState(false);
+  const [showTemplatePreview, setShowTemplatePreview] = useState(false);
   const [multiExportSelected, setMultiExportSelected] = useState<Set<string>>(new Set());
   const [isMultiExporting, setIsMultiExporting] = useState(false);
   const [multiExportProgress, setMultiExportProgress] = useState({ current: 0, total: 0 });
@@ -4854,7 +4855,7 @@ export default function PerformanceEvidence() {
               {/* قائمة القوالب */}
               <div className="relative shrink-0">
                 <button className="flex items-center gap-1.5 text-xs h-8 sm:h-9 px-2.5 rounded-lg border border-gray-300 bg-white hover:bg-gray-50 transition-colors whitespace-nowrap"
-                  onClick={() => setShowTemplatePanel(!showTemplatePanel)}>
+                  onClick={() => setShowTemplatePreview(true)}>
                   <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: selectedTheme.accent }} />
                   <span className="hidden sm:inline">{selectedTheme.name}</span>
                   <span className="sm:hidden">القالب</span>
