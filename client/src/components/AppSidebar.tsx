@@ -193,10 +193,11 @@ export default function AppSidebar({ currentPath }: AppSidebarProps) {
 
   return (
     <>
-      {/* Mobile toggle button */}
+      {/* Mobile toggle button - positioned in the header area */}
       <button
         onClick={() => setSidebarOpen(true)}
-        className="fixed top-3 right-3 z-50 lg:hidden bg-white rounded-xl shadow-lg border border-gray-200 p-2.5 hover:bg-gray-50 transition-all"
+        className="fixed top-2.5 right-3 z-50 lg:hidden bg-white/90 backdrop-blur-sm rounded-lg shadow-sm border border-gray-200 p-2 hover:bg-gray-50 transition-all"
+        aria-label="فتح القائمة"
       >
         <Menu className="w-5 h-5 text-gray-700" />
       </button>

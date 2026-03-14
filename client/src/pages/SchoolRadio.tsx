@@ -13,13 +13,16 @@ import {
   ChevronDown, ChevronUp, Sparkles, BookOpen,
   Mic, Heart, Lightbulb, Clock, Search,
   Copy, Loader2, Eye, Printer, FileDown, Maximize2, Minimize2,
-  Star, Quote, ChevronLeft
+  Star, Quote, ChevronLeft, ZoomIn, ZoomOut, RotateCcw
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import TemplateSelector, { THEMES, type ThemeConfig } from "@/components/TemplateSelector";
 import { exportToPDF, printElement } from "@/lib/pdf-export";
+import { usePreviewScale } from "@/hooks/usePreviewScale";
+
+const A4_WIDTH_PX = 793.7;
 
 // ═══════════════════════════════════════════════════════════════
 // Types & Data
@@ -181,6 +184,8 @@ export default function SchoolRadio() {
   const [exporting, setExporting] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
 
+  const { containerRef: previewContainerRef, pageRef: previewPageRef, previewScale, wrapperWidth, wrapperHeight, zoomLevel, zoomIn, zoomOut, resetZoom } = usePreviewScale();
+
   const generateRadioMutation = trpc.genAI.generateRadio.useMutation();
 
   const startNew = useCallback(() => {
@@ -314,7 +319,7 @@ export default function SchoolRadio() {
   return (
     <div className="min-h-screen bg-[#F8FAFC]" dir="rtl">
       {/* Header */}
-      <div className="w-full bg-gradient-to-l from-red-700 via-red-600 to-orange-500">
+      <div className="w-full bg-gradient-to-l from-teal-700 via-teal-600 to-emerald-500">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6">
           <button type="button" onClick={() => navigate("/")} className="flex items-center gap-2 text-white/70 hover:text-white mb-3 transition-colors">
             <ChevronLeft className="w-4 h-4" />
@@ -343,9 +348,9 @@ export default function SchoolRadio() {
                   <div className="relative w-48">
                     <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                     <input type="text" placeholder="بحث..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
-                      className="w-full pr-10 pl-3 py-2 rounded-lg bg-white border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-red-500/20" />
+                      className="w-full pr-10 pl-3 py-2 rounded-lg bg-white border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20" />
                   </div>
-                  <Button onClick={startNew} className="gap-1 bg-red-600 hover:bg-red-700 text-white">
+                  <Button onClick={startNew} className="gap-1 bg-teal-600 hover:bg-teal-700 text-white">
                     <Plus className="w-4 h-4" /> إذاعة جديدة
                   </Button>
                 </div>
@@ -398,7 +403,7 @@ export default function SchoolRadio() {
                     {aiLoading ? "جاري التوليد..." : "تعبئة بالذكاء الاصطناعي"}
                   </Button>
                   <Button onClick={handleSave} variant="outline" size="sm" className="gap-1"><Save className="w-4 h-4" /> حفظ</Button>
-                  <Button onClick={() => setView("preview")} size="sm" className="gap-1 bg-red-600 hover:bg-red-700 text-white">
+                  <Button onClick={() => setView("preview")} size="sm" className="gap-1 bg-teal-600 hover:bg-teal-700 text-white">
                     <Eye className="w-4 h-4" /> معاينة وتصدير
                   </Button>
                 </div>
@@ -415,17 +420,17 @@ export default function SchoolRadio() {
                   <div>
                     <label className="block text-xs font-medium text-gray-500 mb-1">عنوان الإذاعة</label>
                     <input type="text" value={title} onChange={(e) => setTitle(e.target.value)}
-                      className="w-full px-3 py-2.5 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-red-500/20" />
+                      className="w-full px-3 py-2.5 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20" />
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-gray-500 mb-1">التاريخ</label>
                     <input type="text" value={date} onChange={(e) => setDate(e.target.value)} placeholder="مثال: الأحد 1446/5/15"
-                      className="w-full px-3 py-2.5 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-red-500/20" />
+                      className="w-full px-3 py-2.5 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20" />
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-gray-500 mb-1">الموضوع</label>
                     <select value={radioTheme} onChange={(e) => setRadioTheme(e.target.value)}
-                      className="w-full px-3 py-2.5 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-red-500/20 bg-white">
+                      className="w-full px-3 py-2.5 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 bg-white">
                       {RADIO_THEMES.map((t) => <option key={t} value={t}>{t}</option>)}
                     </select>
                   </div>
@@ -498,10 +503,26 @@ export default function SchoolRadio() {
               <div className={`bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between ${fullscreen ? "sticky top-0 z-10 shadow-sm" : "rounded-t-xl border border-gray-200"}`}>
                 <div className="flex items-center gap-3">
                   <button onClick={() => { setView("editor"); setFullscreen(false); }} className="text-gray-400 hover:text-gray-600"><ArrowLeft className="w-5 h-5" /></button>
-                  <Eye className="w-4 h-4 text-gray-500" />
+                  <Eye className="w-4 h-4 text-teal-500" />
                   <span className="text-sm font-semibold text-gray-800" style={{ fontFamily: "'Tajawal', sans-serif" }}>معاينة الإذاعة</span>
                 </div>
                 <div className="flex items-center gap-2 flex-wrap">
+                  {/* أزرار التكبير/التصغير */}
+                  <div className="flex items-center gap-0.5 bg-white/90 backdrop-blur-sm border border-gray-200 rounded-lg shadow-sm px-1 py-0.5">
+                    <button onClick={zoomOut} className="p-1.5 hover:bg-gray-100 rounded-md transition-colors active:scale-95" title="تصغير">
+                      <ZoomOut className="w-3.5 h-3.5 text-gray-600" />
+                    </button>
+                    <div className="px-1.5 min-w-[2.5rem] text-center">
+                      <span className="text-[10px] font-mono text-gray-700 font-medium">{zoomLevel}%</span>
+                    </div>
+                    <button onClick={zoomIn} className="p-1.5 hover:bg-gray-100 rounded-md transition-colors active:scale-95" title="تكبير">
+                      <ZoomIn className="w-3.5 h-3.5 text-gray-600" />
+                    </button>
+                    <div className="w-px h-4 bg-gray-200 mx-0.5" />
+                    <button onClick={resetZoom} className="p-1.5 hover:bg-gray-100 rounded-md transition-colors active:scale-95" title="إعادة الحجم الأصلي">
+                      <RotateCcw className="w-3 h-3 text-gray-500" />
+                    </button>
+                  </div>
                   <Button variant="outline" size="sm" onClick={handlePrint} className="gap-1.5 text-xs"><Printer className="w-3.5 h-3.5" /> طباعة</Button>
                   <Button size="sm" onClick={handleExportPDF} disabled={exporting} className="gap-1.5 text-xs bg-teal-600 hover:bg-teal-700 text-white">
                     {exporting ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> جاري التصدير...</> : <><FileDown className="w-3.5 h-3.5" /> تصدير PDF</>}
@@ -511,10 +532,13 @@ export default function SchoolRadio() {
                   </Button>
                 </div>
               </div>
-              <div className={`bg-gray-100 overflow-auto ${fullscreen ? "h-[calc(100vh-52px)]" : "max-h-[75vh] rounded-b-xl border-x border-b border-gray-200"} p-6`}>
-                <div className="mx-auto" style={{ maxWidth: "210mm" }}>
-                  <div id="radio-preview-content">
-                    <RadioPreview title={title} date={date} radioTheme={radioTheme} segments={segments} theme={selectedTheme} fontFamily={selectedFont} />
+              {/* Preview Content - A4 مضغوط بـ transform: scale() */}
+              <div ref={previewContainerRef} className={`bg-gray-200 overflow-auto ${fullscreen ? "h-[calc(100vh-52px)]" : "max-h-[75vh] rounded-b-xl border-x border-b border-gray-200"}`} style={{ padding: '8px 4px', minHeight: '200px' }}>
+                <div style={{ width: `${wrapperWidth}px`, height: `${wrapperHeight}px`, margin: '0 auto', position: 'relative', overflow: 'hidden' }}>
+                  <div style={{ width: `${A4_WIDTH_PX}px`, transformOrigin: 'top right', transform: `scale(${previewScale})`, transition: 'transform 0.15s ease-out' }}>
+                    <div id="radio-preview-content" ref={previewPageRef} style={{ fontFamily: "'Cairo', sans-serif", direction: 'rtl', width: '210mm' }}>
+                      <RadioPreview title={title} date={date} radioTheme={radioTheme} segments={segments} theme={selectedTheme} fontFamily={selectedFont} />
+                    </div>
                   </div>
                 </div>
               </div>

@@ -7,13 +7,13 @@
  * - 6 ثيمات/قوالب مختلفة
  * - اختيار الخط
  */
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useRef } from "react";
 import { useLocation } from "wouter";
 import {
   ArrowLeft, FileText, Plus, Trash2, Download, Eye, Save,
   Users, Building2, BookOpen, Star, Search, X, Edit3,
   Sparkles, Loader2, Printer, FileDown, Maximize2, Minimize2,
-  ClipboardCheck, ChevronLeft
+  ClipboardCheck, ChevronLeft, ZoomIn, ZoomOut, RotateCcw
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
@@ -21,6 +21,9 @@ import { trpc } from "@/lib/trpc";
 import TemplateSelector, { THEMES, FONT_OPTIONS, type ThemeConfig } from "@/components/TemplateSelector";
 import { exportToPDF, printElement } from "@/lib/pdf-export";
 import OfficialHeader from "@/components/OfficialHeader";
+import { usePreviewScale } from "@/hooks/usePreviewScale";
+
+const A4_WIDTH_PX = 793.7;
 
 // ═══════════════════════════════════════════════════════════════
 // Types & Data
@@ -326,6 +329,8 @@ export default function ReportCenter() {
   const [exporting, setExporting] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
 
+  const { containerRef: previewContainerRef, pageRef: previewPageRef, previewScale, wrapperWidth, wrapperHeight, zoomLevel, zoomIn, zoomOut, resetZoom } = usePreviewScale();
+
   const fillReportMutation = trpc.genAI.fillReport.useMutation();
 
   const startNewReport = useCallback((template: ReportTemplate) => {
@@ -439,7 +444,7 @@ export default function ReportCenter() {
   return (
     <div className="min-h-screen bg-[#F8FAFC]" dir="rtl">
       {/* Header */}
-      <div className="w-full bg-gradient-to-l from-blue-700 via-blue-600 to-blue-500">
+      <div className="w-full bg-gradient-to-l from-teal-700 via-teal-600 to-emerald-500">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6">
           <button type="button" onClick={() => navigate("/")} className="flex items-center gap-2 text-white/70 hover:text-white mb-3 transition-colors">
             <ChevronLeft className="w-4 h-4" />
@@ -465,7 +470,7 @@ export default function ReportCenter() {
               const isActive = view === tab.id || (view === "editor" && tab.id === "templates") || (view === "preview" && tab.id === "templates");
               return (
                 <button key={tab.id} onClick={() => setView(tab.id)}
-                  className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-all ${isActive ? "bg-white text-blue-700" : "bg-white/15 text-white hover:bg-white/25"}`}>
+                  className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-all ${isActive ? "bg-white text-teal-700" : "bg-white/15 text-white hover:bg-white/25"}`}>
                   <Icon className="w-4 h-4" /> {tab.label}
                 </button>
               );
@@ -514,7 +519,7 @@ export default function ReportCenter() {
                     <ArrowLeft className="w-5 h-5" />
                   </button>
                   <h2 className="text-lg font-bold text-gray-900" style={{ fontFamily: "'Tajawal', sans-serif" }}>{selectedTemplate.title}</h2>
-                  <span className="text-xs bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full">{filledFieldsCount}/{selectedTemplate.fields.length} حقل</span>
+                  <span className="text-xs bg-teal-50 text-teal-600 px-2 py-0.5 rounded-full">{filledFieldsCount}/{selectedTemplate.fields.length} حقل</span>
                 </div>
                 <div className="flex items-center gap-2 flex-wrap">
                   <Button onClick={handleAIFill} variant="outline" size="sm" disabled={aiLoading}
@@ -525,7 +530,7 @@ export default function ReportCenter() {
                   <Button onClick={handleSave} variant="outline" size="sm" className="gap-1">
                     <Save className="w-4 h-4" /> حفظ
                   </Button>
-                  <Button onClick={() => setView("preview")} size="sm" className="gap-1 bg-blue-600 hover:bg-blue-700 text-white">
+                  <Button onClick={() => setView("preview")} size="sm" className="gap-1 bg-teal-600 hover:bg-teal-700 text-white">
                     <Eye className="w-4 h-4" /> معاينة وتصدير
                   </Button>
                 </div>
@@ -556,14 +561,14 @@ export default function ReportCenter() {
                           onChange={(e) => setFormData({ ...formData, [field.id]: e.target.value })}
                           placeholder={field.placeholder}
                           rows={4}
-                          className="w-full px-3 py-2.5 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-all resize-y"
+                          className="w-full px-3 py-2.5 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-400 transition-all resize-y"
                           style={{ fontFamily: `'${selectedFont}', sans-serif` }}
                         />
                       ) : field.type === "select" ? (
                         <select
                           value={formData[field.id] || ""}
                           onChange={(e) => setFormData({ ...formData, [field.id]: e.target.value })}
-                          className="w-full px-3 py-2.5 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 bg-white"
+                          className="w-full px-3 py-2.5 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 bg-white"
                         >
                           <option value="">اختر...</option>
                           {field.options?.map((opt) => <option key={opt} value={opt}>{opt}</option>)}
@@ -574,7 +579,7 @@ export default function ReportCenter() {
                           value={formData[field.id] || ""}
                           onChange={(e) => setFormData({ ...formData, [field.id]: e.target.value })}
                           placeholder={field.placeholder}
-                          className="w-full px-3 py-2.5 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-all"
+                          className="w-full px-3 py-2.5 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-400 transition-all"
                         />
                       )}
                     </div>
@@ -594,10 +599,26 @@ export default function ReportCenter() {
                   <button onClick={() => { setView("editor"); setFullscreen(false); }} className="text-gray-400 hover:text-gray-600">
                     <ArrowLeft className="w-5 h-5" />
                   </button>
-                  <Eye className="w-4 h-4 text-gray-500" />
+                  <Eye className="w-4 h-4 text-teal-500" />
                   <span className="text-sm font-semibold text-gray-800" style={{ fontFamily: "'Tajawal', sans-serif" }}>معاينة التقرير</span>
                 </div>
                 <div className="flex items-center gap-2 flex-wrap">
+                  {/* أزرار التكبير/التصغير */}
+                  <div className="flex items-center gap-0.5 bg-white/90 backdrop-blur-sm border border-gray-200 rounded-lg shadow-sm px-1 py-0.5">
+                    <button onClick={zoomOut} className="p-1.5 hover:bg-gray-100 rounded-md transition-colors active:scale-95" title="تصغير">
+                      <ZoomOut className="w-3.5 h-3.5 text-gray-600" />
+                    </button>
+                    <div className="px-1.5 min-w-[2.5rem] text-center">
+                      <span className="text-[10px] font-mono text-gray-700 font-medium">{zoomLevel}%</span>
+                    </div>
+                    <button onClick={zoomIn} className="p-1.5 hover:bg-gray-100 rounded-md transition-colors active:scale-95" title="تكبير">
+                      <ZoomIn className="w-3.5 h-3.5 text-gray-600" />
+                    </button>
+                    <div className="w-px h-4 bg-gray-200 mx-0.5" />
+                    <button onClick={resetZoom} className="p-1.5 hover:bg-gray-100 rounded-md transition-colors active:scale-95" title="إعادة الحجم الأصلي">
+                      <RotateCcw className="w-3 h-3 text-gray-500" />
+                    </button>
+                  </div>
                   <Button variant="outline" size="sm" onClick={handlePrint} className="gap-1.5 text-xs">
                     <Printer className="w-3.5 h-3.5" /> طباعة
                   </Button>
@@ -609,11 +630,13 @@ export default function ReportCenter() {
                   </Button>
                 </div>
               </div>
-              {/* Preview Content */}
-              <div className={`bg-gray-100 overflow-auto ${fullscreen ? "h-[calc(100vh-52px)]" : "max-h-[75vh] rounded-b-xl border-x border-b border-gray-200"} p-6`}>
-                <div className="mx-auto" style={{ maxWidth: "210mm" }}>
-                  <div id="report-preview-content">
-                    <ReportPreview template={selectedTemplate} data={formData} theme={selectedTheme} fontFamily={selectedFont} />
+              {/* Preview Content - A4 مضغوط بـ transform: scale() */}
+              <div ref={previewContainerRef} className={`bg-gray-200 overflow-auto ${fullscreen ? "h-[calc(100vh-52px)]" : "max-h-[75vh] rounded-b-xl border-x border-b border-gray-200"}`} style={{ padding: '8px 4px', minHeight: '200px' }}>
+                <div style={{ width: `${wrapperWidth}px`, height: `${wrapperHeight}px`, margin: '0 auto', position: 'relative', overflow: 'hidden' }}>
+                  <div style={{ width: `${A4_WIDTH_PX}px`, transformOrigin: 'top right', transform: `scale(${previewScale})`, transition: 'transform 0.15s ease-out' }}>
+                    <div id="report-preview-content" ref={previewPageRef} style={{ fontFamily: "'Cairo', sans-serif", direction: 'rtl', width: '210mm' }}>
+                      <ReportPreview template={selectedTemplate} data={formData} theme={selectedTheme} fontFamily={selectedFont} />
+                    </div>
                   </div>
                 </div>
               </div>
@@ -628,7 +651,7 @@ export default function ReportCenter() {
                 <div className="relative w-64">
                   <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                   <input type="text" placeholder="بحث..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full pr-10 pl-4 py-2 rounded-lg bg-white border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20" />
+                    className="w-full pr-10 pl-4 py-2 rounded-lg bg-white border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20" />
                 </div>
               </div>
               {filteredReports.length === 0 ? (

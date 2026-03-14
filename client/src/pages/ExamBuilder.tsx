@@ -12,13 +12,16 @@ import {
   ArrowLeft, ClipboardCheck, Plus, Trash2, Save, Edit3,
   Search, ChevronDown, ChevronUp, Sparkles,
   CheckCircle2, XCircle, HelpCircle, Eye, Printer,
-  FileDown, Maximize2, Minimize2, Loader2, ChevronLeft
+  FileDown, Maximize2, Minimize2, Loader2, ChevronLeft, ZoomIn, ZoomOut, RotateCcw
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import TemplateSelector, { THEMES, type ThemeConfig } from "@/components/TemplateSelector";
 import { exportToPDF, printElement } from "@/lib/pdf-export";
+import { usePreviewScale } from "@/hooks/usePreviewScale";
+
+const A4_WIDTH_PX = 793.7;
 
 // ═══════════════════════════════════════════════════════════════
 // Types & Data
@@ -240,6 +243,8 @@ export default function ExamBuilder() {
   const [fullscreen, setFullscreen] = useState(false);
   const [showAnswers, setShowAnswers] = useState(false);
 
+  const { containerRef: previewContainerRef, pageRef: previewPageRef, previewScale, wrapperWidth, wrapperHeight, zoomLevel, zoomIn, zoomOut, resetZoom } = usePreviewScale();
+
   const generateExamMutation = trpc.genAI.generateExamQuestions.useMutation();
   const totalPoints = useMemo(() => questions.reduce((s, q) => s + q.points, 0), [questions]);
 
@@ -350,7 +355,7 @@ export default function ExamBuilder() {
   return (
     <div className="min-h-screen bg-[#F8FAFC]" dir="rtl">
       {/* Header */}
-      <div className="w-full bg-gradient-to-l from-violet-700 via-violet-600 to-purple-500">
+      <div className="w-full bg-gradient-to-l from-teal-700 via-teal-600 to-emerald-500">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6">
           <button type="button" onClick={() => navigate("/")} className="flex items-center gap-2 text-white/70 hover:text-white mb-3 transition-colors">
             <ChevronLeft className="w-4 h-4" /><span className="text-sm">العودة للرئيسية</span>
@@ -378,9 +383,9 @@ export default function ExamBuilder() {
                   <div className="relative w-48">
                     <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                     <input type="text" placeholder="بحث..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
-                      className="w-full pr-10 pl-3 py-2 rounded-lg bg-white border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/20" />
+                      className="w-full pr-10 pl-3 py-2 rounded-lg bg-white border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20" />
                   </div>
-                  <Button onClick={startNew} className="gap-1 bg-violet-600 hover:bg-violet-700 text-white">
+                  <Button onClick={startNew} className="gap-1 bg-teal-600 hover:bg-teal-700 text-white">
                     <Plus className="w-4 h-4" /> اختبار جديد
                   </Button>
                 </div>
@@ -434,7 +439,7 @@ export default function ExamBuilder() {
                     {aiLoading ? "جاري التوليد..." : "توليد أسئلة AI"}
                   </Button>
                   <Button onClick={handleSave} variant="outline" size="sm" className="gap-1"><Save className="w-4 h-4" /> حفظ</Button>
-                  <Button onClick={() => setView("preview")} size="sm" className="gap-1 bg-violet-600 hover:bg-violet-700 text-white">
+                  <Button onClick={() => setView("preview")} size="sm" className="gap-1 bg-teal-600 hover:bg-teal-700 text-white">
                     <Eye className="w-4 h-4" /> معاينة وتصدير
                   </Button>
                 </div>
@@ -451,29 +456,29 @@ export default function ExamBuilder() {
                   <div>
                     <label className="block text-xs font-medium text-gray-500 mb-1">عنوان الاختبار</label>
                     <input type="text" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="اختبار نهائي..."
-                      className="w-full px-3 py-2.5 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/20" />
+                      className="w-full px-3 py-2.5 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20" />
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-gray-500 mb-1">المادة</label>
                     <input type="text" value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="الرياضيات"
-                      className="w-full px-3 py-2.5 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/20" />
+                      className="w-full px-3 py-2.5 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20" />
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-gray-500 mb-1">الصف</label>
                     <input type="text" value={grade} onChange={(e) => setGrade(e.target.value)} placeholder="ثالث متوسط"
-                      className="w-full px-3 py-2.5 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/20" />
+                      className="w-full px-3 py-2.5 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20" />
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-gray-500 mb-1">الفصل الدراسي</label>
                     <select value={semester} onChange={(e) => setSemester(e.target.value)}
-                      className="w-full px-3 py-2.5 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/20 bg-white">
+                      className="w-full px-3 py-2.5 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 bg-white">
                       <option value="الأول">الأول</option><option value="الثاني">الثاني</option><option value="الثالث">الثالث</option>
                     </select>
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-gray-500 mb-1">مدة الاختبار</label>
                     <input type="text" value={duration} onChange={(e) => setDuration(e.target.value)} placeholder="ساعة ونصف"
-                      className="w-full px-3 py-2.5 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/20" />
+                      className="w-full px-3 py-2.5 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20" />
                   </div>
                 </div>
               </div>
@@ -587,7 +592,7 @@ export default function ExamBuilder() {
               <div className={`bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between ${fullscreen ? "sticky top-0 z-10 shadow-sm" : "rounded-t-xl border border-gray-200"}`}>
                 <div className="flex items-center gap-3">
                   <button onClick={() => { setView("editor"); setFullscreen(false); }} className="text-gray-400 hover:text-gray-600"><ArrowLeft className="w-5 h-5" /></button>
-                  <Eye className="w-4 h-4 text-gray-500" />
+                  <Eye className="w-4 h-4 text-teal-500" />
                   <span className="text-sm font-semibold text-gray-800" style={{ fontFamily: "'Tajawal', sans-serif" }}>معاينة الاختبار</span>
                 </div>
                 <div className="flex items-center gap-2 flex-wrap">
@@ -595,6 +600,22 @@ export default function ExamBuilder() {
                     <input type="checkbox" checked={showAnswers} onChange={(e) => setShowAnswers(e.target.checked)} className="rounded" />
                     إظهار الإجابات
                   </label>
+                  {/* أزرار التكبير/التصغير */}
+                  <div className="flex items-center gap-0.5 bg-white/90 backdrop-blur-sm border border-gray-200 rounded-lg shadow-sm px-1 py-0.5">
+                    <button onClick={zoomOut} className="p-1.5 hover:bg-gray-100 rounded-md transition-colors active:scale-95" title="تصغير">
+                      <ZoomOut className="w-3.5 h-3.5 text-gray-600" />
+                    </button>
+                    <div className="px-1.5 min-w-[2.5rem] text-center">
+                      <span className="text-[10px] font-mono text-gray-700 font-medium">{zoomLevel}%</span>
+                    </div>
+                    <button onClick={zoomIn} className="p-1.5 hover:bg-gray-100 rounded-md transition-colors active:scale-95" title="تكبير">
+                      <ZoomIn className="w-3.5 h-3.5 text-gray-600" />
+                    </button>
+                    <div className="w-px h-4 bg-gray-200 mx-0.5" />
+                    <button onClick={resetZoom} className="p-1.5 hover:bg-gray-100 rounded-md transition-colors active:scale-95" title="إعادة الحجم الأصلي">
+                      <RotateCcw className="w-3 h-3 text-gray-500" />
+                    </button>
+                  </div>
                   <Button variant="outline" size="sm" onClick={handlePrint} className="gap-1.5 text-xs"><Printer className="w-3.5 h-3.5" /> طباعة</Button>
                   <Button size="sm" onClick={handleExportPDF} disabled={exporting} className="gap-1.5 text-xs bg-teal-600 hover:bg-teal-700 text-white">
                     {exporting ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> جاري التصدير...</> : <><FileDown className="w-3.5 h-3.5" /> تصدير PDF</>}
@@ -604,11 +625,14 @@ export default function ExamBuilder() {
                   </Button>
                 </div>
               </div>
-              <div className={`bg-gray-100 overflow-auto ${fullscreen ? "h-[calc(100vh-52px)]" : "max-h-[80vh] rounded-b-xl border-x border-b border-gray-200"} p-6`}>
-                <div className="mx-auto" style={{ maxWidth: "210mm" }}>
-                  <div id="exam-preview-content">
-                    <ExamPreview title={title} subject={subject} grade={grade} semester={semester} duration={duration}
-                      questions={questions} theme={selectedTheme} fontFamily={selectedFont} showAnswers={showAnswers} />
+              {/* Preview Content - A4 مضغوط بـ transform: scale() */}
+              <div ref={previewContainerRef} className={`bg-gray-200 overflow-auto ${fullscreen ? "h-[calc(100vh-52px)]" : "max-h-[80vh] rounded-b-xl border-x border-b border-gray-200"}`} style={{ padding: '8px 4px', minHeight: '200px' }}>
+                <div style={{ width: `${wrapperWidth}px`, height: `${wrapperHeight}px`, margin: '0 auto', position: 'relative', overflow: 'hidden' }}>
+                  <div style={{ width: `${A4_WIDTH_PX}px`, transformOrigin: 'top right', transform: `scale(${previewScale})`, transition: 'transform 0.15s ease-out' }}>
+                    <div id="exam-preview-content" ref={previewPageRef} style={{ fontFamily: "'Cairo', sans-serif", direction: 'rtl', width: '210mm' }}>
+                      <ExamPreview title={title} subject={subject} grade={grade} semester={semester} duration={duration}
+                        questions={questions} theme={selectedTheme} fontFamily={selectedFont} showAnswers={showAnswers} />
+                    </div>
                   </div>
                 </div>
               </div>

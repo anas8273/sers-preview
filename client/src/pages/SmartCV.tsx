@@ -9,13 +9,16 @@ import {
   ArrowLeft, User, Plus, Trash2, Save, Edit3,
   Briefcase, GraduationCap, Award, Phone, Mail, MapPin,
   Star, BookOpen, Sparkles, Loader2, Eye, Printer,
-  FileDown, Maximize2, Minimize2, ChevronLeft
+  FileDown, Maximize2, Minimize2, ChevronLeft, ZoomIn, ZoomOut, RotateCcw
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import TemplateSelector, { THEMES, type ThemeConfig } from "@/components/TemplateSelector";
 import { exportToPDF, printElement } from "@/lib/pdf-export";
+import { usePreviewScale } from "@/hooks/usePreviewScale";
+
+const A4_WIDTH_PX = 793.7;
 
 // ═══════════════════════════════════════════════════════════════
 // Types
@@ -214,6 +217,8 @@ export default function SmartCV() {
   const [exporting, setExporting] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
 
+  const { containerRef: previewContainerRef, pageRef: previewPageRef, previewScale, wrapperWidth, wrapperHeight, zoomLevel, zoomIn, zoomOut, resetZoom } = usePreviewScale();
+
   const generateCVMutation = trpc.genAI.generateCV.useMutation();
 
   const updateField = useCallback((field: keyof CVData, value: any) => {
@@ -291,7 +296,7 @@ export default function SmartCV() {
   return (
     <div className="min-h-screen bg-[#F8FAFC]" dir="rtl">
       {/* Header */}
-      <div className="w-full bg-gradient-to-l from-slate-800 via-slate-700 to-slate-600">
+      <div className="w-full bg-gradient-to-l from-teal-700 via-teal-600 to-emerald-500">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6">
           <button type="button" onClick={() => navigate("/")} className="flex items-center gap-2 text-white/70 hover:text-white mb-3 transition-colors">
             <ChevronLeft className="w-4 h-4" /><span className="text-sm">العودة للرئيسية</span>
@@ -316,11 +321,11 @@ export default function SmartCV() {
                 <Save className="w-4 h-4" /> حفظ
               </Button>
               {view === "editor" ? (
-                <Button onClick={() => setView("preview")} size="sm" className="gap-1 bg-white text-slate-800 hover:bg-gray-100">
+                <Button onClick={() => setView("preview")} size="sm" className="gap-1 bg-white text-teal-800 hover:bg-gray-100">
                   <Eye className="w-4 h-4" /> معاينة وتصدير
                 </Button>
               ) : (
-                <Button onClick={() => { setView("editor"); setFullscreen(false); }} size="sm" className="gap-1 bg-white text-slate-800 hover:bg-gray-100">
+                <Button onClick={() => { setView("editor"); setFullscreen(false); }} size="sm" className="gap-1 bg-white text-teal-800 hover:bg-gray-100">
                   <Edit3 className="w-4 h-4" /> تعديل
                 </Button>
               )}
@@ -346,7 +351,7 @@ export default function SmartCV() {
                   return (
                     <button key={sec.id} onClick={() => setActiveSection(sec.id)}
                       className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium transition-all ${
-                        activeSection === sec.id ? "bg-slate-800 text-white" : "bg-white text-gray-600 hover:bg-gray-50 border border-gray-200"
+                        activeSection === sec.id ? "bg-teal-700 text-white" : "bg-white text-gray-600 hover:bg-gray-50 border border-gray-200"
                       }`}>
                       <Icon className="w-3.5 h-3.5" /> {sec.label}
                     </button>
@@ -477,10 +482,26 @@ export default function SmartCV() {
               <div className={`bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between ${fullscreen ? "sticky top-0 z-10 shadow-sm" : "rounded-t-xl border border-gray-200"}`}>
                 <div className="flex items-center gap-3">
                   <button onClick={() => { setView("editor"); setFullscreen(false); }} className="text-gray-400 hover:text-gray-600"><ArrowLeft className="w-5 h-5" /></button>
-                  <Eye className="w-4 h-4 text-gray-500" />
+                  <Eye className="w-4 h-4 text-teal-500" />
                   <span className="text-sm font-semibold text-gray-800" style={{ fontFamily: "'Tajawal', sans-serif" }}>معاينة السيرة الذاتية</span>
                 </div>
                 <div className="flex items-center gap-2 flex-wrap">
+                  {/* أزرار التكبير/التصغير */}
+                  <div className="flex items-center gap-0.5 bg-white/90 backdrop-blur-sm border border-gray-200 rounded-lg shadow-sm px-1 py-0.5">
+                    <button onClick={zoomOut} className="p-1.5 hover:bg-gray-100 rounded-md transition-colors active:scale-95" title="تصغير">
+                      <ZoomOut className="w-3.5 h-3.5 text-gray-600" />
+                    </button>
+                    <div className="px-1.5 min-w-[2.5rem] text-center">
+                      <span className="text-[10px] font-mono text-gray-700 font-medium">{zoomLevel}%</span>
+                    </div>
+                    <button onClick={zoomIn} className="p-1.5 hover:bg-gray-100 rounded-md transition-colors active:scale-95" title="تكبير">
+                      <ZoomIn className="w-3.5 h-3.5 text-gray-600" />
+                    </button>
+                    <div className="w-px h-4 bg-gray-200 mx-0.5" />
+                    <button onClick={resetZoom} className="p-1.5 hover:bg-gray-100 rounded-md transition-colors active:scale-95" title="إعادة الحجم الأصلي">
+                      <RotateCcw className="w-3 h-3 text-gray-500" />
+                    </button>
+                  </div>
                   <Button variant="outline" size="sm" onClick={handlePrint} className="gap-1.5 text-xs"><Printer className="w-3.5 h-3.5" /> طباعة</Button>
                   <Button size="sm" onClick={handleExportPDF} disabled={exporting} className="gap-1.5 text-xs bg-teal-600 hover:bg-teal-700 text-white">
                     {exporting ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> جاري التصدير...</> : <><FileDown className="w-3.5 h-3.5" /> تصدير PDF</>}
@@ -490,10 +511,13 @@ export default function SmartCV() {
                   </Button>
                 </div>
               </div>
-              <div className={`bg-gray-100 overflow-auto ${fullscreen ? "h-[calc(100vh-52px)]" : "max-h-[80vh] rounded-b-xl border-x border-b border-gray-200"} p-6`}>
-                <div className="mx-auto" style={{ maxWidth: "210mm" }}>
-                  <div id="cv-preview-content">
-                    <CVPreview data={cvData} theme={selectedTheme} fontFamily={selectedFont} />
+              {/* Preview Content - A4 مضغوط بـ transform: scale() */}
+              <div ref={previewContainerRef} className={`bg-gray-200 overflow-auto ${fullscreen ? "h-[calc(100vh-52px)]" : "max-h-[80vh] rounded-b-xl border-x border-b border-gray-200"}`} style={{ padding: '8px 4px', minHeight: '200px' }}>
+                <div style={{ width: `${wrapperWidth}px`, height: `${wrapperHeight}px`, margin: '0 auto', position: 'relative', overflow: 'hidden' }}>
+                  <div style={{ width: `${A4_WIDTH_PX}px`, transformOrigin: 'top right', transform: `scale(${previewScale})`, transition: 'transform 0.15s ease-out' }}>
+                    <div id="cv-preview-content" ref={previewPageRef} style={{ fontFamily: "'Cairo', sans-serif", direction: 'rtl', width: '210mm' }}>
+                      <CVPreview data={cvData} theme={selectedTheme} fontFamily={selectedFont} />
+                    </div>
                   </div>
                 </div>
               </div>

@@ -12,13 +12,16 @@ import {
   ArrowLeft, User, GraduationCap, Award, Briefcase,
   Target, Plus, Trash2, Save, Eye,
   Sparkles, FolderOpen, ChevronLeft, Loader2,
-  FileDown, Printer, Maximize2, Minimize2, Building2, Star
+  FileDown, Printer, Maximize2, Minimize2, Building2, Star, ZoomIn, ZoomOut, RotateCcw
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import TemplateSelector, { THEMES, type ThemeConfig } from "@/components/TemplateSelector";
 import { exportToPDF, printElement } from "@/lib/pdf-export";
+import { usePreviewScale } from "@/hooks/usePreviewScale";
+
+const A4_WIDTH_PX = 793.7;
 
 // ═══════════════════════════════════════════════════════════════
 // Types
@@ -295,6 +298,8 @@ export default function PortfolioBuilder() {
   const [exporting, setExporting] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
 
+  const { containerRef: previewContainerRef, pageRef: previewPageRef, previewScale, wrapperWidth, wrapperHeight, zoomLevel, zoomIn, zoomOut, resetZoom } = usePreviewScale();
+
   const generatePortfolioMutation = trpc.genAI.generatePortfolioContent.useMutation();
 
   const updateData = useCallback((updater: (prev: PortfolioData) => PortfolioData) => {
@@ -422,7 +427,7 @@ export default function PortfolioBuilder() {
   return (
     <div className="min-h-screen bg-[#F8FAFC]" dir="rtl">
       {/* Header */}
-      <div className="w-full bg-gradient-to-l from-violet-700 via-violet-600 to-violet-500">
+      <div className="w-full bg-gradient-to-l from-teal-700 via-teal-600 to-emerald-500">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6">
           <button type="button" onClick={() => navigate("/")} className="flex items-center gap-2 text-white/70 hover:text-white mb-3 transition-colors">
             <ChevronLeft className="w-4 h-4" /><span className="text-sm">العودة للرئيسية</span>
@@ -472,7 +477,7 @@ export default function PortfolioBuilder() {
                 const isActive = activeTab === tab.id;
                 return (
                   <button key={tab.id} onClick={() => setActiveTab(tab.id)}
-                    className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium transition-all mb-0.5 ${isActive ? "bg-violet-50 text-violet-700" : "text-gray-600 hover:bg-gray-50"}`}>
+                    className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium transition-all mb-0.5 ${isActive ? "bg-teal-50 text-teal-700" : "text-gray-600 hover:bg-gray-50"}`}>
                     <Icon className="w-4 h-4 shrink-0" /> {tab.label}
                   </button>
                 );
@@ -490,7 +495,7 @@ export default function PortfolioBuilder() {
                 <div key="personal">
                   <div className="bg-white rounded-xl border border-gray-200 p-6">
                     <h2 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2" style={{ fontFamily: "'Tajawal', sans-serif" }}>
-                      <User className="w-5 h-5 text-violet-600" /> البيانات الشخصية
+                      <User className="w-5 h-5 text-teal-600" /> البيانات الشخصية
                     </h2>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       {([
@@ -506,7 +511,7 @@ export default function PortfolioBuilder() {
                         <div key={field.key}>
                           <label className="block text-xs font-medium text-gray-600 mb-1">{field.label}</label>
                           <input type="text" value={data.personalInfo[field.key]} onChange={(e) => updatePersonal(field.key, e.target.value)} placeholder={field.placeholder}
-                            className="w-full px-3 py-2.5 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-400" />
+                            className="w-full px-3 py-2.5 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-400" />
                         </div>
                       ))}
                     </div>
@@ -520,9 +525,9 @@ export default function PortfolioBuilder() {
                   <div className="bg-white rounded-xl border border-gray-200 p-6">
                     <div className="flex items-center justify-between mb-4">
                       <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2" style={{ fontFamily: "'Tajawal', sans-serif" }}>
-                        <GraduationCap className="w-5 h-5 text-violet-600" /> الدورات والشهادات ({data.certificates.length})
+                        <GraduationCap className="w-5 h-5 text-teal-600" /> الدورات والشهادات ({data.certificates.length})
                       </h2>
-                      <Button onClick={addCertificate} size="sm" className="gap-1 bg-violet-600 hover:bg-violet-700 text-white"><Plus className="w-4 h-4" /> إضافة</Button>
+                      <Button onClick={addCertificate} size="sm" className="gap-1 bg-teal-600 hover:bg-teal-700 text-white"><Plus className="w-4 h-4" /> إضافة</Button>
                     </div>
                     {data.certificates.length === 0 ? (
                       <div className="text-center py-12 text-gray-400">
@@ -548,13 +553,13 @@ export default function PortfolioBuilder() {
                             </div>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                               <input type="text" value={cert.title} onChange={(e) => updateCertificate(cert.id, "title", e.target.value)} placeholder="اسم الدورة / الشهادة"
-                                className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/20" />
+                                className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20" />
                               <input type="text" value={cert.issuer} onChange={(e) => updateCertificate(cert.id, "issuer", e.target.value)} placeholder="الجهة المانحة"
-                                className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/20" />
+                                className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20" />
                               <input type="text" value={cert.date} onChange={(e) => updateCertificate(cert.id, "date", e.target.value)} placeholder="التاريخ (مثال: 1445/06)"
-                                className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/20" />
+                                className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20" />
                               <input type="text" value={cert.hours} onChange={(e) => updateCertificate(cert.id, "hours", e.target.value)} placeholder="عدد الساعات"
-                                className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/20" />
+                                className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20" />
                             </div>
                           </div>
                         ))}
@@ -570,9 +575,9 @@ export default function PortfolioBuilder() {
                   <div className="bg-white rounded-xl border border-gray-200 p-6">
                     <div className="flex items-center justify-between mb-4">
                       <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2" style={{ fontFamily: "'Tajawal', sans-serif" }}>
-                        <Award className="w-5 h-5 text-violet-600" /> الإنجازات والجوائز ({data.achievements.length})
+                        <Award className="w-5 h-5 text-teal-600" /> الإنجازات والجوائز ({data.achievements.length})
                       </h2>
-                      <Button onClick={addAchievement} size="sm" className="gap-1 bg-violet-600 hover:bg-violet-700 text-white"><Plus className="w-4 h-4" /> إضافة</Button>
+                      <Button onClick={addAchievement} size="sm" className="gap-1 bg-teal-600 hover:bg-teal-700 text-white"><Plus className="w-4 h-4" /> إضافة</Button>
                     </div>
                     {data.achievements.length === 0 ? (
                       <div className="text-center py-12 text-gray-400">
@@ -598,11 +603,11 @@ export default function PortfolioBuilder() {
                             </div>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                               <input type="text" value={ach.title} onChange={(e) => updateAchievement(ach.id, "title", e.target.value)} placeholder="عنوان الإنجاز"
-                                className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/20" />
+                                className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20" />
                               <input type="text" value={ach.date} onChange={(e) => updateAchievement(ach.id, "date", e.target.value)} placeholder="التاريخ"
-                                className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/20" />
+                                className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20" />
                               <textarea value={ach.description} onChange={(e) => updateAchievement(ach.id, "description", e.target.value)} placeholder="وصف الإنجاز" rows={2}
-                                className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/20 md:col-span-2 resize-y" />
+                                className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 md:col-span-2 resize-y" />
                             </div>
                           </div>
                         ))}
@@ -618,9 +623,9 @@ export default function PortfolioBuilder() {
                   <div className="bg-white rounded-xl border border-gray-200 p-6">
                     <div className="flex items-center justify-between mb-4">
                       <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2" style={{ fontFamily: "'Tajawal', sans-serif" }}>
-                        <Target className="w-5 h-5 text-violet-600" /> الأنشطة والمبادرات ({data.activities.length})
+                        <Target className="w-5 h-5 text-teal-600" /> الأنشطة والمبادرات ({data.activities.length})
                       </h2>
-                      <Button onClick={addActivity} size="sm" className="gap-1 bg-violet-600 hover:bg-violet-700 text-white"><Plus className="w-4 h-4" /> إضافة</Button>
+                      <Button onClick={addActivity} size="sm" className="gap-1 bg-teal-600 hover:bg-teal-700 text-white"><Plus className="w-4 h-4" /> إضافة</Button>
                     </div>
                     {data.activities.length === 0 ? (
                       <div className="text-center py-12 text-gray-400">
@@ -636,7 +641,7 @@ export default function PortfolioBuilder() {
                               <div className="flex items-center gap-1">
                                 {ACTIVITY_TYPES.map((t) => (
                                   <button key={t.value} onClick={() => updateActivity(act.id, "type", t.value)}
-                                    className={`px-2 py-0.5 rounded-full text-[10px] font-medium transition-all ${act.type === t.value ? "bg-violet-100 text-violet-700" : "bg-gray-100 text-gray-500"}`}>
+                                    className={`px-2 py-0.5 rounded-full text-[10px] font-medium transition-all ${act.type === t.value ? "bg-teal-100 text-teal-700" : "bg-gray-100 text-gray-500"}`}>
                                     {t.label}
                                   </button>
                                 ))}
@@ -645,11 +650,11 @@ export default function PortfolioBuilder() {
                             </div>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                               <input type="text" value={act.title} onChange={(e) => updateActivity(act.id, "title", e.target.value)} placeholder="عنوان النشاط"
-                                className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/20" />
+                                className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20" />
                               <input type="text" value={act.date} onChange={(e) => updateActivity(act.id, "date", e.target.value)} placeholder="التاريخ"
-                                className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/20" />
+                                className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20" />
                               <textarea value={act.description} onChange={(e) => updateActivity(act.id, "description", e.target.value)} placeholder="وصف النشاط" rows={2}
-                                className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/20 md:col-span-2 resize-y" />
+                                className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 md:col-span-2 resize-y" />
                             </div>
                           </div>
                         ))}
@@ -665,16 +670,16 @@ export default function PortfolioBuilder() {
                   <div className="bg-white rounded-xl border border-gray-200 p-6">
                     <div className="flex items-center justify-between mb-4">
                       <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2" style={{ fontFamily: "'Tajawal', sans-serif" }}>
-                        <Sparkles className="w-5 h-5 text-violet-600" /> الأهداف المهنية ({data.goals.filter(g => g.trim()).length})
+                        <Sparkles className="w-5 h-5 text-teal-600" /> الأهداف المهنية ({data.goals.filter(g => g.trim()).length})
                       </h2>
-                      <Button onClick={addGoal} size="sm" className="gap-1 bg-violet-600 hover:bg-violet-700 text-white"><Plus className="w-4 h-4" /> إضافة هدف</Button>
+                      <Button onClick={addGoal} size="sm" className="gap-1 bg-teal-600 hover:bg-teal-700 text-white"><Plus className="w-4 h-4" /> إضافة هدف</Button>
                     </div>
                     <div className="space-y-3">
                       {data.goals.map((goal, index) => (
                         <div key={index} className="flex items-center gap-3">
-                          <span className="text-xs font-bold text-violet-400 shrink-0 w-6 h-6 rounded-full bg-violet-50 flex items-center justify-center">{index + 1}</span>
+                          <span className="text-xs font-bold text-teal-400 shrink-0 w-6 h-6 rounded-full bg-teal-50 flex items-center justify-center">{index + 1}</span>
                           <input type="text" value={goal} onChange={(e) => updateGoal(index, e.target.value)} placeholder="اكتب هدفاً مهنياً..."
-                            className="flex-1 px-3 py-2.5 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/20" />
+                            className="flex-1 px-3 py-2.5 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20" />
                           {data.goals.length > 1 && (
                             <button onClick={() => removeGoal(index)} className="p-1 text-red-400 hover:text-red-600"><Trash2 className="w-3.5 h-3.5" /></button>
                           )}
@@ -684,7 +689,7 @@ export default function PortfolioBuilder() {
                     <div className="mt-4">
                       <label className="block text-xs font-medium text-gray-600 mb-1">ملاحظات إضافية</label>
                       <textarea value={data.notes} onChange={(e) => updateData((prev) => ({ ...prev, notes: e.target.value }))} placeholder="أي ملاحظات أو معلومات إضافية..."
-                        rows={4} className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/20 resize-y" />
+                        rows={4} className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 resize-y" />
                     </div>
                   </div>
                 </div>
@@ -697,10 +702,26 @@ export default function PortfolioBuilder() {
                   <div className={`bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between ${fullscreen ? "sticky top-0 z-10 shadow-sm" : "rounded-t-xl border border-gray-200"}`}>
                     <div className="flex items-center gap-3">
                       {fullscreen && <button onClick={() => setFullscreen(false)} className="text-gray-400 hover:text-gray-600"><ArrowLeft className="w-5 h-5" /></button>}
-                      <Eye className="w-4 h-4 text-gray-500" />
+                      <Eye className="w-4 h-4 text-teal-500" />
                       <span className="text-sm font-semibold text-gray-800" style={{ fontFamily: "'Tajawal', sans-serif" }}>معاينة ملف الإنجاز</span>
                     </div>
                     <div className="flex items-center gap-2 flex-wrap">
+                      {/* أزرار التكبير/التصغير */}
+                      <div className="flex items-center gap-0.5 bg-white/90 backdrop-blur-sm border border-gray-200 rounded-lg shadow-sm px-1 py-0.5">
+                        <button onClick={zoomOut} className="p-1.5 hover:bg-gray-100 rounded-md transition-colors active:scale-95" title="تصغير">
+                          <ZoomOut className="w-3.5 h-3.5 text-gray-600" />
+                        </button>
+                        <div className="px-1.5 min-w-[2.5rem] text-center">
+                          <span className="text-[10px] font-mono text-gray-700 font-medium">{zoomLevel}%</span>
+                        </div>
+                        <button onClick={zoomIn} className="p-1.5 hover:bg-gray-100 rounded-md transition-colors active:scale-95" title="تكبير">
+                          <ZoomIn className="w-3.5 h-3.5 text-gray-600" />
+                        </button>
+                        <div className="w-px h-4 bg-gray-200 mx-0.5" />
+                        <button onClick={resetZoom} className="p-1.5 hover:bg-gray-100 rounded-md transition-colors active:scale-95" title="إعادة الحجم الأصلي">
+                          <RotateCcw className="w-3 h-3 text-gray-500" />
+                        </button>
+                      </div>
                       <Button variant="outline" size="sm" onClick={handlePrint} className="gap-1.5 text-xs"><Printer className="w-3.5 h-3.5" /> طباعة</Button>
                       <Button size="sm" onClick={handleExportPDF} disabled={exporting} className="gap-1.5 text-xs bg-teal-600 hover:bg-teal-700 text-white">
                         {exporting ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> جاري التصدير...</> : <><FileDown className="w-3.5 h-3.5" /> تصدير PDF</>}
@@ -710,10 +731,13 @@ export default function PortfolioBuilder() {
                       </Button>
                     </div>
                   </div>
-                  <div className={`bg-gray-100 overflow-auto ${fullscreen ? "h-[calc(100vh-52px)]" : "max-h-[80vh] rounded-b-xl border-x border-b border-gray-200"} p-6`}>
-                    <div className="mx-auto" style={{ maxWidth: "210mm" }}>
-                      <div id="portfolio-preview-content">
-                        <PortfolioPreview data={data} theme={selectedTheme} fontFamily={selectedFont} />
+                  {/* Preview Content - A4 مضغوط بـ transform: scale() */}
+                  <div ref={previewContainerRef} className={`bg-gray-200 overflow-auto ${fullscreen ? "h-[calc(100vh-52px)]" : "max-h-[80vh] rounded-b-xl border-x border-b border-gray-200"}`} style={{ padding: '8px 4px', minHeight: '200px' }}>
+                    <div style={{ width: `${wrapperWidth}px`, height: `${wrapperHeight}px`, margin: '0 auto', position: 'relative', overflow: 'hidden' }}>
+                      <div style={{ width: `${A4_WIDTH_PX}px`, transformOrigin: 'top right', transform: `scale(${previewScale})`, transition: 'transform 0.15s ease-out' }}>
+                        <div id="portfolio-preview-content" ref={previewPageRef} style={{ fontFamily: "'Cairo', sans-serif", direction: 'rtl', width: '210mm' }}>
+                          <PortfolioPreview data={data} theme={selectedTheme} fontFamily={selectedFont} />
+                        </div>
                       </div>
                     </div>
                   </div>
