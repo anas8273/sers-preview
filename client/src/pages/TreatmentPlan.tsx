@@ -82,7 +82,7 @@ export default function TreatmentPlan() {
 
   if (showPreview) {
     return (
-      <div className="min-h-screen bg-gray-100 p-4 md:p-6" dir="rtl">
+      <div className="min-h-screen pb-20 lg:pb-0 bg-gray-100 p-4 md:p-6" dir="rtl">
         <div className="max-w-4xl mx-auto">
           <div className="flex gap-3 mb-4 flex-wrap">
             <button type="button" onClick={() => setShowPreview(false)} className="flex items-center gap-2 bg-white text-gray-700 px-4 py-2 rounded-lg text-sm border border-gray-200 shadow-sm">
@@ -325,7 +325,7 @@ export default function TreatmentPlan() {
   }
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] p-4 md:p-6" dir="rtl">
+    <div className="min-h-screen pb-20 lg:pb-0 bg-[#F8FAFC] p-4 md:p-6" dir="rtl">
       <div className="max-w-5xl mx-auto">
         <button type="button" onClick={() => navigate("/")} className="flex items-center gap-2 text-gray-500 hover:text-gray-700 mb-6">
           <ArrowLeft className="w-4 h-4" />

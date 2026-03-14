@@ -121,7 +121,7 @@ export default function GradeAnalysis() {
   };
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] p-4 md:p-6" dir="rtl">
+    <div className="min-h-screen pb-20 lg:pb-0 bg-[#F8FAFC] p-4 md:p-6" dir="rtl">
       <div className="max-w-6xl mx-auto">
         <button type="button" onClick={() => navigate("/")} className="flex items-center gap-2 text-gray-500 hover:text-gray-700 mb-6">
           <ArrowLeft className="w-4 h-4" />

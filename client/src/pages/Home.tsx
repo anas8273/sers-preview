@@ -285,7 +285,7 @@ export default function Home() {
   }, [navigate]);
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC]" dir="rtl">
+    <div className="min-h-screen bg-[#F8FAFC] pb-20 lg:pb-0" dir="rtl">
       {/* القائمة الجانبية */}
       <AppSidebar currentPath="/" />
 

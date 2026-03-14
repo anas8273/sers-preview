@@ -2308,7 +2308,7 @@ export default function PerformanceEvidence() {
   // ======================================================================
   if (step === "select") {
     return (
-      <div className="min-h-screen bg-gradient-to-b from-background to-muted/30 p-3 sm:p-4 md:p-8" dir="rtl">
+      <div className="min-h-screen pb-20 lg:pb-0 bg-gradient-to-b from-background to-muted/30 p-3 sm:p-4 md:p-8" dir="rtl">
         <div className="max-w-5xl mx-auto">
           <button type="button" onClick={() => navigate("/")} className="flex items-center gap-1.5 sm:gap-2 text-muted-foreground hover:text-foreground mb-5 sm:mb-8 transition-colors group">
             <ArrowLeft className="w-3.5 h-3.5 sm:w-4 sm:h-4 transition-transform group-hover:-translate-x-1" /><span className="text-xs sm:text-sm">العودة للرئيسية</span>
@@ -2407,7 +2407,7 @@ export default function PerformanceEvidence() {
   if (step === "dashboard") {
     const grade = getGrade(percentage);
     return (
-      <div className="min-h-screen bg-background p-3 sm:p-4 md:p-6" dir="rtl">
+      <div className="min-h-screen pb-20 lg:pb-0 bg-background p-3 sm:p-4 md:p-6" dir="rtl">
         <input type="file" ref={smartUploadRef} className="hidden" accept="image/*,video/*,.pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx" multiple onChange={handleSmartUpload} />
         <div className="max-w-6xl mx-auto">
 
@@ -3014,7 +3014,7 @@ export default function PerformanceEvidence() {
     const standard = isStandardBased ? jobStandardsDetail.find(s => s.id === currentCriterion.id) : null;
 
     return (
-      <div className="min-h-screen bg-background p-3 sm:p-4 md:p-6" dir="rtl">
+      <div className="min-h-screen pb-20 lg:pb-0 bg-background p-3 sm:p-4 md:p-6" dir="rtl">
         <input type="file" ref={fileInputRef} className="hidden" accept="image/*,video/*,.pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx" multiple onChange={handleFileUpload} />
         {/* Lightbox Overlay */}
         <>
@@ -4421,7 +4421,7 @@ export default function PerformanceEvidence() {
   if (step === 'final-review') {
     const grade = getGrade(percentage);
     return (
-      <div className="min-h-screen bg-background p-4 md:p-6" dir="rtl">
+      <div className="min-h-screen pb-20 lg:pb-0 bg-background p-4 md:p-6" dir="rtl">
         <div className="max-w-4xl mx-auto">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 sm:mb-5 gap-2">
             <Button variant="outline" size="sm" onClick={() => setStep('dashboard')} className="text-xs sm:text-sm h-8 sm:h-9">
@@ -4809,7 +4809,7 @@ export default function PerformanceEvidence() {
       return true;
     });
     return (
-      <div className="min-h-screen bg-muted p-2 sm:p-4" dir="rtl">
+      <div className="min-h-screen pb-20 lg:pb-0 bg-muted p-2 sm:p-4" dir="rtl">
         <div className="max-w-4xl mx-auto">
           {/* ═══ شريط الأدوات العلوي ═══ */}
           <div className="mb-3 sm:mb-4 bg-background rounded-xl shadow-sm border border-border sticky top-2 z-10">
@@ -5887,10 +5887,9 @@ export default function PerformanceEvidence() {
               const sigLineStyle: React.CSSProperties = ss === 'dotted' ? { borderTop: `2px dotted ${theme.accent}` } : ss === 'solid' ? { borderTop: `2px solid ${theme.accent}` } : ss === 'boxed' ? { borderTop: `1.5px solid ${theme.accent}`, borderBottom: `1.5px solid ${theme.accent}`, borderLeft: `1.5px solid ${theme.accent}`, borderRight: `1.5px solid ${theme.accent}`, borderRadius: '8px', padding: '0.5rem' } : ss === 'lined' ? { borderTop: `1px solid ${theme.borderColor}`, borderBottom: `1px solid ${theme.borderColor}`, padding: '0.25rem 0' } : { borderTop: `2px dashed ${theme.accent}` };
               return (
                 <div className="bg-white shadow-lg mx-auto mb-6" style={{ width: '210mm', minHeight: '297mm', maxWidth: '100%', position: 'relative', display: 'flex', flexDirection: 'column' as const, boxSizing: 'border-box' as const, border: `2px solid ${theme.accent}` }}>
-                  <div style={{ flex: 1, padding: '2rem 2.5rem', display: 'flex', flexDirection: 'column' as const, justifyContent: 'center' }}>
-                  {/* ترويسة - Full Width من الحافة للحافة */}
-                  <div style={{ margin: '0 -2.5rem 0.5rem -2.5rem', marginTop: '-2rem' }}>
-                    <div style={{ marginBottom: '0.5rem' }}>
+                  {/* ترويسة - Full Width في أعلى الصفحة */}
+                  <div>
+                    <div style={{ marginBottom: '0' }}>
                       <div style={{ background: `linear-gradient(to left, ${theme.accent}, ${theme.coverAccent2 || theme.accent})`, padding: '12px 24px 10px' }}>
                         <table style={{ width: '100%', borderCollapse: 'collapse' as const }}>
                           <tbody>
@@ -5927,6 +5926,8 @@ export default function PerformanceEvidence() {
                     </div>
                   </div>
 
+                  {/* محتوى الصفحة - مركزي */}
+                  <div style={{ flex: 1, padding: '2rem 2.5rem', display: 'flex', flexDirection: 'column' as const, justifyContent: 'center' }}>
                   {/* عنوان */}
                   <h2 style={{ textAlign: 'center', fontSize: '1.2rem', fontWeight: 800, color: theme.accent, fontFamily: "'Cairo', sans-serif", marginBottom: '3rem' }}>اعتماد التقرير</h2>
 

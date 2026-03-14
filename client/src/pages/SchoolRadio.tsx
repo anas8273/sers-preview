@@ -317,7 +317,7 @@ export default function SchoolRadio() {
   }, [programs, searchQuery]);
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC]" dir="rtl">
+    <div className="min-h-screen pb-20 lg:pb-0 bg-[#F8FAFC]" dir="rtl">
       {/* Header */}
       <div className="w-full bg-gradient-to-l from-teal-700 via-teal-600 to-emerald-500">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6">

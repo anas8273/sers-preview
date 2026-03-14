@@ -91,7 +91,7 @@ export default function CertificateBuilder() {
   const footerGradId = `certFooterGrad-${t.id}`;
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC]" dir="rtl">
+    <div className="min-h-screen pb-20 lg:pb-0 bg-[#F8FAFC]" dir="rtl">
       <div className="flex flex-col lg:flex-row min-h-screen">
         {/* ═══ الشريط الجانبي - الإعدادات ═══ */}
         <aside className="lg:w-96 bg-white border-l border-gray-200 p-5 overflow-y-auto">
