@@ -1,0 +1,50 @@
+{
+  "query": "SELECT id, name FROM pdf_templates ORDER BY name;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 6C7x6f29RX1BcFf.7325488fde9e --database h34s4aPNVyHXdtjgZ7eNNf --execute SELECT id, name FROM pdf_templates ORDER BY name;",
+  "rows": [
+    {
+      "id": "420003",
+      "name": "بطاقات - شريط جانبي"
+    },
+    {
+      "id": "600010",
+      "name": "قالب اختبار"
+    },
+    {
+      "id": "720010",
+      "name": "قالب اختبار"
+    },
+    {
+      "id": "720014",
+      "name": "قالب اختبار"
+    },
+    {
+      "id": "600009",
+      "name": "قالب اختبار جديد"
+    },
+    {
+      "id": "720009",
+      "name": "قالب اختبار جديد"
+    },
+    {
+      "id": "720013",
+      "name": "قالب اختبار جديد"
+    },
+    {
+      "id": "600003",
+      "name": "قالب معدّل"
+    },
+    {
+      "id": "720011",
+      "name": "قالب معدّل"
+    },
+    {
+      "id": "720015",
+      "name": "قالب معدّل"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tname\n420003\tبطاقات - شريط جانبي\n600010\tقالب اختبار\n720010\tقالب اختبار\n720014\tقالب اختبار\n600009\tقالب اختبار جديد\n720009\tقالب اختبار جديد\n720013\tقالب اختبار جديد\n600003\tقالب معدّل\n720011\tقالب معدّل\n720015\tقالب معدّل\n",
+  "stderr": "",
+  "execution_time_ms": 51
+}

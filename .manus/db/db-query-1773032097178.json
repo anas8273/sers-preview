@@ -1,0 +1,9 @@
+{
+  "query": "\nUPDATE pdf_templates SET \n  headerBg = 'linear-gradient(135deg, #004D5A, #0097A7)',\n  headerText = '#ffffff',\n  accent = '#0097A7',\n  borderColor = '#004D5A',\n  description = 'ترويسة تدرج Teal مع حقول جدول - الهوية البصرية الرسمية لوزارة التعليم'\nWHERE name = 'رسمي - ترويسة داكنة';\n\nUPDATE pdf_templates SET \n  headerBg = '#ffffff',\n  headerText = '#004D5A',\n  accent = '#0097A7',\n  borderColor = '#0097A7',\n  description = 'ترويسة بيضاء مع حقول مسطرة وعنوان مستدير - الهوية البصرية الرسمية'\nWHERE name = 'كلاسيكي - ترويسة بيضاء';\n\nUPDATE pdf_templates SET \n  headerBg = '#ffffff',\n  headerText = '#004D5A',\n  accent = '#0097A7',\n  borderColor = '#0097A7',\n  description = 'شريط جانبي ملون مع حقول بطاقات - الهوية البصرية الرسمية'\nWHERE name = 'بطاقات - شريط جانبي';\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 6C7x6f29RX1BcFf.7325488fde9e --database h34s4aPNVyHXdtjgZ7eNNf --execute \nUPDATE pdf_templates SET \n  headerBg = 'linear-gradient(135deg, #004D5A, #0097A7)',\n  headerText = '#ffffff',\n  accent = '#0097A7',\n  borderColor = '#004D5A',\n  description = 'ترويسة تدرج Teal مع حقول جدول - الهوية البصرية الرسمية لوزارة التعليم'\nWHERE name = 'رسمي - ترويسة داكنة';\n\nUPDATE pdf_templates SET \n  headerBg = '#ffffff',\n  headerText = '#004D5A',\n  accent = '#0097A7',\n  borderColor = '#0097A7',\n  description = 'ترويسة بيضاء مع حقول مسطرة وعنوان مستدير - الهوية البصرية الرسمية'\nWHERE name = 'كلاسيكي - ترويسة بيضاء';\n\nUPDATE pdf_templates SET \n  headerBg = '#ffffff',\n  headerText = '#004D5A',\n  accent = '#0097A7',\n  borderColor = '#0097A7',\n  description = 'شريط جانبي ملون مع حقول بطاقات - الهوية البصرية الرسمية'\nWHERE name = 'بطاقات - شريط جانبي';\n",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 492
+}

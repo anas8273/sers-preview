@@ -1,0 +1,9 @@
+{
+  "query": "DELETE FROM pdf_templates WHERE id IN (330004, 330005, 330006, 330008, 330009, 330010);",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 6C7x6f29RX1BcFf.7325488fde9e --database h34s4aPNVyHXdtjgZ7eNNf --execute DELETE FROM pdf_templates WHERE id IN (330004, 330005, 330006, 330008, 330009, 330010);",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 361
+}

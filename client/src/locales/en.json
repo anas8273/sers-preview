@@ -1,0 +1,119 @@
+{
+  "app": {
+    "name": "Smart Educational Records System",
+    "shortName": "SERS",
+    "tagline": "Smart Tools for Educational Quality"
+  },
+  "nav": {
+    "home": "Home",
+    "performance": "Performance Evidence",
+    "smartcv": "Smart CV",
+    "reports": "Report Center",
+    "exams": "Exam Platform",
+    "certificates": "Certificates",
+    "radio": "School Radio",
+    "plans": "Remedial Plans",
+    "covers": "Covers & Dividers",
+    "analysis": "Results Analysis",
+    "portfolio": "Portfolio",
+    "admin": "Dashboard",
+    "wishlist": "Wishlist",
+    "cart": "Cart"
+  },
+  "common": {
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "edit": "Edit",
+    "add": "Add",
+    "search": "Search",
+    "filter": "Filter",
+    "reset": "Reset",
+    "export": "Export",
+    "import": "Import",
+    "preview": "Preview",
+    "print": "Print",
+    "share": "Share",
+    "download": "Download",
+    "upload": "Upload",
+    "close": "Close",
+    "confirm": "Confirm",
+    "back": "Back",
+    "next": "Next",
+    "previous": "Previous",
+    "loading": "Loading...",
+    "noData": "No data available",
+    "success": "Operation successful",
+    "error": "An error occurred",
+    "required": "Required",
+    "optional": "Optional"
+  },
+  "auth": {
+    "login": "Login",
+    "logout": "Logout",
+    "welcome": "Welcome"
+  },
+  "performance": {
+    "title": "Performance Evidence",
+    "selectJob": "Select Job Title",
+    "criteria": "Criteria",
+    "evidence": "Evidence",
+    "score": "Score",
+    "total": "Total",
+    "addEvidence": "Add Evidence",
+    "aiFill": "AI Fill"
+  },
+  "reports": {
+    "title": "Report Center",
+    "newReport": "New Report",
+    "savedReports": "Saved Reports",
+    "templates": "Templates",
+    "department": "Department",
+    "year": "Academic Year",
+    "preparer": "Report Preparer"
+  },
+  "smartcv": {
+    "title": "Smart CV",
+    "personalInfo": "Personal Information",
+    "education": "Education",
+    "experience": "Experience",
+    "skills": "Skills",
+    "layout": "Layout"
+  },
+  "admin": {
+    "title": "Dashboard",
+    "templates": "Template Management",
+    "users": "Users",
+    "schemas": "Schema Editor",
+    "canvas": "Visual Template Editor",
+    "settings": "Settings"
+  },
+  "cart": {
+    "title": "Cart",
+    "empty": "Your cart is empty",
+    "total": "Total",
+    "checkout": "Checkout",
+    "clear": "Clear Cart",
+    "addToCart": "Add to Cart",
+    "removeFromCart": "Remove from Cart"
+  },
+  "wishlist": {
+    "title": "Wishlist",
+    "empty": "No items in your wishlist",
+    "moveToCart": "Move to Cart",
+    "clearAll": "Clear All"
+  },
+  "preview": {
+    "title": "Preview",
+    "exportPDF": "Export PDF",
+    "exportImage": "Export Image",
+    "print": "Print",
+    "zoom": "Zoom",
+    "fullscreen": "Fullscreen"
+  },
+  "language": {
+    "ar": "العربية",
+    "en": "English",
+    "switch": "Switch Language"
+  }
+}

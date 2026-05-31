@@ -1,0 +1,25 @@
+{
+  "query": "SELECT id, name, isDefault FROM pdf_templates ORDER BY id",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 6C7x6f29RX1BcFf.7325488fde9e --database h34s4aPNVyHXdtjgZ7eNNf --execute SELECT id, name, isDefault FROM pdf_templates ORDER BY id",
+  "rows": [
+    {
+      "id": "330001",
+      "name": "رسمي - ترويسة داكنة",
+      "isDefault": "1"
+    },
+    {
+      "id": "330002",
+      "name": "كلاسيكي - ترويسة بيضاء",
+      "isDefault": "0"
+    },
+    {
+      "id": "330003",
+      "name": "بطاقات - شريط جانبي",
+      "isDefault": "0"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tname\tisDefault\n330001\tرسمي - ترويسة داكنة\t1\n330002\tكلاسيكي - ترويسة بيضاء\t0\n330003\tبطاقات - شريط جانبي\t0\n",
+  "stderr": "",
+  "execution_time_ms": 342
+}

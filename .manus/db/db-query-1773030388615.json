@@ -1,0 +1,46 @@
+{
+  "query": "SELECT id, name FROM pdf_templates ORDER BY id;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 6C7x6f29RX1BcFf.7325488fde9e --database h34s4aPNVyHXdtjgZ7eNNf --execute SELECT id, name FROM pdf_templates ORDER BY id;",
+  "rows": [
+    {
+      "id": "330001",
+      "name": "رسمي - ترويسة داكنة"
+    },
+    {
+      "id": "330002",
+      "name": "كلاسيكي - ترويسة بيضاء"
+    },
+    {
+      "id": "330003",
+      "name": "بطاقات - شريط جانبي"
+    },
+    {
+      "id": "330004",
+      "name": "قالب اختبار جديد"
+    },
+    {
+      "id": "330005",
+      "name": "قالب اختبار"
+    },
+    {
+      "id": "330006",
+      "name": "قالب معدّل"
+    },
+    {
+      "id": "330008",
+      "name": "قالب اختبار جديد"
+    },
+    {
+      "id": "330009",
+      "name": "قالب اختبار"
+    },
+    {
+      "id": "330010",
+      "name": "قالب معدّل"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tname\n330001\tرسمي - ترويسة داكنة\n330002\tكلاسيكي - ترويسة بيضاء\n330003\tبطاقات - شريط جانبي\n330004\tقالب اختبار جديد\n330005\tقالب اختبار\n330006\tقالب معدّل\n330008\tقالب اختبار جديد\n330009\tقالب اختبار\n330010\tقالب معدّل\n",
+  "stderr": "",
+  "execution_time_ms": 364
+}

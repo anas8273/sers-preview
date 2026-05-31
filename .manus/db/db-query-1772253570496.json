@@ -1,0 +1,18 @@
+{
+  "query": "SELECT COLUMN_NAME, COLUMN_TYPE FROM information_schema.COLUMNS WHERE TABLE_NAME = 'share_links' AND COLUMN_TYPE LIKE '%tinyint%';",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 6C7x6f29RX1BcFf.7325488fde9e --database h34s4aPNVyHXdtjgZ7eNNf --execute SELECT COLUMN_NAME, COLUMN_TYPE FROM information_schema.COLUMNS WHERE TABLE_NAME = 'share_links' AND COLUMN_TYPE LIKE '%tinyint%';",
+  "rows": [
+    {
+      "COLUMN_NAME": "hasPassword",
+      "COLUMN_TYPE": "tinyint(1)"
+    },
+    {
+      "COLUMN_NAME": "isActive",
+      "COLUMN_TYPE": "tinyint(1)"
+    }
+  ],
+  "messages": [],
+  "stdout": "COLUMN_NAME\tCOLUMN_TYPE\nhasPassword\ttinyint(1)\nisActive\ttinyint(1)\n",
+  "stderr": "",
+  "execution_time_ms": 361
+}

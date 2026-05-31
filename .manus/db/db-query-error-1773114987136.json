@@ -1,0 +1,8 @@
+{
+  "query": "SELECT id, name, header_bg, accent, border_color, body_bg FROM pdf_templates ORDER BY id;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 6C7x6f29RX1BcFf.7325488fde9e --database h34s4aPNVyHXdtjgZ7eNNf --execute SELECT id, name, header_bg, accent, border_color, body_bg FROM pdf_templates ORDER BY id;",
+  "returncode": 1,
+  "logs": [
+    "ERROR 1054 (42S22) at line 1: Unknown column 'header_bg' in 'field list'"
+  ]
+}

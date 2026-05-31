@@ -1,0 +1,232 @@
+{
+  "query": "SELECT id, name, accent, isActive FROM pdf_templates WHERE name IN (SELECT name FROM pdf_templates GROUP BY name HAVING COUNT(*) > 1) ORDER BY name, id;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 6C7x6f29RX1BcFf.7325488fde9e --database h34s4aPNVyHXdtjgZ7eNNf --execute SELECT id, name, accent, isActive FROM pdf_templates WHERE name IN (SELECT name FROM pdf_templates GROUP BY name HAVING COUNT(*) > 1) ORDER BY name, id;",
+  "rows": [
+    {
+      "id": "600010",
+      "name": "قالب اختبار",
+      "accent": "#2E7D32",
+      "isActive": "1"
+    },
+    {
+      "id": "600014",
+      "name": "قالب اختبار",
+      "accent": "#2E7D32",
+      "isActive": "1"
+    },
+    {
+      "id": "600018",
+      "name": "قالب اختبار",
+      "accent": "#2E7D32",
+      "isActive": "1"
+    },
+    {
+      "id": "600022",
+      "name": "قالب اختبار",
+      "accent": "#2E7D32",
+      "isActive": "1"
+    },
+    {
+      "id": "600026",
+      "name": "قالب اختبار",
+      "accent": "#2E7D32",
+      "isActive": "1"
+    },
+    {
+      "id": "600030",
+      "name": "قالب اختبار",
+      "accent": "#2E7D32",
+      "isActive": "1"
+    },
+    {
+      "id": "630002",
+      "name": "قالب اختبار",
+      "accent": "#2E7D32",
+      "isActive": "1"
+    },
+    {
+      "id": "630006",
+      "name": "قالب اختبار",
+      "accent": "#2E7D32",
+      "isActive": "1"
+    },
+    {
+      "id": "660002",
+      "name": "قالب اختبار",
+      "accent": "#2E7D32",
+      "isActive": "1"
+    },
+    {
+      "id": "690002",
+      "name": "قالب اختبار",
+      "accent": "#2E7D32",
+      "isActive": "1"
+    },
+    {
+      "id": "720002",
+      "name": "قالب اختبار",
+      "accent": "#2E7D32",
+      "isActive": "1"
+    },
+    {
+      "id": "720006",
+      "name": "قالب اختبار",
+      "accent": "#2E7D32",
+      "isActive": "1"
+    },
+    {
+      "id": "600009",
+      "name": "قالب اختبار جديد",
+      "accent": "#059669",
+      "isActive": "1"
+    },
+    {
+      "id": "600013",
+      "name": "قالب اختبار جديد",
+      "accent": "#059669",
+      "isActive": "1"
+    },
+    {
+      "id": "600017",
+      "name": "قالب اختبار جديد",
+      "accent": "#059669",
+      "isActive": "1"
+    },
+    {
+      "id": "600021",
+      "name": "قالب اختبار جديد",
+      "accent": "#059669",
+      "isActive": "1"
+    },
+    {
+      "id": "600025",
+      "name": "قالب اختبار جديد",
+      "accent": "#059669",
+      "isActive": "1"
+    },
+    {
+      "id": "600029",
+      "name": "قالب اختبار جديد",
+      "accent": "#059669",
+      "isActive": "1"
+    },
+    {
+      "id": "630001",
+      "name": "قالب اختبار جديد",
+      "accent": "#059669",
+      "isActive": "1"
+    },
+    {
+      "id": "630005",
+      "name": "قالب اختبار جديد",
+      "accent": "#059669",
+      "isActive": "1"
+    },
+    {
+      "id": "660001",
+      "name": "قالب اختبار جديد",
+      "accent": "#059669",
+      "isActive": "1"
+    },
+    {
+      "id": "690001",
+      "name": "قالب اختبار جديد",
+      "accent": "#059669",
+      "isActive": "1"
+    },
+    {
+      "id": "720001",
+      "name": "قالب اختبار جديد",
+      "accent": "#059669",
+      "isActive": "1"
+    },
+    {
+      "id": "720005",
+      "name": "قالب اختبار جديد",
+      "accent": "#059669",
+      "isActive": "1"
+    },
+    {
+      "id": "600003",
+      "name": "قالب معدّل",
+      "accent": "#1a3a5c",
+      "isActive": "1"
+    },
+    {
+      "id": "600011",
+      "name": "قالب معدّل",
+      "accent": "#2E7D32",
+      "isActive": "1"
+    },
+    {
+      "id": "600015",
+      "name": "قالب معدّل",
+      "accent": "#2E7D32",
+      "isActive": "1"
+    },
+    {
+      "id": "600019",
+      "name": "قالب معدّل",
+      "accent": "#2E7D32",
+      "isActive": "1"
+    },
+    {
+      "id": "600023",
+      "name": "قالب معدّل",
+      "accent": "#2E7D32",
+      "isActive": "1"
+    },
+    {
+      "id": "600027",
+      "name": "قالب معدّل",
+      "accent": "#2E7D32",
+      "isActive": "1"
+    },
+    {
+      "id": "600031",
+      "name": "قالب معدّل",
+      "accent": "#2E7D32",
+      "isActive": "1"
+    },
+    {
+      "id": "630003",
+      "name": "قالب معدّل",
+      "accent": "#2E7D32",
+      "isActive": "1"
+    },
+    {
+      "id": "630007",
+      "name": "قالب معدّل",
+      "accent": "#2E7D32",
+      "isActive": "1"
+    },
+    {
+      "id": "660003",
+      "name": "قالب معدّل",
+      "accent": "#2E7D32",
+      "isActive": "1"
+    },
+    {
+      "id": "690003",
+      "name": "قالب معدّل",
+      "accent": "#2E7D32",
+      "isActive": "1"
+    },
+    {
+      "id": "720003",
+      "name": "قالب معدّل",
+      "accent": "#2E7D32",
+      "isActive": "1"
+    },
+    {
+      "id": "720007",
+      "name": "قالب معدّل",
+      "accent": "#2E7D32",
+      "isActive": "1"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tname\taccent\tisActive\n600010\tقالب اختبار\t#2E7D32\t1\n600014\tقالب اختبار\t#2E7D32\t1\n600018\tقالب اختبار\t#2E7D32\t1\n600022\tقالب اختبار\t#2E7D32\t1\n600026\tقالب اختبار\t#2E7D32\t1\n600030\tقالب اختبار\t#2E7D32\t1\n630002\tقالب اختبار\t#2E7D32\t1\n630006\tقالب اختبار\t#2E7D32\t1\n660002\tقالب اختبار\t#2E7D32\t1\n690002\tقالب اختبار\t#2E7D32\t1\n720002\tقالب اختبار\t#2E7D32\t1\n720006\tقالب اختبار\t#2E7D32\t1\n600009\tقالب اختبار جديد\t#059669\t1\n600013\tقالب اختبار جديد\t#059669\t1\n600017\tقالب اختبار جديد\t#059669\t1\n600021\tقالب اختبار جديد\t#059669\t1\n600025\tقالب اختبار جديد\t#059669\t1\n600029\tقالب اختبار جديد\t#059669\t1\n630001\tقالب اختبار جديد\t#059669\t1\n630005\tقالب اختبار جديد\t#059669\t1\n660001\tقالب اختبار جديد\t#059669\t1\n690001\tقالب اختبار جديد\t#059669\t1\n720001\tقالب اختبار جديد\t#059669\t1\n720005\tقالب اختبار جديد\t#059669\t1\n600003\tقالب معدّل\t#1a3a5c\t1\n600011\tقالب معدّل\t#2E7D32\t1\n600015\tقالب معدّل\t#2E7D32\t1\n600019\tقالب معدّل\t#2E7D32\t1\n600023\tقالب معدّل\t#2E7D32\t1\n600027\tقالب معدّل\t#2E7D32\t1\n600031\tقالب معدّل\t#2E7D32\t1\n630003\tقالب معدّل\t#2E7D32\t1\n630007\tقالب معدّل\t#2E7D32\t1\n660003\tقالب معدّل\t#2E7D32\t1\n690003\tقالب معدّل\t#2E7D32\t1\n720003\tقالب معدّل\t#2E7D32\t1\n720007\tقالب معدّل\t#2E7D32\t1\n",
+  "stderr": "",
+  "execution_time_ms": 55
+}

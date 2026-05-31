@@ -1,0 +1,119 @@
+{
+  "app": {
+    "name": "نظام السجلات التعليمية الذكي",
+    "shortName": "SERS",
+    "tagline": "أدوات ذكية للجودة التعليمية"
+  },
+  "nav": {
+    "home": "الرئيسية",
+    "performance": "شواهد الأداء",
+    "smartcv": "السيرة الذاتية",
+    "reports": "مركز التقارير",
+    "exams": "منصة الاختبارات",
+    "certificates": "الشهادات",
+    "radio": "الإذاعة المدرسية",
+    "plans": "الخطط العلاجية",
+    "covers": "أغلفة وفواصل",
+    "analysis": "تحليل النتائج",
+    "portfolio": "ملف الإنجاز",
+    "admin": "لوحة التحكم",
+    "wishlist": "قائمة الأمنيات",
+    "cart": "السلة"
+  },
+  "common": {
+    "save": "حفظ",
+    "cancel": "إلغاء",
+    "delete": "حذف",
+    "edit": "تعديل",
+    "add": "إضافة",
+    "search": "بحث",
+    "filter": "تصفية",
+    "reset": "إعادة تعيين",
+    "export": "تصدير",
+    "import": "استيراد",
+    "preview": "معاينة",
+    "print": "طباعة",
+    "share": "مشاركة",
+    "download": "تحميل",
+    "upload": "رفع",
+    "close": "إغلاق",
+    "confirm": "تأكيد",
+    "back": "رجوع",
+    "next": "التالي",
+    "previous": "السابق",
+    "loading": "جاري التحميل...",
+    "noData": "لا توجد بيانات",
+    "success": "تمت العملية بنجاح",
+    "error": "حدث خطأ",
+    "required": "مطلوب",
+    "optional": "اختياري"
+  },
+  "auth": {
+    "login": "تسجيل الدخول",
+    "logout": "تسجيل الخروج",
+    "welcome": "مرحباً"
+  },
+  "performance": {
+    "title": "شواهد الأداء الوظيفي",
+    "selectJob": "اختر المسمى الوظيفي",
+    "criteria": "المعايير",
+    "evidence": "الشواهد",
+    "score": "الدرجة",
+    "total": "المجموع",
+    "addEvidence": "إضافة شاهد",
+    "aiFill": "تعبئة ذكية"
+  },
+  "reports": {
+    "title": "مركز التقارير",
+    "newReport": "تقرير جديد",
+    "savedReports": "التقارير المحفوظة",
+    "templates": "القوالب",
+    "department": "الجهة / الإدارة",
+    "year": "العام الدراسي",
+    "preparer": "معد التقرير"
+  },
+  "smartcv": {
+    "title": "السيرة الذاتية الذكية",
+    "personalInfo": "المعلومات الشخصية",
+    "education": "التعليم",
+    "experience": "الخبرات",
+    "skills": "المهارات",
+    "layout": "التنسيق"
+  },
+  "admin": {
+    "title": "لوحة التحكم",
+    "templates": "إدارة القوالب",
+    "users": "المستخدمين",
+    "schemas": "محرر الحقول",
+    "canvas": "محرر القالب البصري",
+    "settings": "الإعدادات"
+  },
+  "cart": {
+    "title": "السلة",
+    "empty": "السلة فارغة",
+    "total": "الإجمالي",
+    "checkout": "إتمام الشراء",
+    "clear": "تفريغ السلة",
+    "addToCart": "أضف للسلة",
+    "removeFromCart": "إزالة من السلة"
+  },
+  "wishlist": {
+    "title": "قائمة الأمنيات",
+    "empty": "لا توجد عناصر في قائمة الأمنيات",
+    "moveToCart": "نقل للسلة",
+    "clearAll": "مسح الكل"
+  },
+  "preview": {
+    "title": "معاينة",
+    "exportPDF": "تصدير PDF",
+    "exportImage": "تصدير صورة",
+    "print": "طباعة",
+    "zoom": "تكبير/تصغير",
+    "fullscreen": "ملء الشاشة"
+  },
+  "language": {
+    "ar": "العربية",
+    "en": "English",
+    "switch": "تبديل اللغة"
+  }
+}
