@@ -370,6 +370,7 @@ function createEmptyEvidence(subEvidenceId: string = ""): EvidenceItem {
 const STORAGE_KEY = "sers_perf_state";
 const STORAGE_PENDING_UPLOAD = "sers_pending_upload";
 const STORAGE_AUTOSAVE_KEY = "sers_perf_autosave";
+const OFFLINE_DRAFT_KEY = "performance-evidence-draft";
 
 // ===== حفظ واستعادة الـ state من localStorage (يبقى حتى بعد إغلاق المتصفح) =====
 function saveStateToStorage(data: {
@@ -622,7 +623,12 @@ export default function PerformanceEvidence() {
   // ===== استعادة الـ state من localStorage عند تحميل الصفحة (حل مشكلة الجوال + إغلاق المتصفح) =====
   useEffect(() => {
     if (stateRestored) return;
-    const saved = loadStateFromStorage();
+    const offlineDraft = getOfflineData<any>(OFFLINE_DRAFT_KEY);
+    const saved = loadStateFromStorage() ?? (
+      offlineDraft && Date.now() - (offlineDraft.timestamp || 0) <= 86400000
+        ? offlineDraft
+        : null
+    );
     if (saved && saved.jobId) {
       const job = JOB_TYPES.find(j => j.id === saved.jobId);
       if (job) {
@@ -1844,8 +1850,10 @@ export default function PerformanceEvidence() {
     if (!selectedJob) return;
     if (!isAuthenticated) {
       // حفظ محلي كاحتياطي للمستخدمين غير المسجلين
-      const data = { personalInfo, criteriaData, jobId: selectedJob?.id, themeId: selectedTheme.id, customCriteria };
+      const data = { step, personalInfo, criteriaData, jobId: selectedJob.id, themeId: selectedTheme.id, customCriteria, currentCriterionIndex, activeTab, expandedSubEvidence, timestamp: Date.now() };
       localStorage.setItem(`sers_perf_${personalInfo.name || "draft"}`, JSON.stringify(data));
+      saveStateToStorage(data);
+      saveOfflineData(OFFLINE_DRAFT_KEY, data);
       toast.success("تم حفظ البيانات محلياً! سجل دخولك لحفظها في السحابة.");
       return;
     }
@@ -1862,8 +1870,16 @@ export default function PerformanceEvidence() {
       });
       if (savedId) {
         toast.success("تم حفظ البيانات في السحابة بنجاح!");
+      } else {
+        const fallback = { step, personalInfo, criteriaData, jobId: selectedJob.id, themeId: selectedTheme.id, customCriteria, currentCriterionIndex, activeTab, expandedSubEvidence, timestamp: Date.now() };
+        saveStateToStorage(fallback);
+        saveOfflineData(OFFLINE_DRAFT_KEY, fallback);
+        toast.warning("تعذر الحفظ السحابي؛ احتُفظ بنسخة محلية آمنة لاستعادتها لاحقاً.");
       }
     } catch {
+      const fallback = { step, personalInfo, criteriaData, jobId: selectedJob.id, themeId: selectedTheme.id, customCriteria, currentCriterionIndex, activeTab, expandedSubEvidence, timestamp: Date.now() };
+      saveStateToStorage(fallback);
+      saveOfflineData(OFFLINE_DRAFT_KEY, fallback);
       toast.error("فشل الحفظ، يرجى المحاولة مرة أخرى");
     }
     setIsSaving(false);
