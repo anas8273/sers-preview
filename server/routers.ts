@@ -14,6 +14,7 @@ import {
   getAllPortfolios, reviewPortfolio,
   createUploadedFile, getFilesByPortfolio, deleteUploadedFile,
   createEvidenceComment, getEvidenceComments, deleteEvidenceComment,
+  createOnlineExam, getOnlineExamByToken, deactivateOnlineExam, createOnlineExamResponse,
   createShareLink, getShareLinkByToken, incrementShareLinkViews, getShareLinksByPortfolio, deactivateShareLink,
   createPdfTemplate, updatePdfTemplate, deletePdfTemplate, getActivePdfTemplates, getAllPdfTemplates, seedDefaultTemplates,
   createUserTheme, updateUserTheme, deleteUserTheme, getUserThemes,
@@ -143,7 +144,91 @@ export const appRouter = router({
       .input(z.object({ id: z.number() }))
       .mutation(async ({ ctx, input }) => {
         return deleteEvidenceComment(input.id, ctx.user.id, ctx.user.role === "admin");
+    }),
+  }),
+
+  // ─── Online Exam Sharing ───────────────────────────────────
+  onlineExam: router({
+    create: protectedProcedure
+      .input(z.object({
+        title: z.string().trim().min(1).max(255),
+        subject: z.string().trim().min(1).max(255),
+        grade: z.string().trim().min(1).max(128),
+        semester: z.string().trim().min(1).max(64),
+        duration: z.string().trim().max(64),
+        themeId: z.string().trim().min(1).max(64),
+        fontFamily: z.string().trim().min(1).max(128),
+        questions: z.array(z.record(z.string(), z.any())).min(1).max(100),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const token = nanoid(24);
+        return createOnlineExam({ ...input, userId: ctx.user.id, token });
       }),
+
+    view: publicProcedure
+      .input(z.object({ token: z.string().min(12).max(128) }))
+      .query(async ({ input }) => {
+        const exam = await getOnlineExamByToken(input.token);
+        if (!exam) return null;
+        const questions = (exam.questions as Array<Record<string, unknown>>).map(({ correctAnswer, correctIndex, ...question }) => question);
+        return {
+          title: exam.title,
+          subject: exam.subject,
+          grade: exam.grade,
+          semester: exam.semester,
+          duration: exam.duration,
+          themeId: exam.themeId,
+          fontFamily: exam.fontFamily,
+          questions,
+        };
+      }),
+
+    submit: publicProcedure
+      .input(z.object({
+        token: z.string().min(12).max(128),
+        studentName: z.string().trim().min(2).max(255),
+        studentId: z.string().trim().max(128).optional(),
+        answers: z.record(z.string(), z.union([z.string(), z.number()])),
+      }))
+      .mutation(async ({ input }) => {
+        const exam = await getOnlineExamByToken(input.token);
+        if (!exam) throw new TRPCError({ code: "NOT_FOUND", message: "رابط الاختبار غير صالح أو تم إيقافه" });
+        const questions = exam.questions as Array<Record<string, unknown>>;
+        let autoScore = 0;
+        let autoMaxScore = 0;
+        let requiresManualReview = false;
+
+        for (const question of questions) {
+          const type = String(question.type || "");
+          const id = String(question.id || "");
+          const points = Number(question.points || 0);
+          const answer = input.answers[id];
+          if (type === "essay") {
+            requiresManualReview = true;
+            continue;
+          }
+          autoMaxScore += points;
+          const normalizedAnswer = String(answer ?? "").trim().toLocaleLowerCase("ar-SA");
+          const expected = type === "multiple-choice"
+            ? String(question.correctIndex ?? "")
+            : String(question.correctAnswer ?? "").trim().toLocaleLowerCase("ar-SA");
+          if (normalizedAnswer && normalizedAnswer === expected) autoScore += points;
+        }
+
+        const response = await createOnlineExamResponse({
+          onlineExamId: exam.id,
+          studentName: input.studentName,
+          studentId: input.studentId || null,
+          answers: input.answers,
+          autoScore,
+          autoMaxScore,
+        });
+        return { ...response, autoScore, autoMaxScore, requiresManualReview };
+      }),
+
+    revoke: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ ctx, input }) => deactivateOnlineExam(input.id, ctx.user.id)),
   }),
 
   // ─── File Upload ───────────────────────────────────────

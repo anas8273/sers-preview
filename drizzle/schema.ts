@@ -68,6 +68,41 @@ export const evidenceComments = mysqlTable("evidence_comments", {
 export type EvidenceComment = typeof evidenceComments.$inferSelect;
 export type InsertEvidenceComment = typeof evidenceComments.$inferInsert;
 
+// ─── Online Exams ───────────────────────────────────────────
+export const onlineExams = mysqlTable("online_exams", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  token: varchar("token", { length: 128 }).notNull().unique(),
+  title: varchar("title", { length: 255 }).notNull(),
+  subject: varchar("subject", { length: 255 }).notNull(),
+  grade: varchar("grade", { length: 128 }).notNull(),
+  semester: varchar("semester", { length: 64 }).notNull(),
+  duration: varchar("duration", { length: 64 }).notNull(),
+  themeId: varchar("themeId", { length: 64 }).notNull(),
+  fontFamily: varchar("fontFamily", { length: 128 }).notNull(),
+  questions: json("questions").$type<Array<Record<string, unknown>>>().notNull(),
+  isActive: boolean("isActive").default(true).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type OnlineExam = typeof onlineExams.$inferSelect;
+export type InsertOnlineExam = typeof onlineExams.$inferInsert;
+
+export const onlineExamResponses = mysqlTable("online_exam_responses", {
+  id: int("id").autoincrement().primaryKey(),
+  onlineExamId: int("onlineExamId").notNull(),
+  studentName: varchar("studentName", { length: 255 }).notNull(),
+  studentId: varchar("studentId", { length: 128 }),
+  answers: json("answers").$type<Record<string, string | number>>().notNull(),
+  autoScore: int("autoScore").notNull().default(0),
+  autoMaxScore: int("autoMaxScore").notNull().default(0),
+  submittedAt: timestamp("submittedAt").defaultNow().notNull(),
+});
+
+export type OnlineExamResponse = typeof onlineExamResponses.$inferSelect;
+export type InsertOnlineExamResponse = typeof onlineExamResponses.$inferInsert;
+
 export const shareLinks = mysqlTable("share_links", {
   id: int("id").autoincrement().primaryKey(),
   portfolioId: int("portfolioId").notNull(),

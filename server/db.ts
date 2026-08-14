@@ -1,6 +1,6 @@
 import { eq, and, desc, sql, gt, lt } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, users, portfolios, uploadedFiles, evidenceComments, shareLinks, pdfTemplates, userThemes, type InsertPortfolio, type InsertUploadedFile, type InsertEvidenceComment, type InsertShareLink, type InsertPdfTemplate, type InsertUserTheme } from "../drizzle/schema";
+import { InsertUser, users, portfolios, uploadedFiles, evidenceComments, onlineExams, onlineExamResponses, shareLinks, pdfTemplates, userThemes, type InsertPortfolio, type InsertUploadedFile, type InsertEvidenceComment, type InsertOnlineExam, type InsertOnlineExamResponse, type InsertShareLink, type InsertPdfTemplate, type InsertUserTheme } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -130,6 +130,35 @@ export async function deleteEvidenceComment(id: number, userId: number, isAdmin 
   const where = isAdmin ? eq(evidenceComments.id, id) : and(eq(evidenceComments.id, id), eq(evidenceComments.userId, userId));
   await db.delete(evidenceComments).where(where);
   return { success: true };
+}
+
+// ─── Online Exams ───────────────────────────────────────────
+export async function createOnlineExam(data: InsertOnlineExam) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(onlineExams).values(data);
+  return { id: Number(result[0].insertId), token: data.token };
+}
+
+export async function getOnlineExamByToken(token: string) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(onlineExams).where(and(eq(onlineExams.token, token), eq(onlineExams.isActive, true))).limit(1);
+  return result[0];
+}
+
+export async function deactivateOnlineExam(id: number, userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(onlineExams).set({ isActive: false }).where(and(eq(onlineExams.id, id), eq(onlineExams.userId, userId)));
+  return { success: true };
+}
+
+export async function createOnlineExamResponse(data: InsertOnlineExamResponse) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(onlineExamResponses).values(data);
+  return { id: Number(result[0].insertId) };
 }
 
 // ─── Admin: All Portfolios ──────────────────────────────

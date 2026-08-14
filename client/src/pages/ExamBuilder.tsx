@@ -12,11 +12,12 @@ import {
   ArrowLeft, ClipboardCheck, Plus, Trash2, Save, Edit3,
   Search, ChevronDown, ChevronUp, Sparkles,
   CheckCircle2, XCircle, HelpCircle, Eye, Printer,
-  FileDown, Maximize2, Minimize2, Loader2, ChevronLeft, ZoomIn, ZoomOut, RotateCcw
+  FileDown, Maximize2, Minimize2, Loader2, ChevronLeft, ZoomIn, ZoomOut, RotateCcw, Share2, Copy
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
+import { useAuth } from "@/_core/hooks/useAuth";
 import TemplateSelector, { THEMES, type ThemeConfig } from "@/components/TemplateSelector";
 import { exportToPDF, printElement } from "@/lib/pdf-export";
 import { usePreviewScale } from "@/hooks/usePreviewScale";
@@ -226,6 +227,7 @@ function ExamPreview({
 
 export default function ExamBuilder() {
   const [, navigate] = useLocation();
+  const { isAuthenticated } = useAuth();
   const [view, setView] = useState<"list" | "editor" | "preview">("list");
   const [exams, setExams] = useState<SavedExam[]>(loadExams);
   const [currentExam, setCurrentExam] = useState<SavedExam | null>(null);
@@ -242,10 +244,12 @@ export default function ExamBuilder() {
   const [exporting, setExporting] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
   const [showAnswers, setShowAnswers] = useState(false);
+  const [shareUrl, setShareUrl] = useState<string | null>(null);
 
   const { containerRef: previewContainerRef, pageRef: previewPageRef, previewScale, wrapperWidth, wrapperHeight, zoomLevel, zoomIn, zoomOut, resetZoom } = usePreviewScale();
 
   const generateExamMutation = trpc.genAI.generateExamQuestions.useMutation();
+  const createOnlineExam = (trpc as any).onlineExam.create.useMutation();
   const totalPoints = useMemo(() => questions.reduce((s, q) => s + q.points, 0), [questions]);
 
   const startNew = useCallback(() => {
@@ -345,6 +349,35 @@ export default function ExamBuilder() {
   }, [title]);
 
   const handlePrint = useCallback(() => { try { printElement("exam-preview-content"); } catch { toast.error("حدث خطأ"); } }, []);
+
+  const handleShareOnlineExam = useCallback(async () => {
+    if (!isAuthenticated) {
+      toast.error("سجّل الدخول أولاً لإنشاء رابط اختبار إلكتروني");
+      return;
+    }
+    if (!subject.trim() || !grade.trim() || questions.length === 0) {
+      toast.error("أدخل المادة والصف وأضف سؤالاً واحداً على الأقل قبل المشاركة");
+      return;
+    }
+    try {
+      const result = await createOnlineExam.mutateAsync({
+        title: title.trim() || `اختبار ${subject.trim()}`,
+        subject: subject.trim(),
+        grade: grade.trim(),
+        semester,
+        duration: duration.trim(),
+        themeId: selectedTheme.id,
+        fontFamily: selectedFont,
+        questions: questions as any,
+      });
+      const url = `${window.location.origin}/exam/${result.token}`;
+      setShareUrl(url);
+      await navigator.clipboard.writeText(url);
+      toast.success("تم إنشاء ونسخ رابط الاختبار الإلكتروني");
+    } catch (error: any) {
+      toast.error(error?.message || "تعذر إنشاء رابط الاختبار");
+    }
+  }, [isAuthenticated, subject, grade, questions, createOnlineExam, title, semester, duration, selectedTheme.id, selectedFont]);
 
   const filteredExams = useMemo(() => {
     if (!searchQuery.trim()) return exams;
@@ -597,6 +630,10 @@ export default function ExamBuilder() {
                     <span className="text-xs sm:text-sm font-semibold text-gray-800" style={{ fontFamily: "'Tajawal', sans-serif" }}>معاينة الاختبار</span>
                   </div>
                   <div className="flex items-center gap-1.5 sm:gap-2">
+                    <Button size="sm" variant="outline" onClick={handleShareOnlineExam} disabled={createOnlineExam.isPending} className="gap-1 text-xs h-8 sm:h-9 border-blue-200 text-blue-700 hover:bg-blue-50">
+                      {createOnlineExam.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Share2 className="w-3.5 h-3.5" />}
+                      <span className="hidden sm:inline">اختبار إلكتروني</span>
+                    </Button>
                     <Button size="sm" onClick={handleExportPDF} disabled={exporting} className="gap-1 sm:gap-1.5 text-xs h-8 sm:h-9 bg-teal-600 hover:bg-teal-700 text-white">
                       {exporting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileDown className="w-3.5 h-3.5" />}
                       <span className="hidden sm:inline">{exporting ? 'جاري التصدير...' : 'تصدير PDF'}</span>
@@ -607,6 +644,17 @@ export default function ExamBuilder() {
                     </Button>
                   </div>
                 </div>
+                {shareUrl && (
+                  <div className="mx-3 mb-3 flex flex-col gap-2 rounded-lg border border-blue-200 bg-blue-50 p-2.5 sm:mx-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="min-w-0">
+                      <p className="text-[11px] font-semibold text-blue-800">رابط الاختبار الإلكتروني</p>
+                      <p className="truncate text-[10px] text-blue-700" dir="ltr">{shareUrl}</p>
+                    </div>
+                    <Button size="sm" variant="outline" className="h-7 shrink-0 gap-1 text-xs border-blue-300 text-blue-700" onClick={() => { navigator.clipboard.writeText(shareUrl); toast.success("تم نسخ الرابط"); }}>
+                      <Copy className="w-3 h-3" />نسخ الرابط
+                    </Button>
+                  </div>
+                )}
                 <div className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 pb-2 sm:pb-3 overflow-x-auto" style={{ WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none' }}>
                   <div className="flex items-center gap-0.5 bg-white/90 backdrop-blur-sm border border-gray-200 rounded-lg shadow-sm px-1 py-0.5 shrink-0">
                     <button onClick={zoomOut} className="p-1.5 hover:bg-gray-100 rounded-md transition-colors active:scale-95" title="تصغير">
