@@ -132,6 +132,7 @@ export function mergeDBThemes(
     id: number; name: string; headerBg: string; headerText: string;
     accent: string; borderColor: string; bodyBg: string;
     description?: string | null; fontFamily?: string | null;
+    coverImageUrl?: string | null; logoUrl?: string | null;
     layoutType?: string | null;
     templateLayout?: Record<string, any> | null;
   }>
@@ -161,6 +162,9 @@ export function mergeDBThemes(
       coverStyle: layout.coverStyle || 'gradient-center',
       sectionCoverStyle: layout.sectionCoverStyle || 'full-gradient',
       coverAccent2: layout.coverAccent2 || db.accent || '#1a6b6a',
+      coverImageUrl: db.coverImageUrl || undefined,
+      coverBackgroundUrl: db.coverImageUrl || layout.coverBackgroundUrl || undefined,
+      logoUrl: db.logoUrl || undefined,
       headerVariant: layout.headerVariant || 'right-text-center-logo-left-info',
       headerSeparator: layout.headerSeparator ?? false,
       showTopLine: layout.showTopLine ?? false,

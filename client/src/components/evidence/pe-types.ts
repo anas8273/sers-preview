@@ -113,6 +113,9 @@ export interface ThemeConfig {
   coverStyle?: 'gradient-center' | 'split-left' | 'diagonal' | 'framed-elegant' | 'top-bar' | 'minimal-line';
   sectionCoverStyle?: 'full-gradient' | 'left-stripe' | 'top-accent' | 'card-center' | 'numbered-bar' | 'clean-divider';
   coverAccent2?: string;
+  coverImageUrl?: string;
+  coverBackgroundUrl?: string;
+  logoUrl?: string;
   headerVariant?: 'right-text-center-logo-left-info' | 'right-text-left-logo' | 'center-logo-banner' | 'full-header-sections';
 }
 

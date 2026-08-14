@@ -21,4 +21,9 @@ describe("admin template field schema", () => {
     expect(source).toContain("templateFields.map((field, index)");
     expect(source).toContain("templateFields.map((field) =>");
   });
+
+  it("expands long descriptive fields across the available preview columns", () => {
+    expect(source).toContain("isLongTemplateField");
+    expect(source).toContain("gridColumn: isLongTemplateField(field) ? '1 / -1' : undefined");
+  });
 });

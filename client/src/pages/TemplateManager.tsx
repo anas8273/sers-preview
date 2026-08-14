@@ -51,6 +51,9 @@ const createDefaultLayout = (): TemplateLayoutConfig => ({
   sections: [{ id: "basic-information", title: "البيانات الأساسية", columns: 2, fields: DEFAULT_TEMPLATE_FIELDS }],
 });
 
+const isLongTemplateField = (field: TemplateFieldConfig) =>
+  field.type === "textarea" || /وصف|تفاصيل|أهداف|محتوى|ملاحظات|خطة|توصيات/.test(field.label);
+
 interface TemplateData {
   id?: number;
   name: string;
@@ -930,7 +933,7 @@ function TemplateEditor({
                 {layout.fieldStyle === 'cards' && (
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px', marginBottom: '6px' }}>
                     {templateFields.map((field) => (
-                      <div key={field.id} style={{ borderRadius: '3px', padding: '3px 5px', border: `1px solid ${form.borderColor}`, background: `linear-gradient(135deg, ${form.accent}08, ${form.accent}15)` }}>
+                      <div key={field.id} style={{ gridColumn: isLongTemplateField(field) ? '1 / -1' : undefined, borderRadius: '3px', padding: '3px 5px', border: `1px solid ${form.borderColor}`, background: `linear-gradient(135deg, ${form.accent}08, ${form.accent}15)` }}>
                         <div style={{ fontSize: '4.5px', fontWeight: 700, color: form.accent }}>{field.label}</div>
                         <div style={{ fontSize: '5.5px', color: '#1F2937' }}>{field.placeholder || 'نموذج'}</div>
                       </div>
@@ -940,7 +943,7 @@ function TemplateEditor({
                 {(layout.fieldStyle === 'fieldset' || layout.fieldStyle === 'underlined' || layout.fieldStyle === 'minimal') && (
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px', marginBottom: '6px' }}>
                     {templateFields.map((field) => (
-                      <div key={field.id} style={{ padding: '3px 5px', borderBottom: layout.fieldStyle === 'underlined' ? `1.5px solid ${form.accent}50` : undefined, border: layout.fieldStyle !== 'underlined' ? `1px solid ${form.accent}30` : undefined, borderRadius: layout.fieldStyle !== 'underlined' ? '3px' : undefined }}>
+                      <div key={field.id} style={{ gridColumn: isLongTemplateField(field) ? '1 / -1' : undefined, padding: '3px 5px', borderBottom: layout.fieldStyle === 'underlined' ? `1.5px solid ${form.accent}50` : undefined, border: layout.fieldStyle !== 'underlined' ? `1px solid ${form.accent}30` : undefined, borderRadius: layout.fieldStyle !== 'underlined' ? '3px' : undefined }}>
                         <div style={{ fontSize: '4.5px', fontWeight: 700, color: form.accent }}>{field.label}</div>
                         <div style={{ fontSize: '5.5px', color: '#1F2937' }}>{field.placeholder || 'نموذج'}</div>
                       </div>
