@@ -10,7 +10,7 @@ import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
 import {
   ArrowLeft, Plus, Trash2, Save, Edit3, Palette,
-  Upload, X, Loader2, Copy, ToggleLeft, ToggleRight,
+  Upload, X, Loader2, Copy, ToggleLeft, ToggleRight, ChevronUp, ChevronDown,
   Sparkles, FileText, Settings2, ImageIcon, Layout,
   Share2, Link, Link2Off, Check
 } from "lucide-react";
@@ -18,10 +18,38 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 
+interface TemplateFieldConfig {
+  id: string;
+  label: string;
+  type: "text" | "textarea" | "date" | "select" | "number";
+  required?: boolean;
+  placeholder?: string;
+  options?: string[];
+}
+
 interface TemplateLayoutConfig {
   headerStyle: number;
   fieldStyle: string;
+  sections?: Array<{
+    id: string;
+    title: string;
+    columns?: number;
+    fields: TemplateFieldConfig[];
+  }>;
 }
+
+const DEFAULT_TEMPLATE_FIELDS: TemplateFieldConfig[] = [
+  { id: "teacher_name", label: "اسم المعلم", type: "text", required: true },
+  { id: "subject", label: "المادة", type: "text" },
+  { id: "school", label: "المدرسة", type: "text", required: true },
+  { id: "academic_year", label: "العام الدراسي", type: "text" },
+];
+
+const createDefaultLayout = (): TemplateLayoutConfig => ({
+  headerStyle: 1,
+  fieldStyle: "table",
+  sections: [{ id: "basic-information", title: "البيانات الأساسية", columns: 2, fields: DEFAULT_TEMPLATE_FIELDS }],
+});
 
 interface TemplateData {
   id?: number;
@@ -52,7 +80,7 @@ const EMPTY_TEMPLATE: TemplateData = {
   fontFamily: "Tajawal",
   coverImageUrl: "",
   logoUrl: "",
-  templateLayout: { headerStyle: 1, fieldStyle: "table" },
+  templateLayout: createDefaultLayout(),
   isDefault: false,
   isActive: true,
   sortOrder: 0,
@@ -212,7 +240,7 @@ export default function TemplateManager() {
       fontFamily: template.fontFamily || "Tajawal",
       coverImageUrl: template.coverImageUrl || "",
       logoUrl: template.logoUrl || "",
-      templateLayout: template.templateLayout || { headerStyle: 1, fieldStyle: "table" },
+      templateLayout: template.templateLayout || createDefaultLayout(),
       isDefault: false,
       isActive: true,
       sortOrder: (template.sortOrder || 0) + 1,
@@ -399,7 +427,7 @@ export default function TemplateManager() {
                             bodyBg: template.bodyBg || "#FFFFFF",
                             coverImageUrl: template.coverImageUrl || "",
                             logoUrl: template.logoUrl || "",
-                            templateLayout: template.templateLayout || { headerStyle: 1, fieldStyle: "table" },
+                            templateLayout: template.templateLayout || createDefaultLayout(),
                           })}>
                           <Edit3 className="w-3 h-3 ml-1" />تعديل
                         </Button>
@@ -519,7 +547,7 @@ function TemplateEditor({
 }) {
   const [form, setForm] = useState<TemplateData>({
     ...template,
-    templateLayout: template.templateLayout || { headerStyle: 1, fieldStyle: "table" },
+    templateLayout: template.templateLayout || createDefaultLayout(),
   });
   const [activeTab, setActiveTab] = useState<'colors' | 'layout' | 'images'>('colors');
 
@@ -530,11 +558,51 @@ function TemplateEditor({
   const updateLayout = (field: keyof TemplateLayoutConfig, value: any) => {
     setForm((prev) => ({
       ...prev,
-      templateLayout: { ...(prev.templateLayout || { headerStyle: 1, fieldStyle: "table" }), [field]: value },
+      templateLayout: { ...(prev.templateLayout || createDefaultLayout()), [field]: value },
     }));
   };
 
-  const layout = form.templateLayout || { headerStyle: 1, fieldStyle: "table" };
+  const layout = form.templateLayout || createDefaultLayout();
+  const templateFields = layout.sections?.[0]?.fields?.length ? layout.sections[0].fields : DEFAULT_TEMPLATE_FIELDS;
+
+  const updateTemplateFields = (nextFields: TemplateFieldConfig[]) => {
+    setForm((previous) => {
+      const currentLayout = previous.templateLayout || createDefaultLayout();
+      const currentSections = currentLayout.sections?.length
+        ? currentLayout.sections
+        : [{ id: "basic-information", title: "البيانات الأساسية", columns: 2, fields: [] }];
+      return {
+        ...previous,
+        templateLayout: {
+          ...currentLayout,
+          sections: currentSections.map((section, index) => index === 0 ? { ...section, fields: nextFields } : section),
+        },
+      };
+    });
+  };
+
+  const addTemplateField = () => {
+    updateTemplateFields([
+      ...templateFields,
+      { id: `custom_${Date.now()}`, label: "حقل جديد", type: "text", placeholder: "أدخل قيمة الحقل" },
+    ]);
+  };
+
+  const updateTemplateField = (id: string, patch: Partial<TemplateFieldConfig>) => {
+    updateTemplateFields(templateFields.map((field) => field.id === id ? { ...field, ...patch } : field));
+  };
+
+  const removeTemplateField = (id: string) => {
+    updateTemplateFields(templateFields.filter((field) => field.id !== id));
+  };
+
+  const moveTemplateField = (index: number, direction: -1 | 1) => {
+    const target = index + direction;
+    if (target < 0 || target >= templateFields.length) return;
+    const nextFields = [...templateFields];
+    [nextFields[index], nextFields[target]] = [nextFields[target], nextFields[index]];
+    updateTemplateFields(nextFields);
+  };
 
   return (
     <div className="p-6" dir="rtl">
@@ -658,6 +726,42 @@ function TemplateEditor({
                       <div className="font-medium text-xs">{fs.label}</div>
                       <div className="text-[10px] mt-0.5 opacity-70">{fs.desc}</div>
                     </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="border-t border-border pt-4">
+                <div className="flex items-center justify-between gap-3 mb-2">
+                  <div>
+                    <label className="text-xs font-medium text-muted-foreground block">حقول النموذج</label>
+                    <p className="text-[10px] text-muted-foreground mt-0.5">رتّب الحقول أو أضف حقولاً مخصصة؛ تُحفظ مع القالب وتظهر في المعاينة الحية.</p>
+                  </div>
+                  <Button type="button" variant="outline" size="sm" className="h-8 gap-1 text-xs" onClick={addTemplateField}>
+                    <Plus className="w-3.5 h-3.5" />حقل جديد
+                  </Button>
+                </div>
+                <div className="space-y-2 max-h-64 overflow-y-auto pl-1">
+                  {templateFields.map((field, index) => (
+                    <div key={field.id} className="rounded-lg border border-border p-2 bg-muted/20">
+                      <div className="flex items-center gap-2">
+                        <span className="w-5 text-center text-[10px] text-muted-foreground font-mono">{index + 1}</span>
+                        <input value={field.label} onChange={(event) => updateTemplateField(field.id, { label: event.target.value })} aria-label={`اسم الحقل ${index + 1}`} className="min-w-0 flex-1 h-8 px-2 rounded border border-border bg-background text-xs" />
+                        <select value={field.type} onChange={(event) => updateTemplateField(field.id, { type: event.target.value as TemplateFieldConfig["type"] })} aria-label={`نوع الحقل ${field.label}`} className="h-8 max-w-24 px-1 rounded border border-border bg-background text-[10px]">
+                          <option value="text">نص</option>
+                          <option value="textarea">نص طويل</option>
+                          <option value="date">تاريخ</option>
+                          <option value="number">رقم</option>
+                          <option value="select">قائمة</option>
+                        </select>
+                        <button type="button" title="نقل لأعلى" disabled={index === 0} onClick={() => moveTemplateField(index, -1)} className="p-1 rounded hover:bg-muted disabled:opacity-30"><ChevronUp className="w-3.5 h-3.5" /></button>
+                        <button type="button" title="نقل لأسفل" disabled={index === templateFields.length - 1} onClick={() => moveTemplateField(index, 1)} className="p-1 rounded hover:bg-muted disabled:opacity-30"><ChevronDown className="w-3.5 h-3.5" /></button>
+                        <button type="button" title="حذف الحقل" aria-label={`حذف ${field.label}`} onClick={() => removeTemplateField(field.id)} className="p-1 rounded text-red-500 hover:bg-red-50"><Trash2 className="w-3.5 h-3.5" /></button>
+                      </div>
+                      <div className="flex items-center gap-3 mt-2 mr-7">
+                        <input value={field.placeholder || ""} onChange={(event) => updateTemplateField(field.id, { placeholder: event.target.value })} placeholder="نص إرشادي اختياري" aria-label={`النص الإرشادي ${field.label}`} className="flex-1 h-7 px-2 rounded border border-border bg-background text-[10px]" />
+                        <label className="flex items-center gap-1 text-[10px] text-muted-foreground whitespace-nowrap"><input type="checkbox" checked={!!field.required} onChange={(event) => updateTemplateField(field.id, { required: event.target.checked })} />إلزامي</label>
+                      </div>
+                    </div>
                   ))}
                 </div>
               </div>
@@ -813,38 +917,32 @@ function TemplateEditor({
                   <div style={{ border: `1px solid ${form.borderColor}`, borderRadius: '3px', overflow: 'hidden', marginBottom: '6px' }}>
                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '5.5px' }}>
                       <tbody>
-                        <tr>
-                          <td style={{ padding: '3px 5px', fontWeight: 700, backgroundColor: form.accent + '15', color: form.accent, width: '35%', borderBottom: `1px solid ${form.borderColor}` }}>اسم المعلم</td>
-                          <td style={{ padding: '3px 5px', backgroundColor: '#fff', borderBottom: `1px solid ${form.borderColor}` }}>أحمد محمد العلي</td>
-                        </tr>
-                        <tr>
-                          <td style={{ padding: '3px 5px', fontWeight: 700, backgroundColor: form.accent + '15', color: form.accent, borderBottom: `1px solid ${form.borderColor}` }}>المادة</td>
-                          <td style={{ padding: '3px 5px', backgroundColor: '#fff', borderBottom: `1px solid ${form.borderColor}` }}>الرياضيات</td>
-                        </tr>
-                        <tr>
-                          <td style={{ padding: '3px 5px', fontWeight: 700, backgroundColor: form.accent + '15', color: form.accent }}>المدرسة</td>
-                          <td style={{ padding: '3px 5px', backgroundColor: '#fff' }}>متوسطة النموذجية</td>
-                        </tr>
+                        {templateFields.map((field, index) => (
+                          <tr key={field.id}>
+                            <td style={{ padding: '3px 5px', fontWeight: 700, backgroundColor: form.accent + '15', color: form.accent, width: '35%', borderBottom: index < templateFields.length - 1 ? `1px solid ${form.borderColor}` : undefined }}>{field.label}</td>
+                            <td style={{ padding: '3px 5px', backgroundColor: '#fff', borderBottom: index < templateFields.length - 1 ? `1px solid ${form.borderColor}` : undefined }}>{field.placeholder || 'نموذج'}</td>
+                          </tr>
+                        ))}
                       </tbody>
                     </table>
                   </div>
                 )}
                 {layout.fieldStyle === 'cards' && (
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px', marginBottom: '6px' }}>
-                    {['اسم المعلم', 'المادة', 'المدرسة', 'العام'].map((label, i) => (
-                      <div key={i} style={{ borderRadius: '3px', padding: '3px 5px', border: `1px solid ${form.borderColor}`, background: `linear-gradient(135deg, ${form.accent}08, ${form.accent}15)` }}>
-                        <div style={{ fontSize: '4.5px', fontWeight: 700, color: form.accent }}>{label}</div>
-                        <div style={{ fontSize: '5.5px', color: '#1F2937' }}>نموذج</div>
+                    {templateFields.map((field) => (
+                      <div key={field.id} style={{ borderRadius: '3px', padding: '3px 5px', border: `1px solid ${form.borderColor}`, background: `linear-gradient(135deg, ${form.accent}08, ${form.accent}15)` }}>
+                        <div style={{ fontSize: '4.5px', fontWeight: 700, color: form.accent }}>{field.label}</div>
+                        <div style={{ fontSize: '5.5px', color: '#1F2937' }}>{field.placeholder || 'نموذج'}</div>
                       </div>
                     ))}
                   </div>
                 )}
                 {(layout.fieldStyle === 'fieldset' || layout.fieldStyle === 'underlined' || layout.fieldStyle === 'minimal') && (
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px', marginBottom: '6px' }}>
-                    {['اسم المعلم', 'المادة', 'المدرسة', 'العام'].map((label, i) => (
-                      <div key={i} style={{ padding: '3px 5px', borderBottom: layout.fieldStyle === 'underlined' ? `1.5px solid ${form.accent}50` : undefined, border: layout.fieldStyle !== 'underlined' ? `1px solid ${form.accent}30` : undefined, borderRadius: layout.fieldStyle !== 'underlined' ? '3px' : undefined }}>
-                        <div style={{ fontSize: '4.5px', fontWeight: 700, color: form.accent }}>{label}</div>
-                        <div style={{ fontSize: '5.5px', color: '#1F2937' }}>نموذج</div>
+                    {templateFields.map((field) => (
+                      <div key={field.id} style={{ padding: '3px 5px', borderBottom: layout.fieldStyle === 'underlined' ? `1.5px solid ${form.accent}50` : undefined, border: layout.fieldStyle !== 'underlined' ? `1px solid ${form.accent}30` : undefined, borderRadius: layout.fieldStyle !== 'underlined' ? '3px' : undefined }}>
+                        <div style={{ fontSize: '4.5px', fontWeight: 700, color: form.accent }}>{field.label}</div>
+                        <div style={{ fontSize: '5.5px', color: '#1F2937' }}>{field.placeholder || 'نموذج'}</div>
                       </div>
                     ))}
                   </div>

@@ -3298,6 +3298,10 @@ export default function PerformanceEvidence() {
                                       {aiLoading === `fill_${formEv.id}` ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5 text-violet-500" />}
                                       تعبئة AI
                                     </Button>
+                                    <Button variant="outline" size="sm" className="gap-1 text-[10px] sm:text-xs h-7 sm:h-8 border-primary/30 text-primary hover:bg-primary/5"
+                                      onClick={() => addDynamicRow(currentCriterion.id, sub.id, formEv.id)}>
+                                      <Plus className="w-3 h-3 sm:w-3.5 sm:h-3.5" />إضافة حقل
+                                    </Button>
                                   </div>
                                 </div>
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -3343,7 +3347,6 @@ export default function PerformanceEvidence() {
                                     </div>
                                   ))}
                                   {/* الصفوف الديناميكية المضافة */}
-                                  {/* الصفوف الديناميكية المضافة من الإدارة - عرض فقط بدون حذف */}
                                   {formEv.formData && Object.keys(formEv.formData).filter(k => k.startsWith('dynamic_') && !k.startsWith('__label_')).map(fieldId => {
                                     const label = formEv.formData?.[`__label_${fieldId}`] || 'حقل إضافي';
                                     return (
@@ -3352,12 +3355,18 @@ export default function PerformanceEvidence() {
                                           <label className="block text-xs font-medium text-foreground flex items-center gap-1">
                                             <span className="text-primary">◇</span> {label}
                                           </label>
-                                          {formEv.formData?.[fieldId] && (
-                                            <button type="button" onClick={() => { navigator.clipboard.writeText(formEv.formData?.[fieldId] || ''); toast.success('تم النسخ'); }}
-                                              className="text-[10px] text-gray-500 hover:text-gray-700 flex items-center gap-0.5" title="نسخ">
-                                              <Copy className="w-3 h-3" />نسخ
+                                          <div className="flex items-center gap-2">
+                                            {formEv.formData?.[fieldId] && (
+                                              <button type="button" onClick={() => { navigator.clipboard.writeText(formEv.formData?.[fieldId] || ''); toast.success('تم النسخ'); }}
+                                                className="text-[10px] text-gray-500 hover:text-gray-700 flex items-center gap-0.5" title="نسخ">
+                                                <Copy className="w-3 h-3" />نسخ
+                                              </button>
+                                            )}
+                                            <button type="button" onClick={() => removeDynamicRow(currentCriterion.id, formEv.id, fieldId)}
+                                              className="text-[10px] text-red-500 hover:text-red-700 flex items-center gap-0.5" title="حذف الحقل" aria-label={`حذف ${label}`}>
+                                              <Trash2 className="w-3 h-3" />حذف
                                             </button>
-                                          )}
+                                          </div>
                                         </div>
                                         <textarea value={formEv.formData?.[fieldId] || ''} onChange={(e) => updateFormField(currentCriterion.id, formEv.id, fieldId, e.target.value)}
                                           placeholder={`أدخل ${label}...`} rows={2}
@@ -3366,6 +3375,24 @@ export default function PerformanceEvidence() {
                                     );
                                   })}
                                 </div>
+
+                                {addRowDialog?.formEvId === formEv.id && (
+                                  <div className="fixed inset-0 z-[90] flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="add-dynamic-field-title">
+                                    <div className="absolute inset-0 bg-black/40 backdrop-blur-[1px]" onClick={() => setAddRowDialog(null)} />
+                                    <div className="relative w-full max-w-sm rounded-2xl bg-background border border-border shadow-2xl p-5" dir="rtl">
+                                      <div className="flex items-center justify-between gap-3 mb-3">
+                                        <h5 id="add-dynamic-field-title" className="text-sm font-bold text-foreground flex items-center gap-2"><Plus className="w-4 h-4 text-primary" />إضافة حقل مخصص</h5>
+                                        <button type="button" onClick={() => setAddRowDialog(null)} className="p-1 rounded-md hover:bg-muted" aria-label="إغلاق"><X className="w-4 h-4" /></button>
+                                      </div>
+                                      <p className="text-xs text-muted-foreground mb-3">سيظهر الحقل الجديد في النموذج والمعاينة وملف PDF.</p>
+                                      <input autoFocus value={newRowLabel} onChange={(event) => setNewRowLabel(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') confirmAddDynamicRow(); }} placeholder="مثال: اسم البرنامج المنفذ" className="w-full h-10 px-3 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/25" />
+                                      <div className="flex items-center justify-end gap-2 mt-4">
+                                        <Button type="button" variant="outline" size="sm" onClick={() => setAddRowDialog(null)}>إلغاء</Button>
+                                        <Button type="button" size="sm" disabled={!newRowLabel.trim()} onClick={confirmAddDynamicRow}>إضافة الحقل</Button>
+                                      </div>
+                                    </div>
+                                  </div>
+                                )}
 
                               </div>
                             );
