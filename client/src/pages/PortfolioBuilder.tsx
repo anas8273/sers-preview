@@ -12,7 +12,7 @@ import {
   ArrowLeft, User, GraduationCap, Award, Briefcase,
   Target, Plus, Trash2, Save, Eye,
   Sparkles, FolderOpen, ChevronLeft, Loader2,
-  FileDown, Printer, Maximize2, Minimize2, Building2, Star, ZoomIn, ZoomOut, RotateCcw
+  FileDown, Printer, Maximize2, Minimize2, Building2, Star, ZoomIn, ZoomOut, RotateCcw, ScanSearch, CircleCheck, CircleAlert
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
@@ -53,7 +53,29 @@ interface PortfolioData {
   goals: string[]; notes: string;
 }
 
+export interface PortfolioReadinessCheck {
+  id: string;
+  tab: TabId;
+  label: string;
+  recommendation: string;
+  complete: boolean;
+  weight: number;
+}
+
 type TabId = "personal" | "certificates" | "achievements" | "activities" | "goals" | "preview";
+
+export function calculatePortfolioReadiness(data: PortfolioData) {
+  const personalFilled = Object.values(data.personalInfo).filter((value) => value.trim()).length;
+  const checks: PortfolioReadinessCheck[] = [
+    { id: "personal", tab: "personal", label: "البيانات المهنية", recommendation: "أكمل ستة حقول شخصية ومهنية على الأقل لتمثيل صاحب الملف بوضوح.", complete: personalFilled >= 6, weight: 20 },
+    { id: "certificates", tab: "certificates", label: "الدورات والشهادات", recommendation: "أضف دورة أو شهادة موثقة باسمها وجهتها وتاريخها.", complete: data.certificates.some((item) => item.title.trim() && item.issuer.trim() && item.date.trim()), weight: 15 },
+    { id: "achievements", tab: "achievements", label: "الإنجازات والجوائز", recommendation: "أضف إنجازاً موثقاً بوصف يوضح أثره المهني.", complete: data.achievements.some((item) => item.title.trim() && item.description.trim().length >= 40), weight: 15 },
+    { id: "activities", tab: "activities", label: "الأنشطة والمبادرات", recommendation: "أضف نشاطاً أو مبادرة مع وصف واضح لمشاركتك ونتيجتها.", complete: data.activities.some((item) => item.title.trim() && item.description.trim().length >= 40), weight: 15 },
+    { id: "goals", tab: "goals", label: "الأهداف المهنية", recommendation: "أضف هدفين مهنيين محددين قابلين للمتابعة.", complete: data.goals.filter((goal) => goal.trim().length >= 10).length >= 2, weight: 15 },
+    { id: "notes", tab: "goals", label: "الانعكاس المهني", recommendation: "أضف ملخصاً أو ملاحظات مهنية لا تقل عن 80 حرفاً لتعزيز سياق الملف.", complete: data.notes.trim().length >= 80, weight: 20 },
+  ];
+  return { score: checks.reduce((total, check) => total + (check.complete ? check.weight : 0), 0), checks, completed: checks.filter((check) => check.complete).length };
+}
 
 const TABS: { id: TabId; label: string; icon: React.ComponentType<any> }[] = [
   { id: "personal", label: "البيانات الشخصية", icon: User },
@@ -297,6 +319,7 @@ export default function PortfolioBuilder() {
   const [aiLoading, setAiLoading] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
+  const readiness = useMemo(() => calculatePortfolioReadiness(data), [data]);
 
   const { containerRef: previewContainerRef, pageRef: previewPageRef, previewScale, wrapperWidth, wrapperHeight, zoomLevel, zoomIn, zoomOut, resetZoom } = usePreviewScale();
 
@@ -467,6 +490,24 @@ export default function PortfolioBuilder() {
           </Button>
           <span className="text-xs text-gray-400">يولّد محتوى تجريبي بناءً على بياناتك الشخصية</span>
         </div>
+
+        <section className="mb-5 overflow-hidden rounded-xl border border-sky-100 bg-gradient-to-l from-sky-50 to-white p-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-3">
+              <div className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-sky-100 text-sky-700"><ScanSearch className="h-6 w-6" /></div>
+              <div><h2 className="text-sm font-bold text-slate-800">جاهزية ملف الإنجاز المهني</h2><p className="mt-0.5 text-[11px] leading-5 text-slate-500">فحص إرشادي لمحتوى الملف قبل المعاينة والتصدير.</p></div>
+            </div>
+            <div className="rounded-lg bg-white px-4 py-2 text-center shadow-sm ring-1 ring-sky-100"><strong className="text-2xl font-black text-sky-700">{readiness.score}%</strong><span className="mr-1 text-[10px] text-slate-500">جاهزية</span></div>
+          </div>
+          <div className="mt-3 grid grid-cols-1 gap-1.5 sm:grid-cols-2 lg:grid-cols-3">
+            {readiness.checks.map((check) => (
+              <button key={check.id} type="button" onClick={() => setActiveTab(check.tab)} className={`flex items-start gap-1.5 rounded-lg border px-2.5 py-2 text-right transition-colors ${check.complete ? "border-emerald-100 bg-emerald-50/70" : "border-amber-100 bg-amber-50/60 hover:border-amber-300"}`}>
+                {check.complete ? <CircleCheck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-600" /> : <CircleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600" />}
+                <span><span className="block text-[11px] font-semibold text-slate-700">{check.label}</span>{!check.complete && <span className="mt-0.5 block text-[10px] leading-4 text-slate-500">{check.recommendation}</span>}</span>
+              </button>
+            ))}
+          </div>
+        </section>
 
         <div className="flex flex-col lg:flex-row gap-6">
           {/* Sidebar tabs */}
