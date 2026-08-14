@@ -2936,6 +2936,7 @@ export default function PerformanceEvidence() {
                 />
                 <ProgressRadarChart
                   title="خريطة التقدم في المعايير"
+                  exportFileName={`تقرير_تقدم_${personalInfo.name || selectedJob?.title || "الأداء_الوظيفي"}`}
                   data={allCriteria.slice(0, 8).map((criterion) => {
                     const criterionData = criteriaData[criterion.id];
                     const evidenceCount = criterionData?.evidences?.length || 0;

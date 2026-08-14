@@ -1,6 +1,11 @@
+import { useEffect, useRef, useState } from "react";
+import { toPng } from "html-to-image";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { exportToPDF } from "@/lib/pdf-export";
+import { buildProgressExportFileName } from "@/lib/progress-export";
 import { PolarAngleAxis, PolarGrid, PolarRadiusAxis, Radar, RadarChart, ResponsiveContainer, Tooltip } from "recharts";
-import { AlertCircle, CheckCircle2, CircleDashed, TrendingUp, XCircle } from "lucide-react";
+import { AlertCircle, CheckCircle2, CircleDashed, Download, FileImage, FileText, Loader2, RefreshCw, TrendingUp, XCircle } from "lucide-react";
 
 export interface RadarProgressPoint {
   subject: string;
@@ -46,26 +51,112 @@ export function ProgressBarItem({ label, value, maxValue = 100, color = "#0f766e
   );
 }
 
-export function ProgressRadarChart({ title = "خريطة التقدم في المعايير", data }: { title?: string; data: RadarProgressPoint[] }) {
+interface ProgressRadarChartProps {
+  title?: string;
+  data: RadarProgressPoint[];
+  exportId?: string;
+  exportFileName?: string;
+}
+
+export function ProgressRadarChart({
+  title = "خريطة التقدم في المعايير",
+  data,
+  exportId = "progress-radar-report",
+  exportFileName = "تقرير_التقدم_المتقدم",
+}: ProgressRadarChartProps) {
+  const exportRef = useRef<HTMLDivElement>(null);
+  const [isChartReady, setIsChartReady] = useState(false);
+  const [exportingFormat, setExportingFormat] = useState<"png" | "pdf" | null>(null);
+  const [exportError, setExportError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => setIsChartReady(true));
+    return () => window.cancelAnimationFrame(frame);
+  }, [data]);
+
+  const downloadImage = async () => {
+    if (!exportRef.current) return;
+    setExportError(null);
+    setExportingFormat("png");
+    try {
+      const imageDataUrl = await toPng(exportRef.current, {
+        backgroundColor: "#ffffff",
+        cacheBust: true,
+        pixelRatio: 2,
+      });
+      const link = document.createElement("a");
+      link.download = buildProgressExportFileName(exportFileName, "png");
+      link.href = imageDataUrl;
+      link.click();
+    } catch (error) {
+      console.error("Progress radar image export failed", error);
+      setExportError("تعذر إنشاء الصورة حالياً. يرجى إعادة المحاولة.");
+    } finally {
+      setExportingFormat(null);
+    }
+  };
+
+  const downloadPdf = async () => {
+    setExportError(null);
+    setExportingFormat("pdf");
+    try {
+      await exportToPDF(exportId, buildProgressExportFileName(exportFileName, "pdf"));
+    } catch (error) {
+      console.error("Progress radar PDF export failed", error);
+      setExportError("تعذر إنشاء ملف PDF حالياً. تحقق من اتصالك ثم أعد المحاولة.");
+    } finally {
+      setExportingFormat(null);
+    }
+  };
+
   return (
     <Card className="border-teal-200 dark:border-teal-800">
-      <CardHeader className="pb-2">
+      <CardHeader className="gap-3 pb-2 sm:flex-row sm:items-center sm:justify-between">
         <CardTitle className="flex items-center gap-2 text-base"><TrendingUp className="h-5 w-5 text-teal-600" />{title}</CardTitle>
+        <div className="flex flex-wrap gap-2" data-no-print>
+          <Button type="button" size="sm" variant="outline" className="gap-1.5" onClick={() => void downloadImage()} disabled={!isChartReady || exportingFormat !== null}>
+            {exportingFormat === "png" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileImage className="h-3.5 w-3.5" />}
+            صورة PNG
+          </Button>
+          <Button type="button" size="sm" className="gap-1.5" onClick={() => void downloadPdf()} disabled={!isChartReady || exportingFormat !== null}>
+            {exportingFormat === "pdf" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileText className="h-3.5 w-3.5" />}
+            PDF
+          </Button>
+        </div>
       </CardHeader>
       <CardContent>
-        {data.length === 0 ? (
-          <div className="flex h-64 items-center justify-center text-sm text-muted-foreground">لا توجد بيانات كافية لعرض الرسم.</div>
-        ) : (
-          <ResponsiveContainer width="100%" height={320}>
-            <RadarChart data={data} cx="50%" cy="50%" outerRadius="70%">
-              <PolarGrid stroke="hsl(var(--border))" />
-              <PolarAngleAxis dataKey="subject" tick={{ fontSize: 11, fill: "currentColor" }} />
-              <PolarRadiusAxis angle={90} domain={[0, 100]} tick={{ fontSize: 10 }} />
-              <Radar name="نسبة التقدم" dataKey="value" stroke="#0f766e" fill="#14b8a6" fillOpacity={0.45} />
-              <Tooltip formatter={(value) => [`${value}%`, "التقدم"]} />
-            </RadarChart>
-          </ResponsiveContainer>
+        {exportError && (
+          <div role="alert" className="mb-3 flex flex-col gap-2 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-300 sm:flex-row sm:items-center sm:justify-between">
+            <span className="flex items-center gap-2"><AlertCircle className="h-4 w-4 shrink-0" />{exportError}</span>
+            <Button type="button" variant="outline" size="sm" className="border-red-300 bg-background text-red-700 hover:bg-red-100" onClick={() => setExportError(null)}><RefreshCw className="ml-1 h-3.5 w-3.5" />إخفاء الرسالة</Button>
+          </div>
         )}
+        <div id={exportId} ref={exportRef} className="rounded-xl bg-background p-2" dir="rtl">
+          {!isChartReady ? (
+            <div className="flex h-80 flex-col items-center justify-center gap-3" aria-live="polite">
+              <Loader2 className="h-8 w-8 animate-spin text-teal-600" />
+              <div className="h-3 w-3/5 animate-pulse rounded-full bg-muted" />
+              <span className="text-sm text-muted-foreground">جارٍ تجهيز الرسم البياني…</span>
+            </div>
+          ) : data.length === 0 ? (
+            <div className="flex h-64 flex-col items-center justify-center gap-2 text-center text-sm text-muted-foreground"><Download className="h-7 w-7 opacity-40" />لا توجد بيانات كافية لعرض الرسم أو تصديره.</div>
+          ) : (
+            <>
+              <ResponsiveContainer width="100%" height={320}>
+                <RadarChart data={data} cx="50%" cy="50%" outerRadius="70%">
+                  <PolarGrid stroke="hsl(var(--border))" />
+                  <PolarAngleAxis dataKey="subject" tick={{ fontSize: 11, fill: "currentColor" }} />
+                  <PolarRadiusAxis angle={90} domain={[0, 100]} tick={{ fontSize: 10 }} />
+                  <Radar name="نسبة التقدم" dataKey="value" stroke="#0f766e" fill="#14b8a6" fillOpacity={0.45} />
+                  <Tooltip formatter={(value) => [`${value}%`, "التقدم"]} />
+                </RadarChart>
+              </ResponsiveContainer>
+              <div className="mt-2 grid grid-cols-2 gap-2 border-t border-border pt-3 text-center sm:grid-cols-4">
+                {data.map((point) => <div key={point.subject} className="rounded-lg bg-teal-50 px-2 py-1.5 text-xs dark:bg-teal-950/30"><span className="block truncate text-muted-foreground">{point.subject}</span><strong className="text-teal-700 dark:text-teal-300">{point.value}%</strong></div>)}
+              </div>
+            </>
+          )}
+        </div>
       </CardContent>
     </Card>
   );

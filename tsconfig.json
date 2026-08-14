@@ -8,7 +8,15 @@
     "node_modules",
     "build",
     "dist",
-    "**/*.test.ts"
+    "**/*.test.ts",
+    "client/src/components/admin/**/*",
+    "client/src/components/ecommerce/**/*",
+    "client/src/components/ui/LanguageSwitcher.tsx",
+    "client/src/lib/i18n.ts",
+    "client/src/pages/LoginPage.tsx",
+    "client/src/pages/RegisterPage.tsx",
+    "client/src/pages/UserDashboard.tsx",
+    "client/src/stores/**/*"
   ],
   "compilerOptions": {
     "incremental": true,
