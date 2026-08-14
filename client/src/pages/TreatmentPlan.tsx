@@ -3,7 +3,7 @@
  * الهوية البصرية: ترويسة رسمية + مربع عنوان + جداول بترويسة متدرجة + فوتر منحني
  * تنسيق مختلف: حقول ملونة حسب نوع الخطة + بطاقات طلاب + جدول تفصيلي
  */
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { ArrowLeft, Download, Printer, Plus, Trash2, Eye } from "lucide-react";
 import { useLocation } from "wouter";
 import { exportToPDF, printElement } from "@/lib/pdf-export";
@@ -79,6 +79,17 @@ export default function TreatmentPlan() {
   };
 
   const validStudents = students.filter((s) => s.name.trim());
+  const completion = useMemo(() => {
+    const planFields = [info.subject, info.teacher, info.grade, info.school, info.skill, info.objective];
+    const studentFields = students.flatMap((student) => [student.name, student.weakness, student.activities, student.evaluation]);
+    const total = planFields.length + studentFields.length;
+    const completed = [...planFields, ...studentFields].filter((value) => value.trim() !== "").length;
+    return {
+      completed,
+      total,
+      percentage: total > 0 ? Math.round((completed / total) * 100) : 0,
+    };
+  }, [info, students]);
 
   if (showPreview) {
     return (
@@ -337,6 +348,20 @@ export default function TreatmentPlan() {
             معاينة وتصدير
           </button>
         </div>
+
+        <section className="mb-6 rounded-xl border border-teal-100 bg-gradient-to-l from-teal-50 to-white p-4 shadow-sm" aria-label="مؤشر جاهزية الخطة">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-black text-slate-800">جاهزية الخطة</h2>
+              <p className="mt-1 text-xs text-slate-500">أكملت {completion.completed} من {completion.total} من بيانات الخطة والطلاب الأساسية.</p>
+            </div>
+            <span className="rounded-full bg-white px-3 py-1 text-sm font-black text-teal-700 shadow-sm">{completion.percentage}%</span>
+          </div>
+          <div className="mt-3 h-2 overflow-hidden rounded-full bg-teal-100" role="progressbar" aria-valuenow={completion.percentage} aria-valuemin={0} aria-valuemax={100} aria-label="نسبة جاهزية الخطة">
+            <div className="h-full rounded-full bg-teal-600 transition-[width]" style={{ width: `${completion.percentage}%` }} />
+          </div>
+          <p className="mt-2 text-[11px] font-medium text-teal-700">{completion.percentage === 100 ? "الخطة جاهزة للمعاينة والتصدير." : "أكمل الحقول الأساسية وبيانات الطالب لرفع مستوى الجاهزية."}</p>
+        </section>
 
         {/* نوع الخطة */}
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">

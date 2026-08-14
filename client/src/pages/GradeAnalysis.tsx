@@ -12,7 +12,7 @@ import { OfficialHeader } from "@/components/OfficialHeader";
 interface Student {
   id: string;
   name: string;
-  score: number;
+  score: number | null;
 }
 
 export default function GradeAnalysis() {
@@ -33,28 +33,31 @@ export default function GradeAnalysis() {
   });
 
   const [students, setStudents] = useState<Student[]>([
-    { id: "1", name: "", score: 0 },
-    { id: "2", name: "", score: 0 },
-    { id: "3", name: "", score: 0 },
-    { id: "4", name: "", score: 0 },
-    { id: "5", name: "", score: 0 },
+    { id: "1", name: "", score: null },
+    { id: "2", name: "", score: null },
+    { id: "3", name: "", score: null },
+    { id: "4", name: "", score: null },
+    { id: "5", name: "", score: null },
   ]);
 
   const addStudent = () => {
-    setStudents((prev) => [...prev, { id: `${Date.now()}`, name: "", score: 0 }]);
+    setStudents((prev) => [...prev, { id: `${Date.now()}`, name: "", score: null }]);
   };
 
   const removeStudent = (id: string) => {
     setStudents((prev) => prev.filter((s) => s.id !== id));
   };
 
-  const updateStudent = (id: string, field: keyof Student, value: string | number) => {
-    setStudents((prev) => prev.map((s) => (s.id === id ? { ...s, [field]: value } : s)));
+  const updateStudent = (id: string, field: keyof Student, value: string | number | null) => {
+    const normalizedValue = field === "score" && value !== null
+      ? Math.min(Math.max(Number(value) || 0, 0), Math.max(subjectInfo.maxScore || 100, 1))
+      : value;
+    setStudents((prev) => prev.map((s) => (s.id === id ? { ...s, [field]: normalizedValue } : s)));
   };
 
   // الإحصائيات
   const stats = useMemo(() => {
-    const validStudents = students.filter((s) => s.name.trim() && s.score > 0);
+    const validStudents = students.filter((s): s is Student & { score: number } => s.name.trim() !== "" && s.score !== null);
     if (validStudents.length === 0) return null;
 
     const scores = validStudents.map((s) => s.score);
@@ -80,6 +83,7 @@ export default function GradeAnalysis() {
       good,
       pass,
       fail,
+      needsSupport: fail,
       passRate: (((validStudents.length - fail) / validStudents.length) * 100).toFixed(1),
       students: validStudents,
     };
@@ -210,8 +214,8 @@ export default function GradeAnalysis() {
                       <div className="text-[10px] text-gray-600">أعلى درجة</div>
                     </div>
                     <div className="rounded-lg p-3 text-center" style={{ backgroundColor: "#dc262610" }}>
-                      <div className="text-lg font-black text-red-600">{stats.lowest}</div>
-                      <div className="text-[10px] text-gray-600">أدنى درجة</div>
+                      <div className="text-lg font-black text-red-600">{stats.needsSupport}</div>
+                      <div className="text-[10px] text-gray-600">بحاجة دعم</div>
                     </div>
                   </div>
 
@@ -266,7 +270,7 @@ export default function GradeAnalysis() {
                   </thead>
                   <tbody>
                     {students.map((student, index) => {
-                      const pct = subjectInfo.maxScore > 0 ? ((student.score / subjectInfo.maxScore) * 100) : 0;
+                      const pct = subjectInfo.maxScore > 0 && student.score !== null ? ((student.score / subjectInfo.maxScore) * 100) : 0;
                       return (
                         <tr
                           key={student.id}
@@ -285,8 +289,8 @@ export default function GradeAnalysis() {
                           <td className="p-2">
                             <input
                               type="number"
-                              value={student.score || ""}
-                              onChange={(e) => updateStudent(student.id, "score", parseInt(e.target.value) || 0)}
+                              value={student.score ?? ""}
+                              onChange={(e) => updateStudent(student.id, "score", e.target.value === "" ? null : Number(e.target.value))}
                               placeholder="0"
                               min={0}
                               max={subjectInfo.maxScore}
@@ -294,14 +298,14 @@ export default function GradeAnalysis() {
                             />
                           </td>
                           <td className="p-2 text-center">
-                            {student.score > 0 && (
+                            {student.score !== null && (
                               <span className="text-xs font-bold" style={{ color: getGradeColor(student.score) }}>
                                 {pct.toFixed(0)}%
                               </span>
                             )}
                           </td>
                           <td className="p-2 text-center">
-                            {student.score > 0 && (
+                            {student.score !== null && (
                               <span
                                 className="inline-block px-2 py-0.5 rounded-full text-[10px] font-bold text-white"
                                 style={{ backgroundColor: getGradeColor(student.score) }}
@@ -334,7 +338,7 @@ export default function GradeAnalysis() {
                     const newStudents = Array.from({ length: 5 }, (_, i) => ({
                       id: `${Date.now()}-${i}`,
                       name: "",
-                      score: 0,
+                      score: null,
                     }));
                     setStudents((prev) => [...prev, ...newStudents]);
                   }}

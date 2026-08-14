@@ -15,4 +15,11 @@ describe("TreatmentPlan mobile layout", () => {
     expect(source).toContain('aria-label="جدول بيانات الطلاب"');
     expect(source).toContain('className="min-w-[720px]"');
   });
+
+  it("shows a readiness indicator based on required plan and student fields", () => {
+    expect(source).toContain("const completion = useMemo");
+    expect(source).toContain("جاهزية الخطة");
+    expect(source).toContain('aria-label="نسبة جاهزية الخطة"');
+    expect(source).toContain("الخطة جاهزة للمعاينة والتصدير.");
+  });
 });
