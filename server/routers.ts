@@ -8,10 +8,12 @@ import { notifyOwner } from "./_core/notification";
 import { z } from "zod";
 import { nanoid } from "nanoid";
 import { createHash, timingSafeEqual } from "node:crypto";
+import { TRPCError } from "@trpc/server";
 import {
   createPortfolio, updatePortfolio, getPortfoliosByUser, getPortfolioById, deletePortfolio,
   getAllPortfolios, reviewPortfolio,
   createUploadedFile, getFilesByPortfolio, deleteUploadedFile,
+  createEvidenceComment, getEvidenceComments, deleteEvidenceComment,
   createShareLink, getShareLinkByToken, incrementShareLinkViews, getShareLinksByPortfolio, deactivateShareLink,
   createPdfTemplate, updatePdfTemplate, deletePdfTemplate, getActivePdfTemplates, getAllPdfTemplates, seedDefaultTemplates,
   createUserTheme, updateUserTheme, deleteUserTheme, getUserThemes,
@@ -25,6 +27,14 @@ const verifyShareAccessCode = (storedValue: string | null, suppliedValue: string
   const received = hashShareAccessCode(suppliedValue);
   return timingSafeEqual(Buffer.from(expected, "hex"), Buffer.from(received, "hex"));
 };
+
+async function assertCommentPortfolioAccess(user: { id: number; role: string }, portfolioId: number) {
+  const portfolio = await getPortfolioById(portfolioId);
+  if (!portfolio || (portfolio.userId !== user.id && user.role !== "admin")) {
+    throw new TRPCError({ code: "FORBIDDEN", message: "لا تملك صلاحية الوصول إلى تعليقات هذا الملف" });
+  }
+  return portfolio;
+}
 
 export const appRouter = router({
   system: systemRouter,
@@ -99,6 +109,40 @@ export const appRouter = router({
       .input(z.object({ id: z.number() }))
       .mutation(async ({ ctx, input }) => {
         return updatePortfolio(input.id, ctx.user.id, { status: "submitted" });
+    }),
+  }),
+
+  // ─── Collaborative Evidence Comments ─────────────────────
+  evidenceComment: router({
+    list: protectedProcedure
+      .input(z.object({ portfolioId: z.number(), criterionId: z.string().min(1), evidenceId: z.string().min(1) }))
+      .query(async ({ ctx, input }) => {
+        await assertCommentPortfolioAccess(ctx.user, input.portfolioId);
+        return getEvidenceComments(input.portfolioId, input.criterionId, input.evidenceId);
+      }),
+
+    create: protectedProcedure
+      .input(z.object({
+        portfolioId: z.number(),
+        criterionId: z.string().min(1).max(128),
+        evidenceId: z.string().min(1).max(128),
+        content: z.string().trim().min(1, "اكتب تعليقاً قبل الإرسال").max(2000),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        await assertCommentPortfolioAccess(ctx.user, input.portfolioId);
+        return createEvidenceComment({
+          portfolioId: input.portfolioId,
+          criterionId: input.criterionId,
+          evidenceId: input.evidenceId,
+          userId: ctx.user.id,
+          content: input.content,
+        });
+      }),
+
+    delete: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        return deleteEvidenceComment(input.id, ctx.user.id, ctx.user.role === "admin");
       }),
   }),
 

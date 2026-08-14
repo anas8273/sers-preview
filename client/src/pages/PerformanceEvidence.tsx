@@ -37,7 +37,7 @@ import {
   ClipboardCheck, Handshake, UserCheck, Target,
   NotebookPen, Monitor, School, Award, PieChart, ListChecks,
   GripVertical, Move, FlaskConical, Activity, Megaphone, Share2, Globe, Copy, Link2, Settings,
-  ZoomIn, ZoomOut, RotateCcw, Maximize2, RefreshCw, Palette
+  ZoomIn, ZoomOut, RotateCcw, Maximize2, RefreshCw, Palette, MessageSquare, Send
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -2104,6 +2104,75 @@ export default function PerformanceEvidence() {
   const currentCriterion = allCriteria[currentCriterionIndex];
 
   // ===== Render Evidence Item =====
+  const CollaborativeComments = ({ criterionId, evidenceId }: { criterionId: string; evidenceId: string }) => {
+    const [content, setContent] = useState("");
+    const utils = trpc.useUtils();
+    const canAccessComments = isAuthenticated && !!portfolio.id;
+    const commentInput = { portfolioId: portfolio.id ?? 0, criterionId, evidenceId };
+    const commentsQuery = trpc.evidenceComment.list.useQuery(commentInput, { enabled: canAccessComments, staleTime: 30_000 });
+    const createComment = trpc.evidenceComment.create.useMutation({
+      onSuccess: async () => {
+        setContent("");
+        await utils.evidenceComment.list.invalidate(commentInput);
+      },
+    });
+    const deleteComment = trpc.evidenceComment.delete.useMutation({
+      onSuccess: async () => {
+        await utils.evidenceComment.list.invalidate(commentInput);
+      },
+    });
+
+    if (!isAuthenticated) return null;
+    if (!portfolio.id) {
+      return <p className="mt-2 text-[10px] text-muted-foreground">احفظ الملف أولاً لبدء التعليقات التعاونية على هذا الشاهد.</p>;
+    }
+
+    const submitComment = async () => {
+      const normalized = content.trim();
+      if (!normalized) return;
+      try {
+        await createComment.mutateAsync({ ...commentInput, content: normalized });
+        toast.success("تمت إضافة التعليق التعاوني");
+      } catch (error: any) {
+        toast.error(error?.message || "تعذر إضافة التعليق");
+      }
+    };
+
+    return (
+      <div className="mt-3 rounded-lg border border-sky-200/80 bg-sky-50/60 p-2.5 dark:border-sky-900/60 dark:bg-sky-950/20">
+        <div className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold text-sky-800 dark:text-sky-300">
+          <MessageSquare className="h-3.5 w-3.5" />
+          تعليقات تعاونية
+        </div>
+        {commentsQuery.isLoading ? (
+          <div className="flex items-center gap-1.5 py-1 text-[10px] text-muted-foreground"><Loader2 className="h-3 w-3 animate-spin" />جاري تحميل التعليقات...</div>
+        ) : commentsQuery.data?.length ? (
+          <div className="mb-2 space-y-1.5">
+            {commentsQuery.data.map((comment) => (
+              <div key={comment.id} className="rounded-md border border-sky-100 bg-white/80 px-2 py-1.5 dark:border-sky-900/50 dark:bg-background/40">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[10px] font-semibold text-sky-700 dark:text-sky-300">{comment.authorName || "مستخدم النظام"}</span>
+                  {(comment.userId === user?.id || user?.role === "admin") && (
+                    <button type="button" className="text-[10px] text-muted-foreground hover:text-red-500" onClick={() => deleteComment.mutate({ id: comment.id })} disabled={deleteComment.isPending}>حذف</button>
+                  )}
+                </div>
+                <p className="mt-0.5 whitespace-pre-wrap text-[11px] leading-relaxed text-foreground">{comment.content}</p>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="mb-2 text-[10px] text-muted-foreground">لا توجد تعليقات تعاونية بعد.</p>
+        )}
+        <div className="flex items-end gap-1.5">
+          <textarea value={content} onChange={(event) => setContent(event.target.value)} maxLength={2000} rows={2} placeholder="أضف ملاحظة للمراجعة أو التعاون..." className="min-h-0 flex-1 resize-none rounded-md border border-sky-200 bg-white px-2 py-1.5 text-[11px] outline-none focus:ring-1 focus:ring-sky-400 dark:bg-background dark:border-sky-900" />
+          <button type="button" title="إرسال التعليق" aria-label="إرسال تعليق تعاوني" onClick={submitComment} disabled={!content.trim() || createComment.isPending} className="rounded-md bg-sky-600 p-2 text-white transition-colors hover:bg-sky-700 disabled:cursor-not-allowed disabled:opacity-50">
+            {createComment.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+          </button>
+        </div>
+      </div>
+    );
+  };
+
   // ===== مكون عرض ملف الشاهد (يدعم IndexedDB references) مع lightbox =====
   const EvidenceFilePreview = ({ ev, criterionId }: { ev: EvidenceItem; criterionId: string }) => {
     const [resolvedData, setResolvedData] = useState<string | null>(null);
@@ -2353,6 +2422,8 @@ export default function PerformanceEvidence() {
           </button>
         )}
       </div>
+
+      <CollaborativeComments criterionId={criterionId} evidenceId={ev.id} />
 
       {/* كلمات مفتاحية */}
       <div className="mt-2">
@@ -5179,23 +5250,29 @@ export default function PerformanceEvidence() {
 
           {/* رابط المشاركة */}
           {shareUrl && (
-            <div className="mb-4 bg-blue-50 border border-blue-200 rounded-xl p-4 flex items-center justify-between gap-3">
+            <div className="mb-4 bg-blue-50 border border-blue-200 rounded-xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
               <div className="flex items-center gap-2 min-w-0">
                 <Globe className="w-5 h-5 text-blue-600 shrink-0" />
                 <div className="min-w-0">
                   <p className="text-xs font-bold text-blue-800 mb-0.5">رابط العرض الإلكتروني</p>
                   <p className="text-xs text-blue-600 truncate" dir="ltr">{shareUrl}</p>
+                  {shareAccessCode.trim() && <p className="mt-1 text-[10px] font-medium text-emerald-700">محمي برمز وصول</p>}
                 </div>
               </div>
-              <div className="flex gap-2 shrink-0">
-                <Button size="sm" variant="outline" className="gap-1 text-xs h-7 border-blue-300 text-blue-700 hover:bg-blue-100"
-                  onClick={() => { navigator.clipboard.writeText(shareUrl); toast.success('تم نسخ الرابط!'); }}>
-                  <Copy className="w-3 h-3" />نسخ
-                </Button>
-                <Button size="sm" variant="outline" className="gap-1 text-xs h-7 border-blue-300 text-blue-700 hover:bg-blue-100"
-                  onClick={() => window.open(shareUrl, '_blank')}>
-                  <Globe className="w-3 h-3" />فتح
-                </Button>
+              <div className="flex items-center gap-3 shrink-0">
+                <div className="rounded-lg bg-white p-1.5 shadow-sm" title="امسح رمز QR لفتح رابط المشاركة">
+                  <img src={generateQRDataURL(shareUrl, 6)} alt="رمز QR لرابط المشاركة" className="w-14 h-14" />
+                </div>
+                <div className="flex gap-2">
+                  <Button size="sm" variant="outline" className="gap-1 text-xs h-7 border-blue-300 text-blue-700 hover:bg-blue-100"
+                    onClick={() => { navigator.clipboard.writeText(shareUrl); toast.success('تم نسخ الرابط!'); }}>
+                    <Copy className="w-3 h-3" />نسخ
+                  </Button>
+                  <Button size="sm" variant="outline" className="gap-1 text-xs h-7 border-blue-300 text-blue-700 hover:bg-blue-100"
+                    onClick={() => window.open(shareUrl, '_blank')}>
+                    <Globe className="w-3 h-3" />فتح
+                  </Button>
+                </div>
               </div>
             </div>
           )}

@@ -53,6 +53,21 @@ export const uploadedFiles = mysqlTable("uploaded_files", {
 export type UploadedFile = typeof uploadedFiles.$inferSelect;
 export type InsertUploadedFile = typeof uploadedFiles.$inferInsert;
 
+// ─── Collaborative Evidence Comments ───────────────────────
+export const evidenceComments = mysqlTable("evidence_comments", {
+  id: int("id").autoincrement().primaryKey(),
+  portfolioId: int("portfolioId").notNull(),
+  criterionId: varchar("criterionId", { length: 128 }).notNull(),
+  evidenceId: varchar("evidenceId", { length: 128 }).notNull(),
+  userId: int("userId").notNull(),
+  content: text("content").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type EvidenceComment = typeof evidenceComments.$inferSelect;
+export type InsertEvidenceComment = typeof evidenceComments.$inferInsert;
+
 export const shareLinks = mysqlTable("share_links", {
   id: int("id").autoincrement().primaryKey(),
   portfolioId: int("portfolioId").notNull(),

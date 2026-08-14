@@ -22,6 +22,7 @@ interface TemplateSection {
   title: string;
   titleBg?: string;
   columns?: number;
+  pageBreakBefore?: boolean;
   fields: TemplateField[];
 }
 
@@ -168,7 +169,15 @@ export default function TemplateRenderer({
       {/* ═══ Body ═══ */}
       <div style={{ padding: '24px 28px' }}>
         {layout.sections.map((section) => (
-          <div key={section.id} style={{ marginBottom: '20px' }}>
+          <div
+            key={section.id}
+            style={{
+              marginBottom: '20px',
+              breakBefore: section.pageBreakBefore ? 'page' : undefined,
+              pageBreakBefore: section.pageBreakBefore ? 'always' : undefined,
+              breakInside: 'avoid',
+            }}
+          >
             {/* Section title */}
             <div
               style={{

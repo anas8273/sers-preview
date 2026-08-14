@@ -1,5 +1,4 @@
 import { readFileSync } from "node:fs";
-import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const performanceEvidenceSource = readFileSync(new URL("../client/src/pages/PerformanceEvidence.tsx", import.meta.url), "utf8");
@@ -22,5 +21,11 @@ describe("shared portfolio route", () => {
 
   it("explains the access-code flow on the public shared page", () => {
     expect(sharedPortfolioSource).toContain("رمز الوصول");
+  });
+
+  it("shows a scannable QR code and protection state after a link is generated", () => {
+    expect(performanceEvidenceSource).toContain('generateQRDataURL(shareUrl, 6)');
+    expect(performanceEvidenceSource).toContain('alt="رمز QR لرابط المشاركة"');
+    expect(performanceEvidenceSource).toContain("محمي برمز وصول");
   });
 });

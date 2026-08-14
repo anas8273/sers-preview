@@ -1,6 +1,6 @@
 import { eq, and, desc, sql, gt, lt } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, users, portfolios, uploadedFiles, shareLinks, pdfTemplates, userThemes, type InsertPortfolio, type InsertUploadedFile, type InsertShareLink, type InsertPdfTemplate, type InsertUserTheme } from "../drizzle/schema";
+import { InsertUser, users, portfolios, uploadedFiles, evidenceComments, shareLinks, pdfTemplates, userThemes, type InsertPortfolio, type InsertUploadedFile, type InsertEvidenceComment, type InsertShareLink, type InsertPdfTemplate, type InsertUserTheme } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -85,8 +85,50 @@ export async function deletePortfolio(id: number, userId: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   await db.delete(uploadedFiles).where(eq(uploadedFiles.portfolioId, id));
+  await db.delete(evidenceComments).where(eq(evidenceComments.portfolioId, id));
   await db.delete(shareLinks).where(eq(shareLinks.portfolioId, id));
   await db.delete(portfolios).where(and(eq(portfolios.id, id), eq(portfolios.userId, userId)));
+  return { success: true };
+}
+
+// ─── Collaborative Evidence Comments ───────────────────────
+export async function createEvidenceComment(data: InsertEvidenceComment) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(evidenceComments).values(data);
+  return { id: Number(result[0].insertId) };
+}
+
+export async function getEvidenceComments(portfolioId: number, criterionId: string, evidenceId: string) {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select({
+      id: evidenceComments.id,
+      portfolioId: evidenceComments.portfolioId,
+      criterionId: evidenceComments.criterionId,
+      evidenceId: evidenceComments.evidenceId,
+      userId: evidenceComments.userId,
+      content: evidenceComments.content,
+      createdAt: evidenceComments.createdAt,
+      updatedAt: evidenceComments.updatedAt,
+      authorName: users.name,
+    })
+    .from(evidenceComments)
+    .leftJoin(users, eq(evidenceComments.userId, users.id))
+    .where(and(
+      eq(evidenceComments.portfolioId, portfolioId),
+      eq(evidenceComments.criterionId, criterionId),
+      eq(evidenceComments.evidenceId, evidenceId),
+    ))
+    .orderBy(desc(evidenceComments.createdAt));
+}
+
+export async function deleteEvidenceComment(id: number, userId: number, isAdmin = false) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const where = isAdmin ? eq(evidenceComments.id, id) : and(eq(evidenceComments.id, id), eq(evidenceComments.userId, userId));
+  await db.delete(evidenceComments).where(where);
   return { success: true };
 }
 

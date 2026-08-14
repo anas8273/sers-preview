@@ -34,9 +34,12 @@ interface TemplateLayoutConfig {
     id: string;
     title: string;
     columns?: number;
+    pageBreakBefore?: boolean;
     fields: TemplateFieldConfig[];
   }>;
 }
+
+type TemplateSectionConfig = NonNullable<TemplateLayoutConfig["sections"]>[number];
 
 const DEFAULT_TEMPLATE_FIELDS: TemplateFieldConfig[] = [
   { id: "teacher_name", label: "اسم المعلم", type: "text", required: true },
@@ -553,6 +556,9 @@ function TemplateEditor({
     templateLayout: template.templateLayout || createDefaultLayout(),
   });
   const [activeTab, setActiveTab] = useState<'colors' | 'layout' | 'images'>('colors');
+  const [activeSectionId, setActiveSectionId] = useState(
+    template.templateLayout?.sections?.[0]?.id || "basic-information"
+  );
 
   const updateField = (field: keyof TemplateData, value: any) => {
     setForm((prev) => ({ ...prev, [field]: value }));
@@ -566,7 +572,11 @@ function TemplateEditor({
   };
 
   const layout = form.templateLayout || createDefaultLayout();
-  const templateFields = layout.sections?.[0]?.fields?.length ? layout.sections[0].fields : DEFAULT_TEMPLATE_FIELDS;
+  const templateSections = layout.sections?.length
+    ? layout.sections
+    : [{ id: "basic-information", title: "البيانات الأساسية", columns: 2, fields: DEFAULT_TEMPLATE_FIELDS }];
+  const activeSection = templateSections.find((section) => section.id === activeSectionId) || templateSections[0];
+  const templateFields = activeSection.fields;
 
   const updateTemplateFields = (nextFields: TemplateFieldConfig[]) => {
     setForm((previous) => {
@@ -578,10 +588,52 @@ function TemplateEditor({
         ...previous,
         templateLayout: {
           ...currentLayout,
-          sections: currentSections.map((section, index) => index === 0 ? { ...section, fields: nextFields } : section),
+          sections: currentSections.map((section) => section.id === activeSection.id ? { ...section, fields: nextFields } : section),
         },
       };
     });
+  };
+
+  const updateTemplateSection = (id: string, patch: Partial<TemplateSectionConfig>) => {
+    setForm((previous) => {
+      const currentLayout = previous.templateLayout || createDefaultLayout();
+      return {
+        ...previous,
+        templateLayout: {
+          ...currentLayout,
+          sections: (currentLayout.sections || []).map((section) => section.id === id ? { ...section, ...patch } : section),
+        },
+      };
+    });
+  };
+
+  const addTemplateSection = () => {
+    const id = `section_${Date.now()}`;
+    setForm((previous) => {
+      const currentLayout = previous.templateLayout || createDefaultLayout();
+      const currentSections = currentLayout.sections?.length ? currentLayout.sections : templateSections;
+      return {
+        ...previous,
+        templateLayout: {
+          ...currentLayout,
+          sections: [...currentSections, { id, title: `صفحة ${currentSections.length + 1}`, columns: 2, pageBreakBefore: true, fields: [] }],
+        },
+      };
+    });
+    setActiveSectionId(id);
+  };
+
+  const removeTemplateSection = (id: string) => {
+    if (templateSections.length <= 1) {
+      toast.error("يجب أن يحتوي القالب على قسم واحد على الأقل");
+      return;
+    }
+    const nextSections = templateSections.filter((section) => section.id !== id);
+    setForm((previous) => ({
+      ...previous,
+      templateLayout: { ...(previous.templateLayout || createDefaultLayout()), sections: nextSections },
+    }));
+    if (activeSectionId === id) setActiveSectionId(nextSections[0].id);
   };
 
   const addTemplateField = () => {
@@ -736,8 +788,70 @@ function TemplateEditor({
               <div className="border-t border-border pt-4">
                 <div className="flex items-center justify-between gap-3 mb-2">
                   <div>
+                    <label className="text-xs font-medium text-muted-foreground block">أقسام وصفحات القالب</label>
+                    <p className="text-[10px] text-muted-foreground mt-0.5">أضف صفحة مستقلة عند الحاجة، ثم رتّب حقولها داخل القسم المحدد.</p>
+                  </div>
+                  <Button type="button" variant="outline" size="sm" className="h-8 gap-1 text-xs" onClick={addTemplateSection}>
+                    <Plus className="w-3.5 h-3.5" />صفحة جديدة
+                  </Button>
+                </div>
+
+                <div className="flex gap-2 overflow-x-auto pb-1 mb-3" aria-label="اختيار قسم القالب">
+                  {templateSections.map((section, index) => (
+                    <button
+                      key={section.id}
+                      type="button"
+                      onClick={() => setActiveSectionId(section.id)}
+                      className={`shrink-0 rounded-lg border px-2.5 py-1.5 text-[11px] transition-colors ${
+                        activeSection.id === section.id ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground hover:border-primary/30"
+                      }`}
+                    >
+                      {index + 1}. {section.title || "قسم بلا عنوان"}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="grid grid-cols-1 gap-2 rounded-lg border border-border bg-muted/20 p-2 mb-4 sm:grid-cols-[1fr_auto_auto_auto] sm:items-center">
+                  <input
+                    value={activeSection.title}
+                    onChange={(event) => updateTemplateSection(activeSection.id, { title: event.target.value })}
+                    aria-label="عنوان القسم المحدد"
+                    placeholder="عنوان القسم"
+                    className="h-8 min-w-0 rounded border border-border bg-background px-2 text-xs"
+                  />
+                  <select
+                    value={activeSection.columns || 2}
+                    onChange={(event) => updateTemplateSection(activeSection.id, { columns: Number(event.target.value) })}
+                    aria-label="أعمدة القسم المحدد"
+                    className="h-8 rounded border border-border bg-background px-2 text-xs"
+                  >
+                    <option value={1}>عمود واحد</option>
+                    <option value={2}>عمودان</option>
+                  </select>
+                  <label className="flex items-center gap-1 whitespace-nowrap text-[10px] text-muted-foreground">
+                    <input
+                      type="checkbox"
+                      checked={!!activeSection.pageBreakBefore}
+                      onChange={(event) => updateTemplateSection(activeSection.id, { pageBreakBefore: event.target.checked })}
+                    />
+                    صفحة جديدة قبل القسم
+                  </label>
+                  <button
+                    type="button"
+                    title="حذف القسم"
+                    aria-label={`حذف القسم ${activeSection.title}`}
+                    disabled={templateSections.length <= 1}
+                    onClick={() => removeTemplateSection(activeSection.id)}
+                    className="h-8 rounded border border-red-200 px-2 text-red-500 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-30"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+
+                <div className="flex items-center justify-between gap-3 mb-2">
+                  <div>
                     <label className="text-xs font-medium text-muted-foreground block">حقول النموذج</label>
-                    <p className="text-[10px] text-muted-foreground mt-0.5">رتّب الحقول أو أضف حقولاً مخصصة؛ تُحفظ مع القالب وتظهر في المعاينة الحية.</p>
+                    <p className="text-[10px] text-muted-foreground mt-0.5">رتّب حقول قسم «{activeSection.title || "بلا عنوان"}» أو أضف حقولاً مخصصة؛ تُحفظ مع القالب وتظهر في المعاينة الحية.</p>
                   </div>
                   <Button type="button" variant="outline" size="sm" className="h-8 gap-1 text-xs" onClick={addTemplateField}>
                     <Plus className="w-3.5 h-3.5" />حقل جديد
@@ -814,7 +928,7 @@ function TemplateEditor({
 
         {/* Right: Live Preview - معاينة A4 مصغرة كاملة */}
         <div>
-          <label className="text-xs font-medium text-muted-foreground mb-2 block">معاينة حية - صفحة A4 مصغرة</label>
+          <label className="text-xs font-medium text-muted-foreground mb-2 block">معاينة حية - صفحة {templateSections.findIndex((section) => section.id === activeSection.id) + 1} من {templateSections.length}</label>
           <div className="border border-border rounded-xl overflow-hidden shadow-lg bg-gray-100 p-3">
             {/* A4 Page Miniature */}
             <div style={{
@@ -909,10 +1023,10 @@ function TemplateEditor({
                 )}
               </div>
 
-              {/* === عنوان المعيار === */}
-              <div style={{ padding: '6px 10px', flex: 1, backgroundColor: form.bodyBg }}>
-                <div style={{ backgroundColor: form.accent + '15', borderRight: `2px solid ${form.accent}`, borderRadius: '3px', padding: '4px 6px', marginBottom: '6px' }}>
-                  <div style={{ fontSize: '6px', fontWeight: 700, color: form.accent }}>المعيار الأول: أداء الواجبات الوظيفية</div>
+                {/* === عنوان المعيار === */}
+                <div style={{ padding: '6px 10px', flex: 1, backgroundColor: form.bodyBg }}>
+                  <div style={{ backgroundColor: form.accent + '15', borderRight: `2px solid ${form.accent}`, borderRadius: '3px', padding: '4px 6px', marginBottom: '6px' }}>
+                  <div style={{ fontSize: '6px', fontWeight: 700, color: form.accent }}>{activeSection.title || "قسم القالب"}</div>
                 </div>
 
                 {/* === أنماط الحقول === */}
@@ -973,8 +1087,9 @@ function TemplateEditor({
               </div>
 
               {/* === التذييل === */}
-              <div style={{ padding: '3px 10px', textAlign: 'center', fontSize: '4.5px', backgroundColor: form.headerBg + '15', color: form.accent, borderTop: `1px solid ${form.borderColor}` }}>
-                SERS - نظام السجلات التعليمية الذكي
+              <div style={{ padding: '3px 10px', fontSize: '4.5px', backgroundColor: form.headerBg + '15', color: form.accent, borderTop: `1px solid ${form.borderColor}`, display: 'flex', justifyContent: 'space-between' }}>
+                <span>SERS - نظام السجلات التعليمية الذكي</span>
+                <span>صفحة {templateSections.findIndex((section) => section.id === activeSection.id) + 1}</span>
               </div>
             </div>
           </div>

@@ -144,6 +144,8 @@ export interface TemplateSection {
   title: string;
   titleBg?: string;
   columns?: number;
+  /** Start this section on a new printed/exported page. */
+  pageBreakBefore?: boolean;
   fields: TemplateField[];
 }
 

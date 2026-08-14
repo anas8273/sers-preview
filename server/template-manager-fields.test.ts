@@ -26,4 +26,12 @@ describe("admin template field schema", () => {
     expect(source).toContain("isLongTemplateField");
     expect(source).toContain("gridColumn: isLongTemplateField(field) ? '1 / -1' : undefined");
   });
+
+  it("manages independent template sections as editable pages", () => {
+    expect(source).toContain("addTemplateSection");
+    expect(source).toContain("removeTemplateSection");
+    expect(source).toContain("pageBreakBefore");
+    expect(source).toContain("صفحة جديدة");
+    expect(source).toContain("صفحة جديدة قبل القسم");
+  });
 });
