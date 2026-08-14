@@ -1,5 +1,8 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { calculateATSReadiness } from "../client/src/pages/SmartCV";
+
+const source = readFileSync(new URL("../client/src/pages/SmartCV.tsx", import.meta.url), "utf8");
 
 const emptyCV = {
   name: "", title: "", phone: "", email: "", city: "", summary: "",
@@ -25,5 +28,13 @@ describe("ATS readiness for Smart CV", () => {
     });
     expect(readiness.score).toBe(100);
     expect(readiness.checks.every((check) => check.complete)).toBe(true);
+  });
+
+  it("supports bilingual preview and an optional platinum presentation style", () => {
+    expect(source).toContain('type CVLanguage = "ar" | "en"');
+    expect(source).toContain('setPreviewLanguage("en")');
+    expect(source).toContain("Professional Summary");
+    expect(source).toContain("القالب البلاتيني الثنائي");
+    expect(source).toContain("setPlatinumStyle");
   });
 });

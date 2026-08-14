@@ -9,7 +9,7 @@ import {
   ArrowLeft, User, Plus, Trash2, Save, Edit3,
   Briefcase, GraduationCap, Award, Phone, Mail, MapPin,
   Star, BookOpen, Sparkles, Loader2, Eye, Printer,
-  FileDown, Maximize2, Minimize2, ChevronLeft, ZoomIn, ZoomOut, RotateCcw, ScanSearch, CircleCheck, CircleAlert
+  FileDown, Maximize2, Minimize2, ChevronLeft, ZoomIn, ZoomOut, RotateCcw, ScanSearch, CircleCheck, CircleAlert, Languages, Gem
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
@@ -46,6 +46,8 @@ interface CVData {
   achievements: string[];
 }
 
+type CVLanguage = "ar" | "en";
+
 export interface ATSCheck {
   id: string;
   section: "personal" | "experience" | "education" | "skills" | "courses" | "achievements";
@@ -80,14 +82,19 @@ function genId() { return Date.now().toString(36) + Math.random().toString(36).s
 // CV Preview Templates
 // ═══════════════════════════════════════════════════════════════
 
-function CVPreview({ data, theme, fontFamily }: { data: CVData; theme: ThemeConfig; fontFamily: string }) {
+function CVPreview({ data, theme, fontFamily, language, platinum }: { data: CVData; theme: ThemeConfig; fontFamily: string; language: CVLanguage; platinum: boolean }) {
   const hasContent = data.name || data.title || data.summary || data.experience.length > 0;
+  const accentColor = platinum ? "#B9912B" : theme.primaryColor;
+  const headerBackground = platinum ? "linear-gradient(135deg, #0F172A 0%, #475569 52%, #B9912B 100%)" : `linear-gradient(135deg, ${theme.primaryColor}, ${theme.secondaryColor})`;
+  const labels = language === "en"
+    ? { name: "Full Name", title: "Professional Title", summary: "Professional Summary", experience: "Work Experience", education: "Education", skills: "Skills", courses: "Training & Courses", achievements: "Achievements & Awards", empty: "Start adding your details to preview your résumé", created: "Created with SERS", locale: "en-US" }
+    : { name: "الاسم الكامل", title: "المسمى الوظيفي", summary: "الملخص المهني", experience: "الخبرات العملية", education: "المؤهلات العلمية", skills: "المهارات", courses: "الدورات التدريبية", achievements: "الإنجازات والجوائز", empty: "ابدأ بتعبئة بياناتك لعرض المعاينة", created: "تم إنشاؤه بواسطة منصة SERS", locale: "ar-SA" };
 
   return (
-    <div style={{ width: "210mm", minHeight: "297mm", fontFamily: `'${fontFamily}', sans-serif`, direction: "rtl", background: "#fff" }}>
+    <div style={{ width: "210mm", minHeight: "297mm", fontFamily: `'${fontFamily}', sans-serif`, direction: language === "ar" ? "rtl" : "ltr", background: "#fff" }}>
       {/* Header */}
       <div data-pdf-header style={{
-        background: `linear-gradient(135deg, ${theme.primaryColor}, ${theme.secondaryColor})`,
+        background: headerBackground,
         color: theme.headerText, padding: "32px", display: "flex", alignItems: "center", gap: "24px",
       }}>
         <div style={{
@@ -100,9 +107,9 @@ function CVPreview({ data, theme, fontFamily }: { data: CVData; theme: ThemeConf
         </div>
         <div style={{ flex: 1 }}>
           <h1 style={{ fontSize: "26px", fontWeight: "800", margin: "0 0 4px", fontFamily: `'Tajawal', '${fontFamily}', sans-serif` }}>
-            {data.name || "الاسم الكامل"}
+            {data.name || labels.name}
           </h1>
-          <p style={{ fontSize: "14px", opacity: 0.9, margin: "0 0 8px" }}>{data.title || "المسمى الوظيفي"}</p>
+          <p style={{ fontSize: "14px", opacity: 0.9, margin: "0 0 8px" }}>{data.title || labels.title}</p>
           <div style={{ display: "flex", flexWrap: "wrap", gap: "16px", fontSize: "11px", opacity: 0.8 }}>
             {data.phone && <span>📱 {data.phone}</span>}
             {data.email && <span>✉️ {data.email}</span>}
@@ -115,8 +122,8 @@ function CVPreview({ data, theme, fontFamily }: { data: CVData; theme: ThemeConf
         {/* Summary */}
         {data.summary && (
           <div style={{ marginBottom: "24px" }}>
-            <h2 data-pdf-accent style={{ fontSize: "15px", fontWeight: "700", color: theme.primaryColor, marginBottom: "8px", paddingBottom: "6px", borderBottom: `2px solid ${theme.borderColor}`, fontFamily: `'Tajawal', '${fontFamily}', sans-serif` }}>
-              الملخص المهني
+              <h2 data-pdf-accent style={{ fontSize: "15px", fontWeight: "700", color: accentColor, marginBottom: "8px", paddingBottom: "6px", borderBottom: `2px solid ${theme.borderColor}`, fontFamily: `'Tajawal', '${fontFamily}', sans-serif` }}>
+              {labels.summary}
             </h2>
             <p style={{ fontSize: "12px", lineHeight: "2", color: "#374151", whiteSpace: "pre-wrap" }}>{data.summary}</p>
           </div>
@@ -126,7 +133,7 @@ function CVPreview({ data, theme, fontFamily }: { data: CVData; theme: ThemeConf
         {data.experience.length > 0 && (
           <div style={{ marginBottom: "24px" }}>
             <h2 data-pdf-accent style={{ fontSize: "15px", fontWeight: "700", color: theme.primaryColor, marginBottom: "12px", paddingBottom: "6px", borderBottom: `2px solid ${theme.borderColor}`, fontFamily: `'Tajawal', '${fontFamily}', sans-serif` }}>
-              الخبرات العملية
+              {labels.experience}
             </h2>
             {data.experience.map((e) => (
               <div key={e.id} style={{ marginBottom: "14px", paddingRight: "12px", borderRight: `3px solid ${theme.primaryColor}30` }}>
@@ -145,7 +152,7 @@ function CVPreview({ data, theme, fontFamily }: { data: CVData; theme: ThemeConf
         {data.education.length > 0 && (
           <div style={{ marginBottom: "24px" }}>
             <h2 data-pdf-accent style={{ fontSize: "15px", fontWeight: "700", color: theme.primaryColor, marginBottom: "12px", paddingBottom: "6px", borderBottom: `2px solid ${theme.borderColor}`, fontFamily: `'Tajawal', '${fontFamily}', sans-serif` }}>
-              المؤهلات العلمية
+              {labels.education}
             </h2>
             {data.education.map((e) => (
               <div key={e.id} style={{ marginBottom: "10px", paddingRight: "12px", borderRight: `3px solid ${theme.primaryColor}30` }}>
@@ -163,7 +170,7 @@ function CVPreview({ data, theme, fontFamily }: { data: CVData; theme: ThemeConf
         {data.skills.filter(Boolean).length > 0 && (
           <div style={{ marginBottom: "24px" }}>
             <h2 data-pdf-accent style={{ fontSize: "15px", fontWeight: "700", color: theme.primaryColor, marginBottom: "12px", paddingBottom: "6px", borderBottom: `2px solid ${theme.borderColor}`, fontFamily: `'Tajawal', '${fontFamily}', sans-serif` }}>
-              المهارات
+              {labels.skills}
             </h2>
             <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
               {data.skills.filter(Boolean).map((s, i) => (
@@ -179,7 +186,7 @@ function CVPreview({ data, theme, fontFamily }: { data: CVData; theme: ThemeConf
         {data.courses.length > 0 && (
           <div style={{ marginBottom: "24px" }}>
             <h2 data-pdf-accent style={{ fontSize: "15px", fontWeight: "700", color: theme.primaryColor, marginBottom: "12px", paddingBottom: "6px", borderBottom: `2px solid ${theme.borderColor}`, fontFamily: `'Tajawal', '${fontFamily}', sans-serif` }}>
-              الدورات التدريبية
+              {labels.courses}
             </h2>
             {data.courses.map((c) => (
               <div key={c.id} style={{ marginBottom: "8px", display: "flex", justifyContent: "space-between" }}>
@@ -197,7 +204,7 @@ function CVPreview({ data, theme, fontFamily }: { data: CVData; theme: ThemeConf
         {data.achievements.filter(Boolean).length > 0 && (
           <div style={{ marginBottom: "24px" }}>
             <h2 data-pdf-accent style={{ fontSize: "15px", fontWeight: "700", color: theme.primaryColor, marginBottom: "12px", paddingBottom: "6px", borderBottom: `2px solid ${theme.borderColor}`, fontFamily: `'Tajawal', '${fontFamily}', sans-serif` }}>
-              الإنجازات والجوائز
+              {labels.achievements}
             </h2>
             {data.achievements.filter(Boolean).map((a, i) => (
               <div key={i} style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "6px" }}>
@@ -210,15 +217,15 @@ function CVPreview({ data, theme, fontFamily }: { data: CVData; theme: ThemeConf
 
         {!hasContent && (
           <div style={{ textAlign: "center", padding: "60px 0", color: "#9ca3af" }}>
-            <p style={{ fontSize: "14px" }}>ابدأ بتعبئة بياناتك لعرض المعاينة</p>
+            <p style={{ fontSize: "14px" }}>{labels.empty}</p>
           </div>
         )}
       </div>
 
       {/* Footer */}
       <div style={{ borderTop: `2px solid ${theme.borderColor}`, padding: "12px 32px", display: "flex", justifyContent: "space-between", fontSize: "10px", color: "#9ca3af" }}>
-        <span>تم إنشاؤه بواسطة منصة SERS</span>
-        <span>{new Date().toLocaleDateString("ar-SA")}</span>
+        <span>{labels.created}</span>
+        <span>{new Date().toLocaleDateString(labels.locale)}</span>
       </div>
     </div>
   );
@@ -234,6 +241,8 @@ export default function SmartCV() {
   const [activeSection, setActiveSection] = useState("personal");
   const [selectedTheme, setSelectedTheme] = useState<ThemeConfig>(THEMES[0]);
   const [selectedFont, setSelectedFont] = useState("Cairo");
+  const [previewLanguage, setPreviewLanguage] = useState<CVLanguage>("ar");
+  const [platinumStyle, setPlatinumStyle] = useState(false);
   const [view, setView] = useState<"editor" | "preview">("editor");
   const [aiLoading, setAiLoading] = useState(false);
   const [exporting, setExporting] = useState(false);
@@ -366,6 +375,20 @@ export default function SmartCV() {
               <div className="mb-4">
                 <TemplateSelector selectedTheme={selectedTheme} onThemeChange={setSelectedTheme} selectedFont={selectedFont} onFontChange={setSelectedFont} compact />
               </div>
+
+              <section className="mb-4 flex flex-col gap-3 rounded-xl border border-slate-200 bg-gradient-to-l from-slate-50 to-white p-3 sm:flex-row sm:items-center sm:justify-between" aria-label="خيارات قالب ولغة السيرة">
+                <div className="flex items-center gap-2">
+                  <div className="grid h-9 w-9 place-items-center rounded-lg bg-slate-900 text-amber-300"><Gem className="h-4 w-4" /></div>
+                  <div><h2 className="text-xs font-bold text-slate-800">القالب البلاتيني الثنائي</h2><p className="text-[10px] text-slate-500">تخطيط رسمي مهيأ للعربية والإنجليزية.</p></div>
+                </div>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <div className="flex rounded-lg border border-slate-200 bg-white p-0.5" role="group" aria-label="لغة المعاينة">
+                    <button type="button" onClick={() => setPreviewLanguage("ar")} className={`rounded-md px-2.5 py-1 text-[11px] font-bold ${previewLanguage === "ar" ? "bg-teal-600 text-white" : "text-slate-600"}`}>العربية</button>
+                    <button type="button" onClick={() => setPreviewLanguage("en")} className={`rounded-md px-2.5 py-1 text-[11px] font-bold ${previewLanguage === "en" ? "bg-teal-600 text-white" : "text-slate-600"}`}>English</button>
+                  </div>
+                  <button type="button" onClick={() => setPlatinumStyle((value) => !value)} className={`flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-[11px] font-bold ${platinumStyle ? "border-amber-400 bg-amber-50 text-amber-800" : "border-slate-200 bg-white text-slate-600"}`}><Gem className="h-3.5 w-3.5" />{platinumStyle ? "البلاتيني مفعّل" : "تفعيل البلاتيني"}</button>
+                </div>
+              </section>
 
               <section className="mb-4 overflow-hidden rounded-xl border border-indigo-100 bg-gradient-to-l from-indigo-50 to-white p-4">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -567,7 +590,7 @@ export default function SmartCV() {
                 <div style={{ width: `${wrapperWidth}px`, height: `${wrapperHeight}px`, margin: '0 auto', position: 'relative', overflow: 'hidden' }}>
                   <div style={{ width: `${A4_WIDTH_PX}px`, transformOrigin: 'top right', transform: `scale(${previewScale})`, transition: 'transform 0.15s ease-out' }}>
                     <div id="cv-preview-content" ref={previewPageRef} style={{ fontFamily: "'Cairo', sans-serif", direction: 'rtl', width: '210mm' }}>
-                      <CVPreview data={cvData} theme={selectedTheme} fontFamily={selectedFont} />
+                      <CVPreview data={cvData} theme={selectedTheme} fontFamily={selectedFont} language={previewLanguage} platinum={platinumStyle} />
                     </div>
                   </div>
                 </div>
