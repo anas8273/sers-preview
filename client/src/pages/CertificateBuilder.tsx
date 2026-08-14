@@ -5,7 +5,7 @@
  * كل نوع شهادة له تنسيق مختلف
  */
 import { useState, useMemo } from "react";
-import { ArrowLeft, Download, Printer, Palette, Type } from "lucide-react";
+import { ArrowLeft, Download, Printer, Palette, Type, Languages } from "lucide-react";
 import { useLocation } from "wouter";
 import { exportToPDF, printElement } from "@/lib/pdf-export";
 import { generateQRDataURL } from "@/lib/qr-utils";
@@ -99,6 +99,7 @@ export default function CertificateBuilder() {
   const [, navigate] = useLocation();
   const [selectedTheme, setSelectedTheme] = useState(CERT_THEMES[0]);
   const [selectedType, setSelectedType] = useState(CERT_TYPES[0]);
+  const [language, setLanguage] = useState<"ar" | "en">("ar");
   const [isExporting, setIsExporting] = useState(false);
 
   const [formData, setFormData] = useState({
@@ -125,6 +126,11 @@ export default function CertificateBuilder() {
 
   const t = selectedTheme;
   const footerGradId = `certFooterGrad-${t.id}`;
+  const englishTitles: Record<string, string> = { thanks: "Certificate of Appreciation", excellence: "Certificate of Excellence", participation: "Certificate of Participation", training: "Training Attendance Certificate", student_excellence: "Student Excellence Certificate" };
+  const certificateTitle = language === "en" ? englishTitles[selectedType.id] : selectedType.title;
+  const certificateCopy = language === "en"
+    ? { intro: selectedType.id === "thanks" ? "The school administration proudly extends its appreciation to" : "The school administration hereby certifies that", recipient: "Recipient Name", position: "Position", date: "Date", footer: "SERS – Smart Educational Records System" }
+    : { intro: selectedType.id === "thanks" ? "يسر إدارة المدرسة أن تتقدم بخالص الشكر والتقدير إلى" : "تشهد إدارة المدرسة بأن", recipient: "اسم المستلم", position: "المنصب", date: "التاريخ", footer: "SERS - نظام السجلات التعليمية الذكي" };
 
   return (
     <div className="min-h-screen pb-20 lg:pb-0 bg-[#F8FAFC]" dir="rtl">
@@ -187,6 +193,14 @@ export default function CertificateBuilder() {
                   {theme.name}
                 </button>
               ))}
+            </div>
+          </div>
+
+          <div className="mb-5">
+            <label className="block text-sm font-bold text-gray-700 mb-2"><Languages className="w-4 h-4 inline ml-1" />لغة الشهادة</label>
+            <div className="grid grid-cols-2 gap-2">
+              <button type="button" onClick={() => setLanguage("ar")} className={`rounded-lg border px-3 py-2 text-xs font-medium ${language === "ar" ? "border-teal-600 bg-teal-50 text-teal-700" : "border-gray-200 text-gray-600"}`}>العربية</button>
+              <button type="button" onClick={() => setLanguage("en")} className={`rounded-lg border px-3 py-2 text-xs font-medium ${language === "en" ? "border-teal-600 bg-teal-50 text-teal-700" : "border-gray-200 text-gray-600"}`}>English</button>
             </div>
           </div>
 
@@ -256,6 +270,7 @@ export default function CertificateBuilder() {
               background: t.bg,
               fontFamily: "'Cairo', 'Tajawal', sans-serif",
             }}
+            dir={language === "ar" ? "rtl" : "ltr"}
           >
             {/* شريط علوي رفيع بتدرج */}
             <div style={{ height: '5px', background: `linear-gradient(to left, ${t.gradientStart}, ${t.gradientMid}, ${t.gradientEnd})`, position: 'absolute', top: 0, left: 0, right: 0, zIndex: 20 }} />
@@ -304,7 +319,7 @@ export default function CertificateBuilder() {
                   className="text-3xl font-black mb-1"
                   style={{ color: t.headerColor, fontFamily: "'Tajawal', sans-serif" }}
                 >
-                  {selectedType.title}
+                  {certificateTitle}
                 </h1>
                 {formData.organization && (
                   <p className="text-sm" style={{ color: t.accentColor }}>{formData.organization}</p>
@@ -314,7 +329,7 @@ export default function CertificateBuilder() {
               {/* النص الرئيسي */}
               <div className="flex-1 flex flex-col items-center justify-center max-w-lg">
                 <p className="text-sm mb-3" style={{ color: t.textColor + "99" }}>
-                  {selectedType.id === "thanks" ? "يسر إدارة المدرسة أن تتقدم بخالص الشكر والتقدير إلى" : "تشهد إدارة المدرسة بأن"}
+                  {certificateCopy.intro}
                 </p>
 
                 <div className="mb-4">
@@ -322,7 +337,7 @@ export default function CertificateBuilder() {
                     className="text-2xl font-black mb-1"
                     style={{ color: t.headerColor, fontFamily: "'Tajawal', sans-serif" }}
                   >
-                    {formData.recipientName || "اسم المستلم"}
+                    {formData.recipientName || certificateCopy.recipient}
                   </h2>
                   {formData.recipientTitle && (
                     <p className="text-sm font-medium" style={{ color: t.accentColor }}>{formData.recipientTitle}</p>
@@ -360,14 +375,14 @@ export default function CertificateBuilder() {
                         {formData.issuerName || "_______________"}
                       </p>
                       <p className="text-xs" style={{ color: t.textColor + "80" }}>
-                        {formData.issuerTitle || "المنصب"}
+                        {formData.issuerTitle || certificateCopy.position}
                       </p>
                     </div>
                   </div>
 
                   {/* التاريخ */}
                   <div className="text-left">
-                    <p className="text-xs" style={{ color: t.textColor + "60" }}>التاريخ</p>
+                    <p className="text-xs" style={{ color: t.textColor + "60" }}>{certificateCopy.date}</p>
                     <p className="text-sm font-medium" style={{ color: t.headerColor }}>
                       {formData.date || "____/____/____"}
                     </p>
@@ -398,7 +413,7 @@ export default function CertificateBuilder() {
                 alignItems: 'center',
                 marginTop: '-1px',
               }}>
-                <span style={{ fontWeight: 700, letterSpacing: '0.3px' }}>SERS - نظام السجلات التعليمية الذكي</span>
+                <span style={{ fontWeight: 700, letterSpacing: '0.3px' }}>{certificateCopy.footer}</span>
                 <span style={{ opacity: 0.85 }}>{formData.organization || ''}</span>
               </div>
             </div>
