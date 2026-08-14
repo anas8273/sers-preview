@@ -147,6 +147,13 @@ export async function getOnlineExamByToken(token: string) {
   return result[0];
 }
 
+export async function getOnlineExamById(id: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(onlineExams).where(eq(onlineExams.id, id)).limit(1);
+  return result[0];
+}
+
 export async function deactivateOnlineExam(id: number, userId: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
@@ -159,6 +166,12 @@ export async function createOnlineExamResponse(data: InsertOnlineExamResponse) {
   if (!db) throw new Error("Database not available");
   const result = await db.insert(onlineExamResponses).values(data);
   return { id: Number(result[0].insertId) };
+}
+
+export async function getOnlineExamResponses(onlineExamId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(onlineExamResponses).where(eq(onlineExamResponses.onlineExamId, onlineExamId)).orderBy(desc(onlineExamResponses.submittedAt));
 }
 
 // ─── Admin: All Portfolios ──────────────────────────────

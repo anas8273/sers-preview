@@ -14,7 +14,7 @@ import {
   getAllPortfolios, reviewPortfolio,
   createUploadedFile, getFilesByPortfolio, deleteUploadedFile,
   createEvidenceComment, getEvidenceComments, deleteEvidenceComment,
-  createOnlineExam, getOnlineExamByToken, deactivateOnlineExam, createOnlineExamResponse,
+  createOnlineExam, getOnlineExamByToken, getOnlineExamById, deactivateOnlineExam, createOnlineExamResponse, getOnlineExamResponses,
   createShareLink, getShareLinkByToken, incrementShareLinkViews, getShareLinksByPortfolio, deactivateShareLink,
   createPdfTemplate, updatePdfTemplate, deletePdfTemplate, getActivePdfTemplates, getAllPdfTemplates, seedDefaultTemplates,
   createUserTheme, updateUserTheme, deleteUserTheme, getUserThemes,
@@ -224,6 +224,16 @@ export const appRouter = router({
           autoMaxScore,
         });
         return { ...response, autoScore, autoMaxScore, requiresManualReview };
+      }),
+
+    responses: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .query(async ({ ctx, input }) => {
+        const exam = await getOnlineExamById(input.id);
+        if (!exam || (exam.userId !== ctx.user.id && ctx.user.role !== "admin")) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "لا تملك صلاحية مراجعة تسليمات هذا الاختبار" });
+        }
+        return getOnlineExamResponses(exam.id);
       }),
 
     revoke: protectedProcedure
