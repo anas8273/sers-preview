@@ -10,6 +10,7 @@ interface ThemeConfig {
   accent: string;
   footerBg: string;
   showBottomBar?: boolean;
+  coverBackgroundUrl?: string;
 }
 
 interface TemplatePreviewModalProps {
@@ -87,7 +88,14 @@ export const TemplatePreviewModal: React.FC<TemplatePreviewModalProps> = ({
                 {/* معاينة الرأس */}
                 <div
                   className="h-24 relative"
-                  style={{ background: previewTemplate.headerBg }}
+                  style={{
+                    backgroundColor: previewTemplate.headerBg,
+                    backgroundImage: previewTemplate.coverBackgroundUrl
+                      ? `linear-gradient(135deg, rgba(9, 45, 58, 0.66), rgba(9, 45, 58, 0.3)), url(${previewTemplate.coverBackgroundUrl})`
+                      : undefined,
+                    backgroundSize: "cover",
+                    backgroundPosition: "center",
+                  }}
                 >
                   <div className="h-full flex flex-col justify-between p-4">
                     <div className="flex items-center justify-between">

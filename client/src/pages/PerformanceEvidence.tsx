@@ -20,6 +20,7 @@ import { generateQRDataURL } from "@/lib/qr-utils";
 import { exportToPDF, exportMultipleReportsToPDF, printElement } from "@/lib/pdf-export";
 // تم حذف تصدير Word لأن التنسيق مدمر - الاكتفاء بـ PDF
 import { getMoeLogoDataUrl, getMoeLogoUrl, getMoeDotsUrl, getMoeLogoFilter } from "@/components/MoeLogo";
+import { validateCoverBackgroundFile } from "@/lib/cover-background";
 import { STANDARDS, type Standard, type Indicator } from "@/lib/standards-data";
 import {
   PRINCIPAL_STANDARDS, VICE_PRINCIPAL_STANDARDS, COUNSELOR_STANDARDS,
@@ -216,6 +217,7 @@ interface ThemeConfig {
   coverAccent2?: string;     // لون ثانوي للغلاف
   // === نمط الترويسة ===
   headerVariant?: 'right-text-center-logo-left-info' | 'right-text-left-logo' | 'center-logo-banner' | 'full-header-sections';
+  coverBackgroundUrl?: string; // خلفية مخصصة للغلاف الرئيسي
 }
 
 // ===== قوالب مطابقة لملف الهوية البصرية =====
@@ -469,6 +471,7 @@ export default function PerformanceEvidence() {
           coverStyle: (layout.coverStyle || 'gradient-center') as ThemeConfig['coverStyle'],
           sectionCoverStyle: (layout.sectionCoverStyle || 'full-gradient') as ThemeConfig['sectionCoverStyle'],
           coverAccent2: t.accent || layout.coverAccent2 || '#1a3a5c',
+          coverBackgroundUrl: t.coverImageUrl || layout.coverBackgroundUrl,
         };
       });
       themes.push(...dbMapped);
@@ -540,8 +543,47 @@ export default function PerformanceEvidence() {
   const [customCriteria, setCustomCriteria] = useState<Criterion[]>([]);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const coverBackgroundInputRef = useRef<HTMLInputElement>(null);
   const activeUploadRef = useRef<{ criterionId: string; subEvidenceId: string } | null>(null);
   const smartUploadRef = useRef<HTMLInputElement>(null);
+  const [isCoverBackgroundUploading, setIsCoverBackgroundUploading] = useState(false);
+
+  const handleCoverBackgroundUpload = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    const validationError = validateCoverBackgroundFile(file);
+    if (validationError) {
+      toast.error(validationError);
+      return;
+    }
+
+    setIsCoverBackgroundUploading(true);
+    try {
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result));
+        reader.onerror = () => reject(new Error("تعذر قراءة الصورة"));
+        reader.readAsDataURL(file);
+      });
+      let backgroundUrl = dataUrl;
+      if (isAuthenticated) {
+        const uploaded = await uploadFileMutation.mutateAsync({
+          fileName: `cover-background-${Date.now()}-${file.name}`,
+          mimeType: file.type,
+          base64Data: dataUrl.split(",")[1] || dataUrl,
+        });
+        backgroundUrl = uploaded.url || dataUrl;
+      }
+      setSelectedTheme((current) => ({ ...current, coverBackgroundUrl: backgroundUrl }));
+      toast.success("تم تطبيق خلفية الغلاف المخصصة.");
+    } catch (error) {
+      console.error("Cover background upload failed", error);
+      toast.error("تعذر رفع الخلفية. حاول بصورة أخرى أو أعد المحاولة.");
+    } finally {
+      setIsCoverBackgroundUploading(false);
+    }
+  }, [isAuthenticated, uploadFileMutation]);
 
   const [personalInfo, setPersonalInfo] = useState({
     name: "", school: "",
@@ -5017,6 +5059,19 @@ export default function PerformanceEvidence() {
                           ))}
                         </div>
                       </div>
+                      <div className="border-t border-gray-100 pt-3">
+                        <label className="text-xs font-medium text-gray-700 mb-1.5 block">خلفية الغلاف</label>
+                        <p className="text-[10px] text-gray-400 mb-2">صورة PNG أو JPG بحجم لا يتجاوز 5 ميجابايت. تظهر في الغلاف والمعاينة والتصدير.</p>
+                        <input ref={coverBackgroundInputRef} type="file" accept="image/png,image/jpeg,image/webp" className="hidden" onChange={(event) => void handleCoverBackgroundUpload(event)} />
+                        <div className="flex items-center gap-2">
+                          <Button type="button" size="sm" variant="outline" className="h-8 gap-1 text-xs" disabled={isCoverBackgroundUploading} onClick={() => coverBackgroundInputRef.current?.click()}>
+                            {isCoverBackgroundUploading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Image className="w-3 h-3" />}
+                            {isCoverBackgroundUploading ? "جارٍ الرفع" : "رفع خلفية"}
+                          </Button>
+                          {selectedTheme.coverBackgroundUrl && <Button type="button" size="sm" variant="ghost" className="h-8 text-xs text-red-600 hover:text-red-700" onClick={() => setSelectedTheme((current) => ({ ...current, coverBackgroundUrl: undefined }))}>إزالة</Button>}
+                        </div>
+                        {selectedTheme.coverBackgroundUrl && <div className="mt-2 h-12 rounded-lg border border-gray-200 bg-cover bg-center" style={{ backgroundImage: `url(${selectedTheme.coverBackgroundUrl})` }} />}
+                      </div>
                     </div>
                   </div>
                 )}
@@ -5122,6 +5177,12 @@ export default function PerformanceEvidence() {
             {(() => {
               const cs = theme.coverStyle || 'gradient-center';
               const a2 = theme.coverAccent2 || theme.accent;
+              const coverBodyBackground = theme.coverBackgroundUrl
+                ? { backgroundColor: theme.headerBg, backgroundImage: `linear-gradient(135deg, rgba(9, 45, 58, 0.72), rgba(9, 45, 58, 0.38)), url(${theme.coverBackgroundUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' }
+                : { background: theme.headerBg };
+              const coverPageBackground = theme.coverBackgroundUrl
+                ? { backgroundImage: `linear-gradient(135deg, rgba(255,255,255,0.58), rgba(255,255,255,0.8)), url(${theme.coverBackgroundUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' }
+                : {};
               // ترويسة رسمية للغلاف - مطابقة للصفحات الداخلية (المملكة + وزارة التعليم + الإدارة + شعار)
               const coverOfficialHeader = (
                 <div style={{ background: `linear-gradient(to left, ${theme.accent}, ${a2})`, padding: '14px 24px 10px' }}>
@@ -5182,9 +5243,9 @@ export default function PerformanceEvidence() {
 
               // === غلاف 1: متدرج مركزي (الافتراضي) ===
               if (cs === 'gradient-center') return (
-                <div className="bg-white shadow-lg mx-auto mb-6" style={{ width: '210mm', minHeight: '297mm', maxWidth: '100%', position: 'relative', overflow: 'hidden', pageBreakAfter: 'always', border: `2px solid ${theme.accent}` }}>
+                <div className="bg-white shadow-lg mx-auto mb-6" style={{ ...coverPageBackground, width: '210mm', minHeight: '297mm', maxWidth: '100%', position: 'relative', overflow: 'hidden', pageBreakAfter: 'always', border: `2px solid ${theme.accent}` }}>
                   {coverOfficialHeader}
-                  <div style={{ background: theme.headerBg, color: theme.headerText, padding: '3rem 2.5rem', textAlign: 'center', position: 'relative', overflow: 'hidden', minHeight: 'calc(297mm - 80px)', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                  <div style={{ ...coverBodyBackground, color: theme.headerText, padding: '3rem 2.5rem', textAlign: 'center', position: 'relative', overflow: 'hidden', minHeight: 'calc(297mm - 80px)', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
                     <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, background: 'linear-gradient(135deg, rgba(255,255,255,0.12) 0%, transparent 40%, rgba(0,0,0,0.1) 100%)', pointerEvents: 'none' }} />
                     <div style={{ position: 'absolute', top: '-50px', right: '-50px', width: '200px', height: '200px', borderRadius: '50%', background: 'rgba(255,255,255,0.06)', pointerEvents: 'none' }} />
                     <div style={{ position: 'absolute', bottom: '-40px', left: '-40px', width: '150px', height: '150px', borderRadius: '50%', background: 'rgba(255,255,255,0.04)', pointerEvents: 'none' }} />
@@ -5196,7 +5257,7 @@ export default function PerformanceEvidence() {
 
               // === غلاف 2: مقسوم يسار (شريط جانبي ملون + محتوى أبيض) ===
               if (cs === 'split-left') return (
-                <div className="bg-white shadow-lg mx-auto mb-6" style={{ width: '210mm', minHeight: '297mm', maxWidth: '100%', position: 'relative', overflow: 'hidden', pageBreakAfter: 'always', border: `2px solid ${theme.accent}` }}>
+                <div className="bg-white shadow-lg mx-auto mb-6" style={{ ...coverPageBackground, width: '210mm', minHeight: '297mm', maxWidth: '100%', position: 'relative', overflow: 'hidden', pageBreakAfter: 'always', border: `2px solid ${theme.accent}` }}>
                   {coverOfficialHeader}
                   <div style={{ display: 'flex', minHeight: 'calc(297mm - 80px)' }}>
                   <div style={{ width: '35%', background: theme.headerBg, minHeight: '297mm', position: 'relative', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', padding: '2rem', color: theme.headerText }}>
@@ -5225,7 +5286,7 @@ export default function PerformanceEvidence() {
 
               // === غلاف 3: قطري (شريط علوي مائل + محتوى أبيض) ===
               if (cs === 'diagonal') return (
-                <div className="bg-white shadow-lg mx-auto mb-6" style={{ width: '210mm', minHeight: '297mm', maxWidth: '100%', position: 'relative', overflow: 'hidden', pageBreakAfter: 'always', border: `2px solid ${theme.accent}` }}>
+                <div className="bg-white shadow-lg mx-auto mb-6" style={{ ...coverPageBackground, width: '210mm', minHeight: '297mm', maxWidth: '100%', position: 'relative', overflow: 'hidden', pageBreakAfter: 'always', border: `2px solid ${theme.accent}` }}>
                   {coverOfficialHeader}
                   <div style={{ background: theme.headerBg, height: '40%', position: 'absolute', top: '80px', left: 0, right: 0, clipPath: 'polygon(0 0, 100% 0, 100% 75%, 0 100%)' }} />
                   <div style={{ position: 'relative', zIndex: 1, minHeight: '297mm', display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '4rem 3rem', textAlign: 'center' }}>
@@ -5249,7 +5310,7 @@ export default function PerformanceEvidence() {
 
               // === غلاف 4: إطار أنيق (خلفية فاتحة + إطار مزدوج) ===
               if (cs === 'framed-elegant') return (
-                <div className="bg-white shadow-lg mx-auto mb-6" style={{ width: '210mm', minHeight: '297mm', maxWidth: '100%', position: 'relative', overflow: 'hidden', pageBreakAfter: 'always', background: `${theme.accent}08`, border: `2px solid ${theme.accent}` }}>
+                <div className="bg-white shadow-lg mx-auto mb-6" style={{ ...coverPageBackground, width: '210mm', minHeight: '297mm', maxWidth: '100%', position: 'relative', overflow: 'hidden', pageBreakAfter: 'always', backgroundColor: `${theme.accent}08`, border: `2px solid ${theme.accent}` }}>
                   {coverOfficialHeader}
                   <div style={{ position: 'absolute', top: '100px', left: '20px', right: '20px', bottom: '20px', border: `2px solid ${theme.accent}`, borderRadius: '4px', pointerEvents: 'none' }} />
                   <div style={{ position: 'absolute', top: '28px', left: '28px', right: '28px', bottom: '28px', border: `1px solid ${theme.accent}40`, borderRadius: '4px', pointerEvents: 'none' }} />
@@ -5279,7 +5340,7 @@ export default function PerformanceEvidence() {
 
               // === غلاف 5: شريط علوي (شريط عريض أعلى + محتوى أبيض) ===
               if (cs === 'top-bar') return (
-                <div className="bg-white shadow-lg mx-auto mb-6" style={{ width: '210mm', minHeight: '297mm', maxWidth: '100%', position: 'relative', overflow: 'hidden', pageBreakAfter: 'always', border: `2px solid ${theme.accent}` }}>
+                <div className="bg-white shadow-lg mx-auto mb-6" style={{ ...coverPageBackground, width: '210mm', minHeight: '297mm', maxWidth: '100%', position: 'relative', overflow: 'hidden', pageBreakAfter: 'always', border: `2px solid ${theme.accent}` }}>
                   {coverOfficialHeader}
                   <div style={{ height: '4px', background: `linear-gradient(to left, ${theme.accent}, ${a2})` }} />
                   <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', padding: '5rem 3rem', minHeight: 'calc(297mm - 120px)', textAlign: 'center' }}>
@@ -5304,7 +5365,7 @@ export default function PerformanceEvidence() {
 
               // === غلاف 6: خط بسيط (minimal) ===
               return (
-                <div className="bg-white shadow-lg mx-auto mb-6" style={{ width: '210mm', minHeight: '297mm', maxWidth: '100%', position: 'relative', overflow: 'hidden', pageBreakAfter: 'always', border: `2px solid ${theme.accent}` }}>
+                <div className="bg-white shadow-lg mx-auto mb-6" style={{ ...coverPageBackground, width: '210mm', minHeight: '297mm', maxWidth: '100%', position: 'relative', overflow: 'hidden', pageBreakAfter: 'always', border: `2px solid ${theme.accent}` }}>
                   {coverOfficialHeader}
                   <div style={{ minHeight: 'calc(297mm - 80px)', display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '4rem 4rem', textAlign: 'center' }}>
                     <div style={{ width: '1px', height: '60px', background: theme.accent, margin: '1.5rem auto' }} />
