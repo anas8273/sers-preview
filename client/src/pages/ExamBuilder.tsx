@@ -12,7 +12,7 @@ import {
   ArrowLeft, ClipboardCheck, Plus, Trash2, Save, Edit3,
   Search, ChevronDown, ChevronUp, Sparkles,
   CheckCircle2, XCircle, HelpCircle, Eye, Printer,
-  FileDown, Maximize2, Minimize2, Loader2, ChevronLeft, ZoomIn, ZoomOut, RotateCcw, RefreshCw, Share2, Copy
+  FileDown, FileText, Maximize2, Minimize2, Loader2, ChevronLeft, ZoomIn, ZoomOut, RotateCcw, RefreshCw, Share2, Copy, Upload
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
@@ -241,6 +241,8 @@ export default function ExamBuilder() {
   const [selectedTheme, setSelectedTheme] = useState<ThemeConfig>(THEMES[0]);
   const [selectedFont, setSelectedFont] = useState("Cairo");
   const [aiLoading, setAiLoading] = useState(false);
+  const [sourceContent, setSourceContent] = useState("");
+  const [sourceFileName, setSourceFileName] = useState("");
   const [exporting, setExporting] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
   const [showAnswers, setShowAnswers] = useState(false);
@@ -326,7 +328,7 @@ export default function ExamBuilder() {
     try {
       const result = await generateExamMutation.mutateAsync({
         subject, grade,
-        topic: title || undefined,
+        topic: sourceContent || title || undefined,
         questionTypes: ["multiple-choice", "true-false", "essay"],
         count: 10,
         difficulty: "متوسط",
@@ -344,7 +346,32 @@ export default function ExamBuilder() {
       }
     } catch { toast.error("حدث خطأ أثناء التوليد"); }
     finally { setAiLoading(false); }
-  }, [subject, grade, title, generateExamMutation]);
+  }, [subject, grade, title, sourceContent, generateExamMutation]);
+
+  const handleSourceFileUpload = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    const acceptedExtensions = ["txt", "md", "csv", "json"];
+    const extension = file.name.split(".").pop()?.toLowerCase();
+    if (!extension || !acceptedExtensions.includes(extension)) {
+      toast.error("ارفع ملفاً نصياً بصيغة TXT أو MD أو CSV أو JSON.");
+      return;
+    }
+    if (file.size > 750 * 1024) {
+      toast.error("الملف كبير. استخدم ملفاً نصياً لا يتجاوز 750 كيلوبايت.");
+      return;
+    }
+    try {
+      const content = (await file.text()).trim();
+      if (!content) throw new Error("الملف لا يحتوي على نص قابل للاستخدام.");
+      setSourceContent(content.slice(0, 16_000));
+      setSourceFileName(file.name);
+      toast.success("تم تحميل المصدر؛ سيُستخدم محتواه عند توليد الأسئلة.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "تعذر قراءة الملف.");
+    }
+  }, []);
 
   const handleExportPDF = useCallback(async () => {
     setExporting(true);
@@ -489,6 +516,23 @@ export default function ExamBuilder() {
                 <TemplateSelector selectedTheme={selectedTheme} onThemeChange={setSelectedTheme} selectedFont={selectedFont} onFontChange={setSelectedFont} compact />
               </div>
 
+              <section className="mb-4 rounded-xl border border-violet-100 bg-gradient-to-l from-violet-50 to-white p-3" aria-label="مصدر توليد أسئلة الذكاء الاصطناعي">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex items-center gap-2.5">
+                    <div className="grid h-9 w-9 place-items-center rounded-lg bg-violet-100 text-violet-700"><FileText className="h-4 w-4" /></div>
+                    <div><h3 className="text-xs font-bold text-slate-800">إنشاء اختبار من ملف</h3><p className="text-[10px] leading-4 text-slate-500">ارفع محتوى الدرس النصي ثم استخدم زر «توليد أسئلة AI».</p></div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <label className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-violet-200 bg-white px-3 py-1.5 text-xs font-bold text-violet-700 transition-colors hover:bg-violet-50">
+                      <input type="file" accept=".txt,.md,.csv,.json,text/plain,text/markdown,text/csv,application/json" className="sr-only" onChange={handleSourceFileUpload} />
+                      <Upload className="h-3.5 w-3.5" />رفع ملف نصي
+                    </label>
+                    {sourceFileName && <button type="button" onClick={() => { setSourceContent(""); setSourceFileName(""); }} className="rounded-lg px-2 py-1.5 text-[11px] font-medium text-slate-500 hover:bg-white hover:text-red-600">إزالة</button>}
+                  </div>
+                </div>
+                {sourceFileName && <p className="mt-2 rounded-md border border-violet-100 bg-white px-2.5 py-1.5 text-[11px] text-violet-800">المصدر الجاهز: <strong>{sourceFileName}</strong> <span className="text-violet-500">({sourceContent.length.toLocaleString("ar-SA")} حرف)</span></p>}
+              </section>
+
               {/* Exam info */}
               <div className="bg-white rounded-xl border border-gray-200 p-4 mb-4">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -511,7 +555,7 @@ export default function ExamBuilder() {
                     <label className="block text-xs font-medium text-gray-500 mb-1">الفصل الدراسي</label>
                     <select value={semester} onChange={(e) => setSemester(e.target.value)}
                       className="w-full px-3 py-2.5 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 bg-white">
-                      <option value="الأول">الأول</option><option value="الثاني">الثاني</option><option value="الثالث">الثالث</option>
+                      <option value="الأول">الأول</option><option value="الثاني">الثاني</option>
                     </select>
                   </div>
                   <div>
