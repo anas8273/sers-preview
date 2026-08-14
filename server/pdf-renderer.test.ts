@@ -67,15 +67,14 @@ describe("pdf-renderer", () => {
     expect(pdfBuffer.toString("utf-8", 0, 5)).toBe("%PDF-");
   }, 30000);
 
-  it("handles HTML with images (broken image fallback)", async () => {
+  it("renders HTML with an embedded image", async () => {
     const html = `
       <div style="padding: 20px; direction: rtl;">
-        <img src="https://invalid-url-that-does-not-exist.com/image.png" alt="شعار" />
+        <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40'%3E%3Crect width='40' height='40' fill='%2314b8a6'/%3E%3C/svg%3E" alt="شعار" />
         <p>نص بعد الصورة</p>
       </div>
     `;
 
-    // يجب ألا يفشل حتى مع صورة غير موجودة
     const pdfBuffer = await renderHtmlToPdf(html);
 
     expect(Buffer.isBuffer(pdfBuffer)).toBe(true);

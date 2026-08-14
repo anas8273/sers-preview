@@ -3,13 +3,13 @@
  * إنشاء سيرة ذاتية احترافية للمعلم/الإداري
  * مع قوالب متعددة + تعبئة AI + معاينة حية + تصدير PDF
  */
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { useLocation } from "wouter";
 import {
   ArrowLeft, User, Plus, Trash2, Save, Edit3,
   Briefcase, GraduationCap, Award, Phone, Mail, MapPin,
   Star, BookOpen, Sparkles, Loader2, Eye, Printer,
-  FileDown, Maximize2, Minimize2, ChevronLeft, ZoomIn, ZoomOut, RotateCcw
+  FileDown, Maximize2, Minimize2, ChevronLeft, ZoomIn, ZoomOut, RotateCcw, ScanSearch, CircleCheck, CircleAlert
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
@@ -44,6 +44,28 @@ interface CVData {
   skills: string[];
   courses: CVEntry[];
   achievements: string[];
+}
+
+export interface ATSCheck {
+  id: string;
+  section: "personal" | "experience" | "education" | "skills" | "courses" | "achievements";
+  label: string;
+  recommendation: string;
+  complete: boolean;
+  weight: number;
+}
+
+export function calculateATSReadiness(data: CVData) {
+  const detailedExperiences = data.experience.filter((entry) => entry.title.trim() && entry.organization.trim() && entry.description.trim().length >= 40);
+  const checks: ATSCheck[] = [
+    { id: "identity", section: "personal", label: "الاسم والمسمى الوظيفي", recommendation: "أضف الاسم الكامل ومسمى وظيفياً محدداً ومتوافقاً مع الوظيفة المستهدفة.", complete: Boolean(data.name.trim() && data.title.trim()), weight: 15 },
+    { id: "contact", section: "personal", label: "بيانات التواصل", recommendation: "أضف بريداً إلكترونياً ورقم جوالاً صالحين ليسهل على جهة العمل التواصل معك.", complete: Boolean(data.email.trim() && data.phone.trim()), weight: 15 },
+    { id: "summary", section: "personal", label: "ملخص مهني واضح", recommendation: "اكتب ملخصاً مهنياً لا يقل عن 80 حرفاً يتضمن التخصص والقيمة التي تقدمها.", complete: data.summary.trim().length >= 80, weight: 15 },
+    { id: "experience", section: "experience", label: "خبرات قابلة للقراءة", recommendation: "أضف خبرة واحدة على الأقل مع المسمى والجهة ووصف منجزات واضح.", complete: detailedExperiences.length > 0, weight: 20 },
+    { id: "education", section: "education", label: "المؤهلات العلمية", recommendation: "أضف مؤهلاً علمياً واحداً على الأقل مع الجهة والفترة الزمنية.", complete: data.education.some((entry) => entry.title.trim() && entry.organization.trim()), weight: 15 },
+    { id: "skills", section: "skills", label: "الكلمات المفتاحية والمهارات", recommendation: "أضف خمس مهارات مهنية أو تقنية محددة لتعزيز مطابقة الكلمات المفتاحية.", complete: data.skills.filter((skill) => skill.trim()).length >= 5, weight: 20 },
+  ];
+  return { score: checks.reduce((total, check) => total + (check.complete ? check.weight : 0), 0), checks, completed: checks.filter((check) => check.complete).length };
 }
 
 const STORAGE_KEY = "sers-cv-data";
@@ -216,6 +238,7 @@ export default function SmartCV() {
   const [aiLoading, setAiLoading] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
+  const atsReadiness = useMemo(() => calculateATSReadiness(cvData), [cvData]);
 
   const { containerRef: previewContainerRef, pageRef: previewPageRef, previewScale, wrapperWidth, wrapperHeight, zoomLevel, zoomIn, zoomOut, resetZoom } = usePreviewScale();
 
@@ -343,6 +366,27 @@ export default function SmartCV() {
               <div className="mb-4">
                 <TemplateSelector selectedTheme={selectedTheme} onThemeChange={setSelectedTheme} selectedFont={selectedFont} onFontChange={setSelectedFont} compact />
               </div>
+
+              <section className="mb-4 overflow-hidden rounded-xl border border-indigo-100 bg-gradient-to-l from-indigo-50 to-white p-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-indigo-100 text-indigo-700"><ScanSearch className="h-6 w-6" /></div>
+                    <div>
+                      <h2 className="text-sm font-bold text-slate-800">جاهزية السيرة الذاتية لأنظمة ATS</h2>
+                      <p className="mt-0.5 text-[11px] leading-5 text-slate-500">فحص إرشادي لبنية السيرة وبياناتها الأساسية قبل التصدير أو التقديم.</p>
+                    </div>
+                  </div>
+                  <div className="rounded-lg bg-white px-4 py-2 text-center shadow-sm ring-1 ring-indigo-100"><strong className="text-2xl font-black text-indigo-700">{atsReadiness.score}%</strong><span className="mr-1 text-[10px] text-slate-500">جاهزية</span></div>
+                </div>
+                <div className="mt-3 grid grid-cols-1 gap-1.5 sm:grid-cols-2 lg:grid-cols-3">
+                  {atsReadiness.checks.map((check) => (
+                    <button key={check.id} type="button" onClick={() => setActiveSection(check.section)} className={`flex items-start gap-1.5 rounded-lg border px-2.5 py-2 text-right transition-colors ${check.complete ? "border-emerald-100 bg-emerald-50/70" : "border-amber-100 bg-amber-50/60 hover:border-amber-300"}`}>
+                      {check.complete ? <CircleCheck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-600" /> : <CircleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600" />}
+                      <span><span className="block text-[11px] font-semibold text-slate-700">{check.label}</span>{!check.complete && <span className="mt-0.5 block text-[10px] leading-4 text-slate-500">{check.recommendation}</span>}</span>
+                    </button>
+                  ))}
+                </div>
+              </section>
 
               {/* Section tabs */}
               <div className="flex flex-wrap gap-1.5 mb-4">
