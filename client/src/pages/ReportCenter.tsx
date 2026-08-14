@@ -13,7 +13,7 @@ import {
   ArrowLeft, FileText, Plus, Trash2, Download, Eye, Save,
   Users, Building2, BookOpen, Star, Search, X, Edit3,
   Sparkles, Loader2, Printer, FileDown, Maximize2, Minimize2,
-  ClipboardCheck, ChevronLeft, ZoomIn, ZoomOut, RotateCcw
+  ClipboardCheck, ChevronLeft, ZoomIn, ZoomOut, RotateCcw, AlertTriangle
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
@@ -354,6 +354,11 @@ export default function ReportCenter() {
 
   const handleSave = useCallback(() => {
     if (!selectedTemplate) return;
+    const missing = selectedTemplate.fields.filter((field) => field.required && !formData[field.id]?.trim());
+    if (missing.length) {
+      toast.error(`أكمل الحقول الإلزامية: ${missing.map((field) => field.label).join("، ")}`);
+      return;
+    }
     const title = formData.title || formData.subject || formData.teacherName || formData.school || formData.deptName || selectedTemplate.title;
     const now = Date.now();
 
@@ -416,6 +421,13 @@ export default function ReportCenter() {
   }, [selectedTemplate, formData, fillReportMutation]);
 
   const handleExportPDF = useCallback(async () => {
+    if (selectedTemplate) {
+      const missing = selectedTemplate.fields.filter((field) => field.required && !formData[field.id]?.trim());
+      if (missing.length) {
+        toast.error(`لا يمكن التصدير قبل إكمال: ${missing.map((field) => field.label).join("، ")}`);
+        return;
+      }
+    }
     setExporting(true);
     try {
       await exportToPDF("report-preview-content", `${selectedTemplate?.title || "تقرير"}.pdf`);
@@ -425,7 +437,7 @@ export default function ReportCenter() {
     } finally {
       setExporting(false);
     }
-  }, [selectedTemplate]);
+  }, [selectedTemplate, formData]);
 
   const handlePrint = useCallback(() => {
     try { printElement("report-preview-content"); } catch { toast.error("حدث خطأ أثناء الطباعة"); }
@@ -440,6 +452,9 @@ export default function ReportCenter() {
   const filledFieldsCount = selectedTemplate
     ? selectedTemplate.fields.filter((f) => formData[f.id] && formData[f.id].trim() !== "").length
     : 0;
+  const missingRequiredFields = selectedTemplate
+    ? selectedTemplate.fields.filter((field) => field.required && !formData[field.id]?.trim())
+    : [];
 
   return (
     <div className="min-h-screen pb-20 lg:pb-0 bg-[#F8FAFC]" dir="rtl">
@@ -546,6 +561,13 @@ export default function ReportCenter() {
                   compact
                 />
               </div>
+
+              {missingRequiredFields.length > 0 && (
+                <div className="mb-4 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs text-amber-800">
+                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                  <span>قبل الحفظ أو التصدير، أكمل الحقول الإلزامية التالية: <strong>{missingRequiredFields.map((field) => field.label).join("، ")}</strong>.</span>
+                </div>
+              )}
 
               {/* Form Fields */}
               <div className="bg-white rounded-xl border border-gray-200 p-6">
