@@ -2387,9 +2387,16 @@ export default function PerformanceEvidence() {
 
       {/* عرض textarea عادي إذا لم تكن هناك formFields */}
       {ev.type === 'text' && !hasFormFields && (
-        <textarea value={ev.text} onChange={(e) => updateEvidence(criterionId, ev.id, { text: e.target.value })}
-          placeholder="اكتب نص الشاهد هنا..." rows={2}
-          className="w-full px-3 py-2 rounded-lg border border-border text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/20 bg-background" />
+        <div>
+          <textarea value={ev.text} onChange={(e) => updateEvidence(criterionId, ev.id, { text: e.target.value })}
+            placeholder="اكتب نص الشاهد هنا..." rows={2}
+            className="w-full px-3 py-2 rounded-lg border border-border text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/20 bg-background" />
+          {ev.text.trim() && (
+            <button type="button" onClick={() => { navigator.clipboard.writeText(ev.text); toast.success('تم نسخ نص الشاهد'); }} className="mt-1.5 flex items-center gap-1 text-[10px] text-muted-foreground transition-colors hover:text-primary">
+              <Copy className="h-3 w-3" />نسخ النص
+            </button>
+          )}
+        </div>
       )}
 
       {ev.type === 'link' && (
@@ -2408,8 +2415,11 @@ export default function PerformanceEvidence() {
           <div className="bg-amber-50/50 dark:bg-amber-950/20 rounded-lg p-2.5 border border-amber-200/30">
             <div className="flex items-center justify-between mb-1">
               <span className="text-[10px] font-medium text-amber-700 dark:text-amber-400">تعليق</span>
-              <button type="button" onClick={() => updateEvidence(criterionId, ev.id, { comment: '' })}
-                className="text-[10px] text-muted-foreground hover:text-red-500 transition-colors">حذف</button>
+              <div className="flex items-center gap-2">
+                {ev.comment.trim() && <button type="button" onClick={() => { navigator.clipboard.writeText(ev.comment || ''); toast.success('تم نسخ التعليق'); }} className="flex items-center gap-1 text-[10px] text-muted-foreground transition-colors hover:text-primary"><Copy className="h-3 w-3" />نسخ</button>}
+                <button type="button" onClick={() => updateEvidence(criterionId, ev.id, { comment: '' })}
+                  className="text-[10px] text-muted-foreground hover:text-red-500 transition-colors">حذف</button>
+              </div>
             </div>
             <textarea value={ev.comment} onChange={(e) => updateEvidence(criterionId, ev.id, { comment: e.target.value })}
               placeholder="أضف تعليقك هنا..." rows={2}
