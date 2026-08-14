@@ -282,7 +282,7 @@ export default function TemplateRenderer({
                 if (ev.type === 'link') {
                   return (
                     <div key={ev.id} style={{ border: '1px solid #E8E8E8', borderRadius: '8px', padding: '12px', textAlign: 'center', background: '#FAFAFA' }}>
-                      <img src={generateQRDataURL(ev.link || '', 5)} alt="QR" style={{ width: '100px', height: '100px', margin: '0 auto 8px' }} />
+                      <img src={generateQRDataURL(ev.link || '', 6)} alt="QR" style={{ width: '128px', height: '128px', margin: '0 auto 10px' }} />
                       <div style={{ fontSize: '9px', color: '#666', wordBreak: 'break-all', maxHeight: '30px', overflow: 'hidden' }}>{ev.link}</div>
                     </div>
                   );
@@ -292,7 +292,7 @@ export default function TemplateRenderer({
                   const qrData = ev.fileData?.startsWith('idb://') ? ev.fileName : (ev.fileData || ev.fileName);
                   return (
                     <div key={ev.id} style={{ border: '1px solid #E8E8E8', borderRadius: '8px', padding: '12px', textAlign: 'center', background: '#FAFAFA' }}>
-                      <img src={generateQRDataURL(qrData.substring(0, 200), 5)} alt="QR" style={{ width: '100px', height: '100px', margin: '0 auto 8px' }} />
+                      <img src={generateQRDataURL(qrData.substring(0, 200), 6)} alt="QR" style={{ width: '128px', height: '128px', margin: '0 auto 10px' }} />
                       <div style={{ fontSize: '9px', color: '#666', fontWeight: 'bold' }}>{ev.fileName}</div>
                     </div>
                   );
@@ -302,7 +302,7 @@ export default function TemplateRenderer({
                   const qrData = ev.fileData?.startsWith('idb://') ? ev.fileName : (ev.fileData || ev.fileName);
                   return (
                     <div key={ev.id} style={{ border: '1px solid #E8E8E8', borderRadius: '8px', padding: '12px', textAlign: 'center', background: '#FAFAFA' }}>
-                      <img src={generateQRDataURL(qrData.substring(0, 200), 5)} alt="QR" style={{ width: '100px', height: '100px', margin: '0 auto 8px' }} />
+                      <img src={generateQRDataURL(qrData.substring(0, 200), 6)} alt="QR" style={{ width: '128px', height: '128px', margin: '0 auto 10px' }} />
                       <div style={{ fontSize: '9px', color: '#666' }}>{ev.fileName}</div>
                     </div>
                   );

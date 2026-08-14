@@ -6063,7 +6063,7 @@ export default function PerformanceEvidence() {
                             {ev.type === 'text' && ev.text && <p style={{ fontSize: '0.8rem', lineHeight: 1.7, color: '#374151' }}>{ev.text}</p>}
                             {ev.type === 'link' && ev.link && (
                               <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                                {ev.showBarcode !== false && <img src={generateQRDataURL(ev.link)} alt="QR" style={{ width: '80px', height: '80px', borderRadius: '4px' }} />}
+                                {ev.showBarcode !== false && <img src={generateQRDataURL(ev.link, 6)} alt="QR" style={{ width: '128px', height: '128px', borderRadius: '6px' }} />}
                                 <div>
                                   <span style={{ fontSize: '0.7rem', color: '#6B7280', display: 'block' }}>رابط إلكتروني</span>
                                   <span style={{ fontSize: '0.7rem', color: '#2563EB', wordBreak: 'break-all' as const }}>{ev.link}</span>
@@ -6074,7 +6074,7 @@ export default function PerformanceEvidence() {
                               ev.displayAs === 'image'
                                 ? <img src={ev.fileData.startsWith('idb://') ? '' : ev.fileData} alt="" style={{ maxHeight: '200px', borderRadius: '8px', border: '1px solid #E5E7EB' }} />
                                 : <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                                    {ev.showBarcode !== false && <img src={generateQRDataURL(ev.uploadedUrl || ev.fileName || 'file')} alt="QR" style={{ width: '80px', height: '80px', borderRadius: '4px' }} />}
+                                    {ev.showBarcode !== false && <img src={generateQRDataURL(ev.uploadedUrl || ev.fileName || 'file', 6)} alt="QR" style={{ width: '128px', height: '128px', borderRadius: '6px' }} />}
                                     <div>
                                       <span style={{ fontSize: '0.7rem', color: '#6B7280', display: 'block' }}>صورة {ev.showBarcode !== false ? '(باركود)' : ''}</span>
                                       <span style={{ fontSize: '0.7rem', color: '#4B5563' }}>{ev.fileName}</span>
@@ -6083,7 +6083,7 @@ export default function PerformanceEvidence() {
                             )}
                             {(ev.type === 'video' || ev.type === 'file') && ev.fileData && (
                               <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                                {ev.showBarcode !== false && <img src={generateQRDataURL(ev.uploadedUrl || ev.fileName || 'file')} alt="QR" style={{ width: '80px', height: '80px', borderRadius: '4px' }} />}
+                                {ev.showBarcode !== false && <img src={generateQRDataURL(ev.uploadedUrl || ev.fileName || 'file', 6)} alt="QR" style={{ width: '128px', height: '128px', borderRadius: '6px' }} />}
                                 <div>
                                   <span style={{ fontSize: '0.7rem', color: '#6B7280', display: 'block' }}>{ev.type === 'video' ? 'فيديو' : 'ملف مرفق'}</span>
                                   <span style={{ fontSize: '0.7rem', color: '#4B5563' }}>{ev.fileName}</span>
