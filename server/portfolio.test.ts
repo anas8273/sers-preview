@@ -227,14 +227,14 @@ describe("share", () => {
       expect(result.error).toBe("رابط غير صالح");
     });
 
-    it("requires password for protected links", async () => {
+    it("requires an access code for protected links", async () => {
       const ctx = createPublicContext();
       const caller = appRouter.createCaller(ctx);
       const result = await caller.share.view({ token: "password-token" });
-      expect(result.error).toBe("كلمة المرور غير صحيحة");
+      expect(result.error).toBe("رمز الوصول غير صحيح");
     });
 
-    it("allows access with correct password", async () => {
+    it("allows access with the correct access code", async () => {
       const ctx = createPublicContext();
       const caller = appRouter.createCaller(ctx);
       const result = await caller.share.view({ token: "password-token", password: "secret123" });

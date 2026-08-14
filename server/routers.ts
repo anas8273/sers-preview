@@ -7,6 +7,7 @@ import { storagePut } from "./storage";
 import { notifyOwner } from "./_core/notification";
 import { z } from "zod";
 import { nanoid } from "nanoid";
+import { createHash, timingSafeEqual } from "node:crypto";
 import {
   createPortfolio, updatePortfolio, getPortfoliosByUser, getPortfolioById, deletePortfolio,
   getAllPortfolios, reviewPortfolio,
@@ -15,6 +16,15 @@ import {
   createPdfTemplate, updatePdfTemplate, deletePdfTemplate, getActivePdfTemplates, getAllPdfTemplates, seedDefaultTemplates,
   createUserTheme, updateUserTheme, deleteUserTheme, getUserThemes,
 } from "./db";
+
+const hashShareAccessCode = (value: string) => createHash("sha256").update(value, "utf8").digest("hex");
+
+const verifyShareAccessCode = (storedValue: string | null, suppliedValue: string | undefined) => {
+  if (!storedValue || !suppliedValue) return false;
+  const expected = /^[a-f0-9]{64}$/i.test(storedValue) ? storedValue : hashShareAccessCode(storedValue);
+  const received = hashShareAccessCode(suppliedValue);
+  return timingSafeEqual(Buffer.from(expected, "hex"), Buffer.from(received, "hex"));
+};
 
 export const appRouter = router({
   system: systemRouter,
@@ -145,7 +155,7 @@ export const appRouter = router({
         portfolioId: z.number(),
         expiresInDays: z.number().min(1).max(30).default(7),
         maxViews: z.number().min(0).max(1000).default(0),
-        password: z.string().optional(),
+        password: z.string().min(4).max(64).optional(),
       }))
       .mutation(async ({ ctx, input }) => {
         const token = nanoid(32);
@@ -157,7 +167,7 @@ export const appRouter = router({
           token,
           expiresAt,
           hasPassword: !!input.password,
-          passwordHash: input.password || null,
+          passwordHash: input.password ? hashShareAccessCode(input.password) : null,
           viewCount: 0,
           maxViews: input.maxViews,
           isActive: true,
@@ -169,14 +179,14 @@ export const appRouter = router({
     view: publicProcedure
       .input(z.object({
         token: z.string(),
-        password: z.string().optional(),
+        password: z.string().max(64).optional(),
       }))
       .query(async ({ input }) => {
         const link = await getShareLinkByToken(input.token);
         if (!link) return { error: "رابط غير صالح", portfolio: null };
         if (new Date() > link.expiresAt) return { error: "انتهت صلاحية الرابط", portfolio: null };
         if ((link.maxViews ?? 0) > 0 && (link.viewCount ?? 0) >= (link.maxViews ?? 0)) return { error: "تم تجاوز الحد الأقصى للمشاهدات", portfolio: null };
-        if (link.hasPassword && input.password !== link.passwordHash) return { error: "كلمة المرور غير صحيحة", portfolio: null, requiresPassword: true };
+        if (link.hasPassword && !verifyShareAccessCode(link.passwordHash, input.password)) return { error: "رمز الوصول غير صحيح", portfolio: null, requiresPassword: true };
 
         await incrementShareLinkViews(link.id);
         const portfolio = await getPortfolioById(link.portfolioId);

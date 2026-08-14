@@ -493,6 +493,7 @@ export default function PerformanceEvidence() {
   const [isSharing, setIsSharing] = useState(false);
   const [shareExpiryDays, setShareExpiryDays] = useState(30);
   const [showShareSettings, setShowShareSettings] = useState(false);
+  const [shareAccessCode, setShareAccessCode] = useState("");
   const [shareUrl, setShareUrl] = useState<string | null>(null);
   const [showColorPicker, setShowColorPicker] = useState(false);
   const [showAIAssistant, setShowAIAssistant] = useState(false);
@@ -2072,11 +2073,12 @@ export default function PerformanceEvidence() {
         portfolioId: currentPortfolioId,
         expiresInDays: shareExpiryDays,
         maxViews: 0,
+        password: shareAccessCode.trim() || undefined,
       });
       const url = `${window.location.origin}/share/${result.token}`;
       setShareUrl(url);
       await navigator.clipboard.writeText(url);
-      toast.success("تم نسخ رابط المشاركة!");
+      toast.success(shareAccessCode.trim() ? "تم نسخ الرابط. أرسل رمز الوصول للمستلم عبر قناة آمنة." : "تم نسخ رابط المشاركة!");
     } catch {
       toast.error("فشل إنشاء رابط المشاركة");
     }
@@ -4622,6 +4624,9 @@ export default function PerformanceEvidence() {
                       <option value={365}>سنة</option>
                     </select>
                     <p className="text-[10px] text-muted-foreground mt-1">ينتهي الرابط بعد {shareExpiryDays} يوم من إنشائه</p>
+                    <label className="block text-xs font-medium text-muted-foreground mt-3 mb-1">رمز وصول اختياري</label>
+                    <input type="password" dir="ltr" value={shareAccessCode} onChange={(event) => setShareAccessCode(event.target.value)} minLength={4} maxLength={64} placeholder="4 أحرف أو أرقام على الأقل" className="w-full px-2 py-1.5 rounded-md border border-input text-sm bg-background" />
+                    <p className="text-[10px] text-muted-foreground mt-1">يُحفظ الرمز بصورة مجزأة، ولا يظهر لزائر الرابط إلا بعد إدخاله بشكل صحيح.</p>
                   </div>
                 )}
               </div>

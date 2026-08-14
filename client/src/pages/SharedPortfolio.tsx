@@ -249,7 +249,7 @@ export default function SharedPortfolio() {
               <Lock className="w-8 h-8 text-white" />
             </div>
             <h1 className="text-xl font-bold text-white" style={{ fontFamily: "'Tajawal', sans-serif" }}>ملف إنجاز محمي</h1>
-            <p className="text-teal-100 text-sm mt-1">أدخل كلمة المرور للمتابعة</p>
+            <p className="text-teal-100 text-sm mt-1">أدخل رمز الوصول الذي وصلك من صاحب الملف</p>
           </div>
           <CardContent className="p-6">
             <div className="space-y-4">
@@ -258,7 +258,7 @@ export default function SharedPortfolio() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 onKeyDown={(e) => { if (e.key === "Enter") setSubmitted(true); }}
-                placeholder="كلمة المرور"
+                placeholder="رمز الوصول"
                 className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-400 text-center"
               />
               <Button onClick={() => setSubmitted(true)} className="w-full gap-2 bg-teal-600 hover:bg-teal-700 h-11">
