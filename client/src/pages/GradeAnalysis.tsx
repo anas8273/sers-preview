@@ -404,11 +404,7 @@ export default function GradeAnalysis() {
 
               {/* ── بيانات المادة في حقول fieldset ── */}
               <div style={{ padding: '0 28px 8px' }}>
-                <div style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(4, 1fr)',
-                  gap: '8px',
-                }}>
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                   {[
                     { label: "المعلم/ة", value: subjectInfo.teacher },
                     { label: "المادة", value: subjectInfo.subject },
@@ -450,10 +446,7 @@ export default function GradeAnalysis() {
               {stats && (
                 <div style={{ padding: '0 28px 20px' }}>
                   {/* ── الإحصائيات ── */}
-                  <div style={{
-                    display: 'grid',
-                    gridTemplateColumns: 'repeat(5, 1fr)',
-                    gap: '8px',
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5" style={{
                     marginBottom: '16px',
                     marginTop: '8px',
                   }}>
@@ -491,7 +484,8 @@ export default function GradeAnalysis() {
                       <div style={{ width: '4px', height: '14px', borderRadius: '2px', backgroundColor: C.teal }} />
                       توزيع التقديرات
                     </div>
-                    <div style={{
+                    <div className="overflow-x-auto rounded-[10px] border border-gray-100" role="region" aria-label="رسم توزيع التقديرات" tabIndex={0}>
+                    <div className="min-w-[420px]" style={{
                       display: 'flex',
                       alignItems: 'flex-end',
                       gap: '16px',
@@ -528,6 +522,7 @@ export default function GradeAnalysis() {
                         );
                       })}
                     </div>
+                    </div>
                   </div>
 
                   {/* ── جدول النتائج التفصيلي ── */}
@@ -543,7 +538,8 @@ export default function GradeAnalysis() {
                     <div style={{ width: '4px', height: '14px', borderRadius: '2px', backgroundColor: C.teal }} />
                     تفاصيل الدرجات
                   </div>
-                  <table style={{ width: '100%', fontSize: '11px', borderCollapse: 'collapse', borderRadius: '8px', overflow: 'hidden' }}>
+                  <div className="overflow-x-auto rounded-lg border border-transparent" role="region" aria-label="جدول تفاصيل درجات الطلاب" tabIndex={0}>
+                  <table className="min-w-[650px]" style={{ width: '100%', fontSize: '11px', borderCollapse: 'collapse', borderRadius: '8px', overflow: 'hidden' }}>
                     <thead>
                       <tr style={{ background: `linear-gradient(to left, ${C.tealDark}, ${C.teal})`, color: '#fff' }}>
                         <th style={{ padding: '8px 6px', textAlign: 'right', fontWeight: 700, fontSize: '10px' }}>م</th>
@@ -581,12 +577,10 @@ export default function GradeAnalysis() {
                       ))}
                     </tbody>
                   </table>
+                  </div>
 
                   {/* ── التوقيعات ── */}
-                  <div style={{
-                    display: 'grid',
-                    gridTemplateColumns: '1fr 1fr',
-                    gap: '24px',
+                  <div className="grid grid-cols-1 gap-6 pt-5 mt-4 border-t sm:grid-cols-2" style={{
                     paddingTop: '20px',
                     marginTop: '16px',
                     borderTop: `1px solid ${C.teal}15`,

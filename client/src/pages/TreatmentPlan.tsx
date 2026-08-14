@@ -150,11 +150,7 @@ export default function TreatmentPlan() {
 
             {/* بيانات الخطة في حقول fieldset */}
             <div style={{ padding: '0 28px 12px' }}>
-              <div style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(4, 1fr)',
-                gap: '8px',
-              }}>
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                 {[
                   { label: "المعلم/ة", value: info.teacher },
                   { label: "المادة", value: info.subject },
@@ -193,7 +189,7 @@ export default function TreatmentPlan() {
               </div>
 
               {/* المهارة والهدف - عرض كامل */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginTop: '8px' }}>
+              <div className="grid grid-cols-1 gap-2 mt-2 sm:grid-cols-2">
                 {[
                   { label: "المهارة المستهدفة", value: info.skill },
                   { label: "الهدف", value: info.objective },
@@ -241,7 +237,8 @@ export default function TreatmentPlan() {
                 بيانات الطلاب ({validStudents.length})
               </div>
 
-              <table style={{ width: '100%', fontSize: '11px', borderCollapse: 'collapse', borderRadius: '8px', overflow: 'hidden' }}>
+              <div className="overflow-x-auto rounded-lg border border-transparent" role="region" aria-label="جدول بيانات الطلاب" tabIndex={0}>
+              <table className="min-w-[720px]" style={{ width: '100%', fontSize: '11px', borderCollapse: 'collapse', borderRadius: '8px', overflow: 'hidden' }}>
                 <thead>
                   <tr style={{ background: `linear-gradient(to left, ${C.tealDark}, ${C.teal})`, color: '#fff' }}>
                     <th style={{ padding: '8px 6px', textAlign: 'right', fontWeight: 700, fontSize: '10px', width: '30px' }}>م</th>
@@ -265,12 +262,10 @@ export default function TreatmentPlan() {
                   ))}
                 </tbody>
               </table>
+              </div>
 
               {/* التوقيعات */}
-              <div style={{
-                display: 'grid',
-                gridTemplateColumns: '1fr 1fr',
-                gap: '24px',
+              <div className="grid grid-cols-1 gap-6 pt-5 mt-4 border-t sm:grid-cols-2" style={{
                 paddingTop: '20px',
                 marginTop: '16px',
                 borderTop: `1px solid ${C.teal}15`,
