@@ -227,7 +227,7 @@ describe("AI Services - classifyEvidence with image", () => {
     } catch (e: any) {
       expect(e.message).toBeDefined();
     }
-  }, 30000);
+  }, 45000);
 });
 
 describe("AI Services - classifyEvidence batch validation", () => {

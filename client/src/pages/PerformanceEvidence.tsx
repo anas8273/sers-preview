@@ -2073,7 +2073,7 @@ export default function PerformanceEvidence() {
         expiresInDays: shareExpiryDays,
         maxViews: 0,
       });
-      const url = `${window.location.origin}/shared/${result.token}`;
+      const url = `${window.location.origin}/share/${result.token}`;
       setShareUrl(url);
       await navigator.clipboard.writeText(url);
       toast.success("تم نسخ رابط المشاركة!");
