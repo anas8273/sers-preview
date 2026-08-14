@@ -13,7 +13,7 @@ import {
   ChevronDown, ChevronUp, Sparkles, BookOpen,
   Mic, Heart, Lightbulb, Clock, Search,
   Copy, Loader2, Eye, Printer, FileDown, Maximize2, Minimize2,
-  Star, Quote, ChevronLeft, ZoomIn, ZoomOut, RotateCcw
+  Star, Quote, ChevronLeft, ZoomIn, ZoomOut, RotateCcw, ScanSearch, CircleCheck, CircleAlert
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
@@ -47,6 +47,26 @@ interface SavedRadio {
   fontFamily: string;
   segments: RadioSegment[];
   createdAt: number;
+}
+
+export interface RadioReadinessCheck {
+  id: string;
+  label: string;
+  recommendation: string;
+  complete: boolean;
+  weight: number;
+}
+
+export function calculateRadioReadiness(title: string, date: string, segments: RadioSegment[]) {
+  const checks: RadioReadinessCheck[] = [
+    { id: "title", label: "عنوان البرنامج", recommendation: "اكتب عنواناً واضحاً للإذاعة يعكس موضوعها أو مناسبتها.", complete: title.trim().length >= 4, weight: 10 },
+    { id: "date", label: "تاريخ الإذاعة", recommendation: "أضف تاريخ تقديم البرنامج لتوثيق الإذاعة وأرشفتها.", complete: Boolean(date.trim()), weight: 10 },
+    { id: "segments", label: "عدد الفقرات", recommendation: "أضف ثلاث فقرات على الأقل لتكوين برنامج إذاعي متوازن.", complete: segments.length >= 3, weight: 20 },
+    { id: "content", label: "محتوى الفقرات", recommendation: "أكمل محتوى كل فقرة بما لا يقل عن 20 حرفاً قبل التقديم.", complete: segments.length >= 3 && segments.every((segment) => segment.content.trim().length >= 20), weight: 35 },
+    { id: "variety", label: "تنوع الفقرات", recommendation: "نوّع ثلاث فئات من الفقرات على الأقل لتحسين انسيابية البرنامج.", complete: new Set(segments.map((segment) => segment.type)).size >= 3, weight: 15 },
+    { id: "presenters", label: "توزيع التقديم", recommendation: "عيّن مقدمين لفقرتين على الأقل ليسهل تنظيم التنفيذ الصباحي.", complete: segments.filter((segment) => segment.presenter?.trim()).length >= 2, weight: 10 },
+  ];
+  return { score: checks.reduce((total, check) => total + (check.complete ? check.weight : 0), 0), checks, completed: checks.filter((check) => check.complete).length };
 }
 
 const SEGMENT_TYPES: { id: SegmentType; label: string; icon: React.ComponentType<any>; color: string; defaultTitle: string }[] = [
@@ -183,6 +203,7 @@ export default function SchoolRadio() {
   const [aiLoading, setAiLoading] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
+  const readiness = useMemo(() => calculateRadioReadiness(title, date, segments), [title, date, segments]);
 
   const { containerRef: previewContainerRef, pageRef: previewPageRef, previewScale, wrapperWidth, wrapperHeight, zoomLevel, zoomIn, zoomOut, resetZoom } = usePreviewScale();
 
@@ -257,7 +278,8 @@ export default function SchoolRadio() {
       setCurrentProgram(newProg);
       toast.success("تم حفظ البرنامج بنجاح");
     }
-  }, [currentProgram, programs, title, date, radioTheme, selectedTheme, selectedFont, segments]);
+    if (readiness.score < 100) toast.info(`حُفظ البرنامج كمسودة. أكمل ${readiness.checks.filter((check) => !check.complete).length} عناصر قبل التصدير.`);
+  }, [currentProgram, programs, title, date, radioTheme, selectedTheme, selectedFont, segments, readiness]);
 
   const handleDelete = useCallback((id: string) => {
     const updated = programs.filter((p) => p.id !== id);
@@ -293,13 +315,17 @@ export default function SchoolRadio() {
   }, [segments, radioTheme, title, generateRadioMutation]);
 
   const handleExportPDF = useCallback(async () => {
+    if (readiness.score < 100) {
+      toast.error(`أكمل عناصر الجاهزية قبل التصدير: ${readiness.checks.filter((check) => !check.complete).map((check) => check.label).join("، ")}`);
+      return;
+    }
     setExporting(true);
     try {
       await exportToPDF("radio-preview-content", `${title}.pdf`);
       toast.success("تم تصدير PDF بنجاح");
     } catch { toast.error("حدث خطأ أثناء التصدير"); }
     finally { setExporting(false); }
-  }, [title]);
+  }, [title, readiness]);
 
   const handlePrint = useCallback(() => {
     try { printElement("radio-preview-content"); } catch { toast.error("حدث خطأ أثناء الطباعة"); }
@@ -413,6 +439,16 @@ export default function SchoolRadio() {
               <div className="mb-4">
                 <TemplateSelector selectedTheme={selectedTheme} onThemeChange={setSelectedTheme} selectedFont={selectedFont} onFontChange={setSelectedFont} compact />
               </div>
+
+              <section className="mb-4 overflow-hidden rounded-xl border border-violet-100 bg-gradient-to-l from-violet-50 to-white p-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex items-center gap-3"><div className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-violet-100 text-violet-700"><ScanSearch className="h-6 w-6" /></div><div><h2 className="text-sm font-bold text-slate-800">جاهزية برنامج الإذاعة</h2><p className="mt-0.5 text-[11px] leading-5 text-slate-500">يمكن حفظ البرنامج كمسودة، ويلزم اكتمال العناصر قبل تصديره.</p></div></div>
+                  <div className="rounded-lg bg-white px-4 py-2 text-center shadow-sm ring-1 ring-violet-100"><strong className="text-2xl font-black text-violet-700">{readiness.score}%</strong><span className="mr-1 text-[10px] text-slate-500">جاهزية</span></div>
+                </div>
+                <div className="mt-3 grid grid-cols-1 gap-1.5 sm:grid-cols-2 lg:grid-cols-3">
+                  {readiness.checks.map((check) => <div key={check.id} className={`flex items-start gap-1.5 rounded-lg border px-2.5 py-2 ${check.complete ? "border-emerald-100 bg-emerald-50/70" : "border-amber-100 bg-amber-50/60"}`}>{check.complete ? <CircleCheck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-600" /> : <CircleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600" />}<span><span className="block text-[11px] font-semibold text-slate-700">{check.label}</span>{!check.complete && <span className="mt-0.5 block text-[10px] leading-4 text-slate-500">{check.recommendation}</span>}</span></div>)}
+                </div>
+              </section>
 
               {/* Program Info */}
               <div className="bg-white rounded-xl border border-gray-200 p-4 mb-4">
