@@ -12,11 +12,12 @@ import {
   ArrowLeft, User, GraduationCap, Award, Briefcase,
   Target, Plus, Trash2, Save, Eye,
   Sparkles, FolderOpen, ChevronLeft, Loader2,
-  FileDown, Printer, Maximize2, Minimize2, Building2, Star, ZoomIn, ZoomOut, RotateCcw, ScanSearch, CircleCheck, CircleAlert
+  FileDown, Printer, Maximize2, Minimize2, Building2, Star, ZoomIn, ZoomOut, RotateCcw, ScanSearch, CircleCheck, CircleAlert, Upload, Link2, FileText
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
+import { useAuth } from "@/_core/hooks/useAuth";
 import TemplateSelector, { THEMES, type ThemeConfig } from "@/components/TemplateSelector";
 import { exportToPDF, printElement } from "@/lib/pdf-export";
 import { usePreviewScale } from "@/hooks/usePreviewScale";
@@ -47,10 +48,19 @@ interface Activity {
   type: "school" | "department" | "ministry" | "external";
 }
 
+interface PortfolioEvidence {
+  id: string;
+  title: string;
+  description: string;
+  url: string;
+  fileName: string;
+  mimeType: string;
+}
+
 interface PortfolioData {
   personalInfo: PersonalInfo; certificates: Certificate[];
   achievements: Achievement[]; activities: Activity[];
-  goals: string[]; notes: string;
+  evidences: PortfolioEvidence[]; goals: string[]; notes: string;
 }
 
 export interface PortfolioReadinessCheck {
@@ -62,17 +72,18 @@ export interface PortfolioReadinessCheck {
   weight: number;
 }
 
-type TabId = "personal" | "certificates" | "achievements" | "activities" | "goals" | "preview";
+type TabId = "personal" | "certificates" | "achievements" | "activities" | "evidences" | "goals" | "preview";
 
 export function calculatePortfolioReadiness(data: PortfolioData) {
   const personalFilled = Object.values(data.personalInfo).filter((value) => value.trim()).length;
   const checks: PortfolioReadinessCheck[] = [
-    { id: "personal", tab: "personal", label: "البيانات المهنية", recommendation: "أكمل ستة حقول شخصية ومهنية على الأقل لتمثيل صاحب الملف بوضوح.", complete: personalFilled >= 6, weight: 20 },
+    { id: "personal", tab: "personal", label: "البيانات المهنية", recommendation: "أكمل ستة حقول شخصية ومهنية على الأقل لتمثيل صاحب الملف بوضوح.", complete: personalFilled >= 6, weight: 15 },
     { id: "certificates", tab: "certificates", label: "الدورات والشهادات", recommendation: "أضف دورة أو شهادة موثقة باسمها وجهتها وتاريخها.", complete: data.certificates.some((item) => item.title.trim() && item.issuer.trim() && item.date.trim()), weight: 15 },
     { id: "achievements", tab: "achievements", label: "الإنجازات والجوائز", recommendation: "أضف إنجازاً موثقاً بوصف يوضح أثره المهني.", complete: data.achievements.some((item) => item.title.trim() && item.description.trim().length >= 40), weight: 15 },
     { id: "activities", tab: "activities", label: "الأنشطة والمبادرات", recommendation: "أضف نشاطاً أو مبادرة مع وصف واضح لمشاركتك ونتيجتها.", complete: data.activities.some((item) => item.title.trim() && item.description.trim().length >= 40), weight: 15 },
+    { id: "evidences", tab: "evidences", label: "الشواهد والمرفقات", recommendation: "أضف شاهداً واحداً على الأقل مع رابط أو ملف موثق يدعم إنجازاتك.", complete: data.evidences.some((item) => item.title.trim() && item.url.trim()), weight: 10 },
     { id: "goals", tab: "goals", label: "الأهداف المهنية", recommendation: "أضف هدفين مهنيين محددين قابلين للمتابعة.", complete: data.goals.filter((goal) => goal.trim().length >= 10).length >= 2, weight: 15 },
-    { id: "notes", tab: "goals", label: "الانعكاس المهني", recommendation: "أضف ملخصاً أو ملاحظات مهنية لا تقل عن 80 حرفاً لتعزيز سياق الملف.", complete: data.notes.trim().length >= 80, weight: 20 },
+    { id: "notes", tab: "goals", label: "الانعكاس المهني", recommendation: "أضف ملخصاً أو ملاحظات مهنية لا تقل عن 80 حرفاً لتعزيز سياق الملف.", complete: data.notes.trim().length >= 80, weight: 15 },
   ];
   return { score: checks.reduce((total, check) => total + (check.complete ? check.weight : 0), 0), checks, completed: checks.filter((check) => check.complete).length };
 }
@@ -82,6 +93,7 @@ const TABS: { id: TabId; label: string; icon: React.ComponentType<any> }[] = [
   { id: "certificates", label: "الدورات والشهادات", icon: GraduationCap },
   { id: "achievements", label: "الإنجازات والجوائز", icon: Award },
   { id: "activities", label: "الأنشطة والمبادرات", icon: Target },
+  { id: "evidences", label: "الشواهد والمرفقات", icon: FolderOpen },
   { id: "goals", label: "الأهداف المهنية", icon: Sparkles },
   { id: "preview", label: "المعاينة والتصدير", icon: Eye },
 ];
@@ -110,10 +122,10 @@ function genId() { return Date.now().toString(36) + Math.random().toString(36).s
 const STORAGE_KEY = "sers-portfolio-data";
 
 function loadPortfolio(): PortfolioData {
-  try { const s = localStorage.getItem(STORAGE_KEY); if (s) return JSON.parse(s); } catch {}
+  try { const s = localStorage.getItem(STORAGE_KEY); if (s) { const parsed = JSON.parse(s); return { ...parsed, evidences: parsed.evidences ?? [] }; } } catch {}
   return {
     personalInfo: { fullName: "", jobTitle: "", school: "", department: "", qualification: "", experience: "", email: "", phone: "" },
-    certificates: [], achievements: [], activities: [], goals: [""], notes: "",
+    certificates: [], achievements: [], activities: [], evidences: [], goals: [""], notes: "",
   };
 }
 function savePortfolioToStorage(data: PortfolioData) { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); }
@@ -215,7 +227,7 @@ function PortfolioPreview({ data, theme, fontFamily }: { data: PortfolioData; th
       </div>
 
       {/* Achievements & Activities Page */}
-      {(data.achievements.length > 0 || data.activities.length > 0 || data.goals.filter(g => g.trim()).length > 0) && (
+      {(data.achievements.length > 0 || data.activities.length > 0 || data.evidences.length > 0 || data.goals.filter(g => g.trim()).length > 0) && (
         <div style={{ width: "210mm", minHeight: "297mm", padding: "32px", pageBreakAfter: "always" }}>
           {data.achievements.length > 0 && (
             <>
@@ -269,6 +281,24 @@ function PortfolioPreview({ data, theme, fontFamily }: { data: PortfolioData; th
             </>
           )}
 
+          {data.evidences.length > 0 && (
+            <>
+              <div data-pdf-header style={{ background: `linear-gradient(135deg, ${theme.primaryColor}, ${theme.secondaryColor})`, color: theme.headerText, padding: "16px 24px", borderRadius: "12px", marginBottom: "16px", display: "flex", alignItems: "center", gap: "12px" }}>
+                <div style={{ width: "36px", height: "36px", borderRadius: "8px", backgroundColor: "rgba(255,255,255,0.2)", display: "flex", alignItems: "center", justifyContent: "center" }}><span style={{ fontSize: "18px" }}>📎</span></div>
+                <h2 style={{ fontSize: "18px", fontWeight: "800", margin: 0, fontFamily: `'Tajawal', '${fontFamily}', sans-serif` }}>الشواهد والمرفقات ({data.evidences.length})</h2>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", marginBottom: "28px" }}>
+                {data.evidences.map((evidence, index) => (
+                  <div key={evidence.id} style={{ padding: "14px", borderRadius: "10px", border: `1px solid ${theme.borderColor}`, backgroundColor: "#fafafa" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "6px" }}><span style={{ color: theme.primaryColor, fontWeight: 800 }}>{index + 1}.</span><span style={{ fontSize: "13px", fontWeight: "700", color: "#1f2937" }}>{evidence.title || evidence.fileName || "شاهد مرفق"}</span></div>
+                    {evidence.description && <p style={{ fontSize: "11px", color: "#6b7280", lineHeight: "1.6", margin: "0 0 6px" }}>{evidence.description}</p>}
+                    {evidence.url && <p style={{ fontSize: "9px", color: theme.primaryColor, direction: "ltr", textAlign: "right", wordBreak: "break-all", margin: 0 }}>{evidence.url}</p>}
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+
           {data.goals.filter(g => g.trim()).length > 0 && (
             <>
               <div data-pdf-header style={{ background: `linear-gradient(135deg, ${theme.primaryColor}, ${theme.secondaryColor})`, color: theme.headerText, padding: "16px 24px", borderRadius: "12px", marginBottom: "16px", display: "flex", alignItems: "center", gap: "12px" }}>
@@ -312,11 +342,13 @@ function PortfolioPreview({ data, theme, fontFamily }: { data: PortfolioData; th
 
 export default function PortfolioBuilder() {
   const [, navigate] = useLocation();
+  const { isAuthenticated } = useAuth();
   const [activeTab, setActiveTab] = useState<TabId>("personal");
   const [data, setData] = useState<PortfolioData>(loadPortfolio);
   const [selectedTheme, setSelectedTheme] = useState<ThemeConfig>(THEMES[0]);
   const [selectedFont, setSelectedFont] = useState("Cairo");
   const [aiLoading, setAiLoading] = useState(false);
+  const [evidenceUploading, setEvidenceUploading] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
   const readiness = useMemo(() => calculatePortfolioReadiness(data), [data]);
@@ -324,6 +356,7 @@ export default function PortfolioBuilder() {
   const { containerRef: previewContainerRef, pageRef: previewPageRef, previewScale, wrapperWidth, wrapperHeight, zoomLevel, zoomIn, zoomOut, resetZoom } = usePreviewScale();
 
   const generatePortfolioMutation = trpc.genAI.generatePortfolioContent.useMutation();
+  const uploadEvidenceMutation = trpc.file.upload.useMutation();
 
   const updateData = useCallback((updater: (prev: PortfolioData) => PortfolioData) => {
     setData((prev) => { const next = updater(prev); savePortfolioToStorage(next); return next; });
@@ -371,6 +404,53 @@ export default function PortfolioBuilder() {
   const removeActivity = useCallback((id: string) => {
     updateData((prev) => ({ ...prev, activities: prev.activities.filter((a) => a.id !== id) }));
   }, [updateData]);
+
+  const addEvidence = useCallback(() => {
+    updateData((prev) => ({ ...prev, evidences: [...prev.evidences, { id: genId(), title: "", description: "", url: "", fileName: "", mimeType: "" }] }));
+  }, [updateData]);
+
+  const updateEvidence = useCallback((id: string, field: keyof PortfolioEvidence, value: string) => {
+    updateData((prev) => ({ ...prev, evidences: prev.evidences.map((item) => item.id === id ? { ...item, [field]: value } : item) }));
+  }, [updateData]);
+
+  const removeEvidence = useCallback((id: string) => {
+    updateData((prev) => ({ ...prev, evidences: prev.evidences.filter((item) => item.id !== id) }));
+  }, [updateData]);
+
+  const handleEvidenceFileUpload = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    if (!isAuthenticated) {
+      toast.error("سجّل الدخول أولاً لرفع الشاهد وحفظه بأمان.");
+      return;
+    }
+    if (file.size > 8 * 1024 * 1024) {
+      toast.error("حجم الملف كبير. ارفع ملفاً لا يتجاوز 8 ميغابايت.");
+      return;
+    }
+    setEvidenceUploading(true);
+    try {
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => typeof reader.result === "string" ? resolve(reader.result) : reject(new Error("تعذر قراءة الملف."));
+        reader.onerror = () => reject(new Error("تعذر قراءة الملف."));
+        reader.readAsDataURL(file);
+      });
+      const base64Data = dataUrl.split(",")[1];
+      if (!base64Data) throw new Error("تعذر تجهيز الملف للرفع.");
+      const result = await uploadEvidenceMutation.mutateAsync({ fileName: file.name, mimeType: file.type || "application/octet-stream", base64Data });
+      updateData((prev) => ({
+        ...prev,
+        evidences: [...prev.evidences, { id: genId(), title: file.name.replace(/\.[^.]+$/, ""), description: "", url: result.url, fileName: file.name, mimeType: file.type || "application/octet-stream" }],
+      }));
+      toast.success("تم رفع الشاهد وإضافته إلى ملف الإنجاز.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "تعذر رفع الشاهد.");
+    } finally {
+      setEvidenceUploading(false);
+    }
+  }, [isAuthenticated, updateData, uploadEvidenceMutation]);
 
   // Goals
   const addGoal = useCallback(() => { updateData((prev) => ({ ...prev, goals: [...prev.goals, ""] })); }, [updateData]);
@@ -697,6 +777,57 @@ export default function PortfolioBuilder() {
                               <textarea value={act.description} onChange={(e) => updateActivity(act.id, "description", e.target.value)} placeholder="وصف النشاط" rows={2}
                                 className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 md:col-span-2 resize-y" />
                             </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Evidences Tab */}
+              {activeTab === "evidences" && (
+                <div key="evidences">
+                  <div className="bg-white rounded-xl border border-gray-200 p-6">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
+                      <div>
+                        <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2" style={{ fontFamily: "'Tajawal', sans-serif" }}>
+                          <FolderOpen className="w-5 h-5 text-teal-600" /> الشواهد والمرفقات ({data.evidences.length})
+                        </h2>
+                        <p className="mt-1 text-xs text-gray-500">ارفع ملفاً أو أضف رابطاً موثقاً؛ تحفظ الملفات في التخزين السحابي ويُحفظ رابطها مع ملف الإنجاز.</p>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        <label className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium text-white ${evidenceUploading ? "bg-teal-400" : "cursor-pointer bg-teal-600 hover:bg-teal-700"}`}>
+                          <input type="file" className="sr-only" onChange={handleEvidenceFileUpload} disabled={evidenceUploading} />
+                          {evidenceUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                          {evidenceUploading ? "جاري الرفع..." : "رفع شاهد"}
+                        </label>
+                        <Button onClick={addEvidence} size="sm" variant="outline" className="gap-1"><Link2 className="h-4 w-4" />إضافة رابط</Button>
+                      </div>
+                    </div>
+                    {!isAuthenticated && <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">يتطلب رفع الملفات تسجيل الدخول؛ يمكنك إضافة رابط يدوي الآن.</div>}
+                    {data.evidences.length === 0 ? (
+                      <div className="rounded-xl border border-dashed border-teal-200 bg-teal-50/40 py-12 text-center text-gray-400">
+                        <FileText className="mx-auto mb-2 h-10 w-10 opacity-30" />
+                        <p className="text-sm">لا توجد شواهد مضافة بعد</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        {data.evidences.map((evidence, index) => (
+                          <div key={evidence.id} className="rounded-xl border border-gray-100 p-4 transition-colors hover:border-teal-200">
+                            <div className="mb-3 flex items-center justify-between">
+                              <span className="text-xs font-bold text-gray-400">شاهد #{index + 1}</span>
+                              <div className="flex items-center gap-1">
+                                {evidence.url && <a href={evidence.url} target="_blank" rel="noreferrer" className="rounded-md p-1 text-teal-600 hover:bg-teal-50" title="فتح الشاهد"><Link2 className="h-4 w-4" /></a>}
+                                <button type="button" onClick={() => removeEvidence(evidence.id)} className="rounded-md p-1 text-red-400 hover:bg-red-50 hover:text-red-600"><Trash2 className="h-4 w-4" /></button>
+                              </div>
+                            </div>
+                            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                              <input type="text" value={evidence.title} onChange={(event) => updateEvidence(evidence.id, "title", event.target.value)} placeholder="عنوان الشاهد" className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20" />
+                              <input type="url" value={evidence.url} onChange={(event) => updateEvidence(evidence.id, "url", event.target.value)} placeholder="رابط الشاهد أو الملف" dir="ltr" className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20" />
+                              <textarea value={evidence.description} onChange={(event) => updateEvidence(evidence.id, "description", event.target.value)} placeholder="وصف موجز لما يثبت هذا الشاهد" rows={2} className="w-full resize-y rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 md:col-span-2" />
+                            </div>
+                            {evidence.fileName && <p className="mt-2 text-[11px] text-gray-500">الملف المرفوع: {evidence.fileName}</p>}
                           </div>
                         ))}
                       </div>

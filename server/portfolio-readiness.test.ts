@@ -3,7 +3,7 @@ import { calculatePortfolioReadiness } from "../client/src/pages/PortfolioBuilde
 
 const emptyPortfolio = {
   personalInfo: { fullName: "", jobTitle: "", school: "", department: "", qualification: "", experience: "", email: "", phone: "" },
-  certificates: [], achievements: [], activities: [], goals: [""], notes: "",
+  certificates: [], achievements: [], activities: [], evidences: [], goals: [""], notes: "",
 };
 
 describe("portfolio readiness", () => {
@@ -11,7 +11,7 @@ describe("portfolio readiness", () => {
     const readiness = calculatePortfolioReadiness(emptyPortfolio);
     expect(readiness.score).toBe(0);
     expect(readiness.completed).toBe(0);
-    expect(readiness.checks).toHaveLength(6);
+    expect(readiness.checks).toHaveLength(7);
   });
 
   it("awards full readiness for a complete professional portfolio", () => {
@@ -20,6 +20,7 @@ describe("portfolio readiness", () => {
       certificates: [{ id: "c1", title: "التعلم النشط", issuer: "وزارة التعليم", date: "1446", hours: "20", type: "training" }],
       achievements: [{ id: "a1", title: "مبادرة علاجية", description: "صممت ونفذت مبادرة علاجية قائمة على تحليل نتائج المتعلمين وحققت تحسناً ملموساً في الإتقان.", date: "1446", category: "initiative" }],
       activities: [{ id: "x1", title: "نشاط مدرسي", description: "شاركت في تخطيط وتنفيذ نشاط مدرسي يرفع دافعية الطلاب ويعزز مهارات التعاون لديهم بصورة منظمة.", date: "1446", type: "school" }],
+      evidences: [{ id: "e1", title: "تقرير المبادرة", description: "تقرير موثق", url: "https://example.com/evidence.pdf", fileName: "evidence.pdf", mimeType: "application/pdf" }],
       goals: ["تطوير مهارات تحليل نتائج المتعلمين", "الحصول على شهادة مهنية متقدمة"],
       notes: "أراجع أثر ممارساتي التعليمية بصورة دورية، وأستخدم نتائج التقويم لتحسين التخطيط وتقديم دعم مخصص للمتعلمين وفق احتياجاتهم المختلفة.",
     });
