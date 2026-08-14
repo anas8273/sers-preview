@@ -264,6 +264,54 @@ describe("genAI.generateExamQuestions", () => {
   });
 });
 
+describe("genAI.extractGradesFromImage", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("returns only valid student grades and clamps scores to the declared maximum", async () => {
+    const { invokeLLM } = await import("./_core/llm");
+    (invokeLLM as any).mockResolvedValue({
+      choices: [{
+        message: {
+          content: JSON.stringify({
+            students: [
+              { name: "سارة أحمد", score: 98 },
+              { name: "محمد علي", score: 105 },
+              { name: "", score: 70 },
+            ],
+            unreadableNote: "تم تجاهل صف واحد غير واضح.",
+          }),
+        },
+      }],
+    });
+
+    const caller = appRouter.createCaller(createPublicContext());
+    const result = await caller.genAI.extractGradesFromImage({
+      imageData: "data:image/png;base64,aGVsbG8=",
+      maxScore: 100,
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.students).toEqual([
+      { name: "سارة أحمد", score: 98 },
+      { name: "محمد علي", score: 100 },
+    ]);
+    expect(result.unreadableNote).toContain("صف واحد");
+    expect(invokeLLM).toHaveBeenCalledWith(expect.objectContaining({ response_format: expect.any(Object) }));
+  });
+
+  it("rejects a non-image data URL before invoking the model", async () => {
+    const { invokeLLM } = await import("./_core/llm");
+    const caller = appRouter.createCaller(createPublicContext());
+    await expect(caller.genAI.extractGradesFromImage({
+      imageData: "data:text/plain;base64,aGVsbG8=",
+      maxScore: 100,
+    })).rejects.toThrow();
+    expect(invokeLLM).not.toHaveBeenCalled();
+  });
+});
+
 describe("genAI.generatePortfolioContent", () => {
   beforeEach(() => {
     vi.clearAllMocks();

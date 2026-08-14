@@ -4,10 +4,12 @@
  * المستخدم يدخل بيانات المادة والطلاب → رسوم بيانية تلقائية → تقرير → تصدير PDF
  */
 import { useState, useMemo } from "react";
-import { ArrowLeft, Download, Printer, Plus, Trash2, BarChart3, PieChart, TrendingUp, Users, Eye } from "lucide-react";
+import { ArrowLeft, Download, Printer, Plus, Trash2, BarChart3, PieChart, TrendingUp, Users, Eye, Upload, ScanLine, Loader2 } from "lucide-react";
 import { useLocation } from "wouter";
 import { exportToPDF, printElement } from "@/lib/pdf-export";
 import { OfficialHeader } from "@/components/OfficialHeader";
+import { trpc } from "@/lib/trpc";
+import { toast } from "sonner";
 
 interface Student {
   id: string;
@@ -19,6 +21,9 @@ export default function GradeAnalysis() {
   const [, navigate] = useLocation();
   const [isExporting, setIsExporting] = useState(false);
   const [showReport, setShowReport] = useState(false);
+  const [isScanningSheet, setIsScanningSheet] = useState(false);
+  const [scanNote, setScanNote] = useState("");
+  const extractGradesMutation = (trpc.genAI as any).extractGradesFromImage.useMutation();
 
   const [subjectInfo, setSubjectInfo] = useState({
     subject: "",
@@ -111,6 +116,49 @@ export default function GradeAnalysis() {
     setIsExporting(true);
     await exportToPDF("analysis-report", `تحليل_نتائج_${subjectInfo.subject || "مادة"}.pdf`);
     setIsExporting(false);
+  };
+
+  const handleGradeSheetUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      toast.error("اختر صورة لكشف الدرجات بصيغة PNG أو JPG أو WEBP.");
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error("حجم الصورة كبير. اختر صورة لا تتجاوز 5 ميغابايت.");
+      return;
+    }
+
+    setIsScanningSheet(true);
+    setScanNote("");
+    try {
+      const imageData = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => typeof reader.result === "string" ? resolve(reader.result) : reject(new Error("تعذر قراءة الصورة"));
+        reader.onerror = () => reject(new Error("تعذر قراءة الصورة"));
+        reader.readAsDataURL(file);
+      });
+      const result = await extractGradesMutation.mutateAsync({ imageData, maxScore: subjectInfo.maxScore || 100 });
+      if (!result.success || result.students.length === 0) {
+        throw new Error(result.unreadableNote || "لم يتم العثور على صفوف درجات واضحة.");
+      }
+      const imported = result.students.map((student: { name: string; score: number }, index: number) => ({
+        id: `scan-${Date.now()}-${index}`,
+        name: student.name,
+        score: Math.min(Math.max(student.score, 0), Math.max(subjectInfo.maxScore || 100, 1)),
+      }));
+      setStudents((previous) => [...previous.filter((student) => student.name.trim() || student.score !== null), ...imported]);
+      setScanNote(result.unreadableNote || `تمت إضافة ${imported.length} طالباً من الصورة. راجع النتائج قبل الاعتماد.`);
+      toast.success(`تم استخراج درجات ${imported.length} طالباً. راجعها قبل الحفظ.`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "تعذر تحليل الصورة. تأكد من وضوح الأسماء والدرجات.";
+      setScanNote(message);
+      toast.error(message);
+    } finally {
+      setIsScanningSheet(false);
+    }
   };
 
   // ألوان الهوية البصرية
@@ -250,10 +298,22 @@ export default function GradeAnalysis() {
                   <div className="w-1.5 h-5 rounded-full" style={{ backgroundColor: C.teal }} />
                   درجات الطلاب ({students.length})
                 </h2>
-                <button type="button" onClick={addStudent} className="flex items-center gap-1 text-sm font-medium" style={{ color: C.teal }}>
-                  <Plus className="w-4 h-4" />
-                  إضافة طالب
-                </button>
+                <div className="flex items-center gap-2">
+                  <label className={`flex cursor-pointer items-center gap-1 rounded-lg border px-3 py-1.5 text-xs font-bold transition-colors ${isScanningSheet ? "cursor-wait border-gray-200 bg-gray-50 text-gray-400" : "border-teal-200 bg-teal-50 text-teal-700 hover:bg-teal-100"}`}>
+                    <input type="file" accept="image/png,image/jpeg,image/webp" className="sr-only" disabled={isScanningSheet} onChange={handleGradeSheetUpload} />
+                    {isScanningSheet ? <Loader2 className="h-4 w-4 animate-spin" /> : <ScanLine className="h-4 w-4" />}
+                    {isScanningSheet ? "جاري قراءة الصورة..." : "استيراد من صورة"}
+                  </label>
+                  <button type="button" onClick={addStudent} className="flex items-center gap-1 text-sm font-medium" style={{ color: C.teal }}>
+                    <Plus className="w-4 h-4" />
+                    إضافة طالب
+                  </button>
+                </div>
+              </div>
+
+              <div className="mb-4 flex items-start gap-2 rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-[11px] leading-5 text-blue-800">
+                <Upload className="mt-0.5 h-4 w-4 shrink-0" />
+                <span>{scanNote || "ارفع صورة واضحة لكشف يحتوي عمودَي الاسم والدرجة. تُضاف الصفوف المقروءة فقط ولا تُستبدل الدرجات المُدخلة مسبقاً."}</span>
               </div>
 
               <div className="overflow-x-auto rounded-lg border border-gray-200">

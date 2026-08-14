@@ -1028,6 +1028,71 @@ ${hasDynamicCriteria ? dynamicStandardsList : `لم يتم تزويد بنود �
         catch { return { questions: [], success: false }; }
       }),
 
+    // استخراج قائمة درجات من صورة كشف نتائج مع الامتناع عن تخمين النص غير الواضح
+    extractGradesFromImage: publicProcedure
+      .input(z.object({
+        imageData: z.string().startsWith("data:image/").max(8_500_000),
+        maxScore: z.number().min(1).max(1000),
+      }))
+      .mutation(async ({ input }) => {
+        const response = await invokeLLM({
+          messages: [
+            {
+              role: "system",
+              content: "أنت أداة دقيقة لاستخراج كشوف الدرجات العربية. اقرأ فقط الصفوف الواضحة، ولا تخمّن اسماً أو درجة. الدرجة يجب أن تكون رقماً بين صفر والدرجة العظمى. أجب بصيغة JSON مطابقة للمخطط فقط.",
+            },
+            {
+              role: "user",
+              content: [
+                { type: "image_url", image_url: { url: input.imageData, detail: "high" } },
+                { type: "text", text: `استخرج من هذه الصورة أسماء الطلاب ودرجاتهم. الدرجة العظمى هي ${input.maxScore}. استبعد كل صف غير مقروء أو غير مؤكد.` },
+              ],
+            },
+          ],
+          response_format: {
+            type: "json_schema",
+            json_schema: {
+              name: "grade_sheet_extraction",
+              strict: true,
+              schema: {
+                type: "object",
+                properties: {
+                  students: {
+                    type: "array",
+                    items: {
+                      type: "object",
+                      properties: {
+                        name: { type: "string" },
+                        score: { type: "number" },
+                      },
+                      required: ["name", "score"],
+                      additionalProperties: false,
+                    },
+                  },
+                  unreadableNote: { type: "string" },
+                },
+                required: ["students", "unreadableNote"],
+                additionalProperties: false,
+              },
+            },
+          },
+        });
+        const raw = response.choices?.[0]?.message?.content;
+        const content = typeof raw === "string" ? raw : "{}";
+        try {
+          const extracted = JSON.parse(content) as { students?: Array<{ name?: unknown; score?: unknown }>; unreadableNote?: unknown };
+          const students = (extracted.students ?? [])
+            .filter((student) => typeof student.name === "string" && student.name.trim().length >= 2 && Number.isFinite(Number(student.score)))
+            .map((student) => ({
+              name: String(student.name).trim(),
+              score: Math.min(Math.max(Number(student.score), 0), input.maxScore),
+            }));
+          return { success: true, students, unreadableNote: typeof extracted.unreadableNote === "string" ? extracted.unreadableNote : "" };
+        } catch {
+          return { success: false, students: [], unreadableNote: "تعذر قراءة محتوى الصورة. جرّب صورة أوضح." };
+        }
+      }),
+
     // توليد محتوى ملف إنجاز بالذكاء الاصطناعي
     generatePortfolioContent: publicProcedure
       .input(z.object({

@@ -16,4 +16,12 @@ describe("GradeAnalysis automatic grading", () => {
     expect(source).toContain("needsSupport: fail");
     expect(source).toContain("بحاجة دعم");
   });
+
+  it("offers safeguarded image import while preserving manually entered rows", () => {
+    expect(source).toContain("extractGradesFromImage.useMutation");
+    expect(source).toContain("file.size > 5 * 1024 * 1024");
+    expect(source).toContain('accept="image/png,image/jpeg,image/webp"');
+    expect(source).toContain("previous.filter((student) => student.name.trim() || student.score !== null)");
+    expect(source).toContain("راجع النتائج قبل الاعتماد");
+  });
 });
