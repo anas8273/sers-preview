@@ -60,6 +60,8 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { AIAssistantPanel, AIAssistantButton } from "@/components/AIAssistantPanel";
+import { ProgressRadarChart, ProgressBarItem, StatsOverviewCard } from "@/components/ProgressRadarChart";
 
 // ===== أنواع البيانات =====
 type EvidenceType = "text" | "image" | "link" | "file" | "video";
@@ -490,6 +492,7 @@ export default function PerformanceEvidence() {
   const [showShareSettings, setShowShareSettings] = useState(false);
   const [shareUrl, setShareUrl] = useState<string | null>(null);
   const [showColorPicker, setShowColorPicker] = useState(false);
+  const [showAIAssistant, setShowAIAssistant] = useState(false);
 
   // Preview scaling - responsive (للمعاينة المفردة)
   const { containerRef: previewContainerRef, pageRef: previewPageRef, previewScale, wrapperWidth, wrapperHeight, recalculate: recalcPreview, zoomLevel, zoomIn, zoomOut, resetZoom } = usePreviewScale();
@@ -2522,6 +2525,7 @@ export default function PerformanceEvidence() {
                     <BarChart3 className="w-3.5 h-3.5" />
                     تقرير التغطية
                   </Button>
+                  <AIAssistantButton onClick={() => setShowAIAssistant((open) => !open)} isOpen={showAIAssistant} />
                 </div>
               </div>
 
@@ -2640,10 +2644,24 @@ export default function PerformanceEvidence() {
             </CardContent>
           </Card>
 
+          {showAIAssistant && (
+            <div className="mb-4 sm:mb-6">
+              <AIAssistantPanel
+                context={{
+                  jobTitle: selectedJob?.title,
+                  criterionName: currentCriterion?.title,
+                  subEvidenceName: currentCriterion?.subEvidences?.[0]?.title,
+                  existingContent: currentCriterion ? criteriaData[currentCriterion.id]?.evidences?.[0]?.text : undefined,
+                }}
+              />
+            </div>
+          )}
+
           {/* ===== Tabs ===== */}
           <Tabs value={activeTab} onValueChange={setActiveTab}>
-            <TabsList className="mb-4">
+            <TabsList className="mb-4 flex w-full flex-wrap justify-start gap-1">
               <TabsTrigger value="criteria">البنود ({allCriteria.length})</TabsTrigger>
+              <TabsTrigger value="stats">إحصائيات متقدمة</TabsTrigger>
               <TabsTrigger value="info">البيانات الشخصية</TabsTrigger>
             </TabsList>
 
@@ -2904,6 +2922,59 @@ export default function PerformanceEvidence() {
                   </CardContent>
                 </Card>
               )}
+            </TabsContent>
+
+            {/* ===== تبويب الإحصائيات المتقدمة ===== */}
+            <TabsContent value="stats">
+              <div className="space-y-4">
+                <StatsOverviewCard
+                  covered={gapAnalysis.coveredCriteria}
+                  partial={gapAnalysis.partialCriteria}
+                  missed={gapAnalysis.missedCriteria}
+                  total={allCriteria.length}
+                  percentage={gapAnalysis.percentage}
+                />
+                <ProgressRadarChart
+                  title="خريطة التقدم في المعايير"
+                  data={allCriteria.slice(0, 8).map((criterion) => {
+                    const criterionData = criteriaData[criterion.id];
+                    const evidenceCount = criterionData?.evidences?.length || 0;
+                    const scoreProgress = criterionData?.score ? (criterionData.score / 5) * 50 : 0;
+                    const evidenceProgress = criterion.subEvidences.length > 0
+                      ? Math.min(50, (evidenceCount / criterion.subEvidences.length) * 50)
+                      : evidenceCount > 0 ? 50 : 0;
+                    return {
+                      subject: criterion.title.length > 16 ? `${criterion.title.slice(0, 16)}…` : criterion.title,
+                      value: Math.round(scoreProgress + evidenceProgress),
+                      fullMark: 100,
+                    };
+                  })}
+                />
+                <Card>
+                  <CardHeader className="pb-3"><CardTitle className="text-base">تقدم كل بند</CardTitle></CardHeader>
+                  <CardContent className="space-y-4">
+                    {allCriteria.map((criterion) => {
+                      const criterionData = criteriaData[criterion.id];
+                      const evidenceCount = criterionData?.evidences?.length || 0;
+                      const value = criterionData?.score >= 4 && evidenceCount > 0
+                        ? 100
+                        : criterionData?.score > 0 || evidenceCount > 0 ? 50 : 0;
+                      const color = value === 100 ? "#059669" : value > 0 ? "#d97706" : "#dc2626";
+                      return (
+                        <ProgressBarItem
+                          key={criterion.id}
+                          label={criterion.title}
+                          value={value}
+                          color={color}
+                          showCount
+                          count={evidenceCount}
+                          total={criterion.subEvidences.length}
+                        />
+                      );
+                    })}
+                  </CardContent>
+                </Card>
+              </div>
             </TabsContent>
 
             {/* ===== تبويب البيانات الشخصية ===== */}
