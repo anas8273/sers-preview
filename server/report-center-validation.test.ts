@@ -14,4 +14,11 @@ describe("report center required fields", () => {
     expect(reportCenterSource).toContain("const missingRequiredFields = selectedTemplate");
     expect(reportCenterSource).toContain("قبل الحفظ أو التصدير، أكمل الحقول الإلزامية التالية");
   });
+
+  it("supports secure file attachments and manual evidence links in the editor and preview", () => {
+    expect(reportCenterSource).toContain("const uploadAttachmentMutation = trpc.file.upload.useMutation()");
+    expect(reportCenterSource).toContain("شواهد ومرفقات التقرير");
+    expect(reportCenterSource).toContain("attachments={attachments}");
+    expect(reportCenterSource).toContain("الشواهد والمرفقات");
+  });
 });

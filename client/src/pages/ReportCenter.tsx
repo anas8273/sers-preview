@@ -13,11 +13,12 @@ import {
   ArrowLeft, FileText, Plus, Trash2, Download, Eye, Save,
   Users, Building2, BookOpen, Star, Search, X, Edit3,
   Sparkles, Loader2, Printer, FileDown, Maximize2, Minimize2,
-  ClipboardCheck, ChevronLeft, ZoomIn, ZoomOut, RotateCcw, AlertTriangle
+  ClipboardCheck, ChevronLeft, ZoomIn, ZoomOut, RotateCcw, AlertTriangle, Upload, Link2
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
+import { useAuth } from "@/_core/hooks/useAuth";
 import TemplateSelector, { THEMES, FONT_OPTIONS, type ThemeConfig } from "@/components/TemplateSelector";
 import { exportToPDF, printElement } from "@/lib/pdf-export";
 import OfficialHeader from "@/components/OfficialHeader";
@@ -56,8 +57,17 @@ interface SavedReport {
   data: Record<string, string>;
   themeId: string;
   fontFamily: string;
+  attachments?: ReportAttachment[];
   createdAt: number;
   updatedAt: number;
+}
+
+interface ReportAttachment {
+  id: string;
+  title: string;
+  description: string;
+  url: string;
+  fileName: string;
 }
 
 const REPORT_TEMPLATES: ReportTemplate[] = [
@@ -158,12 +168,13 @@ function generateId() { return Date.now().toString(36) + Math.random().toString(
 // ═══════════════════════════════════════════════════════════════
 
 function ReportPreview({
-  template, data, theme, fontFamily,
+  template, data, theme, fontFamily, attachments,
 }: {
   template: ReportTemplate;
   data: Record<string, string>;
   theme: ThemeConfig;
   fontFamily: string;
+  attachments: ReportAttachment[];
 }) {
   const Icon = template.icon;
   const today = new Date().toLocaleDateString("ar-SA", { year: "numeric", month: "long", day: "numeric" });
@@ -282,6 +293,21 @@ function ReportPreview({
             </div>
           ))}
 
+        {attachments.length > 0 && (
+          <div style={{ marginTop: "24px" }}>
+            <h3 style={{ color: theme.primaryColor, fontSize: "14px", fontWeight: 800, marginBottom: "10px", paddingBottom: "6px", borderBottom: `2px solid ${theme.borderColor}` }}>الشواهد والمرفقات</h3>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+              {attachments.map((attachment, index) => (
+                <div key={attachment.id} style={{ padding: "10px", borderRadius: "8px", border: `1px solid ${theme.borderColor}`, background: "#fafafa" }}>
+                  <div style={{ fontSize: "12px", fontWeight: 700, color: "#1f2937", marginBottom: "4px" }}>{index + 1}. {attachment.title || attachment.fileName || "مرفق"}</div>
+                  {attachment.description && <div style={{ fontSize: "10px", color: "#6b7280", lineHeight: 1.6, marginBottom: "4px" }}>{attachment.description}</div>}
+                  {attachment.url && <div style={{ fontSize: "8px", color: theme.primaryColor, direction: "ltr", textAlign: "right", wordBreak: "break-all" }}>{attachment.url}</div>}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Empty state */}
         {template.fields.filter((f) => f.type === "textarea" && data[f.id]).length === 0 && (
           <div style={{ textAlign: "center", padding: "40px 0", color: "#9ca3af" }}>
@@ -317,6 +343,7 @@ function ReportPreview({
 
 export default function ReportCenter() {
   const [, navigate] = useLocation();
+  const { isAuthenticated } = useAuth();
   const [view, setView] = useState<"templates" | "editor" | "preview" | "saved">("templates");
   const [selectedTemplate, setSelectedTemplate] = useState<ReportTemplate | null>(null);
   const [currentReport, setCurrentReport] = useState<SavedReport | null>(null);
@@ -326,16 +353,20 @@ export default function ReportCenter() {
   const [selectedTheme, setSelectedTheme] = useState<ThemeConfig>(THEMES[0]);
   const [selectedFont, setSelectedFont] = useState("Cairo");
   const [aiLoading, setAiLoading] = useState(false);
+  const [attachments, setAttachments] = useState<ReportAttachment[]>([]);
+  const [attachmentUploading, setAttachmentUploading] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
 
   const { containerRef: previewContainerRef, pageRef: previewPageRef, previewScale, wrapperWidth, wrapperHeight, zoomLevel, zoomIn, zoomOut, resetZoom } = usePreviewScale();
 
   const fillReportMutation = trpc.genAI.fillReport.useMutation();
+  const uploadAttachmentMutation = trpc.file.upload.useMutation();
 
   const startNewReport = useCallback((template: ReportTemplate) => {
     setSelectedTemplate(template);
     setFormData({});
+    setAttachments([]);
     setCurrentReport(null);
     setView("editor");
   }, []);
@@ -345,12 +376,51 @@ export default function ReportCenter() {
     if (!template) return;
     setSelectedTemplate(template);
     setFormData(report.data);
+    setAttachments(report.attachments ?? []);
     setCurrentReport(report);
     const theme = THEMES.find((t) => t.id === report.themeId);
     if (theme) setSelectedTheme(theme);
     if (report.fontFamily) setSelectedFont(report.fontFamily);
     setView("editor");
   }, []);
+
+  const addAttachmentLink = useCallback(() => {
+    setAttachments((previous) => [...previous, { id: generateId(), title: "", description: "", url: "", fileName: "" }]);
+  }, []);
+
+  const updateAttachment = useCallback((id: string, field: keyof ReportAttachment, value: string) => {
+    setAttachments((previous) => previous.map((attachment) => attachment.id === id ? { ...attachment, [field]: value } : attachment));
+  }, []);
+
+  const removeAttachment = useCallback((id: string) => {
+    setAttachments((previous) => previous.filter((attachment) => attachment.id !== id));
+  }, []);
+
+  const handleAttachmentUpload = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    if (!isAuthenticated) { toast.error("سجّل الدخول أولاً لرفع المرفق وحفظه بأمان."); return; }
+    if (file.size > 8 * 1024 * 1024) { toast.error("حجم الملف كبير. الحد الأقصى 8 ميغابايت."); return; }
+    setAttachmentUploading(true);
+    try {
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => typeof reader.result === "string" ? resolve(reader.result) : reject(new Error("تعذر قراءة الملف."));
+        reader.onerror = () => reject(new Error("تعذر قراءة الملف."));
+        reader.readAsDataURL(file);
+      });
+      const base64Data = dataUrl.split(",")[1];
+      if (!base64Data) throw new Error("تعذر تجهيز الملف للرفع.");
+      const result = await uploadAttachmentMutation.mutateAsync({ fileName: file.name, mimeType: file.type || "application/octet-stream", base64Data });
+      setAttachments((previous) => [...previous, { id: generateId(), title: file.name.replace(/\.[^.]+$/, ""), description: "", url: result.url, fileName: file.name }]);
+      toast.success("تم رفع المرفق وإضافته إلى التقرير.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "تعذر رفع المرفق.");
+    } finally {
+      setAttachmentUploading(false);
+    }
+  }, [isAuthenticated, uploadAttachmentMutation]);
 
   const handleSave = useCallback(() => {
     if (!selectedTemplate) return;
@@ -364,16 +434,16 @@ export default function ReportCenter() {
 
     if (currentReport) {
       const updated = savedReports.map((r) =>
-        r.id === currentReport.id ? { ...r, title, data: formData, themeId: selectedTheme.id, fontFamily: selectedFont, updatedAt: now } : r
+        r.id === currentReport.id ? { ...r, title, data: formData, themeId: selectedTheme.id, fontFamily: selectedFont, attachments, updatedAt: now } : r
       );
       setSavedReports(updated);
       saveReportsToStorage(updated);
-      setCurrentReport({ ...currentReport, title, data: formData, themeId: selectedTheme.id, fontFamily: selectedFont, updatedAt: now });
+      setCurrentReport({ ...currentReport, title, data: formData, themeId: selectedTheme.id, fontFamily: selectedFont, attachments, updatedAt: now });
       toast.success("تم تحديث التقرير بنجاح");
     } else {
       const newReport: SavedReport = {
         id: generateId(), templateId: selectedTemplate.id, title, data: formData,
-        themeId: selectedTheme.id, fontFamily: selectedFont, createdAt: now, updatedAt: now,
+        themeId: selectedTheme.id, fontFamily: selectedFont, attachments, createdAt: now, updatedAt: now,
       };
       const updated = [newReport, ...savedReports];
       setSavedReports(updated);
@@ -381,7 +451,7 @@ export default function ReportCenter() {
       setCurrentReport(newReport);
       toast.success("تم حفظ التقرير بنجاح");
     }
-  }, [selectedTemplate, formData, currentReport, savedReports, selectedTheme, selectedFont]);
+  }, [selectedTemplate, formData, currentReport, savedReports, selectedTheme, selectedFont, attachments]);
 
   const handleDelete = useCallback((id: string) => {
     const updated = savedReports.filter((r) => r.id !== id);
@@ -608,6 +678,28 @@ export default function ReportCenter() {
                   ))}
                 </div>
               </div>
+
+              <section className="mt-4 rounded-xl border border-sky-100 bg-gradient-to-l from-sky-50 to-white p-4" aria-label="شواهد ومرفقات التقرير">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div><h3 className="flex items-center gap-2 text-sm font-bold text-slate-800"><FileText className="h-4 w-4 text-sky-700" />الشواهد والمرفقات ({attachments.length})</h3><p className="mt-1 text-[11px] text-slate-500">أرفق ملفاً موثقاً أو أضف رابطاً داعماً للتقرير.</p></div>
+                  <div className="flex flex-wrap gap-2">
+                    <label className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-bold text-white ${attachmentUploading ? "bg-sky-400" : "cursor-pointer bg-sky-600 hover:bg-sky-700"}`}>
+                      <input type="file" className="sr-only" onChange={handleAttachmentUpload} disabled={attachmentUploading} />
+                      {attachmentUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}{attachmentUploading ? "جاري الرفع..." : "رفع مرفق"}
+                    </label>
+                    <Button type="button" size="sm" variant="outline" onClick={addAttachmentLink} className="gap-1"><Link2 className="h-3.5 w-3.5" />إضافة رابط</Button>
+                  </div>
+                </div>
+                {!isAuthenticated && <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-800">يتطلب رفع الملفات تسجيل الدخول؛ ما زال بإمكانك إضافة رابط يدوي.</p>}
+                {attachments.length > 0 && <div className="mt-3 space-y-2">
+                  {attachments.map((attachment, index) => (
+                    <div key={attachment.id} className="rounded-lg border border-sky-100 bg-white p-3">
+                      <div className="mb-2 flex items-center justify-between"><span className="text-[11px] font-bold text-slate-500">مرفق #{index + 1}</span><button type="button" onClick={() => removeAttachment(attachment.id)} className="rounded p-1 text-red-400 hover:bg-red-50 hover:text-red-600"><Trash2 className="h-3.5 w-3.5" /></button></div>
+                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2"><input value={attachment.title} onChange={(event) => updateAttachment(attachment.id, "title", event.target.value)} placeholder="عنوان المرفق" className="rounded-md border border-gray-200 px-2.5 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-sky-500/20" /><input value={attachment.url} onChange={(event) => updateAttachment(attachment.id, "url", event.target.value)} placeholder="رابط المرفق" dir="ltr" className="rounded-md border border-gray-200 px-2.5 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-sky-500/20" /><textarea value={attachment.description} onChange={(event) => updateAttachment(attachment.id, "description", event.target.value)} placeholder="وصف موجز للمرفق" rows={2} className="resize-y rounded-md border border-gray-200 px-2.5 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-sky-500/20 sm:col-span-2" /></div>
+                    </div>
+                  ))}
+                </div>}
+              </section>
             </div>
           )}
 
@@ -662,7 +754,7 @@ export default function ReportCenter() {
                 <div style={{ width: `${wrapperWidth}px`, height: `${wrapperHeight}px`, margin: '0 auto', position: 'relative', overflow: 'hidden' }}>
                   <div style={{ width: `${A4_WIDTH_PX}px`, transformOrigin: 'top right', transform: `scale(${previewScale})`, transition: 'transform 0.15s ease-out' }}>
                     <div id="report-preview-content" ref={previewPageRef} style={{ fontFamily: "'Cairo', sans-serif", direction: 'rtl', width: '210mm' }}>
-                      <ReportPreview template={selectedTemplate} data={formData} theme={selectedTheme} fontFamily={selectedFont} />
+                      <ReportPreview template={selectedTemplate} data={formData} theme={selectedTheme} fontFamily={selectedFont} attachments={attachments} />
                     </div>
                   </div>
                 </div>
