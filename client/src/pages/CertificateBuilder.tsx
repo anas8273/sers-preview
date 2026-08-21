@@ -1,99 +1,93 @@
 /*
- * شهادات الشكر والتقدير - إعادة بناء كاملة
- * الهوية البصرية: إطار مزخرف + شعار وزارة التعليم + فوتر منحني
- * 3 ثيمات فقط مختلفة تماماً (بدون تكرار)
- * كل نوع شهادة له تنسيق مختلف
+ * شهادات الشكر والتقدير
+ * هوية وزارة التعليم السعودية: ألوان مرجعية، مساحة آمنة للشعار، وتخطيط رسمي للطباعة.
  */
-import { useState, useMemo } from "react";
-import { ArrowLeft, Download, Printer, Palette, Type, Languages } from "lucide-react";
+import { useMemo, useState } from "react";
+import { ArrowLeft, Download, Languages, Palette, Printer, Type } from "lucide-react";
 import { useLocation } from "wouter";
 import { exportToPDF, printElement } from "@/lib/pdf-export";
 import { generateQRDataURL } from "@/lib/qr-utils";
 import { MoeLogo } from "@/components/MoeLogo";
 
-/* ═══ 3 ثيمات مختلفة تماماً (بدون تكرار) ═══ */
+const MOE_COLORS = {
+  primary: "#008A76",
+  primaryDark: "#006D5E",
+  supporting: "#16BECF",
+  graphite: "#595C61",
+  mist: "#E9F6F3",
+  line: "#B7DCD5",
+};
+
+/* كلا الخيارين من الهوية نفسها؛ لا تُعرض ألوان احتفالية لا تنتمي للوزارة. */
 const CERT_THEMES = [
   {
-    id: "green-official",
-    name: "الهوية الرسمية",
-    bg: "#ffffff",
-    borderColor: "#1a3a5c",
-    headerColor: "#1a3a5c",
-    textColor: "#1a1a1a",
-    accentColor: "#2ea87a",
-    gradientStart: "#1a3a5c",
-    gradientMid: "#1a5f3f",
-    gradientEnd: "#2ea87a",
+    id: "moe-primary",
+    name: "هوية وزارة التعليم",
+    description: "أخضر الوزارة مع اللون المساند",
+    bg: "#FFFFFF",
+    borderColor: MOE_COLORS.primary,
+    headerColor: MOE_COLORS.primaryDark,
+    textColor: "#202428",
+    accentColor: MOE_COLORS.graphite,
+    gradientStart: MOE_COLORS.primaryDark,
+    gradientMid: MOE_COLORS.primary,
+    gradientEnd: MOE_COLORS.supporting,
   },
   {
-    id: "gold-elegant",
-    name: "الذهبي الأنيق",
-    bg: "linear-gradient(135deg, #fffbeb 0%, #fef3c7 50%, #fffbeb 100%)",
-    borderColor: "#92400e",
-    headerColor: "#78350f",
-    textColor: "#1a1a1a",
-    accentColor: "#d97706",
-    gradientStart: "#78350f",
-    gradientMid: "#92400e",
-    gradientEnd: "#d97706",
-  },
-  {
-    id: "blue-modern",
-    name: "الأزرق العصري",
-    bg: "linear-gradient(135deg, #eff6ff 0%, #dbeafe 50%, #eff6ff 100%)",
-    borderColor: "#1e40af",
-    headerColor: "#1e3a8a",
-    textColor: "#1a1a1a",
-    accentColor: "#2563eb",
-    gradientStart: "#1e3a8a",
-    gradientMid: "#1e40af",
-    gradientEnd: "#3b82f6",
-  },
-  {
-    id: "plum-formal",
-    name: "البنفسجي الرسمي",
-    bg: "linear-gradient(135deg, #faf5ff 0%, #f3e8ff 50%, #faf5ff 100%)",
-    borderColor: "#6b21a8",
-    headerColor: "#581c87",
-    textColor: "#1f1630",
-    accentColor: "#9333ea",
-    gradientStart: "#581c87",
-    gradientMid: "#7e22ce",
-    gradientEnd: "#a855f7",
-  },
-  {
-    id: "rose-celebration",
-    name: "الوردي الاحتفالي",
-    bg: "linear-gradient(135deg, #fff7f9 0%, #ffe4e6 50%, #fff7f9 100%)",
-    borderColor: "#9f1239",
-    headerColor: "#881337",
-    textColor: "#32141f",
-    accentColor: "#e11d48",
-    gradientStart: "#881337",
-    gradientMid: "#be123c",
-    gradientEnd: "#fb7185",
-  },
-  {
-    id: "slate-professional",
-    name: "الرمادي الاحترافي",
-    bg: "linear-gradient(135deg, #f8fafc 0%, #e2e8f0 50%, #f8fafc 100%)",
-    borderColor: "#334155",
-    headerColor: "#1e293b",
-    textColor: "#111827",
-    accentColor: "#0f766e",
-    gradientStart: "#1e293b",
-    gradientMid: "#334155",
-    gradientEnd: "#0f766e",
+    id: "moe-formal",
+    name: "هوية رسمية أحادية اللون",
+    description: "نسخة هادئة للطباعة الرسمية",
+    bg: "#FBFDFC",
+    borderColor: MOE_COLORS.primary,
+    headerColor: MOE_COLORS.primaryDark,
+    textColor: "#202428",
+    accentColor: MOE_COLORS.graphite,
+    gradientStart: MOE_COLORS.primaryDark,
+    gradientMid: MOE_COLORS.primary,
+    gradientEnd: MOE_COLORS.primary,
   },
 ];
 
 const CERT_TYPES = [
-  { id: "thanks", title: "شهادة شكر وتقدير", defaultText: "تقديراً لجهودكم المتميزة وعطائكم المستمر" },
-  { id: "excellence", title: "شهادة تميز", defaultText: "تقديراً لتميزكم وإبداعكم في العمل التعليمي" },
-  { id: "participation", title: "شهادة مشاركة", defaultText: "نشهد بمشاركتكم الفاعلة في" },
-  { id: "training", title: "شهادة حضور دورة", defaultText: "نشهد بحضوركم وإتمامكم للدورة التدريبية" },
-  { id: "student_excellence", title: "شهادة تفوق طالب", defaultText: "تقديراً لتفوقكم الدراسي وتميزكم" },
+  {
+    id: "thanks",
+    title: "شهادة شكر وتقدير",
+    defaultText: "تقديرًا لجهودكم المتميزة وعطائكم المستمر في خدمة العملية التعليمية.",
+    defaultTextEn: "In recognition of your distinguished efforts and continued contribution to the educational process.",
+  },
+  {
+    id: "excellence",
+    title: "شهادة تميز",
+    defaultText: "تقديرًا لتميزكم وإبداعكم في العمل التعليمي.",
+    defaultTextEn: "In recognition of your excellence and creativity in educational work.",
+  },
+  {
+    id: "participation",
+    title: "شهادة مشاركة",
+    defaultText: "نشهد بمشاركتكم الفاعلة في النشاط أو البرنامج التعليمي.",
+    defaultTextEn: "This certifies your effective participation in the educational activity or programme.",
+  },
+  {
+    id: "training",
+    title: "شهادة حضور دورة",
+    defaultText: "نشهد بحضوركم وإتمامكم للدورة التدريبية.",
+    defaultTextEn: "This certifies your attendance and completion of the training course.",
+  },
+  {
+    id: "student_excellence",
+    title: "شهادة تفوق طالب",
+    defaultText: "تقديرًا لتفوقكم الدراسي وتميزكم.",
+    defaultTextEn: "In recognition of your academic achievement and distinction.",
+  },
 ];
+
+const englishTitles: Record<string, string> = {
+  thanks: "Certificate of Appreciation",
+  excellence: "Certificate of Excellence",
+  participation: "Certificate of Participation",
+  training: "Training Attendance Certificate",
+  student_excellence: "Student Excellence Certificate",
+};
 
 export default function CertificateBuilder() {
   const [, navigate] = useLocation();
@@ -101,7 +95,6 @@ export default function CertificateBuilder() {
   const [selectedType, setSelectedType] = useState(CERT_TYPES[0]);
   const [language, setLanguage] = useState<"ar" | "en">("ar");
   const [isExporting, setIsExporting] = useState(false);
-
   const [formData, setFormData] = useState({
     recipientName: "",
     recipientTitle: "",
@@ -114,99 +107,155 @@ export default function CertificateBuilder() {
   });
 
   const qrData = useMemo(
-    () => generateQRDataURL(`SERS-CERT|${formData.recipientName}|${selectedType.title}|${formData.date}|${formData.certNumber}`),
+    () =>
+      generateQRDataURL(
+        `SERS-CERT|${formData.recipientName}|${selectedType.title}|${formData.date}|${formData.certNumber}`
+      ),
     [formData.recipientName, selectedType.title, formData.date, formData.certNumber]
   );
 
+  const certificateCopy =
+    language === "en"
+      ? {
+          intro:
+            selectedType.id === "thanks"
+              ? "The school administration proudly extends its appreciation to"
+              : "The school administration hereby certifies that",
+          recipient: "Recipient Name",
+          position: "Position",
+          date: "Date",
+          footer: "Ministry of Education | Kingdom of Saudi Arabia",
+        }
+      : {
+          intro:
+            selectedType.id === "thanks"
+              ? "يسر إدارة المدرسة أن تتقدم بخالص الشكر والتقدير إلى"
+              : "تشهد إدارة المدرسة بأن",
+          recipient: "اسم المستلم",
+          position: "صفة المستلم",
+          date: "التاريخ",
+          footer: "وزارة التعليم | المملكة العربية السعودية",
+        };
+
+  const certificateTitle = language === "en" ? englishTitles[selectedType.id] : selectedType.title;
+  const certificateReason =
+    formData.reason || (language === "en" ? selectedType.defaultTextEn : selectedType.defaultText);
+
   const handleExportPDF = async () => {
     setIsExporting(true);
-    await exportToPDF("cert-preview", `${selectedType.title}_${formData.recipientName || "شهادة"}.pdf`);
-    setIsExporting(false);
+    try {
+      await exportToPDF("cert-preview", `${selectedType.title}_${formData.recipientName || "شهادة"}.pdf`);
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const updateLanguage = (nextLanguage: "ar" | "en") => {
+    if (nextLanguage === language) return;
+    setLanguage(nextLanguage);
+    const previousDefault = language === "ar" ? selectedType.defaultText : selectedType.defaultTextEn;
+    if (!formData.reason || formData.reason === previousDefault) {
+      setFormData((previous) => ({
+        ...previous,
+        reason: nextLanguage === "ar" ? selectedType.defaultText : selectedType.defaultTextEn,
+      }));
+    }
   };
 
   const t = selectedTheme;
   const footerGradId = `certFooterGrad-${t.id}`;
-  const englishTitles: Record<string, string> = { thanks: "Certificate of Appreciation", excellence: "Certificate of Excellence", participation: "Certificate of Participation", training: "Training Attendance Certificate", student_excellence: "Student Excellence Certificate" };
-  const certificateTitle = language === "en" ? englishTitles[selectedType.id] : selectedType.title;
-  const certificateCopy = language === "en"
-    ? { intro: selectedType.id === "thanks" ? "The school administration proudly extends its appreciation to" : "The school administration hereby certifies that", recipient: "Recipient Name", position: "Position", date: "Date", footer: "SERS – Smart Educational Records System" }
-    : { intro: selectedType.id === "thanks" ? "يسر إدارة المدرسة أن تتقدم بخالص الشكر والتقدير إلى" : "تشهد إدارة المدرسة بأن", recipient: "اسم المستلم", position: "المنصب", date: "التاريخ", footer: "SERS - نظام السجلات التعليمية الذكي" };
 
   return (
-    <div className="min-h-screen pb-20 lg:pb-0 bg-[#F8FAFC]" dir="rtl">
-      <div className="flex flex-col lg:flex-row min-h-screen">
-        {/* ═══ الشريط الجانبي - الإعدادات ═══ */}
-        <aside className="lg:w-96 bg-white border-l border-gray-200 p-5 overflow-y-auto">
-          <button type="button" onClick={() => navigate("/")} className="flex items-center gap-2 text-gray-500 hover:text-gray-700 mb-5">
-            <ArrowLeft className="w-4 h-4" />
-            <span className="text-sm">العودة للرئيسية</span>
+    <div className="min-h-screen bg-[#F5F8F7] pb-20 lg:pb-0" dir="rtl">
+      <div className="flex min-h-screen flex-col lg:flex-row">
+        <aside className="lg:sticky lg:top-0 lg:h-screen lg:w-[380px] lg:shrink-0 lg:overflow-y-auto border-l border-[#DCE8E5] bg-white p-5 sm:p-6">
+          <button
+            type="button"
+            onClick={() => navigate("/")}
+            className="mb-6 flex items-center gap-2 text-sm text-[#595C61] transition-colors hover:text-[#006D5E] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#008A76] focus-visible:ring-offset-2"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            <span>العودة للرئيسية</span>
           </button>
 
-          <h1 className="text-xl font-black text-gray-900 mb-1" style={{ fontFamily: "'Tajawal', sans-serif" }}>
-            شهادات الشكر والتقدير
-          </h1>
-          <p className="text-xs text-gray-500 mb-5">صمم شهادتك → معاينة فورية → تصدير PDF</p>
+          <div className="mb-6 border-b border-[#E4EFEC] pb-5">
+            <p className="mb-2 text-xs font-bold tracking-wide text-[#008A76]">وزارة التعليم · المملكة العربية السعودية</p>
+            <h1 className="mb-1 text-xl font-black text-[#1E2C2A]" style={{ fontFamily: "'Tajawal', sans-serif" }}>
+              شهادات الشكر والتقدير
+            </h1>
+            <p className="text-xs leading-5 text-[#66736F]">نموذج رسمي قابل للطباعة والتصدير وفق هوية وزارة التعليم.</p>
+          </div>
 
-          {/* نوع الشهادة */}
-          <div className="mb-5">
-            <label className="block text-sm font-bold text-gray-700 mb-2">
-              <Type className="w-4 h-4 inline ml-1" />
-              نوع الشهادة
-            </label>
+          <section className="mb-6" aria-labelledby="certificate-type-heading">
+            <h2 id="certificate-type-heading" className="mb-2 flex items-center gap-1 text-sm font-bold text-[#34403D]">
+              <Type className="h-4 w-4 text-[#008A76]" /> نوع الشهادة
+            </h2>
             <div className="grid grid-cols-2 gap-2">
               {CERT_TYPES.map((type) => (
                 <button
+                  type="button"
                   key={type.id}
                   onClick={() => {
                     setSelectedType(type);
-                    setFormData((prev) => ({ ...prev, reason: type.defaultText }));
+                    setFormData((previous) => ({
+                      ...previous,
+                      reason: language === "ar" ? type.defaultText : type.defaultTextEn,
+                    }));
                   }}
-                  className={`px-3 py-2 rounded-lg text-xs font-medium transition-all border ${
+                  aria-pressed={selectedType.id === type.id}
+                  className="rounded-lg border px-3 py-2 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#008A76] focus-visible:ring-offset-1"
+                  style={
                     selectedType.id === type.id
-                      ? "shadow-sm"
-                      : "border-gray-200 text-gray-600 hover:bg-gray-50"
-                  }`}
-                  style={selectedType.id === type.id ? { borderColor: t.borderColor, backgroundColor: t.borderColor + "10", color: t.borderColor } : {}}
+                      ? { borderColor: MOE_COLORS.primary, backgroundColor: MOE_COLORS.mist, color: MOE_COLORS.primaryDark }
+                      : { borderColor: "#DCE8E5", color: "#52605C" }
+                  }
                 >
                   {type.title}
                 </button>
               ))}
             </div>
-          </div>
+          </section>
 
-          {/* الثيم */}
-          <div className="mb-5">
-            <label className="block text-sm font-bold text-gray-700 mb-2">
-              <Palette className="w-4 h-4 inline ml-1" />
-              ثيم الشهادة
-            </label>
-            <div className="flex gap-2 flex-wrap">
+          <section className="mb-6" aria-labelledby="certificate-theme-heading">
+            <h2 id="certificate-theme-heading" className="mb-2 flex items-center gap-1 text-sm font-bold text-[#34403D]">
+              <Palette className="h-4 w-4 text-[#008A76]" /> مظهر الهوية
+            </h2>
+            <div className="space-y-2">
               {CERT_THEMES.map((theme) => (
                 <button
+                  type="button"
                   key={theme.id}
                   onClick={() => setSelectedTheme(theme)}
-                  className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-xs font-medium transition-all ${
-                    selectedTheme.id === theme.id ? "border-gray-900 shadow-sm" : "border-gray-200 hover:border-gray-300"
-                  }`}
+                  aria-pressed={selectedTheme.id === theme.id}
+                  className="flex w-full items-center gap-3 rounded-lg border px-3 py-2.5 text-right transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#008A76] focus-visible:ring-offset-1"
+                  style={
+                    selectedTheme.id === theme.id
+                      ? { borderColor: MOE_COLORS.primary, backgroundColor: MOE_COLORS.mist }
+                      : { borderColor: "#DCE8E5" }
+                  }
                 >
-                  <div className="w-4 h-4 rounded-full border" style={{ backgroundColor: theme.borderColor }} />
-                  {theme.name}
+                  <span className="h-5 w-5 shrink-0 rounded-full border border-white shadow-sm" style={{ background: `linear-gradient(135deg, ${theme.gradientStart}, ${theme.gradientEnd})` }} />
+                  <span>
+                    <span className="block text-xs font-bold text-[#34403D]">{theme.name}</span>
+                    <span className="block pt-0.5 text-[10px] text-[#73807C]">{theme.description}</span>
+                  </span>
                 </button>
               ))}
             </div>
-          </div>
+          </section>
 
-          <div className="mb-5">
-            <label className="block text-sm font-bold text-gray-700 mb-2"><Languages className="w-4 h-4 inline ml-1" />لغة الشهادة</label>
+          <section className="mb-6" aria-labelledby="certificate-language-heading">
+            <h2 id="certificate-language-heading" className="mb-2 flex items-center gap-1 text-sm font-bold text-[#34403D]">
+              <Languages className="h-4 w-4 text-[#008A76]" /> لغة الشهادة
+            </h2>
             <div className="grid grid-cols-2 gap-2">
-              <button type="button" onClick={() => setLanguage("ar")} className={`rounded-lg border px-3 py-2 text-xs font-medium ${language === "ar" ? "border-teal-600 bg-teal-50 text-teal-700" : "border-gray-200 text-gray-600"}`}>العربية</button>
-              <button type="button" onClick={() => setLanguage("en")} className={`rounded-lg border px-3 py-2 text-xs font-medium ${language === "en" ? "border-teal-600 bg-teal-50 text-teal-700" : "border-gray-200 text-gray-600"}`}>English</button>
+              <button type="button" onClick={() => updateLanguage("ar")} aria-pressed={language === "ar"} className={`rounded-lg border px-3 py-2 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#008A76] focus-visible:ring-offset-1 ${language === "ar" ? "border-[#008A76] bg-[#E9F6F3] text-[#006D5E]" : "border-[#DCE8E5] text-[#52605C]"}`}>العربية</button>
+              <button type="button" onClick={() => updateLanguage("en")} aria-pressed={language === "en"} className={`rounded-lg border px-3 py-2 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#008A76] focus-visible:ring-offset-1 ${language === "en" ? "border-[#008A76] bg-[#E9F6F3] text-[#006D5E]" : "border-[#DCE8E5] text-[#52605C]"}`}>English</button>
             </div>
-          </div>
+          </section>
 
-          {/* البيانات */}
-          <div className="space-y-3">
-            <h3 className="text-sm font-bold text-gray-700">بيانات الشهادة</h3>
+          <section className="space-y-3" aria-labelledby="certificate-details-heading">
+            <h2 id="certificate-details-heading" className="text-sm font-bold text-[#34403D]">بيانات الشهادة</h2>
             {[
               { key: "recipientName", label: "اسم المستلم", placeholder: "الاسم الكامل" },
               { key: "recipientTitle", label: "صفة المستلم", placeholder: "معلم / طالب / مدير..." },
@@ -218,182 +267,122 @@ export default function CertificateBuilder() {
               { key: "certNumber", label: "رقم الشهادة (اختياري)", placeholder: "CERT-001" },
             ].map((field) => (
               <div key={field.key}>
-                <label className="block text-xs font-medium text-gray-600 mb-1">{field.label}</label>
-                {(field as any).multiline ? (
+                <label className="mb-1 block text-xs font-medium text-[#52605C]">{field.label}</label>
+                {field.multiline ? (
                   <textarea
-                    value={(formData as any)[field.key]}
-                    onChange={(e) => setFormData((prev) => ({ ...prev, [field.key]: e.target.value }))}
+                    value={(formData as Record<string, string>)[field.key]}
+                    onChange={(event) => setFormData((previous) => ({ ...previous, [field.key]: event.target.value }))}
                     placeholder={field.placeholder}
                     rows={3}
-                    className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-400 resize-none"
+                    className="w-full resize-none rounded-lg border border-[#DCE8E5] px-3 py-2 text-sm text-[#28322F] placeholder:text-[#A2AEAA] focus:border-[#008A76] focus:outline-none focus:ring-2 focus:ring-[#008A76]/15"
                   />
                 ) : (
                   <input
                     type="text"
-                    value={(formData as any)[field.key]}
-                    onChange={(e) => setFormData((prev) => ({ ...prev, [field.key]: e.target.value }))}
+                    value={(formData as Record<string, string>)[field.key]}
+                    onChange={(event) => setFormData((previous) => ({ ...previous, [field.key]: event.target.value }))}
                     placeholder={field.placeholder}
-                    className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-400"
+                    className="w-full rounded-lg border border-[#DCE8E5] px-3 py-2 text-sm text-[#28322F] placeholder:text-[#A2AEAA] focus:border-[#008A76] focus:outline-none focus:ring-2 focus:ring-[#008A76]/15"
                   />
                 )}
               </div>
             ))}
-          </div>
+          </section>
 
-          {/* أزرار التصدير */}
-          <div className="mt-5 flex gap-3">
+          <div className="mt-6 flex gap-3 border-t border-[#E4EFEC] pt-5">
             <button
+              type="button"
               onClick={handleExportPDF}
               disabled={isExporting}
-              className="flex-1 flex items-center justify-center gap-2 text-white px-4 py-2.5 rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
-              style={{ backgroundColor: t.headerColor }}
+              className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-[#006D5E] px-4 py-2.5 text-sm font-bold text-white transition-colors hover:bg-[#00594D] disabled:cursor-wait disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#008A76] focus-visible:ring-offset-2"
             >
-              <Download className="w-4 h-4" />
-              {isExporting ? "جاري..." : "تحميل PDF"}
+              <Download className="h-4 w-4" />
+              {isExporting ? "جاري التصدير..." : "تحميل PDF"}
             </button>
-            <button
-              onClick={() => printElement("cert-preview")}
-              className="flex items-center justify-center gap-2 bg-gray-100 text-gray-700 px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-gray-200 transition-colors"
-            >
-              <Printer className="w-4 h-4" />
-              طباعة
+            <button type="button" onClick={() => printElement("cert-preview")} className="flex items-center justify-center gap-2 rounded-lg border border-[#DCE8E5] bg-white px-4 py-2.5 text-sm font-bold text-[#45534F] transition-colors hover:bg-[#F5F8F7] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#008A76] focus-visible:ring-offset-2">
+              <Printer className="h-4 w-4" /> طباعة
             </button>
           </div>
         </aside>
 
-        {/* ═══ المعاينة الحية ═══ */}
-        <main className="flex-1 p-6 flex items-center justify-center bg-gray-100 overflow-auto">
+        <main className="relative flex min-w-0 flex-1 items-center justify-start overflow-auto bg-[#EEF3F1] p-5 pt-11 sm:justify-center sm:p-8 lg:p-12">
+          <p className="absolute right-5 top-3 z-30 rounded-full bg-white px-3 py-1 text-[11px] font-medium text-[#52605C] shadow-sm sm:hidden">
+            اسحب أفقيًا لمعاينة الشهادة كاملة
+          </p>
           <div
             id="cert-preview"
-            className="w-full max-w-[800px] aspect-[1.414/1] shadow-2xl overflow-hidden relative"
-            style={{
-              background: t.bg,
-              fontFamily: "'Cairo', 'Tajawal', sans-serif",
-            }}
+            className="relative aspect-[1.414/1] w-[720px] max-w-none shrink-0 overflow-hidden bg-white shadow-[0_18px_50px_rgba(40,63,58,0.18)] sm:w-full sm:max-w-[920px]"
+            style={{ background: t.bg, fontFamily: "'Cairo', 'Tajawal', sans-serif" }}
             dir={language === "ar" ? "rtl" : "ltr"}
           >
-            {/* شريط علوي رفيع بتدرج */}
-            <div style={{ height: '5px', background: `linear-gradient(to left, ${t.gradientStart}, ${t.gradientMid}, ${t.gradientEnd})`, position: 'absolute', top: 0, left: 0, right: 0, zIndex: 20 }} />
+            <div className="absolute inset-x-0 top-0 z-20 h-1.5" style={{ background: `linear-gradient(to left, ${t.gradientStart}, ${t.gradientMid}, ${t.gradientEnd})` }} />
+            <div className="absolute rounded-[2px]" style={{ inset: "34px", border: `2px solid ${t.borderColor}` }} />
+            <div className="absolute rounded-[2px]" style={{ inset: "43px", border: `1px solid ${MOE_COLORS.line}` }} />
 
-            {/* إطار مزخرف - بلون الهوية */}
-            <div
-              className="absolute rounded-lg"
-              style={{ inset: '16px', border: `3px double ${t.borderColor}` }}
-            />
-            <div
-              className="absolute rounded"
-              style={{ inset: '24px', border: `1px solid ${t.borderColor}40` }}
-            />
-
-            {/* زخرفة الزوايا */}
-            {['top-right', 'top-left', 'bottom-right', 'bottom-left'].map((corner) => {
-              const isTop = corner.includes('top');
-              const isRight = corner.includes('right');
+            {["top-right", "top-left", "bottom-right", "bottom-left"].map((corner) => {
+              const isTop = corner.includes("top");
+              const isRight = corner.includes("right");
               return (
-                <div
+                <span
                   key={corner}
+                  aria-hidden="true"
+                  className="absolute z-10 h-7 w-7"
                   style={{
-                    position: 'absolute',
-                    [isTop ? 'top' : 'bottom']: '28px',
-                    [isRight ? 'right' : 'left']: '28px',
-                    width: '20px',
-                    height: '20px',
-                    borderTop: isTop ? `3px solid ${t.borderColor}` : 'none',
-                    borderBottom: !isTop ? `3px solid ${t.borderColor}` : 'none',
-                    borderRight: isRight ? `3px solid ${t.borderColor}` : 'none',
-                    borderLeft: !isRight ? `3px solid ${t.borderColor}` : 'none',
-                    zIndex: 5,
+                    [isTop ? "top" : "bottom"]: "50px",
+                    [isRight ? "right" : "left"]: "50px",
+                    borderTop: isTop ? `3px solid ${t.borderColor}` : "none",
+                    borderBottom: !isTop ? `3px solid ${t.borderColor}` : "none",
+                    borderRight: isRight ? `3px solid ${t.borderColor}` : "none",
+                    borderLeft: !isRight ? `3px solid ${t.borderColor}` : "none",
                   }}
                 />
               );
             })}
 
-            {/* المحتوى */}
-            <div className="relative z-10 h-full flex flex-col items-center justify-between p-12 text-center">
-              {/* الشعار والعنوان */}
-              <div>
-                <div style={{ marginBottom: '8px' }}>
-                  <MoeLogo variant="original" height={70} />
+            <div className="relative z-10 grid h-full grid-rows-[auto_1fr_auto] px-[9%] pb-[7%] pt-[7%] text-center">
+              <header className="flex flex-col items-center">
+                <div className="mb-3 flex min-h-[58px] items-center justify-center" aria-label="شعار وزارة التعليم">
+                  <MoeLogo variant="original" height={54} />
                 </div>
-                <h1
-                  className="text-3xl font-black mb-1"
-                  style={{ color: t.headerColor, fontFamily: "'Tajawal', sans-serif" }}
-                >
+                <h2 className="text-[clamp(1.45rem,2.65vw,2.3rem)] font-black tracking-tight" style={{ color: t.headerColor, fontFamily: "'Tajawal', sans-serif" }}>
                   {certificateTitle}
-                </h1>
-                {formData.organization && (
-                  <p className="text-sm" style={{ color: t.accentColor }}>{formData.organization}</p>
-                )}
-              </div>
+                </h2>
+                <div className="mt-2 h-px w-20" style={{ backgroundColor: MOE_COLORS.primary }} />
+                {formData.organization && <p className="mt-2 text-[clamp(0.65rem,1.1vw,0.85rem)] font-medium" style={{ color: t.accentColor }}>{formData.organization}</p>}
+              </header>
 
-              {/* النص الرئيسي */}
-              <div className="flex-1 flex flex-col items-center justify-center max-w-lg">
-                <p className="text-sm mb-3" style={{ color: t.textColor + "99" }}>
-                  {certificateCopy.intro}
-                </p>
+              <section className="flex flex-col items-center justify-center px-[8%]" aria-label="نص الشهادة">
+                <p className="mb-3 text-[clamp(0.72rem,1.25vw,1rem)] leading-relaxed" style={{ color: `${t.textColor}B3` }}>{certificateCopy.intro}</p>
+                <h3 className="mb-2 text-[clamp(1.25rem,2.35vw,2rem)] font-black" style={{ color: t.headerColor, fontFamily: "'Tajawal', sans-serif" }}>
+                  {formData.recipientName || certificateCopy.recipient}
+                </h3>
+                {formData.recipientTitle && <p className="mb-4 text-[clamp(0.66rem,1.1vw,0.85rem)] font-bold" style={{ color: t.accentColor }}>{formData.recipientTitle}</p>}
+                <span className="mb-4 h-0.5 w-16 rounded-full" style={{ background: `linear-gradient(to left, ${t.gradientStart}, ${t.gradientEnd})` }} />
+                <p className="max-w-xl text-[clamp(0.8rem,1.35vw,1.05rem)] leading-[1.9]" style={{ color: t.textColor }}>{certificateReason}</p>
+              </section>
 
-                <div className="mb-4">
-                  <h2
-                    className="text-2xl font-black mb-1"
-                    style={{ color: t.headerColor, fontFamily: "'Tajawal', sans-serif" }}
-                  >
-                    {formData.recipientName || certificateCopy.recipient}
-                  </h2>
-                  {formData.recipientTitle && (
-                    <p className="text-sm font-medium" style={{ color: t.accentColor }}>{formData.recipientTitle}</p>
-                  )}
+              <footer className="grid grid-cols-[1fr_auto_1fr] items-end gap-4 text-[clamp(0.55rem,0.95vw,0.75rem)]" aria-label="بيانات الاعتماد">
+                <div className="flex flex-col items-start gap-1 text-right">
+                  <div className="rounded bg-white p-1" style={{ outline: `1px solid ${MOE_COLORS.line}` }}>
+                    <img src={qrData} alt="رمز تحقق الشهادة" className="h-[clamp(2.7rem,5.5vw,4rem)] w-[clamp(2.7rem,5.5vw,4rem)]" />
+                  </div>
+                  {formData.certNumber && <span className="font-medium" style={{ color: `${t.textColor}A6` }}>{formData.certNumber}</span>}
                 </div>
-
-                <div
-                  className="w-24 h-0.5 rounded-full mb-4"
-                  style={{ background: `linear-gradient(to left, ${t.gradientStart}, ${t.gradientEnd})` }}
-                />
-
-                <p className="text-base leading-relaxed" style={{ color: t.textColor }}>
-                  {formData.reason || selectedType.defaultText}
-                </p>
-              </div>
-
-              {/* التوقيع والتاريخ */}
-              <div className="w-full">
-                <div className="flex items-end justify-between">
-                  {/* QR */}
-                  <div>
-                    <img src={qrData} alt="QR" className="w-14 h-14 rounded" />
-                    {formData.certNumber && (
-                      <p className="text-[9px] mt-1" style={{ color: t.textColor + "60" }}>
-                        {formData.certNumber}
-                      </p>
-                    )}
-                  </div>
-
-                  {/* التوقيع */}
-                  <div className="text-center">
-                    <div className="mb-6" />
-                    <div className="w-40 pt-2" style={{ borderTop: `2.5px dotted ${t.borderColor}60` }}>
-                      <p className="text-sm font-bold" style={{ color: t.headerColor }}>
-                        {formData.issuerName || "_______________"}
-                      </p>
-                      <p className="text-xs" style={{ color: t.textColor + "80" }}>
-                        {formData.issuerTitle || certificateCopy.position}
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* التاريخ */}
-                  <div className="text-left">
-                    <p className="text-xs" style={{ color: t.textColor + "60" }}>{certificateCopy.date}</p>
-                    <p className="text-sm font-medium" style={{ color: t.headerColor }}>
-                      {formData.date || "____/____/____"}
-                    </p>
+                <div className="min-w-[clamp(8rem,18vw,11rem)] text-center">
+                  <div className="mb-1.5 border-t border-dashed pt-1.5" style={{ borderColor: `${t.borderColor}B3` }}>
+                    <p className="font-bold" style={{ color: t.headerColor }}>{formData.issuerName || "اسم المانح"}</p>
+                    <p className="mt-0.5" style={{ color: `${t.textColor}A6` }}>{formData.issuerTitle || certificateCopy.position}</p>
                   </div>
                 </div>
-              </div>
+                <div className="text-left">
+                  <p style={{ color: `${t.textColor}8C` }}>{certificateCopy.date}</p>
+                  <p className="mt-1 font-bold" style={{ color: t.headerColor }}>{formData.date || "____/____/____"}</p>
+                </div>
+              </footer>
             </div>
 
-            {/* الفوتر المنحني */}
-            <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, zIndex: 15 }}>
-              <svg viewBox="0 0 800 40" preserveAspectRatio="none" style={{ width: '100%', height: '25px', display: 'block' }}>
+            <div className="absolute inset-x-0 bottom-0 z-20" aria-hidden="true">
+              <svg viewBox="0 0 920 32" preserveAspectRatio="none" className="block h-5 w-full">
                 <defs>
                   <linearGradient id={footerGradId} x1="0" y1="0" x2="1" y2="0">
                     <stop offset="0%" stopColor={t.gradientEnd} />
@@ -401,21 +390,9 @@ export default function CertificateBuilder() {
                     <stop offset="100%" stopColor={t.gradientStart} />
                   </linearGradient>
                 </defs>
-                <path d="M0,40 L0,28 C150,6 400,0 800,14 L800,40 Z" fill={`url(#${footerGradId})`} />
+                <path d="M0,32 L0,20 C220,2 550,1 920,14 L920,32 Z" fill={`url(#${footerGradId})`} />
               </svg>
-              <div style={{
-                background: `linear-gradient(to left, ${t.gradientStart}, ${t.gradientMid}, ${t.gradientEnd})`,
-                padding: '4px 28px 8px',
-                fontSize: '10px',
-                color: '#fff',
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                marginTop: '-1px',
-              }}>
-                <span style={{ fontWeight: 700, letterSpacing: '0.3px' }}>{certificateCopy.footer}</span>
-                <span style={{ opacity: 0.85 }}>{formData.organization || ''}</span>
-              </div>
+              <div className="h-3" style={{ background: `linear-gradient(to left, ${t.gradientStart}, ${t.gradientMid}, ${t.gradientEnd})` }} />
             </div>
           </div>
         </main>

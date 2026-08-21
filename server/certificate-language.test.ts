@@ -6,14 +6,15 @@ const source = readFileSync(new URL("../client/src/pages/CertificateBuilder.tsx"
 describe("certificate language support", () => {
   it("offers Arabic and English choices for certificate content", () => {
     expect(source).toContain('const [language, setLanguage] = useState<"ar" | "en">("ar")');
-    expect(source).toContain('setLanguage("ar")');
-    expect(source).toContain('setLanguage("en")');
+    expect(source).toContain('updateLanguage("ar")');
+    expect(source).toContain('updateLanguage("en")');
+    expect(source).toContain("defaultTextEn");
   });
 
   it("localizes the certificate title, metadata, and content direction", () => {
     expect(source).toContain("Certificate of Appreciation");
     expect(source).toContain('dir={language === "ar" ? "rtl" : "ltr"}');
     expect(source).toContain("certificateCopy.intro");
-    expect(source).toContain("certificateCopy.footer");
+    expect(source).toContain("certificateCopy.date");
   });
 });
