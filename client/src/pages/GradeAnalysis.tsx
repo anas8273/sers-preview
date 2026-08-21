@@ -4,7 +4,7 @@
  * المستخدم يدخل بيانات المادة والطلاب → رسوم بيانية تلقائية → تقرير → تصدير PDF
  */
 import { useState, useMemo } from "react";
-import { ArrowLeft, Download, Printer, Plus, Trash2, BarChart3, PieChart, TrendingUp, Users, Eye, Upload, ScanLine, Loader2 } from "lucide-react";
+import { ArrowLeft, Download, Printer, Plus, Trash2, BarChart3, PieChart, TrendingUp, Users, Eye, Upload, ScanLine, Loader2, CheckCircle2, AlertCircle, FileImage, Undo2 } from "lucide-react";
 import { useLocation } from "wouter";
 import { exportToPDF, printElement } from "@/lib/pdf-export";
 import { OfficialHeader } from "@/components/OfficialHeader";
@@ -23,6 +23,10 @@ export default function GradeAnalysis() {
   const [showReport, setShowReport] = useState(false);
   const [isScanningSheet, setIsScanningSheet] = useState(false);
   const [scanNote, setScanNote] = useState("");
+  const [scanPhase, setScanPhase] = useState<"idle" | "analyzing" | "success" | "error">("idle");
+  const [scanFileName, setScanFileName] = useState("");
+  const [lastImportedIds, setLastImportedIds] = useState<string[]>([]);
+  const [isDragActive, setIsDragActive] = useState(false);
   const extractGradesMutation = (trpc.genAI as any).extractGradesFromImage.useMutation();
 
   const [subjectInfo, setSubjectInfo] = useState({
@@ -118,9 +122,7 @@ export default function GradeAnalysis() {
     setIsExporting(false);
   };
 
-  const handleGradeSheetUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    event.target.value = "";
+  const processGradeSheet = async (file: File) => {
     if (!file) return;
     if (!file.type.startsWith("image/")) {
       toast.error("اختر صورة لكشف الدرجات بصيغة PNG أو JPG أو WEBP.");
@@ -132,6 +134,8 @@ export default function GradeAnalysis() {
     }
 
     setIsScanningSheet(true);
+    setScanPhase("analyzing");
+    setScanFileName(file.name);
     setScanNote("");
     try {
       const imageData = await new Promise<string>((resolve, reject) => {
@@ -150,15 +154,34 @@ export default function GradeAnalysis() {
         score: Math.min(Math.max(student.score, 0), Math.max(subjectInfo.maxScore || 100, 1)),
       }));
       setStudents((previous) => [...previous.filter((student) => student.name.trim() || student.score !== null), ...imported]);
+      setLastImportedIds(imported.map((student: Student) => student.id));
+      setScanPhase("success");
       setScanNote(result.unreadableNote || `تمت إضافة ${imported.length} طالباً من الصورة. راجع النتائج قبل الاعتماد.`);
       toast.success(`تم استخراج درجات ${imported.length} طالباً. راجعها قبل الحفظ.`);
     } catch (error) {
       const message = error instanceof Error ? error.message : "تعذر تحليل الصورة. تأكد من وضوح الأسماء والدرجات.";
+      setScanPhase("error");
+      setLastImportedIds([]);
       setScanNote(message);
       toast.error(message);
     } finally {
       setIsScanningSheet(false);
     }
+  };
+
+  const handleGradeSheetUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (file) void processGradeSheet(file);
+  };
+
+  const undoLastImport = () => {
+    if (!lastImportedIds.length) return;
+    setStudents((previous) => previous.filter((student) => !lastImportedIds.includes(student.id)));
+    setScanNote(`تمت إزالة ${lastImportedIds.length} صفاً مستورداً. يمكنك اختيار صورة أخرى أو إدخال الدرجات يدوياً.`);
+    setLastImportedIds([]);
+    setScanPhase("idle");
+    toast.info("تم التراجع عن آخر استيراد.");
   };
 
   // ألوان الهوية البصرية
@@ -311,9 +334,20 @@ export default function GradeAnalysis() {
                 </div>
               </div>
 
-              <div className="mb-4 flex items-start gap-2 rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-[11px] leading-5 text-blue-800">
-                <Upload className="mt-0.5 h-4 w-4 shrink-0" />
-                <span>{scanNote || "ارفع صورة واضحة لكشف يحتوي عمودَي الاسم والدرجة. تُضاف الصفوف المقروءة فقط ولا تُستبدل الدرجات المُدخلة مسبقاً."}</span>
+              <div
+                className={`mb-4 rounded-xl border-2 border-dashed p-4 transition-colors ${isDragActive ? "border-teal-500 bg-teal-50" : scanPhase === "error" ? "border-red-200 bg-red-50" : scanPhase === "success" ? "border-emerald-200 bg-emerald-50" : "border-blue-100 bg-blue-50"}`}
+                onDragOver={(event) => { event.preventDefault(); if (!isScanningSheet) setIsDragActive(true); }}
+                onDragLeave={() => setIsDragActive(false)}
+                onDrop={(event) => { event.preventDefault(); setIsDragActive(false); const file = event.dataTransfer.files?.[0]; if (file && !isScanningSheet) void processGradeSheet(file); }}
+              >
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex items-start gap-2 text-[11px] leading-5">
+                    {scanPhase === "analyzing" ? <Loader2 className="mt-0.5 h-5 w-5 shrink-0 animate-spin text-teal-600" /> : scanPhase === "success" ? <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-600" /> : scanPhase === "error" ? <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-red-600" /> : <FileImage className="mt-0.5 h-5 w-5 shrink-0 text-blue-700" />}
+                    <div><p className="font-bold text-gray-800">{scanPhase === "analyzing" ? "نحلل الصورة ونستخرج الصفوف..." : scanPhase === "success" ? "اكتمل الاستيراد — راجع الصفوف المظللة ثم صححها عند الحاجة." : scanPhase === "error" ? "تعذر قراءة الصورة كما ينبغي." : "اسحب صورة كشف الدرجات هنا أو اخترها من جهازك."}</p><p className="mt-0.5 text-gray-600">{scanNote || "الصيغ المدعومة PNG وJPG وWEBP حتى 5 ميغابايت. لن تُستبدل الدرجات المدخلة مسبقاً."}</p>{scanFileName && <p className="mt-1 text-[10px] text-gray-500">الملف الأخير: {scanFileName}</p>}</div>
+                  </div>
+                  {lastImportedIds.length > 0 && <button type="button" onClick={undoLastImport} className="inline-flex shrink-0 items-center justify-center gap-1 rounded-lg border border-amber-200 bg-white px-3 py-2 text-xs font-bold text-amber-700 hover:bg-amber-50"><Undo2 className="h-3.5 w-3.5" />التراجع عن الاستيراد</button>}
+                </div>
+                {isScanningSheet && <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-teal-100"><div className="h-full w-2/3 animate-pulse rounded-full bg-teal-600" /></div>}
               </div>
 
               <div className="overflow-x-auto rounded-lg border border-gray-200">
@@ -334,7 +368,7 @@ export default function GradeAnalysis() {
                       return (
                         <tr
                           key={student.id}
-                          className={`border-b border-gray-100 hover:bg-gray-50 ${index % 2 === 1 ? "bg-gray-50/50" : ""}`}
+                          className={`border-b border-gray-100 hover:bg-gray-50 ${lastImportedIds.includes(student.id) ? "bg-emerald-50/70" : index % 2 === 1 ? "bg-gray-50/50" : ""}`}
                         >
                           <td className="p-2 text-center text-gray-500 font-medium">{index + 1}</td>
                           <td className="p-2">

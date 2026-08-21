@@ -24,4 +24,12 @@ describe("GradeAnalysis automatic grading", () => {
     expect(source).toContain("previous.filter((student) => student.name.trim() || student.score !== null)");
     expect(source).toContain("راجع النتائج قبل الاعتماد");
   });
+
+  it("guides review with progress, drag and drop, highlighted rows, and a reversible import", () => {
+    expect(source).toContain("onDrop={(event)");
+    expect(source).toContain("setScanPhase(\"analyzing\")");
+    expect(source).toContain("التراجع عن الاستيراد");
+    expect(source).toContain("lastImportedIds.includes(student.id)");
+    expect(source).toContain("اكتمل الاستيراد — راجع الصفوف المظللة");
+  });
 });

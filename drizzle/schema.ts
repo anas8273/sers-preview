@@ -15,6 +15,22 @@ export const users = mysqlTable("users", {
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
 
+// ─── Audit Log ──────────────────────────────────────────────
+// يُخزّن بيانات تشغيلية موجزة فقط، ولا يحتفظ بالنصوص الكاملة أو الأسرار.
+export const auditLogs = mysqlTable("audit_logs", {
+  id: int("id").autoincrement().primaryKey(),
+  actorUserId: int("actorUserId").notNull(),
+  action: varchar("action", { length: 128 }).notNull(),
+  resourceType: varchar("resourceType", { length: 64 }).notNull(),
+  resourceId: varchar("resourceId", { length: 128 }),
+  portfolioId: int("portfolioId"),
+  metadata: json("metadata").$type<Record<string, string | number | boolean | null>>(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type AuditLog = typeof auditLogs.$inferSelect;
+export type InsertAuditLog = typeof auditLogs.$inferInsert;
+
 export const portfolios = mysqlTable("portfolios", {
   id: int("id").autoincrement().primaryKey(),
   userId: int("userId").notNull(),

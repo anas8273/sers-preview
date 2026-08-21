@@ -1,6 +1,6 @@
 import { eq, and, desc, sql, gt, lt } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, users, portfolios, uploadedFiles, evidenceComments, onlineExams, onlineExamResponses, shareLinks, pdfTemplates, userThemes, type InsertPortfolio, type InsertUploadedFile, type InsertEvidenceComment, type InsertOnlineExam, type InsertOnlineExamResponse, type InsertShareLink, type InsertPdfTemplate, type InsertUserTheme } from "../drizzle/schema";
+import { InsertUser, users, auditLogs, portfolios, uploadedFiles, evidenceComments, onlineExams, onlineExamResponses, shareLinks, pdfTemplates, userThemes, type InsertAuditLog, type InsertPortfolio, type InsertUploadedFile, type InsertEvidenceComment, type InsertOnlineExam, type InsertOnlineExamResponse, type InsertShareLink, type InsertPdfTemplate, type InsertUserTheme } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -50,6 +50,38 @@ export async function getUserByOpenId(openId: string) {
   if (!db) return undefined;
   const result = await db.select().from(users).where(eq(users.openId, openId)).limit(1);
   return result.length > 0 ? result[0] : undefined;
+}
+
+// ─── Audit Log ──────────────────────────────────────────────
+export async function createAuditLog(entry: InsertAuditLog) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(auditLogs).values(entry);
+  return { id: Number(result[0].insertId) };
+}
+
+export async function getAuditLogs(actorUserId: number, isAdmin = false, limit = 50, portfolioId?: number) {
+  const db = await getDb();
+  if (!db) return [];
+  const scopedConditions = [isAdmin ? undefined : eq(auditLogs.actorUserId, actorUserId), portfolioId ? eq(auditLogs.portfolioId, portfolioId) : undefined].filter(Boolean);
+  const condition = scopedConditions.length ? and(...scopedConditions) : undefined;
+  return db
+    .select({
+      id: auditLogs.id,
+      actorUserId: auditLogs.actorUserId,
+      action: auditLogs.action,
+      resourceType: auditLogs.resourceType,
+      resourceId: auditLogs.resourceId,
+      portfolioId: auditLogs.portfolioId,
+      metadata: auditLogs.metadata,
+      createdAt: auditLogs.createdAt,
+      actorName: users.name,
+    })
+    .from(auditLogs)
+    .leftJoin(users, eq(auditLogs.actorUserId, users.id))
+    .where(condition)
+    .orderBy(desc(auditLogs.createdAt))
+    .limit(Math.min(Math.max(limit, 1), 100));
 }
 
 // ─── Portfolios ──────────────────────────────────────────

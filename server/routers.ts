@@ -18,6 +18,7 @@ import {
   createShareLink, getShareLinkByToken, incrementShareLinkViews, getShareLinksByPortfolio, deactivateShareLink,
   createPdfTemplate, updatePdfTemplate, deletePdfTemplate, getActivePdfTemplates, getAllPdfTemplates, seedDefaultTemplates,
   createUserTheme, updateUserTheme, deleteUserTheme, getUserThemes,
+  createAuditLog, getAuditLogs,
 } from "./db";
 
 const hashShareAccessCode = (value: string) => createHash("sha256").update(value, "utf8").digest("hex");
@@ -37,6 +38,28 @@ async function assertCommentPortfolioAccess(user: { id: number; role: string }, 
   return portfolio;
 }
 
+async function recordAudit(input: {
+  actorUserId: number;
+  action: string;
+  resourceType: string;
+  resourceId?: string | number;
+  portfolioId?: number;
+  metadata?: Record<string, string | number | boolean | null>;
+}) {
+  try {
+    await createAuditLog({
+      actorUserId: input.actorUserId,
+      action: input.action,
+      resourceType: input.resourceType,
+      resourceId: input.resourceId === undefined ? null : String(input.resourceId),
+      portfolioId: input.portfolioId ?? null,
+      metadata: input.metadata ?? null,
+    });
+  } catch (error) {
+    console.warn("[Audit] Failed to record event", error);
+  }
+}
+
 export const appRouter = router({
   system: systemRouter,
   auth: router({
@@ -46,6 +69,21 @@ export const appRouter = router({
       ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
       return { success: true } as const;
     }),
+  }),
+
+  // ─── Audit Log ────────────────────────────────────────────
+  audit: router({
+    list: protectedProcedure
+      .input(z.object({ portfolioId: z.number().optional(), limit: z.number().int().min(1).max(100).optional() }).optional())
+      .query(async ({ ctx, input }) => {
+        if (input?.portfolioId && ctx.user.role !== "admin") {
+          const portfolio = await getPortfolioById(input.portfolioId);
+          if (!portfolio || portfolio.userId !== ctx.user.id) {
+            throw new TRPCError({ code: "FORBIDDEN", message: "لا تملك صلاحية عرض سجل هذا الملف" });
+          }
+        }
+        return getAuditLogs(ctx.user.id, ctx.user.role === "admin", input?.limit ?? 50, input?.portfolioId);
+      }),
   }),
 
   // ─── Portfolio CRUD ────────────────────────────────────
@@ -73,7 +111,7 @@ export const appRouter = router({
         completionPercentage: z.number().optional(),
       }))
       .mutation(async ({ ctx, input }) => {
-        return createPortfolio({
+        const created = await createPortfolio({
           userId: ctx.user.id,
           jobId: input.jobId,
           jobTitle: input.jobTitle,
@@ -84,6 +122,8 @@ export const appRouter = router({
           completionPercentage: input.completionPercentage ?? 0,
           status: "draft",
         });
+        await recordAudit({ actorUserId: ctx.user.id, action: "portfolio.created", resourceType: "portfolio", resourceId: created.id, portfolioId: created.id, metadata: { jobId: input.jobId, completionPercentage: input.completionPercentage ?? 0 } });
+        return created;
       }),
 
     update: protectedProcedure
@@ -97,19 +137,25 @@ export const appRouter = router({
       }))
       .mutation(async ({ ctx, input }) => {
         const { id, ...data } = input;
-        return updatePortfolio(id, ctx.user.id, data as any);
+        const updated = await updatePortfolio(id, ctx.user.id, data as any);
+        await recordAudit({ actorUserId: ctx.user.id, action: "portfolio.updated", resourceType: "portfolio", resourceId: id, portfolioId: id, metadata: { changedFields: Object.keys(data).join(",") } });
+        return updated;
       }),
 
     delete: protectedProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ ctx, input }) => {
-        return deletePortfolio(input.id, ctx.user.id);
+        const deleted = await deletePortfolio(input.id, ctx.user.id);
+        await recordAudit({ actorUserId: ctx.user.id, action: "portfolio.deleted", resourceType: "portfolio", resourceId: input.id, portfolioId: input.id });
+        return deleted;
       }),
 
     submit: protectedProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ ctx, input }) => {
-        return updatePortfolio(input.id, ctx.user.id, { status: "submitted" });
+        const submitted = await updatePortfolio(input.id, ctx.user.id, { status: "submitted" });
+        await recordAudit({ actorUserId: ctx.user.id, action: "portfolio.submitted", resourceType: "portfolio", resourceId: input.id, portfolioId: input.id });
+        return submitted;
     }),
   }),
 
@@ -131,19 +177,23 @@ export const appRouter = router({
       }))
       .mutation(async ({ ctx, input }) => {
         await assertCommentPortfolioAccess(ctx.user, input.portfolioId);
-        return createEvidenceComment({
+        const created = await createEvidenceComment({
           portfolioId: input.portfolioId,
           criterionId: input.criterionId,
           evidenceId: input.evidenceId,
           userId: ctx.user.id,
           content: input.content,
         });
+        await recordAudit({ actorUserId: ctx.user.id, action: "evidence.comment_created", resourceType: "evidence_comment", resourceId: created.id, portfolioId: input.portfolioId, metadata: { criterionId: input.criterionId, evidenceId: input.evidenceId, contentLength: input.content.length } });
+        return created;
       }),
 
     delete: protectedProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ ctx, input }) => {
-        return deleteEvidenceComment(input.id, ctx.user.id, ctx.user.role === "admin");
+        const deleted = await deleteEvidenceComment(input.id, ctx.user.id, ctx.user.role === "admin");
+        await recordAudit({ actorUserId: ctx.user.id, action: "evidence.comment_deleted", resourceType: "evidence_comment", resourceId: input.id });
+        return deleted;
     }),
   }),
 
@@ -162,7 +212,9 @@ export const appRouter = router({
       }))
       .mutation(async ({ ctx, input }) => {
         const token = nanoid(24);
-        return createOnlineExam({ ...input, userId: ctx.user.id, token });
+        const created = await createOnlineExam({ ...input, userId: ctx.user.id, token });
+        await recordAudit({ actorUserId: ctx.user.id, action: "online_exam.created", resourceType: "online_exam", resourceId: created.id, metadata: { questionCount: input.questions.length, subject: input.subject } });
+        return created;
       }),
 
     view: publicProcedure
@@ -238,7 +290,11 @@ export const appRouter = router({
 
     revoke: protectedProcedure
       .input(z.object({ id: z.number() }))
-      .mutation(async ({ ctx, input }) => deactivateOnlineExam(input.id, ctx.user.id)),
+      .mutation(async ({ ctx, input }) => {
+        const revoked = await deactivateOnlineExam(input.id, ctx.user.id);
+        await recordAudit({ actorUserId: ctx.user.id, action: "online_exam.revoked", resourceType: "online_exam", resourceId: input.id });
+        return revoked;
+      }),
   }),
 
   // ─── File Upload ───────────────────────────────────────
@@ -270,7 +326,7 @@ export const appRouter = router({
           criterionId: input.criterionId ?? null,
           subEvidenceId: input.subEvidenceId ?? null,
         });
-
+        await recordAudit({ actorUserId: ctx.user.id, action: "file.uploaded", resourceType: "uploaded_file", resourceId: id, portfolioId: input.portfolioId, metadata: { fileName: input.fileName.slice(0, 160), mimeType: input.mimeType, fileSize: buffer.length } });
         return { id, url, fileKey };
       }),
 
@@ -283,7 +339,9 @@ export const appRouter = router({
     delete: protectedProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ ctx, input }) => {
-        return deleteUploadedFile(input.id, ctx.user.id);
+        const deleted = await deleteUploadedFile(input.id, ctx.user.id);
+        await recordAudit({ actorUserId: ctx.user.id, action: "file.deleted", resourceType: "uploaded_file", resourceId: input.id });
+        return deleted;
       }),
   }),
 
@@ -311,7 +369,7 @@ export const appRouter = router({
           maxViews: input.maxViews,
           isActive: true,
         });
-
+        await recordAudit({ actorUserId: ctx.user.id, action: "share_link.created", resourceType: "share_link", resourceId: token, portfolioId: input.portfolioId, metadata: { expiresInDays: input.expiresInDays, maxViews: input.maxViews, passwordProtected: !!input.password } });
         return { token, expiresAt };
       }),
 
@@ -354,7 +412,9 @@ export const appRouter = router({
     deactivate: protectedProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ ctx, input }) => {
-        return deactivateShareLink(input.id, ctx.user.id);
+        const deactivated = await deactivateShareLink(input.id, ctx.user.id);
+        await recordAudit({ actorUserId: ctx.user.id, action: "share_link.deactivated", resourceType: "share_link", resourceId: input.id });
+        return deactivated;
       }),
   }),
 

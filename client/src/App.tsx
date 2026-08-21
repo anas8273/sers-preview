@@ -26,6 +26,7 @@ const SchoolRadio = lazy(() => import("./pages/SchoolRadio"));
 const SmartCV = lazy(() => import("./pages/SmartCV"));
 const ExamBuilder = lazy(() => import("./pages/ExamBuilder"));
 const SharedOnlineExam = lazy(() => import("./pages/SharedOnlineExam"));
+const AuditLog = lazy(() => import("./pages/AuditLog"));
 
 function LoadingFallback() {
   return (
@@ -60,6 +61,7 @@ function Router() {
         <Route path={"/smart-cv"} component={SmartCV} />
         <Route path={"/exams"} component={ExamBuilder} />
         <Route path={"/exam/:token"} component={SharedOnlineExam} />
+        <Route path={"/audit-log"} component={AuditLog} />
         <Route path={"/404"} component={NotFound} />
         <Route component={NotFound} />
       </Switch>
