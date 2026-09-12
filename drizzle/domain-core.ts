@@ -1,4 +1,5 @@
-import { boolean, int, json, mysqlEnum, mysqlTable, text, timestamp, uniqueIndex, varchar } from "drizzle-orm/mysql-core";
+import { sql } from "drizzle-orm";
+import { boolean, check, int, json, mysqlEnum, mysqlTable, text, timestamp, uniqueIndex, varchar } from "drizzle-orm/mysql-core";
 import { pdfTemplates, users } from "./schema";
 
 export const organizations = mysqlTable("organizations", {
@@ -36,7 +37,13 @@ export const workItems = mysqlTable("work_items", {
   deletedAt: timestamp("deletedAt"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
-});
+}, (table) => ({
+  ownerCheck: check("work_items_owner_check", sql`(
+    (${table.ownerType} = 'personal' AND ${table.ownerUserId} IS NOT NULL AND ${table.ownerOrganizationId} IS NULL)
+    OR
+    (${table.ownerType} = 'organization' AND ${table.ownerOrganizationId} IS NOT NULL AND ${table.ownerUserId} IS NULL)
+  )`),
+}));
 
 export const contentBlocks = mysqlTable("content_blocks", {
   id: int("id").autoincrement().primaryKey(),
@@ -64,7 +71,13 @@ export const assets = mysqlTable("assets", {
   deletedAt: timestamp("deletedAt"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
-});
+}, (table) => ({
+  ownerCheck: check("assets_owner_check", sql`(
+    (${table.ownerType} = 'personal' AND ${table.ownerUserId} IS NOT NULL AND ${table.ownerOrganizationId} IS NULL)
+    OR
+    (${table.ownerType} = 'organization' AND ${table.ownerOrganizationId} IS NOT NULL AND ${table.ownerUserId} IS NULL)
+  )`),
+}));
 
 export const workAssetLinks = mysqlTable("work_asset_links", {
   id: int("id").autoincrement().primaryKey(),
@@ -181,6 +194,11 @@ export const entitlements = mysqlTable("entitlements", {
 }, (table) => ({
   userProductUnique: uniqueIndex("entitlement_user_product_unique").on(table.userId, table.productId),
   organizationProductUnique: uniqueIndex("entitlement_org_product_unique").on(table.organizationId, table.productId),
+  ownerCheck: check("entitlements_owner_check", sql`(
+    (${table.userId} IS NOT NULL AND ${table.organizationId} IS NULL)
+    OR
+    (${table.userId} IS NULL AND ${table.organizationId} IS NOT NULL)
+  )`),
 }));
 
 export const notifications = mysqlTable("notifications", {

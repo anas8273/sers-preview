@@ -4,12 +4,11 @@ import { createServer } from "http";
 import net from "net";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { registerOAuthRoutes } from "./oauth";
-import { appRouter } from "../routers";
+import { appRouter } from "../root-router";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
 import { seedDefaultTemplates } from "../db";
-import { renderHtmlToPdf, closeBrowser } from "../pdf-renderer";
-import { renderHtmlToDocx } from "../docx-renderer";
+import { renderHtmlToPdf } from "../pdf-renderer";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -33,13 +32,10 @@ async function findAvailablePort(startPort: number = 3000): Promise<number> {
 async function startServer() {
   const app = express();
   const server = createServer(app);
-  // Configure body parser with larger size limit for file uploads
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
-  // OAuth callback under /api/oauth/callback
   registerOAuthRoutes(app);
 
-  // Server-side PDF export endpoint using Puppeteer
   app.post('/api/export-pdf', async (req, res) => {
     try {
       const { html, filename } = req.body;
@@ -62,30 +58,25 @@ async function startServer() {
     }
   });
 
-  // Server-side DOCX export endpoint (structured - editable text)
-  // Increase body limit for base64 images
   app.post('/api/export-docx', express.json({ limit: '50mb' }), async (req, res) => {
     try {
       const { data, html, imageBase64, filename, width, height } = req.body;
       let docxBuffer: Buffer;
-      
+
       if (html) {
-        // New: HTML → Puppeteer screenshot → Word (مطابق 100% للمعاينة)
         const { renderHtmlToDocxPuppeteer } = await import('../pdf-renderer');
         docxBuffer = await renderHtmlToDocxPuppeteer(html);
       } else if (imageBase64) {
-        // Fallback: image from html2canvas → Word with image
         const { renderImageToDocx } = await import('../docx-renderer');
         docxBuffer = await renderImageToDocx(imageBase64, width, height);
       } else if (data) {
-        // Structured data → editable Word
         const { renderStructuredDocx } = await import('../docx-renderer');
         docxBuffer = await renderStructuredDocx(data);
       } else {
         res.status(400).json({ error: 'Missing data, imageBase64, or html content' });
         return;
       }
-      
+
       res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
       res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(filename || 'document.docx')}`);
       res.setHeader('Content-Length', docxBuffer.length.toString());
@@ -96,7 +87,6 @@ async function startServer() {
     }
   });
 
-  // Image proxy endpoint to bypass CORS for PDF export
   app.get('/api/image-proxy', async (req, res) => {
     const url = req.query.url as string;
     if (!url) {
@@ -123,7 +113,6 @@ async function startServer() {
     }
   });
 
-  // tRPC API
   app.use(
     "/api/trpc",
     createExpressMiddleware({
@@ -131,7 +120,7 @@ async function startServer() {
       createContext,
     })
   );
-  // development mode uses Vite, production mode uses static files
+
   if (process.env.NODE_ENV === "development") {
     await setupVite(app, server);
   } else {
@@ -147,7 +136,6 @@ async function startServer() {
 
   server.listen(port, async () => {
     console.log(`Server running on http://localhost:${port}/`);
-    // Seed default templates if none exist
     try {
       await seedDefaultTemplates();
     } catch (e) {
