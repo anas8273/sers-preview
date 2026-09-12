@@ -17,22 +17,17 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
-
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: pnpm
-
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
-
       - name: TypeScript
         run: pnpm check
-
       - name: Hermetic test suite
         shell: bash
         run: |
@@ -41,10 +36,8 @@ jobs:
             --exclude server/templates-themes.test.ts \
             --exclude server/copy-templates-barcode.test.ts \
             --exclude server/image-proxy.test.ts
-
       - name: Production build
         run: pnpm build
-
       - name: Document environment-dependent integration suite
         shell: bash
         run: |
