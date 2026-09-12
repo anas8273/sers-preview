@@ -28,6 +28,10 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: TypeScript
         run: pnpm check
+      - name: Drizzle schema generation
+        env:
+          DATABASE_URL: mysql://ci:ci@127.0.0.1:3306/sers
+        run: pnpm exec drizzle-kit generate --config drizzle.config.ts
       - name: Hermetic test suite
         shell: bash
         run: |
