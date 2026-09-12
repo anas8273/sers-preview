@@ -7,8 +7,12 @@ import { ThemeProvider } from "./contexts/ThemeContext";
 import { lazy, Suspense } from "react";
 import BottomNav from "./components/BottomNav";
 
-// Lazy load pages
 const Home = lazy(() => import("./pages/Home"));
+const WorkHub = lazy(() => import("./pages/WorkHub"));
+const EvidenceLibrary = lazy(() => import("./pages/EvidenceLibrary"));
+const ReviewsHub = lazy(() => import("./pages/ReviewsHub"));
+const NotificationsHub = lazy(() => import("./pages/NotificationsHub"));
+const AccountHub = lazy(() => import("./pages/AccountHub"));
 const PerformanceEvidence = lazy(() => import("./pages/PerformanceEvidence"));
 const CertificateBuilder = lazy(() => import("./pages/CertificateBuilder"));
 const GradeAnalysis = lazy(() => import("./pages/GradeAnalysis"));
@@ -44,6 +48,13 @@ function Router() {
     <Suspense fallback={<LoadingFallback />}>
       <Switch>
         <Route path={"/"} component={Home} />
+        <Route path={"/work"} component={WorkHub} />
+        <Route path={"/evidence"} component={EvidenceLibrary} />
+        <Route path={"/reviews"} component={ReviewsHub} />
+        <Route path={"/notifications"} component={NotificationsHub} />
+        <Route path={"/account"} component={AccountHub} />
+
+        {/* Existing capabilities stay available during migration, but are no longer the product IA. */}
         <Route path={"/performance-evidence"} component={PerformanceEvidence} />
         <Route path={"/certificates"} component={CertificateBuilder} />
         <Route path={"/grade-analysis"} component={GradeAnalysis} />
