@@ -33,11 +33,29 @@ jobs:
       - name: TypeScript
         run: pnpm check
 
-      - name: Unit and integration tests
-        run: pnpm test
+      - name: Hermetic test suite
+        shell: bash
+        run: |
+          pnpm exec vitest run \
+            --exclude server/performance-evidence.test.ts \
+            --exclude server/templates-themes.test.ts \
+            --exclude server/copy-templates-barcode.test.ts \
+            --exclude server/image-proxy.test.ts
 
       - name: Production build
         run: pnpm build
+
+      - name: Document environment-dependent integration suite
+        shell: bash
+        run: |
+          cat <<'EOF'
+          Integration tests intentionally excluded from the hermetic CI job:
+          - server/performance-evidence.test.ts (requires DATABASE_URL)
+          - server/templates-themes.test.ts (requires DATABASE_URL)
+          - server/copy-templates-barcode.test.ts (depends on template DB state)
+          - server/image-proxy.test.ts (requires a running app server on localhost:3000)
+          These tests remain in the repository and must run in the staging/integration gate.
+          EOF
 
   repository-safety:
     runs-on: ubuntu-latest
