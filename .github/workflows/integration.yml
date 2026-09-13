@@ -1,0 +1,60 @@
+name: SERS Integration Gate
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: ["agent/integration-gate"]
+
+concurrency:
+  group: sers-integration-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  mysql-domain-integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: sers_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -proot"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+    env:
+      DATABASE_URL: mysql://root:root@127.0.0.1:3306/sers_test
+      SERS_INTEGRATION: "1"
+      NODE_ENV: test
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Apply reviewed Drizzle migrations
+        run: pnpm exec drizzle-kit migrate --config drizzle.config.ts
+      - name: Domain ownership and IDOR integration tests
+        run: pnpm exec vitest run server/domain-integration.test.ts
+      - name: Existing DB suites with isolated fixtures
+        run: >-
+          pnpm exec vitest run
+          server/performance-evidence.test.ts
+          server/templates-themes.test.ts
+      - name: Seed canonical legacy templates
+        run: >-
+          pnpm exec tsx -e
+          "import('./server/db.ts').then(async (m) => { await m.seedDefaultTemplates(); process.exit(0); })"
+      - name: Template/barcode integration suite
+        run: pnpm exec vitest run server/copy-templates-barcode.test.ts
