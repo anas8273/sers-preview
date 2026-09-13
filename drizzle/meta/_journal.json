@@ -78,6 +78,13 @@
       "when": 1787348468237,
       "tag": "0010_left_zarek",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "5",
+      "when": 1789308825601,
+      "tag": "0011_ordinary_rockslide",
+      "breakpoints": true
     }
   ]
 }
