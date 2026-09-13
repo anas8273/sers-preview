@@ -1,0 +1,38 @@
+name: SERS Final Domain Migration
+
+on:
+  push:
+    branches: ["agent/domain-migration-final"]
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Generate migration
+        env:
+          DATABASE_URL: mysql://root:root@127.0.0.1:3306/sers
+        run: pnpm exec drizzle-kit generate --config drizzle.config.ts
+      - name: Show migration diff
+        shell: bash
+        run: |
+          git status --short drizzle
+          git diff -- drizzle ':!drizzle/meta/*.json'
+      - name: Upload generated migration state
+        uses: actions/upload-artifact@v4
+        with:
+          name: sers-final-domain-migration
+          path: drizzle/
+          if-no-files-found: error
+          retention-days: 7
