@@ -1,4 +1,4 @@
-import { and, desc, eq, or } from "drizzle-orm";
+import { and, desc, eq, inArray, or } from "drizzle-orm";
 import {
   memberships,
   outputs,
@@ -7,6 +7,7 @@ import {
   workItems,
   workVersions,
 } from "../drizzle/domain-core";
+import { users } from "../drizzle/schema";
 import { assertWorkAccess } from "./domain-db";
 import { getDb } from "./db";
 
@@ -49,6 +50,23 @@ async function activeOrganizationMember(userId: number, organizationId: number):
 
 function canReviewOrganization(role: MembershipRow["role"]) {
   return role === "reviewer" || role === "admin" || role === "owner";
+}
+
+export async function listEligibleReviewersForUser(userId: number, organizationId: number) {
+  const membership = await activeOrganizationMember(userId, organizationId);
+  if (!membership) return undefined;
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db
+    .select({ userId: memberships.userId, name: users.name, role: memberships.role })
+    .from(memberships)
+    .innerJoin(users, eq(memberships.userId, users.id))
+    .where(and(
+      eq(memberships.organizationId, organizationId),
+      eq(memberships.status, "active"),
+      inArray(memberships.role, ["reviewer", "admin", "owner"]),
+    ))
+    .orderBy(users.name);
 }
 
 export async function createReviewForUser(requestedByUserId: number, workVersionId: number, reviewerUserId: number) {
