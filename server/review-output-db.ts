@@ -10,6 +10,8 @@ import {
 import { assertWorkAccess } from "./domain-db";
 import { getDb } from "./db";
 
+type MembershipRow = typeof memberships.$inferSelect;
+
 async function getVersion(versionId: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
@@ -30,7 +32,7 @@ export async function getWorkVersionForUser(userId: number, versionId: number, m
   return { ...row.version, work };
 }
 
-async function activeOrganizationMember(userId: number, organizationId: number) {
+async function activeOrganizationMember(userId: number, organizationId: number): Promise<MembershipRow | undefined> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   const [membership] = await db
@@ -45,6 +47,10 @@ async function activeOrganizationMember(userId: number, organizationId: number) 
   return membership;
 }
 
+function canReviewOrganization(role: MembershipRow["role"]) {
+  return role === "reviewer" || role === "admin" || role === "owner";
+}
+
 export async function createReviewForUser(requestedByUserId: number, workVersionId: number, reviewerUserId: number) {
   if (requestedByUserId === reviewerUserId) throw new Error("Reviewer must be another user");
   const version = await getWorkVersionForUser(requestedByUserId, workVersionId, "write");
@@ -53,7 +59,9 @@ export async function createReviewForUser(requestedByUserId: number, workVersion
     throw new Error("Review requires organization-owned work");
   }
   const reviewerMembership = await activeOrganizationMember(reviewerUserId, version.work.ownerOrganizationId);
-  if (!reviewerMembership) throw new Error("Reviewer is not an active organization member");
+  if (!reviewerMembership || !canReviewOrganization(reviewerMembership.role)) {
+    throw new Error("Reviewer is not eligible for organization review");
+  }
 
   const db = await getDb();
   if (!db) throw new Error("Database not available");
