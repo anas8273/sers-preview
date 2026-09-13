@@ -33,4 +33,10 @@ describe("review/output domain invariants", () => {
     expect(service).toContain("eq(reviews.reviewerUserId, userId)");
     expect(service).toContain('row.review.status !== "pending"');
   });
+
+  it("only allows explicit reviewer-capable organization roles", () => {
+    expect(service).toContain('role === "reviewer" || role === "admin" || role === "owner"');
+    expect(service).toContain("!canReviewOrganization(reviewerMembership.role)");
+    expect(service).not.toContain('role === "member" || role === "reviewer"');
+  });
 });
