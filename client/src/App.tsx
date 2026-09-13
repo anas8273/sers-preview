@@ -9,6 +9,7 @@ import BottomNav from "./components/BottomNav";
 
 const Home = lazy(() => import("./pages/Home"));
 const WorkHub = lazy(() => import("./pages/WorkHub"));
+const WorkDetail = lazy(() => import("./pages/WorkDetail"));
 const EvidenceLibrary = lazy(() => import("./pages/EvidenceLibrary"));
 const ReviewsHub = lazy(() => import("./pages/ReviewsHub"));
 const NotificationsHub = lazy(() => import("./pages/NotificationsHub"));
@@ -48,6 +49,7 @@ function Router() {
     <Suspense fallback={<LoadingFallback />}>
       <Switch>
         <Route path={"/"} component={Home} />
+        <Route path={"/work/:id"} component={WorkDetail} />
         <Route path={"/work"} component={WorkHub} />
         <Route path={"/evidence"} component={EvidenceLibrary} />
         <Route path={"/reviews"} component={ReviewsHub} />

@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Building2, FileText, FolderKanban, Loader2, Plus, UserRound, X } from "lucide-react";
+import { ArrowLeft, Building2, FileText, FolderKanban, Loader2, Plus, UserRound, X } from "lucide-react";
 import AppSidebar from "@/components/AppSidebar";
 import { trpc } from "@/lib/trpc";
 import { useLocation } from "wouter";
@@ -12,7 +12,7 @@ const statusLabel = {
 } as const;
 
 export default function WorkHub() {
-  const [location] = useLocation();
+  const [location, setLocation] = useLocation();
   const [showCreate, setShowCreate] = useState(false);
   const [title, setTitle] = useState("");
   const [type, setType] = useState<"report" | "portfolio">("report");
@@ -23,13 +23,14 @@ export default function WorkHub() {
   const workQuery = trpc.domain.work.list.useQuery(undefined, { retry: false });
   const organizationsQuery = trpc.domain.organization.listMine.useQuery(undefined, { retry: false });
   const createWork = trpc.domain.work.create.useMutation({
-    onSuccess: async () => {
+    onSuccess: async created => {
       setTitle("");
       setType("report");
       setOwnerType("personal");
       setOrganizationId(undefined);
       setShowCreate(false);
       await utils.domain.work.list.invalidate();
+      if (created?.id) setLocation(`/work/${created.id}`);
     },
   });
 
@@ -97,6 +98,9 @@ export default function WorkHub() {
                       {work.ownerType === "personal" ? <UserRound className="h-3.5 w-3.5" /> : <Building2 className="h-3.5 w-3.5" />}
                       {work.ownerType === "personal" ? "ملكية شخصية" : "ملكية مدرسية"}
                     </div>
+                    <button onClick={() => setLocation(`/work/${work.id}`)} className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 px-3 py-2.5 text-xs font-bold text-slate-700 hover:border-teal-200 hover:bg-teal-50 hover:text-teal-800">
+                      فتح العمل وإدارة الشواهد <ArrowLeft className="h-3.5 w-3.5" />
+                    </button>
                   </article>
                 );
               })}
