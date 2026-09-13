@@ -27,8 +27,8 @@ export const workItems = mysqlTable("work_items", {
   id: int("id").autoincrement().primaryKey(),
   creatorUserId: int("creatorUserId").notNull().references(() => users.id, { onDelete: "restrict" }),
   ownerType: mysqlEnum("ownerType", ["personal", "organization"]).default("personal").notNull(),
-  ownerUserId: int("ownerUserId").references(() => users.id, { onDelete: "set null" }),
-  ownerOrganizationId: int("ownerOrganizationId").references(() => organizations.id, { onDelete: "set null" }),
+  ownerUserId: int("ownerUserId").references(() => users.id, { onDelete: "restrict" }),
+  ownerOrganizationId: int("ownerOrganizationId").references(() => organizations.id, { onDelete: "restrict" }),
   type: mysqlEnum("type", ["report", "portfolio"]).notNull(),
   title: varchar("title", { length: 255 }).notNull(),
   status: mysqlEnum("status", ["draft", "in_review", "approved", "archived"]).default("draft").notNull(),
@@ -59,8 +59,8 @@ export const assets = mysqlTable("assets", {
   id: int("id").autoincrement().primaryKey(),
   creatorUserId: int("creatorUserId").notNull().references(() => users.id, { onDelete: "restrict" }),
   ownerType: mysqlEnum("ownerType", ["personal", "organization"]).default("personal").notNull(),
-  ownerUserId: int("ownerUserId").references(() => users.id, { onDelete: "set null" }),
-  ownerOrganizationId: int("ownerOrganizationId").references(() => organizations.id, { onDelete: "set null" }),
+  ownerUserId: int("ownerUserId").references(() => users.id, { onDelete: "restrict" }),
+  ownerOrganizationId: int("ownerOrganizationId").references(() => organizations.id, { onDelete: "restrict" }),
   kind: mysqlEnum("kind", ["file", "link", "text"]).notNull(),
   title: varchar("title", { length: 255 }).notNull(),
   storageKey: varchar("storageKey", { length: 512 }),
@@ -128,7 +128,9 @@ export const reviews = mysqlTable("reviews", {
   decidedAt: timestamp("decidedAt"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
-});
+}, (table) => ({
+  versionReviewerUnique: uniqueIndex("review_version_reviewer_unique").on(table.workVersionId, table.reviewerUserId),
+}));
 
 export const reviewComments = mysqlTable("review_comments", {
   id: int("id").autoincrement().primaryKey(),
