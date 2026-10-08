@@ -1,3 +1,4 @@
+import { TRPCError } from "@trpc/server";
 import { eq, and, desc, sql, gt, lt } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import { InsertUser, users, auditLogs, portfolios, uploadedFiles, evidenceComments, onlineExams, onlineExamResponses, shareLinks, pdfTemplates, userThemes, type InsertAuditLog, type InsertPortfolio, type InsertUploadedFile, type InsertEvidenceComment, type InsertOnlineExam, type InsertOnlineExamResponse, type InsertShareLink, type InsertPdfTemplate, type InsertUserTheme } from "../drizzle/schema";
@@ -116,11 +117,21 @@ export async function getPortfolioById(id: number) {
 export async function deletePortfolio(id: number, userId: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  await db.delete(uploadedFiles).where(eq(uploadedFiles.portfolioId, id));
-  await db.delete(evidenceComments).where(eq(evidenceComments.portfolioId, id));
-  await db.delete(shareLinks).where(eq(shareLinks.portfolioId, id));
-  await db.delete(portfolios).where(and(eq(portfolios.id, id), eq(portfolios.userId, userId)));
-  return { success: true };
+  return db.transaction(async (tx) => {
+    // Authorize and lock the parent before touching any child rows. A failure in
+    // any delete rolls back the whole operation instead of leaving a partial file.
+    const [portfolio] = await tx.select({ id: portfolios.id }).from(portfolios)
+      .where(and(eq(portfolios.id, id), eq(portfolios.userId, userId)))
+      .limit(1).for("update");
+    if (!portfolio) {
+      throw new TRPCError({ code: "FORBIDDEN", message: "لا تملك صلاحية حذف هذا الملف" });
+    }
+    await tx.delete(uploadedFiles).where(eq(uploadedFiles.portfolioId, id));
+    await tx.delete(evidenceComments).where(eq(evidenceComments.portfolioId, id));
+    await tx.delete(shareLinks).where(eq(shareLinks.portfolioId, id));
+    await tx.delete(portfolios).where(and(eq(portfolios.id, id), eq(portfolios.userId, userId)));
+    return { success: true };
+  });
 }
 
 // ─── Collaborative Evidence Comments ───────────────────────

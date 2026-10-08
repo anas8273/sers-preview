@@ -30,6 +30,15 @@ const verifyShareAccessCode = (storedValue: string | null, suppliedValue: string
   return timingSafeEqual(Buffer.from(expected, "hex"), Buffer.from(received, "hex"));
 };
 
+// Owner operations deliberately do not inherit the separate admin review permission.
+async function assertPortfolioOwner(userId: number, portfolioId: number) {
+  const portfolio = await getPortfolioById(portfolioId);
+  if (!portfolio || portfolio.userId !== userId) {
+    throw new TRPCError({ code: "FORBIDDEN", message: "لا تملك صلاحية الوصول إلى هذا الملف" });
+  }
+  return portfolio;
+}
+
 async function assertCommentPortfolioAccess(user: { id: number; role: string }, portfolioId: number) {
   const portfolio = await getPortfolioById(portfolioId);
   if (!portfolio || (portfolio.userId !== user.id && user.role !== "admin")) {
@@ -309,6 +318,9 @@ export const appRouter = router({
         subEvidenceId: z.string().optional(),
       }))
       .mutation(async ({ ctx, input }) => {
+        if (input.portfolioId !== undefined) {
+          await assertPortfolioOwner(ctx.user.id, input.portfolioId);
+        }
         const suffix = nanoid(8);
         const ext = input.fileName.split('.').pop() || 'bin';
         const fileKey = `evidence/${ctx.user.id}/${suffix}.${ext}`;
@@ -332,7 +344,8 @@ export const appRouter = router({
 
     listByPortfolio: protectedProcedure
       .input(z.object({ portfolioId: z.number() }))
-      .query(async ({ input }) => {
+      .query(async ({ ctx, input }) => {
+        await assertPortfolioOwner(ctx.user.id, input.portfolioId);
         return getFilesByPortfolio(input.portfolioId);
       }),
 
@@ -355,6 +368,7 @@ export const appRouter = router({
         password: z.string().min(4).max(64).optional(),
       }))
       .mutation(async ({ ctx, input }) => {
+        await assertPortfolioOwner(ctx.user.id, input.portfolioId);
         const token = nanoid(32);
         const expiresAt = new Date(Date.now() + input.expiresInDays * 24 * 60 * 60 * 1000);
 
@@ -405,7 +419,8 @@ export const appRouter = router({
 
     listByPortfolio: protectedProcedure
       .input(z.object({ portfolioId: z.number() }))
-      .query(async ({ input }) => {
+      .query(async ({ ctx, input }) => {
+        await assertPortfolioOwner(ctx.user.id, input.portfolioId);
         return getShareLinksByPortfolio(input.portfolioId);
       }),
 

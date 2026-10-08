@@ -328,3 +328,54 @@ describe("ai.classifyEvidence", () => {
     expect(result.success).toBe(true);
   });
 });
+
+// Calls the actual protected procedures; verifies forbidden requests never reach
+// storage, mutation helpers, or data-returning helpers.
+describe("legacy portfolio file/share ownership", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it.each([2, 999])("blocks upload to another or missing portfolio %i before storage", async (portfolioId) => {
+    const db = await import("./db");
+    const storage = await import("./storage");
+    const caller = appRouter.createCaller(createUserContext());
+    await expect(caller.file.upload({ portfolioId, fileName: "proof.png", mimeType: "image/png", base64Data: "eA==" }))
+      .rejects.toMatchObject({ code: "FORBIDDEN" });
+    expect(storage.storagePut).not.toHaveBeenCalled();
+    expect(db.createUploadedFile).not.toHaveBeenCalled();
+  });
+
+  it.each([2, 999])("blocks file and share listings and share creation for portfolio %i", async (portfolioId) => {
+    const db = await import("./db");
+    const caller = appRouter.createCaller(createUserContext());
+    await expect(caller.file.listByPortfolio({ portfolioId })).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(caller.share.listByPortfolio({ portfolioId })).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(caller.share.create({ portfolioId })).rejects.toMatchObject({ code: "FORBIDDEN" });
+    expect(db.getFilesByPortfolio).not.toHaveBeenCalled();
+    expect(db.getShareLinksByPortfolio).not.toHaveBeenCalled();
+    expect(db.createShareLink).not.toHaveBeenCalled();
+  });
+
+  it("does not turn admin review permission into owner mutation permission", async () => {
+    const caller = appRouter.createCaller(createUserContext("admin", 2));
+    await expect(caller.share.create({ portfolioId: 1 })).rejects.toMatchObject({ code: "FORBIDDEN" });
+  });
+
+  it("allows owner upload and listings with the correct portfolio association", async () => {
+    const db = await import("./db");
+    const caller = appRouter.createCaller(createUserContext());
+    await caller.file.upload({ portfolioId: 1, fileName: "proof.png", mimeType: "image/png", base64Data: "eA==" });
+    expect(db.createUploadedFile).toHaveBeenCalledWith(expect.objectContaining({ userId: 1, portfolioId: 1 }));
+    await caller.file.listByPortfolio({ portfolioId: 1 });
+    await caller.share.listByPortfolio({ portfolioId: 1 });
+    expect(db.getFilesByPortfolio).toHaveBeenCalledWith(1);
+    expect(db.getShareLinksByPortfolio).toHaveBeenCalledWith(1);
+  });
+
+  it("preserves unattached upload support", async () => {
+    const db = await import("./db");
+    const caller = appRouter.createCaller(createUserContext());
+    await caller.file.upload({ fileName: "proof.png", mimeType: "image/png", base64Data: "eA==" });
+    expect(db.getPortfolioById).not.toHaveBeenCalled();
+    expect(db.createUploadedFile).toHaveBeenCalledWith(expect.objectContaining({ userId: 1, portfolioId: null }));
+  });
+});
