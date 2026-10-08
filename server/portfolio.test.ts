@@ -4,6 +4,7 @@ import type { TrpcContext } from "./_core/context";
 
 // Mock database functions
 vi.mock("./db", () => ({
+  createAuditLog: vi.fn().mockResolvedValue({ id: 1 }),
   createPortfolio: vi.fn().mockResolvedValue({ id: 1 }),
   updatePortfolio: vi.fn().mockResolvedValue({ id: 1 }),
   getPortfoliosByUser: vi.fn().mockResolvedValue([
@@ -342,6 +343,7 @@ describe("legacy portfolio file/share ownership", () => {
       .rejects.toMatchObject({ code: "FORBIDDEN" });
     expect(storage.storagePut).not.toHaveBeenCalled();
     expect(db.createUploadedFile).not.toHaveBeenCalled();
+    expect(db.createAuditLog).not.toHaveBeenCalled();
   });
 
   it.each([2, 999])("blocks file and share listings and share creation for portfolio %i", async (portfolioId) => {
@@ -353,6 +355,7 @@ describe("legacy portfolio file/share ownership", () => {
     expect(db.getFilesByPortfolio).not.toHaveBeenCalled();
     expect(db.getShareLinksByPortfolio).not.toHaveBeenCalled();
     expect(db.createShareLink).not.toHaveBeenCalled();
+    expect(db.createAuditLog).not.toHaveBeenCalled();
   });
 
   it("does not turn admin review permission into owner mutation permission", async () => {
