@@ -6,7 +6,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import mysql, { type Connection, type RowDataPacket } from "mysql2/promise";
 import { drizzle } from "drizzle-orm/mysql2";
 import { migrate } from "drizzle-orm/mysql2/migrator";
-import { createPortfolio, createUploadedFile, createShareLink, deletePortfolio, getDb } from "./db";
+import { createPortfolio, createUploadedFile, createShareLink, createEvidenceComment, deletePortfolio, getDb } from "./db";
 
 // This suite never accepts a staging/production URL, even when explicitly enabled.
 const syntheticUrl = "mysql://root:sers-ci-only@127.0.0.1:3307/sers_legacy_integration";
@@ -44,6 +44,9 @@ async function upload(id: number, userId = owner) {
 async function share(id: number, userId = owner) {
   return createShareLink({ portfolioId: id, userId, token: randomUUID(), expiresAt: new Date(Date.now() + 86400000) });
 }
+async function comment(id: number, userId = owner, isAdmin = false) {
+  return createEvidenceComment({ portfolioId: id, userId, criterionId: "c", evidenceId: "e", content: "fixture" }, isAdmin);
+}
 async function counts(id: number) {
   const result: Record<string, number> = {};
   for (const table of ["portfolios", "uploaded_files", "evidence_comments", "share_links"]) {
@@ -57,7 +60,7 @@ async function populated() {
   const id = await portfolio();
   await upload(id);
   await share(id);
-  await observer.execute("INSERT INTO evidence_comments (portfolioId, criterionId, evidenceId, userId, content) VALUES (?, 'c', 'e', ?, 'fixture')", [id, owner]);
+  await comment(id);
   return id;
 }
 const empty = { portfolios: 0, uploaded_files: 0, evidence_comments: 0, share_links: 0 };
@@ -96,12 +99,21 @@ test("a real SQL failure after child deletes rolls the entire transaction back",
   assert.deepEqual(await counts(id), empty);
 });
 
-test("both writers reject a foreign or deleted parent without inserting children", async () => {
+test("all writers reject a foreign or deleted parent without inserting children", async () => {
   const id = await portfolio();
-  for (const writer of [upload, share]) await assert.rejects(writer(id, stranger), { code: "FORBIDDEN" });
+  for (const writer of [upload, share, comment]) await assert.rejects(writer(id, stranger), { code: "FORBIDDEN" });
   assert.deepEqual(await counts(id), { ...empty, portfolios: 1 });
   await deletePortfolio(id, owner);
-  for (const writer of [upload, share]) await assert.rejects(writer(id), { code: "FORBIDDEN" });
+  for (const writer of [upload, share, comment]) await assert.rejects(writer(id), { code: "FORBIDDEN" });
+  assert.deepEqual(await counts(id), empty);
+});
+
+test("administrator comments preserve access but cannot recreate children of a deleted parent", async () => {
+  const id = await portfolio();
+  await comment(id, stranger, true);
+  assert.deepEqual(await counts(id), { ...empty, portfolios: 1, evidence_comments: 1 });
+  await deletePortfolio(id, owner);
+  await assert.rejects(comment(id, stranger, true), { code: "FORBIDDEN" });
   assert.deepEqual(await counts(id), empty);
 });
 
@@ -119,7 +131,7 @@ async function waitForParentWaiters(expected: number) {
   assert.fail(`Expected ${expected} actual parent lock waiters; no timing-only race assumptions`);
 }
 
-for (const [name, writer] of [["upload", upload], ["share", share]] as const) {
+for (const [name, writer] of [["upload", upload], ["share", share], ["comment", comment], ["admin comment", (id: number) => comment(id, stranger, true)]] as const) {
   for (const first of ["delete", "writer"] as const) {
     test(`${name}: ${first} queued first against a locked parent leaves no orphan`, { timeout: 30000 }, async () => {
       const id = await portfolio();

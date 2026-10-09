@@ -4,6 +4,7 @@ import type { TrpcContext } from "./_core/context";
 
 // Mock database functions
 vi.mock("./db", () => ({
+  createEvidenceComment: vi.fn().mockResolvedValue({ id: 17 }),
   createAuditLog: vi.fn().mockResolvedValue({ id: 1 }),
   createPortfolio: vi.fn().mockResolvedValue({ id: 1 }),
   updatePortfolio: vi.fn().mockResolvedValue({ id: 1 }),
@@ -380,5 +381,51 @@ describe("legacy portfolio file/share ownership", () => {
     await caller.file.upload({ fileName: "proof.png", mimeType: "image/png", base64Data: "eA==" });
     expect(db.getPortfolioById).not.toHaveBeenCalled();
     expect(db.createUploadedFile).toHaveBeenCalledWith(expect.objectContaining({ userId: 1, portfolioId: null }));
+  });
+});
+
+
+describe("comment transaction authorization and upload reconciliation", () => {
+  beforeEach(() => vi.clearAllMocks());
+  const input = { portfolioId: 1, criterionId: "c", evidenceId: "e", content: "comment" };
+
+  it("passes authenticated administrator status, not client-supplied elevation", async () => {
+    const db = await import("./db");
+    await appRouter.createCaller(createUserContext()).evidenceComment.create({ ...input, isAdmin: true } as typeof input);
+    expect(db.createEvidenceComment).toHaveBeenLastCalledWith(expect.objectContaining({ userId: 1 }), false);
+    await appRouter.createCaller(createUserContext("admin", 2)).evidenceComment.create(input);
+    expect(db.createEvidenceComment).toHaveBeenLastCalledWith(expect.objectContaining({ userId: 2 }), true);
+  });
+
+  it("rejects a foreign user's comment before insertion or success audit", async () => {
+    const db = await import("./db");
+    await expect(appRouter.createCaller(createUserContext("user", 2)).evidenceComment.create(input)).rejects.toMatchObject({ code: "FORBIDDEN" });
+    expect(db.createEvidenceComment).not.toHaveBeenCalled();
+    expect(db.createAuditLog).not.toHaveBeenCalled();
+  });
+
+  it("does not audit success when the locked comment insertion rejects", async () => {
+    const db = await import("./db");
+    const { TRPCError } = await import("@trpc/server");
+    vi.mocked(db.createEvidenceComment).mockRejectedValueOnce(new TRPCError({ code: "FORBIDDEN" }));
+    await expect(appRouter.createCaller(createUserContext()).evidenceComment.create(input)).rejects.toMatchObject({ code: "FORBIDDEN" });
+    expect(db.createAuditLog).not.toHaveBeenCalled();
+  });
+
+  it("records the blob reconciliation key and preserves metadata failure without success audit", async () => {
+    const db = await import("./db");
+    const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
+    vi.mocked(db.createUploadedFile).mockRejectedValueOnce(new Error("metadata unavailable"));
+    try {
+      await expect(appRouter.createCaller(createUserContext()).file.upload({ portfolioId: 1, fileName: "proof.png", mimeType: "image/png", base64Data: "eA==" })).rejects.toThrow("metadata unavailable");
+      const metadata = vi.mocked(db.createUploadedFile).mock.calls[0][0];
+      expect(warning).toHaveBeenCalledTimes(1);
+      expect(warning).toHaveBeenCalledWith("[Storage] Reconciliation required", {
+        event: "storage.metadata_write_failed", fileKey: metadata.fileKey, actorUserId: 1, portfolioId: 1,
+      });
+      expect(db.createAuditLog).not.toHaveBeenCalled();
+    } finally {
+      warning.mockRestore();
+    }
   });
 });

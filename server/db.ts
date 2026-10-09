@@ -135,11 +135,20 @@ export async function deletePortfolio(id: number, userId: number) {
 }
 
 // ─── Collaborative Evidence Comments ───────────────────────
-export async function createEvidenceComment(data: InsertEvidenceComment) {
+export async function createEvidenceComment(data: InsertEvidenceComment, isAdmin = false) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  const result = await db.insert(evidenceComments).values(data);
-  return { id: Number(result[0].insertId) };
+  return db.transaction(async (tx) => {
+    // Serialize with deletion and recheck access after obtaining the parent lock.
+    // isAdmin is supplied only by the authenticated server context.
+    const [portfolio] = await tx.select({ userId: portfolios.userId }).from(portfolios)
+      .where(eq(portfolios.id, data.portfolioId)).limit(1).for("update");
+    if (!portfolio || (!isAdmin && portfolio.userId !== data.userId)) {
+      throw new TRPCError({ code: "FORBIDDEN", message: "لا تملك صلاحية الوصول إلى تعليقات هذا الملف" });
+    }
+    const result = await tx.insert(evidenceComments).values(data);
+    return { id: Number(result[0].insertId) };
+  });
 }
 
 export async function getEvidenceComments(portfolioId: number, criterionId: string, evidenceId: string) {

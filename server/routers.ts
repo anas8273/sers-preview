@@ -192,7 +192,7 @@ export const appRouter = router({
           evidenceId: input.evidenceId,
           userId: ctx.user.id,
           content: input.content,
-        });
+        }, ctx.user.role === "admin");
         await recordAudit({ actorUserId: ctx.user.id, action: "evidence.comment_created", resourceType: "evidence_comment", resourceId: created.id, portfolioId: input.portfolioId, metadata: { criterionId: input.criterionId, evidenceId: input.evidenceId, contentLength: input.content.length } });
         return created;
       }),
@@ -327,17 +327,28 @@ export const appRouter = router({
         const buffer = Buffer.from(input.base64Data, 'base64');
         const { url } = await storagePut(fileKey, buffer, input.mimeType);
 
-        const { id } = await createUploadedFile({
-          userId: ctx.user.id,
-          portfolioId: input.portfolioId ?? null,
-          fileKey,
-          url,
-          originalName: input.fileName,
-          mimeType: input.mimeType,
-          fileSize: buffer.length,
-          criterionId: input.criterionId ?? null,
-          subEvidenceId: input.subEvidenceId ?? null,
-        });
+        let id: number;
+        try {
+          ({ id } = await createUploadedFile({
+            userId: ctx.user.id,
+            portfolioId: input.portfolioId ?? null,
+            fileKey,
+            url,
+            originalName: input.fileName,
+            mimeType: input.mimeType,
+            fileSize: buffer.length,
+            criterionId: input.criterionId ?? null,
+            subEvidenceId: input.subEvidenceId ?? null,
+          }));
+        } catch (error) {
+          console.warn("[Storage] Reconciliation required", {
+            event: "storage.metadata_write_failed",
+            fileKey,
+            actorUserId: ctx.user.id,
+            portfolioId: input.portfolioId ?? null,
+          });
+          throw error;
+        }
         await recordAudit({ actorUserId: ctx.user.id, action: "file.uploaded", resourceType: "uploaded_file", resourceId: id, portfolioId: input.portfolioId, metadata: { fileName: input.fileName.slice(0, 160), mimeType: input.mimeType, fileSize: buffer.length } });
         return { id, url, fileKey };
       }),
