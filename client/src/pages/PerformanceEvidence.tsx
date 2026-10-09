@@ -8,6 +8,7 @@ import { useState, useMemo, useRef, useCallback, useEffect } from "react";
 import { useLocation } from "wouter";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
+import { dataUrlUploadPayload } from "@/lib/upload-data-url";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { usePortfolio } from "@/hooks/usePortfolio";
 import { useOfflineSync } from "@/hooks/useOfflineSync";
@@ -572,8 +573,7 @@ export default function PerformanceEvidence() {
       if (isAuthenticated) {
         const uploaded = await uploadFileMutation.mutateAsync({
           fileName: `cover-background-${Date.now()}-${file.name}`,
-          mimeType: file.type,
-          base64Data: dataUrl.split(",")[1] || dataUrl,
+          ...dataUrlUploadPayload(dataUrl),
         });
         backgroundUrl = uploaded.url || dataUrl;
       }
@@ -1539,11 +1539,9 @@ export default function PerformanceEvidence() {
             // رفع الملف إلى S3 للحصول على رابط عام للباركود (فقط إذا كان المستخدم مسجلاً)
             if (isAuthenticated) {
               try {
-                const base64Only = storageBase64.split(',')[1] || storageBase64;
                 const uploadResult = await uploadFileMutation.mutateAsync({
                   fileName: file.name,
-                  mimeType: file.type,
-                  base64Data: base64Only,
+                  ...dataUrlUploadPayload(storageBase64),
                 });
                 if (uploadResult.url) {
                   newEv.uploadedUrl = uploadResult.url;
@@ -1744,11 +1742,9 @@ export default function PerformanceEvidence() {
         // رفع الملف إلى S3 للحصول على رابط عام للباركود (فقط إذا كان المستخدم مسجلاً)
         if (isAuthenticated) {
           try {
-            const base64Only = processedData.split(',')[1] || processedData;
             const uploadResult = await uploadFileMutation.mutateAsync({
               fileName: file.name,
-              mimeType: file.type,
-              base64Data: base64Only,
+              ...dataUrlUploadPayload(processedData),
             });
             if (uploadResult.url) {
               newEv.uploadedUrl = uploadResult.url;
@@ -2329,12 +2325,9 @@ export default function PerformanceEvidence() {
                           toast.error('يجب تسجيل الدخول لرفع الملفات', { id: 'qr-upload-' + ev.id });
                           return;
                         }
-                        const base64Only = base64Data.split(',')[1] || base64Data;
-                        const mimeType = base64Data.match(/data:([^;]+)/)?.[1] || 'image/png';
                         const uploadResult = await uploadFileMutation.mutateAsync({
                           fileName: ev.fileName || 'image.png',
-                          mimeType,
-                          base64Data: base64Only,
+                          ...dataUrlUploadPayload(base64Data),
                         });
                         if (uploadResult.url) {
                           updateEvidence(criterionId, ev.id, { displayAs: 'qr', uploadedUrl: uploadResult.url });
@@ -5018,12 +5011,9 @@ export default function PerformanceEvidence() {
                                 if (stored?.data) base64Data = stored.data;
                                 else continue;
                               }
-                              const base64Only = base64Data.split(',')[1] || base64Data;
-                              const mimeType = base64Data.match(/data:([^;]+)/)?.[1] || 'image/png';
                               const result = await uploadFileMutation.mutateAsync({
                                 fileName: ev.fileName || 'image.png',
-                                mimeType,
-                                base64Data: base64Only,
+                                ...dataUrlUploadPayload(base64Data),
                               });
                               if (result.url) {
                                 updateEvidence(cId, ev.id, { uploadedUrl: result.url });

@@ -340,7 +340,7 @@ describe("legacy portfolio file/share ownership", () => {
     const db = await import("./db");
     const storage = await import("./storage");
     const caller = appRouter.createCaller(createUserContext());
-    await expect(caller.file.upload({ portfolioId, fileName: "proof.png", mimeType: "image/png", base64Data: "eA==" }))
+    await expect(caller.file.upload({ portfolioId, fileName: "proof.png", mimeType: "image/png", base64Data: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a2ioAAAAASUVORK5CYII=" }))
       .rejects.toMatchObject({ code: "FORBIDDEN" });
     expect(storage.storagePut).not.toHaveBeenCalled();
     expect(db.createUploadedFile).not.toHaveBeenCalled();
@@ -367,7 +367,7 @@ describe("legacy portfolio file/share ownership", () => {
   it("allows owner upload and listings with the correct portfolio association", async () => {
     const db = await import("./db");
     const caller = appRouter.createCaller(createUserContext());
-    await caller.file.upload({ portfolioId: 1, fileName: "proof.png", mimeType: "image/png", base64Data: "eA==" });
+    await caller.file.upload({ portfolioId: 1, fileName: "proof.png", mimeType: "image/png", base64Data: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a2ioAAAAASUVORK5CYII=" });
     expect(db.createUploadedFile).toHaveBeenCalledWith(expect.objectContaining({ userId: 1, portfolioId: 1 }));
     await caller.file.listByPortfolio({ portfolioId: 1 });
     await caller.share.listByPortfolio({ portfolioId: 1 });
@@ -378,7 +378,7 @@ describe("legacy portfolio file/share ownership", () => {
   it("preserves unattached upload support", async () => {
     const db = await import("./db");
     const caller = appRouter.createCaller(createUserContext());
-    await caller.file.upload({ fileName: "proof.png", mimeType: "image/png", base64Data: "eA==" });
+    await caller.file.upload({ fileName: "proof.png", mimeType: "image/png", base64Data: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a2ioAAAAASUVORK5CYII=" });
     expect(db.getPortfolioById).not.toHaveBeenCalled();
     expect(db.createUploadedFile).toHaveBeenCalledWith(expect.objectContaining({ userId: 1, portfolioId: null }));
   });
@@ -417,7 +417,7 @@ describe("comment transaction authorization and upload reconciliation", () => {
     const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
     vi.mocked(db.createUploadedFile).mockRejectedValueOnce(new Error("metadata unavailable"));
     try {
-      await expect(appRouter.createCaller(createUserContext()).file.upload({ portfolioId: 1, fileName: "proof.png", mimeType: "image/png", base64Data: "eA==" })).rejects.toThrow("metadata unavailable");
+      await expect(appRouter.createCaller(createUserContext()).file.upload({ portfolioId: 1, fileName: "proof.png", mimeType: "image/png", base64Data: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a2ioAAAAASUVORK5CYII=" })).rejects.toThrow("metadata unavailable");
       const metadata = vi.mocked(db.createUploadedFile).mock.calls[0][0];
       expect(warning).toHaveBeenCalledTimes(1);
       expect(warning).toHaveBeenCalledWith("[Storage] Reconciliation required", {
@@ -427,5 +427,29 @@ describe("comment transaction authorization and upload reconciliation", () => {
     } finally {
       warning.mockRestore();
     }
+  });
+});
+
+describe("upload admission before side effects", () => {
+  beforeEach(() => vi.clearAllMocks());
+  it("rejects forged image bytes before storage, database insertion and success audit", async () => {
+    const db = await import("./db");
+    const storage = await import("./storage");
+    await expect(appRouter.createCaller(createUserContext()).file.upload({ fileName: "proof.png", mimeType: "image/png", base64Data: "eA==" })).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    expect(storage.storagePut).not.toHaveBeenCalled();
+    expect(db.createUploadedFile).not.toHaveBeenCalled();
+    expect(db.createAuditLog).not.toHaveBeenCalled();
+  });
+  it("applies the raster-only check to administrator template uploads", async () => {
+    const storage = await import("./storage");
+    await expect(appRouter.createCaller(createUserContext("admin")).templates.uploadImage({ fileName: "proof.pdf", mimeType: "application/pdf", base64Data: Buffer.from("%PDF-1.7\nfixture").toString("base64"), imageType: "cover" })).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    expect(storage.storagePut).not.toHaveBeenCalled();
+  });
+  it("stores canonical type and extension instead of a supplied executable extension", async () => {
+    const db = await import("./db");
+    const storage = await import("./storage");
+    await appRouter.createCaller(createUserContext()).file.upload({ fileName: "proof.html", mimeType: "application/octet-stream", base64Data: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a2ioAAAAASUVORK5CYII=" });
+    expect(storage.storagePut).toHaveBeenCalledWith(expect.stringMatching(/\.png$/), expect.any(Buffer), "image/png");
+    expect(db.createUploadedFile).toHaveBeenCalledWith(expect.objectContaining({ mimeType: "image/png", fileKey: expect.stringMatching(/\.png$/) }));
   });
 });

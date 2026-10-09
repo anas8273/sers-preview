@@ -4,6 +4,7 @@ import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, protectedProcedure, adminProcedure, router } from "./_core/trpc";
 import { invokeLLM } from "./_core/llm";
 import { storagePut } from "./storage";
+import { validateUpload, MAX_UPLOAD_BASE64_LENGTH, MAX_IMAGE_BYTES, MAX_LOGO_BYTES } from "./upload-validation";
 import { notifyOwner } from "./_core/notification";
 import { z } from "zod";
 import { nanoid } from "nanoid";
@@ -311,9 +312,9 @@ export const appRouter = router({
     upload: protectedProcedure
       .input(z.object({
         portfolioId: z.number().optional(),
-        fileName: z.string(),
-        mimeType: z.string(),
-        base64Data: z.string(),
+        fileName: z.string().min(1).max(255),
+        mimeType: z.string().max(128),
+        base64Data: z.string().min(1).max(MAX_UPLOAD_BASE64_LENGTH),
         criterionId: z.string().optional(),
         subEvidenceId: z.string().optional(),
       }))
@@ -322,10 +323,9 @@ export const appRouter = router({
           await assertPortfolioOwner(ctx.user.id, input.portfolioId);
         }
         const suffix = nanoid(8);
-        const ext = input.fileName.split('.').pop() || 'bin';
-        const fileKey = `evidence/${ctx.user.id}/${suffix}.${ext}`;
-        const buffer = Buffer.from(input.base64Data, 'base64');
-        const { url } = await storagePut(fileKey, buffer, input.mimeType);
+        const { buffer, mimeType, extension } = validateUpload(input);
+        const fileKey = `evidence/${ctx.user.id}/${suffix}.${extension}`;
+        const { url } = await storagePut(fileKey, buffer, mimeType);
 
         let id: number;
         try {
@@ -335,7 +335,7 @@ export const appRouter = router({
             fileKey,
             url,
             originalName: input.fileName,
-            mimeType: input.mimeType,
+            mimeType,
             fileSize: buffer.length,
             criterionId: input.criterionId ?? null,
             subEvidenceId: input.subEvidenceId ?? null,
@@ -349,7 +349,7 @@ export const appRouter = router({
           });
           throw error;
         }
-        await recordAudit({ actorUserId: ctx.user.id, action: "file.uploaded", resourceType: "uploaded_file", resourceId: id, portfolioId: input.portfolioId, metadata: { fileName: input.fileName.slice(0, 160), mimeType: input.mimeType, fileSize: buffer.length } });
+        await recordAudit({ actorUserId: ctx.user.id, action: "file.uploaded", resourceType: "uploaded_file", resourceId: id, portfolioId: input.portfolioId, metadata: { fileName: input.fileName.slice(0, 160), mimeType, fileSize: buffer.length } });
         return { id, url, fileKey };
       }),
 
@@ -543,17 +543,16 @@ export const appRouter = router({
 
     uploadImage: adminProcedure
       .input(z.object({
-        fileName: z.string(),
-        mimeType: z.string(),
-        base64Data: z.string(),
+        fileName: z.string().min(1).max(255),
+        mimeType: z.string().max(128),
+        base64Data: z.string().min(1).max(MAX_UPLOAD_BASE64_LENGTH),
         imageType: z.enum(['cover', 'logo', 'background']),
       }))
       .mutation(async ({ ctx, input }) => {
         const suffix = nanoid(8);
-        const ext = input.fileName.split('.').pop() || 'png';
-        const fileKey = `templates/${input.imageType}/${suffix}.${ext}`;
-        const buffer = Buffer.from(input.base64Data, 'base64');
-        const { url } = await storagePut(fileKey, buffer, input.mimeType);
+        const { buffer, mimeType, extension } = validateUpload(input, { imagesOnly: true, maxBytes: input.imageType === 'logo' ? MAX_LOGO_BYTES : MAX_IMAGE_BYTES });
+        const fileKey = `templates/${input.imageType}/${suffix}.${extension}`;
+        const { url } = await storagePut(fileKey, buffer, mimeType);
         return { url, fileKey };
       }),
 
