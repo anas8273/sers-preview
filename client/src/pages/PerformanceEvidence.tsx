@@ -1138,96 +1138,6 @@ export default function PerformanceEvidence() {
   }, []);
 
   // ===== معالجة ملف واحد للتصنيف الذكي =====
-  // ===== ضغط الفيديو قبل الرفع =====
-  const compressVideoForStorage = useCallback(async (file: File): Promise<{ blob: Blob; base64: string }> => {
-    // إذا كان الفيديو أقل من 5MB لا حاجة للضغط
-    if (file.size <= 5 * 1024 * 1024) {
-      return new Promise((resolve) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve({ blob: file, base64: reader.result as string });
-        reader.readAsDataURL(file);
-      });
-    }
-    
-    // للفيديوهات الكبيرة: نستخدم canvas + MediaRecorder للضغط
-    return new Promise((resolve) => {
-      try {
-        const video = document.createElement('video');
-        video.preload = 'auto';
-        video.muted = true;
-        video.playsInline = true;
-        const url = URL.createObjectURL(file);
-        video.src = url;
-        
-        video.onloadedmetadata = async () => {
-          // تقليل الدقة إذا كانت عالية
-          const maxDim = 720;
-          const scale = Math.min(maxDim / Math.max(video.videoWidth, video.videoHeight), 1);
-          const canvas = document.createElement('canvas');
-          canvas.width = video.videoWidth * scale;
-          canvas.height = video.videoHeight * scale;
-          const ctx = canvas.getContext('2d');
-          
-          if (!ctx || !('MediaRecorder' in window)) {
-            // fallback: إرجاع الفيديو الأصلي
-            URL.revokeObjectURL(url);
-            const reader = new FileReader();
-            reader.onload = () => resolve({ blob: file, base64: reader.result as string });
-            reader.readAsDataURL(file);
-            return;
-          }
-          
-          const stream = canvas.captureStream(15); // 15fps
-          const recorder = new MediaRecorder(stream, { mimeType: 'video/webm;codecs=vp8', videoBitsPerSecond: 500000 });
-          const chunks: Blob[] = [];
-          
-          recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
-          recorder.onstop = () => {
-            URL.revokeObjectURL(url);
-            const blob = new Blob(chunks, { type: 'video/webm' });
-            const reader = new FileReader();
-            reader.onload = () => resolve({ blob, base64: reader.result as string });
-            reader.readAsDataURL(blob);
-          };
-          
-          recorder.start();
-          video.currentTime = 0;
-          video.play();
-          
-          const drawFrame = () => {
-            if (video.ended || video.paused) {
-              recorder.stop();
-              return;
-            }
-            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-            requestAnimationFrame(drawFrame);
-          };
-          
-          video.onplay = drawFrame;
-          
-          // حد أقصى 30 ثانية للضغط
-          setTimeout(() => {
-            if (recorder.state === 'recording') {
-              video.pause();
-              recorder.stop();
-            }
-          }, Math.min(video.duration * 1000, 30000));
-        };
-        
-        video.onerror = () => {
-          URL.revokeObjectURL(url);
-          const reader = new FileReader();
-          reader.onload = () => resolve({ blob: file, base64: reader.result as string });
-          reader.readAsDataURL(file);
-        };
-      } catch {
-        const reader = new FileReader();
-        reader.onload = () => resolve({ blob: file, base64: reader.result as string });
-        reader.readAsDataURL(file);
-      }
-    });
-  }, []);
-
   const processSmartFile = useCallback(async (file: File, fileIndex: number, totalFiles: number): Promise<{ success: boolean; criterion?: string; indicator?: string }> => {
     const isImage = file.type.startsWith("image/");
     const isVideo = file.type.startsWith("video/");
@@ -1250,27 +1160,18 @@ export default function PerformanceEvidence() {
             storageBase64 = await compressImageForStorage(rawBase64, 1200, 0.7);
             aiImageUrl = await compressImage(rawBase64, 800, 0.5);
           } else if (isVideo) {
-            // === مرحلة 2: استخراج إطار + ضغط الفيديو ===
+            // Extract a preview for classification only; retain the original video bytes.
             setUploadProgress({ stage: `${batchPrefix}جاري استخراج إطار من الفيديو...`, percent: Math.round(15 + (80 * fileIndex / totalFiles)) });
             const videoFrame = await extractVideoFrame(file);
             if (videoFrame) {
               aiImageUrl = videoFrame;
               // عرض معاينة الإطار المستخرج
-              setUploadProgress({ stage: `${batchPrefix}تم استخراج الإطار - جاري الضغط...`, percent: Math.round(25 + (80 * fileIndex / totalFiles)), framePreview: videoFrame });
+              setUploadProgress({ stage: `${batchPrefix}تم استخراج المعاينة - حفظ الفيديو الأصلي كاملًا`, percent: Math.round(25 + (80 * fileIndex / totalFiles)), framePreview: videoFrame });
             }
             
-            // ضغط الفيديو إذا كان كبيراً
-            if (file.size > 5 * 1024 * 1024) {
-              setUploadProgress({ stage: `${batchPrefix}جاري ضغط الفيديو (${(file.size / 1024 / 1024).toFixed(1)}MB)...`, percent: Math.round(30 + (80 * fileIndex / totalFiles)), framePreview: videoFrame || undefined });
-              try {
-                const compressed = await compressVideoForStorage(file);
-                storageBase64 = compressed.base64;
-                setUploadProgress({ stage: `${batchPrefix}تم ضغط الفيديو بنجاح`, percent: Math.round(40 + (80 * fileIndex / totalFiles)), framePreview: videoFrame || undefined });
-              } catch {
-                // فشل الضغط - نستخدم الأصلي
-                console.warn('Video compression failed, using original');
-              }
-            }
+            // Never replace the evidence with a canvas recording: it loses audio
+            // and the previous implementation stopped after 30 seconds.
+
           }
 
           let targetCriterionId: string | null = null;
@@ -1564,7 +1465,7 @@ export default function PerformanceEvidence() {
       reader.onerror = () => resolve({ success: false });
       reader.readAsDataURL(file);
     });
-  }, [allCriteria, criteriaData, classifyMutation, compressImage, compressImageForStorage, addEvidenceToCriterion, uploadFileMutation, extractVideoFrame, compressVideoForStorage, selectedJob, isAuthenticated]);
+  }, [allCriteria, criteriaData, classifyMutation, compressImage, compressImageForStorage, addEvidenceToCriterion, uploadFileMutation, extractVideoFrame, selectedJob, isAuthenticated]);
 
   const handleSmartUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     e.preventDefault();
