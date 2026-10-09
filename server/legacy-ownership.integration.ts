@@ -79,7 +79,15 @@ test("a real SQL failure after child deletes rolls the entire transaction back",
   const id = await populated();
   await observer.query("CREATE TRIGGER integration_fail_parent_delete BEFORE DELETE ON portfolios FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'integration injected delete failure'");
   try {
-    await assert.rejects(deletePortfolio(id, owner));
+    await assert.rejects(deletePortfolio(id, owner), (error: unknown) => {
+      // Require the injected SQL failure, not an unrelated early rejection.
+      let cause = error;
+      while (cause instanceof Error) {
+        if (cause.message.includes("integration injected delete failure")) return true;
+        cause = cause.cause;
+      }
+      return false;
+    });
     assert.deepEqual(await counts(id), populatedCounts);
   } finally {
     await observer.query("DROP TRIGGER integration_fail_parent_delete");
@@ -118,7 +126,7 @@ for (const [name, writer] of [["upload", upload], ["share", share]] as const) {
       await blocker.beginTransaction();
       await blocker.execute("SELECT id FROM portfolios WHERE id = ? FOR UPDATE", [id]);
       // Attach rejection handlers immediately so a failed operation is observed.
-      const settle = <T>(promise: Promise<T>) => promise.then(
+      const settle = (promise: Promise<unknown>) => promise.then(
         value => ({ status: "fulfilled" as const, value }),
         reason => ({ status: "rejected" as const, reason }),
       );
