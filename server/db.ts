@@ -270,8 +270,20 @@ export async function reviewPortfolio(id: number, reviewerId: number, status: st
 export async function createUploadedFile(data: InsertUploadedFile) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  const result = await db.insert(uploadedFiles).values(data);
-  return { id: Number(result[0].insertId) };
+  // Unattached uploads retain their original behavior. Linked uploads must
+  // serialize with portfolio deletion and re-check ownership after storage I/O.
+  if (data.portfolioId == null) {
+    const result = await db.insert(uploadedFiles).values(data);
+    return { id: Number(result[0].insertId) };
+  }
+  return db.transaction(async (tx) => {
+    const [portfolio] = await tx.select({ id: portfolios.id }).from(portfolios)
+      .where(and(eq(portfolios.id, data.portfolioId!), eq(portfolios.userId, data.userId)))
+      .limit(1).for("update");
+    if (!portfolio) throw new TRPCError({ code: "FORBIDDEN", message: "الملف غير متاح أو لا تملك صلاحية إرفاق ملفات به" });
+    const result = await tx.insert(uploadedFiles).values(data);
+    return { id: Number(result[0].insertId) };
+  });
 }
 
 export async function getFilesByPortfolio(portfolioId: number) {
@@ -291,8 +303,14 @@ export async function deleteUploadedFile(id: number, userId: number) {
 export async function createShareLink(data: InsertShareLink) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  const result = await db.insert(shareLinks).values(data);
-  return { id: Number(result[0].insertId) };
+  return db.transaction(async (tx) => {
+    const [portfolio] = await tx.select({ id: portfolios.id }).from(portfolios)
+      .where(and(eq(portfolios.id, data.portfolioId), eq(portfolios.userId, data.userId)))
+      .limit(1).for("update");
+    if (!portfolio) throw new TRPCError({ code: "FORBIDDEN", message: "الملف غير متاح أو لا تملك صلاحية مشاركته" });
+    const result = await tx.insert(shareLinks).values(data);
+    return { id: Number(result[0].insertId) };
+  });
 }
 
 export async function getShareLinkByToken(token: string) {
