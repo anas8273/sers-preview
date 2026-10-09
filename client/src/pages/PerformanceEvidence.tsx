@@ -8,6 +8,8 @@ import { useState, useMemo, useRef, useCallback, useEffect } from "react";
 import { useLocation } from "wouter";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
+import { getEvidenceRemoteUrl, retryEvidenceUpload } from "@/lib/evidence-upload-state";
+import { dataUrlUploadPayload } from "@/lib/upload-data-url";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { usePortfolio } from "@/hooks/usePortfolio";
 import { useOfflineSync } from "@/hooks/useOfflineSync";
@@ -517,6 +519,8 @@ export default function PerformanceEvidence() {
 
   // tRPC file upload mutation - لرفع الملفات إلى S3 للحصول على رابط عام للباركود
   const uploadFileMutation = trpc.file.upload.useMutation();
+  const retryingUploadIds = useRef(new Set<string>());
+  const [retryingUploads, setRetryingUploads] = useState<Set<string>>(new Set());
 
   // tRPC AI mutations
   const suggestMutation = trpc.ai.suggest.useMutation();
@@ -572,8 +576,7 @@ export default function PerformanceEvidence() {
       if (isAuthenticated) {
         const uploaded = await uploadFileMutation.mutateAsync({
           fileName: `cover-background-${Date.now()}-${file.name}`,
-          mimeType: file.type,
-          base64Data: dataUrl.split(",")[1] || dataUrl,
+          ...dataUrlUploadPayload(dataUrl),
         });
         backgroundUrl = uploaded.url || dataUrl;
       }
@@ -792,10 +795,36 @@ export default function PerformanceEvidence() {
   };
 
   const updateEvidence = (criterionId: string, evidenceId: string, updates: Partial<EvidenceItem>) => {
-    setCriteriaData((prev) => ({
-      ...prev,
-      [criterionId]: { ...prev[criterionId], evidences: prev[criterionId].evidences.map((e) => (e.id === evidenceId ? { ...e, ...updates } : e)) },
-    }));
+    setCriteriaData((prev) => {
+      const current = prev[criterionId];
+      if (!current?.evidences.some(e => e.id === evidenceId)) return prev;
+      return { ...prev, [criterionId]: { ...current, evidences: current.evidences.map(e => e.id === evidenceId ? { ...e, ...updates } : e) } };
+    });
+  };
+
+  const retryUpload = async (criterionId: string, ev: EvidenceItem, displayAsQR = false): Promise<boolean> => {
+    if (!isAuthenticated) {
+      toast.info('سجل دخولك لرفع الملف وتفعيل الباركود');
+      return false;
+    }
+    if (retryingUploadIds.current.has(ev.id)) return false;
+    retryingUploadIds.current.add(ev.id);
+    setRetryingUploads(new Set(retryingUploadIds.current));
+    try {
+      const url = await retryEvidenceUpload({ fileName: ev.fileName, fileData: ev.fileData || undefined }, {
+        readLocalFile: getFileFromIDB,
+        upload: input => uploadFileMutation.mutateAsync(input),
+      });
+      updateEvidence(criterionId, ev.id, { uploadedUrl: url, ...(displayAsQR ? { displayAs: 'qr' as const } : {}) });
+      toast.success('تم رفع المرفق بنجاح');
+      return true;
+    } catch {
+      toast.error('لم يكتمل رفع المرفق', { description: 'بقي الشاهد دون تغيير. أعد المحاولة، أو أعد إرفاق الملف إذا لم تعد نسخته المحلية متاحة.' });
+      return false;
+    } finally {
+      retryingUploadIds.current.delete(ev.id);
+      setRetryingUploads(new Set(retryingUploadIds.current));
+    }
   };
 
   const updateFormField = (criterionId: string, evidenceId: string, fieldId: string, value: string) => {
@@ -1138,96 +1167,6 @@ export default function PerformanceEvidence() {
   }, []);
 
   // ===== معالجة ملف واحد للتصنيف الذكي =====
-  // ===== ضغط الفيديو قبل الرفع =====
-  const compressVideoForStorage = useCallback(async (file: File): Promise<{ blob: Blob; base64: string }> => {
-    // إذا كان الفيديو أقل من 5MB لا حاجة للضغط
-    if (file.size <= 5 * 1024 * 1024) {
-      return new Promise((resolve) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve({ blob: file, base64: reader.result as string });
-        reader.readAsDataURL(file);
-      });
-    }
-    
-    // للفيديوهات الكبيرة: نستخدم canvas + MediaRecorder للضغط
-    return new Promise((resolve) => {
-      try {
-        const video = document.createElement('video');
-        video.preload = 'auto';
-        video.muted = true;
-        video.playsInline = true;
-        const url = URL.createObjectURL(file);
-        video.src = url;
-        
-        video.onloadedmetadata = async () => {
-          // تقليل الدقة إذا كانت عالية
-          const maxDim = 720;
-          const scale = Math.min(maxDim / Math.max(video.videoWidth, video.videoHeight), 1);
-          const canvas = document.createElement('canvas');
-          canvas.width = video.videoWidth * scale;
-          canvas.height = video.videoHeight * scale;
-          const ctx = canvas.getContext('2d');
-          
-          if (!ctx || !('MediaRecorder' in window)) {
-            // fallback: إرجاع الفيديو الأصلي
-            URL.revokeObjectURL(url);
-            const reader = new FileReader();
-            reader.onload = () => resolve({ blob: file, base64: reader.result as string });
-            reader.readAsDataURL(file);
-            return;
-          }
-          
-          const stream = canvas.captureStream(15); // 15fps
-          const recorder = new MediaRecorder(stream, { mimeType: 'video/webm;codecs=vp8', videoBitsPerSecond: 500000 });
-          const chunks: Blob[] = [];
-          
-          recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
-          recorder.onstop = () => {
-            URL.revokeObjectURL(url);
-            const blob = new Blob(chunks, { type: 'video/webm' });
-            const reader = new FileReader();
-            reader.onload = () => resolve({ blob, base64: reader.result as string });
-            reader.readAsDataURL(blob);
-          };
-          
-          recorder.start();
-          video.currentTime = 0;
-          video.play();
-          
-          const drawFrame = () => {
-            if (video.ended || video.paused) {
-              recorder.stop();
-              return;
-            }
-            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-            requestAnimationFrame(drawFrame);
-          };
-          
-          video.onplay = drawFrame;
-          
-          // حد أقصى 30 ثانية للضغط
-          setTimeout(() => {
-            if (recorder.state === 'recording') {
-              video.pause();
-              recorder.stop();
-            }
-          }, Math.min(video.duration * 1000, 30000));
-        };
-        
-        video.onerror = () => {
-          URL.revokeObjectURL(url);
-          const reader = new FileReader();
-          reader.onload = () => resolve({ blob: file, base64: reader.result as string });
-          reader.readAsDataURL(file);
-        };
-      } catch {
-        const reader = new FileReader();
-        reader.onload = () => resolve({ blob: file, base64: reader.result as string });
-        reader.readAsDataURL(file);
-      }
-    });
-  }, []);
-
   const processSmartFile = useCallback(async (file: File, fileIndex: number, totalFiles: number): Promise<{ success: boolean; criterion?: string; indicator?: string }> => {
     const isImage = file.type.startsWith("image/");
     const isVideo = file.type.startsWith("video/");
@@ -1250,27 +1189,18 @@ export default function PerformanceEvidence() {
             storageBase64 = await compressImageForStorage(rawBase64, 1200, 0.7);
             aiImageUrl = await compressImage(rawBase64, 800, 0.5);
           } else if (isVideo) {
-            // === مرحلة 2: استخراج إطار + ضغط الفيديو ===
+            // Extract a preview for classification only; retain the original video bytes.
             setUploadProgress({ stage: `${batchPrefix}جاري استخراج إطار من الفيديو...`, percent: Math.round(15 + (80 * fileIndex / totalFiles)) });
             const videoFrame = await extractVideoFrame(file);
             if (videoFrame) {
               aiImageUrl = videoFrame;
               // عرض معاينة الإطار المستخرج
-              setUploadProgress({ stage: `${batchPrefix}تم استخراج الإطار - جاري الضغط...`, percent: Math.round(25 + (80 * fileIndex / totalFiles)), framePreview: videoFrame });
+              setUploadProgress({ stage: `${batchPrefix}تم استخراج المعاينة - حفظ الفيديو الأصلي كاملًا`, percent: Math.round(25 + (80 * fileIndex / totalFiles)), framePreview: videoFrame });
             }
             
-            // ضغط الفيديو إذا كان كبيراً
-            if (file.size > 5 * 1024 * 1024) {
-              setUploadProgress({ stage: `${batchPrefix}جاري ضغط الفيديو (${(file.size / 1024 / 1024).toFixed(1)}MB)...`, percent: Math.round(30 + (80 * fileIndex / totalFiles)), framePreview: videoFrame || undefined });
-              try {
-                const compressed = await compressVideoForStorage(file);
-                storageBase64 = compressed.base64;
-                setUploadProgress({ stage: `${batchPrefix}تم ضغط الفيديو بنجاح`, percent: Math.round(40 + (80 * fileIndex / totalFiles)), framePreview: videoFrame || undefined });
-              } catch {
-                // فشل الضغط - نستخدم الأصلي
-                console.warn('Video compression failed, using original');
-              }
-            }
+            // Never replace the evidence with a canvas recording: it loses audio
+            // and the previous implementation stopped after 30 seconds.
+
           }
 
           let targetCriterionId: string | null = null;
@@ -1539,17 +1469,16 @@ export default function PerformanceEvidence() {
             // رفع الملف إلى S3 للحصول على رابط عام للباركود (فقط إذا كان المستخدم مسجلاً)
             if (isAuthenticated) {
               try {
-                const base64Only = storageBase64.split(',')[1] || storageBase64;
                 const uploadResult = await uploadFileMutation.mutateAsync({
                   fileName: file.name,
-                  mimeType: file.type,
-                  base64Data: base64Only,
+                  ...dataUrlUploadPayload(storageBase64),
                 });
-                if (uploadResult.url) {
-                  newEv.uploadedUrl = uploadResult.url;
-                }
+                const remoteUrl = getEvidenceRemoteUrl({ type: newEv.type, uploadedUrl: uploadResult.url });
+                if (!remoteUrl) throw new Error('Upload returned no valid URL');
+                newEv.uploadedUrl = remoteUrl;
               } catch (uploadErr) {
-                console.warn("S3 upload failed, QR will use filename:", uploadErr);
+                console.warn("Evidence upload failed; local copy retained:", uploadErr);
+                toast.warning("لم يُرفع المرفق؛ النسخة محلية فقط ويمكن إعادة المحاولة من الشاهد");
               }
             }
             
@@ -1566,7 +1495,7 @@ export default function PerformanceEvidence() {
       reader.onerror = () => resolve({ success: false });
       reader.readAsDataURL(file);
     });
-  }, [allCriteria, criteriaData, classifyMutation, compressImage, compressImageForStorage, addEvidenceToCriterion, uploadFileMutation, extractVideoFrame, compressVideoForStorage, selectedJob, isAuthenticated]);
+  }, [allCriteria, criteriaData, classifyMutation, compressImage, compressImageForStorage, addEvidenceToCriterion, uploadFileMutation, extractVideoFrame, selectedJob, isAuthenticated]);
 
   const handleSmartUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     e.preventDefault();
@@ -1744,17 +1673,16 @@ export default function PerformanceEvidence() {
         // رفع الملف إلى S3 للحصول على رابط عام للباركود (فقط إذا كان المستخدم مسجلاً)
         if (isAuthenticated) {
           try {
-            const base64Only = processedData.split(',')[1] || processedData;
             const uploadResult = await uploadFileMutation.mutateAsync({
               fileName: file.name,
-              mimeType: file.type,
-              base64Data: base64Only,
+              ...dataUrlUploadPayload(processedData),
             });
-            if (uploadResult.url) {
-              newEv.uploadedUrl = uploadResult.url;
-            }
+            const remoteUrl = getEvidenceRemoteUrl({ type: newEv.type, uploadedUrl: uploadResult.url });
+            if (!remoteUrl) throw new Error('Upload returned no valid URL');
+            newEv.uploadedUrl = remoteUrl;
           } catch (uploadErr) {
-            console.warn("S3 upload failed, QR will use filename:", uploadErr);
+            console.warn("Evidence upload failed; local copy retained:", uploadErr);
+            toast.warning("لم يُرفع المرفق؛ النسخة محلية فقط ويمكن إعادة المحاولة من الشاهد");
           }
         }
         
@@ -2203,6 +2131,7 @@ export default function PerformanceEvidence() {
     }
     
     const displayData = resolvedData || ev.fileData;
+    const remoteUrl = getEvidenceRemoteUrl(ev);
     if (!displayData) return null;
     
     return (
@@ -2222,8 +2151,8 @@ export default function PerformanceEvidence() {
         )}
         {ev.type === 'image' && ev.displayAs === 'qr' && (
           <div className="flex items-center gap-3 bg-violet-50 dark:bg-violet-950/30 p-3 rounded-lg">
-            <img src={generateQRDataURL((displayData.startsWith('idb://') ? ev.fileName : displayData).substring(0, 200))} alt="QR" className="w-16 h-16" />
-            <span className="text-xs text-violet-600">سيظهر كباركود QR عند الطباعة</span>
+            {remoteUrl && ev.showBarcode !== false && <img src={generateQRDataURL(remoteUrl)} alt="QR" className="w-16 h-16" />}
+            <span className="text-xs text-violet-600">{remoteUrl ? 'الرابط جاهز للباركود' : 'لم يُرفع المرفق؛ الباركود غير متاح'}</span>
           </div>
         )}
         {ev.type === 'video' && (
@@ -2233,7 +2162,7 @@ export default function PerformanceEvidence() {
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium text-foreground truncate">{ev.fileName}</p>
-              <p className="text-[10px] text-red-500 mt-0.5">سيتحول لباركود QR عند الطباعة</p>
+              <p className="text-[10px] text-red-500 mt-0.5">{remoteUrl ? 'الرابط جاهز للباركود عند الطباعة' : 'لم يُرفع المرفق؛ الباركود غير متاح'}</p>
             </div>
           </div>
         )}
@@ -2313,46 +2242,10 @@ export default function PerformanceEvidence() {
               <TooltipTrigger asChild>
                 <button type="button" onClick={async () => {
                   if (ev.displayAs === 'image') {
-                    // تحويل إلى QR - رفع إلى S3 إذا لم يكن هناك uploadedUrl
-                    if (!ev.uploadedUrl && ev.fileData) {
-                      try {
-                        toast.loading('جاري رفع الصورة لإنشاء الباركود...', { id: 'qr-upload-' + ev.id });
-                        let base64Data = ev.fileData;
-                        // إذا كان الملف في IndexedDB، نحتاج لاسترجاعه
-                        if (base64Data.startsWith('idb://')) {
-                          const { getFileFromIDB } = await import('@/hooks/useIndexedDB');
-                          const stored = await getFileFromIDB(base64Data.replace('idb://', ''));
-                          if (stored?.data) base64Data = stored.data;
-                          else { toast.error('لم يتم العثور على الملف', { id: 'qr-upload-' + ev.id }); return; }
-                        }
-                        if (!isAuthenticated) {
-                          toast.error('يجب تسجيل الدخول لرفع الملفات', { id: 'qr-upload-' + ev.id });
-                          return;
-                        }
-                        const base64Only = base64Data.split(',')[1] || base64Data;
-                        const mimeType = base64Data.match(/data:([^;]+)/)?.[1] || 'image/png';
-                        const uploadResult = await uploadFileMutation.mutateAsync({
-                          fileName: ev.fileName || 'image.png',
-                          mimeType,
-                          base64Data: base64Only,
-                        });
-                        if (uploadResult.url) {
-                          updateEvidence(criterionId, ev.id, { displayAs: 'qr', uploadedUrl: uploadResult.url });
-                          toast.success('تم رفع الصورة وإنشاء الباركود', { id: 'qr-upload-' + ev.id });
-                        } else {
-                          toast.error('فشل رفع الصورة', { id: 'qr-upload-' + ev.id });
-                        }
-                      } catch (err) {
-                        console.error('QR upload error:', err);
-                        toast.error('فشل رفع الصورة للباركود', { id: 'qr-upload-' + ev.id });
-                      }
-                    } else {
-                      updateEvidence(criterionId, ev.id, { displayAs: 'qr' });
-                    }
-                  } else {
-                    updateEvidence(criterionId, ev.id, { displayAs: 'image' });
-                  }
-                }}
+                    if (getEvidenceRemoteUrl(ev)) updateEvidence(criterionId, ev.id, { displayAs: 'qr' });
+                    else await retryUpload(criterionId, ev, true);
+                  } else updateEvidence(criterionId, ev.id, { displayAs: 'image' });
+                }} disabled={retryingUploads.has(ev.id)}
                   className={`p-1.5 rounded-lg text-xs ${ev.displayAs === 'qr' ? 'bg-violet-100 text-violet-600' : 'bg-blue-100 text-blue-600'}`}>
                   {ev.displayAs === 'image' ? <QrCode className="w-3.5 h-3.5" /> : <Image className="w-3.5 h-3.5" />}
                 </button>
@@ -2405,6 +2298,16 @@ export default function PerformanceEvidence() {
           className="w-full px-3 py-2 rounded-lg border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 bg-background" />
       )}
 
+      {['image', 'video', 'file'].includes(ev.type) && !getEvidenceRemoteUrl(ev) && (
+        <div role="status" className="my-2 flex flex-wrap items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900">
+          <span>لم يُرفع المرفق — لا يوجد رابط للمشاركة أو باركود صالح. النسخة المحلية، إن كانت متاحة، لا تُعد رفعًا ناجحًا.</span>
+          {isAuthenticated ? (
+            <button type="button" disabled={retryingUploads.has(ev.id)} onClick={() => void retryUpload(criterionId, ev)} className="rounded border border-amber-500 px-2 py-1 font-medium disabled:opacity-50">
+              {retryingUploads.has(ev.id) ? 'جاري الرفع…' : 'إعادة محاولة الرفع'}
+            </button>
+          ) : <span>سجل دخولك لرفع المرفق.</span>}
+        </div>
+      )}
       {(ev.type === 'image' || ev.type === 'video' || ev.type === 'file') && ev.fileData && (
         <EvidenceFilePreview ev={ev} criterionId={criterionId} />
       )}
@@ -4512,17 +4415,16 @@ export default function PerformanceEvidence() {
                             background: '#fafbfc',
                           }}>
                             {allMediaEvidences.map(ev => {
-                              const qrData = ev.type === 'link' ? ev.link :
-                                (ev.uploadedUrl || ev.fileName || '');
+                              const qrData = getEvidenceRemoteUrl(ev);
                               // عرض الصورة مباشرة إذا كانت متاحة (سواء base64 أو uploadedUrl)
                               const hasDirectImage = ev.type === 'image' && (
-                                (ev.fileData && !ev.fileData.startsWith('idb://')) || ev.uploadedUrl
+                                (ev.fileData && !ev.fileData.startsWith('idb://')) || qrData
                               );
-                              const imageSrc = ev.uploadedUrl || (ev.fileData && !ev.fileData.startsWith('idb://') ? ev.fileData : '');
+                              const imageSrc = qrData || (ev.fileData && !ev.fileData.startsWith('idb://') ? ev.fileData : '');
                               // عرض كصورة إذا: displayAs === 'image' أو إذا لم يكن هناك uploadedUrl للباركود
-                              const showAsImage = hasDirectImage && (ev.displayAs === 'image' || !ev.uploadedUrl);
+                              const showAsImage = hasDirectImage && (ev.displayAs === 'image' || !qrData);
                               // عرض باركود فقط إذا كان هناك رابط فعلي (uploadedUrl أو link)
-                              const hasValidQR = ev.type === 'link' ? !!ev.link : !!ev.uploadedUrl;
+                              const hasValidQR = !!qrData && ev.showBarcode !== false;
                               const showAsQR = !showAsImage && hasValidQR;
 
                               return (
@@ -4543,7 +4445,7 @@ export default function PerformanceEvidence() {
                                     />
                                   ) : showAsQR ? (
                                     <img
-                                      src={generateQRDataURL(qrData || 'no-data', 10)}
+                                      src={generateQRDataURL(qrData!, 10)}
                                       alt="QR"
                                       style={{
                                         width: '240px',
@@ -4574,7 +4476,7 @@ export default function PerformanceEvidence() {
                                         {ev.fileName || 'ملف مرفق'}
                                       </span>
                                       <span style={{ fontSize: '9px', color: '#9ca3af' }}>
-                                        سجل الدخول لرفع الملف وتفعيل الباركود
+                                        لم يُرفع المرفق أو أُخفي الباركود؛ لا يوجد رمز للمشاركة
                                       </span>
                                     </div>
                                   )}
@@ -5000,48 +4902,17 @@ export default function PerformanceEvidence() {
                     </Button>
                     <Button variant="outline" size="sm" className="text-xs h-7 gap-1"
                       onClick={async () => {
-                        // جمع كل الصور التي ليس لها uploadedUrl ورفعها أولاً
-                        const allImageEvs: { criterionId: string; ev: EvidenceItem }[] = [];
-                        Object.entries(criteriaData).forEach(([cId, cData]) => {
-                          cData.evidences.filter(e => e.type === 'image' && !e.uploadedUrl && e.fileData).forEach(ev => {
-                            allImageEvs.push({ criterionId: cId, ev });
-                          });
-                        });
-                        if (allImageEvs.length > 0 && isAuthenticated) {
-                          toast.loading(`جاري رفع ${allImageEvs.length} صورة لإنشاء الباركود...`, { id: 'bulk-qr-upload' });
-                          for (const { criterionId: cId, ev } of allImageEvs) {
-                            try {
-                              let base64Data = ev.fileData!;
-                              if (base64Data.startsWith('idb://')) {
-                                const { getFileFromIDB } = await import('@/hooks/useIndexedDB');
-                                const stored = await getFileFromIDB(base64Data.replace('idb://', ''));
-                                if (stored?.data) base64Data = stored.data;
-                                else continue;
-                              }
-                              const base64Only = base64Data.split(',')[1] || base64Data;
-                              const mimeType = base64Data.match(/data:([^;]+)/)?.[1] || 'image/png';
-                              const result = await uploadFileMutation.mutateAsync({
-                                fileName: ev.fileName || 'image.png',
-                                mimeType,
-                                base64Data: base64Only,
-                              });
-                              if (result.url) {
-                                updateEvidence(cId, ev.id, { uploadedUrl: result.url });
-                              }
-                            } catch { /* skip */ }
-                          }
-                          toast.success(`تم رفع ${allImageEvs.length} صورة بنجاح`, { id: 'bulk-qr-upload' });
-                        } else if (allImageEvs.length > 0 && !isAuthenticated) {
-                          toast.info('سجل دخولك لرفع الصور وإنشاء الباركود');
+                        if (retryingUploadIds.current.size > 0) return;
+                        const images = Object.entries(criteriaData).flatMap(([criterionId, data]) => data.evidences.filter(ev => ev.type === 'image').map(ev => ({ criterionId, ev })));
+                        const pending = images.filter(({ ev }) => !getEvidenceRemoteUrl(ev));
+                        if (pending.length && !isAuthenticated) toast.info('سجل دخولك لرفع الصور وإنشاء الباركود');
+                        if (isAuthenticated) {
+                          for (const { criterionId, ev } of pending) await retryUpload(criterionId, ev, true);
                         }
-                        setCriteriaData(prev => {
-                          const updated = { ...prev };
-                          Object.keys(updated).forEach(k => {
-                            updated[k] = { ...updated[k], evidences: updated[k].evidences.map(e => e.type === 'image' ? { ...e, displayAs: 'qr' as const } : e) };
-                          });
-                          return updated;
-                        });
-                        toast.success('تم تحويل جميع الصور لعرض كباركود QR');
+                        setCriteriaData(prev => Object.fromEntries(Object.entries(prev).map(([key, data]) => [key, {
+                          ...data, evidences: data.evidences.map(ev => ev.type === 'image' && getEvidenceRemoteUrl(ev) ? { ...ev, displayAs: 'qr' as const } : ev),
+                        }])));
+                        toast.info('يظهر الباركود للصور المرفوعة فقط؛ راجع حالة المرفقات غير المرفوعة.');
                       }}>
                       <QrCode className="w-3 h-3" />عرض كباركود
                     </Button>
@@ -6063,7 +5934,7 @@ export default function PerformanceEvidence() {
                             {ev.type === 'text' && ev.text && <p style={{ fontSize: '0.8rem', lineHeight: 1.7, color: '#374151' }}>{ev.text}</p>}
                             {ev.type === 'link' && ev.link && (
                               <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                                {ev.showBarcode !== false && <img src={generateQRDataURL(ev.link, 6)} alt="QR" style={{ width: '128px', height: '128px', borderRadius: '6px' }} />}
+                                {ev.showBarcode !== false && getEvidenceRemoteUrl(ev) && <img src={generateQRDataURL(getEvidenceRemoteUrl(ev)!, 6)} alt="QR" style={{ width: '128px', height: '128px', borderRadius: '6px' }} />}
                                 <div>
                                   <span style={{ fontSize: '0.7rem', color: '#6B7280', display: 'block' }}>رابط إلكتروني</span>
                                   <span style={{ fontSize: '0.7rem', color: '#2563EB', wordBreak: 'break-all' as const }}>{ev.link}</span>
@@ -6074,7 +5945,7 @@ export default function PerformanceEvidence() {
                               ev.displayAs === 'image'
                                 ? <img src={ev.fileData.startsWith('idb://') ? '' : ev.fileData} alt="" style={{ maxHeight: '200px', borderRadius: '8px', border: '1px solid #E5E7EB' }} />
                                 : <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                                    {ev.showBarcode !== false && <img src={generateQRDataURL(ev.uploadedUrl || ev.fileName || 'file', 6)} alt="QR" style={{ width: '128px', height: '128px', borderRadius: '6px' }} />}
+                                    {ev.showBarcode !== false && getEvidenceRemoteUrl(ev) && <img src={generateQRDataURL(getEvidenceRemoteUrl(ev)!, 6)} alt="QR" style={{ width: '128px', height: '128px', borderRadius: '6px' }} />}
                                     <div>
                                       <span style={{ fontSize: '0.7rem', color: '#6B7280', display: 'block' }}>صورة {ev.showBarcode !== false ? '(باركود)' : ''}</span>
                                       <span style={{ fontSize: '0.7rem', color: '#4B5563' }}>{ev.fileName}</span>
@@ -6083,13 +5954,14 @@ export default function PerformanceEvidence() {
                             )}
                             {(ev.type === 'video' || ev.type === 'file') && ev.fileData && (
                               <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                                {ev.showBarcode !== false && <img src={generateQRDataURL(ev.uploadedUrl || ev.fileName || 'file', 6)} alt="QR" style={{ width: '128px', height: '128px', borderRadius: '6px' }} />}
+                                {ev.showBarcode !== false && getEvidenceRemoteUrl(ev) && <img src={generateQRDataURL(getEvidenceRemoteUrl(ev)!, 6)} alt="QR" style={{ width: '128px', height: '128px', borderRadius: '6px' }} />}
                                 <div>
                                   <span style={{ fontSize: '0.7rem', color: '#6B7280', display: 'block' }}>{ev.type === 'video' ? 'فيديو' : 'ملف مرفق'}</span>
                                   <span style={{ fontSize: '0.7rem', color: '#4B5563' }}>{ev.fileName}</span>
                                 </div>
                               </div>
                             )}
+                            {['image', 'video', 'file'].includes(ev.type) && !getEvidenceRemoteUrl(ev) && <p style={{ fontSize: '0.7rem', color: '#92400e' }}>لم يُرفع المرفق؛ الباركود غير متاح.</p>}
                             {/* عرض بيانات النموذج باستخدام أسماء الحقول الفعلية */}
                             {ev.formData && Object.entries(ev.formData).some(([, v]) => v) && (
                               <div style={{ marginTop: '0.5rem', borderTop: `1px solid ${theme.accent}20`, borderBottom: `1px solid ${theme.accent}20`, borderLeft: `1px solid ${theme.accent}20`, borderRight: `1px solid ${theme.accent}20`, borderRadius: '8px', overflow: 'hidden' }}>

@@ -4,6 +4,7 @@
  */
 import React from 'react';
 import { generateQRDataURL } from '@/lib/qr-utils';
+import { getEvidenceRemoteUrl } from '@/lib/evidence-upload-state';
 
 // ─── Types ───────────────────────────────────────────────
 interface TemplateField {
@@ -54,6 +55,7 @@ interface EvidenceItem {
   type: 'image' | 'link' | 'file' | 'video';
   fileName: string;
   fileData?: string;
+  uploadedUrl?: string;
   link?: string;
   displayAs?: 'image' | 'qr';
 }
@@ -278,31 +280,37 @@ export default function TemplateRenderer({
               }}
             >
               {evidences.map((ev) => {
+                const remoteUrl = getEvidenceRemoteUrl(ev);
+                const requiresQR = ev.type !== 'image' || ev.displayAs === 'qr';
+                if (requiresQR && !remoteUrl) return (
+                  <div key={ev.id} style={{ border: '1px solid #E8E8E8', borderRadius: '8px', padding: '12px', textAlign: 'center' }}>
+                    <div>{ev.fileName || 'شاهد'}</div>
+                    <div style={{ fontSize: '10px', color: '#92400e' }}>لا يوجد رابط مرفق صالح — لم يُنشأ رمز QR</div>
+                  </div>
+                );
                 // Links → always QR
                 if (ev.type === 'link') {
                   return (
                     <div key={ev.id} style={{ border: '1px solid #E8E8E8', borderRadius: '8px', padding: '12px', textAlign: 'center', background: '#FAFAFA' }}>
-                      <img src={generateQRDataURL(ev.link || '', 6)} alt="QR" style={{ width: '128px', height: '128px', margin: '0 auto 10px' }} />
+                      <img src={generateQRDataURL(remoteUrl!, 6)} alt="QR" style={{ width: '128px', height: '128px', margin: '0 auto 10px' }} />
                       <div style={{ fontSize: '9px', color: '#666', wordBreak: 'break-all', maxHeight: '30px', overflow: 'hidden' }}>{ev.link}</div>
                     </div>
                   );
                 }
                 // Files/Videos → always QR
                 if (ev.type === 'file' || ev.type === 'video') {
-                  const qrData = ev.fileData?.startsWith('idb://') ? ev.fileName : (ev.fileData || ev.fileName);
                   return (
                     <div key={ev.id} style={{ border: '1px solid #E8E8E8', borderRadius: '8px', padding: '12px', textAlign: 'center', background: '#FAFAFA' }}>
-                      <img src={generateQRDataURL(qrData.substring(0, 200), 6)} alt="QR" style={{ width: '128px', height: '128px', margin: '0 auto 10px' }} />
+                      <img src={generateQRDataURL(remoteUrl!, 6)} alt="QR" style={{ width: '128px', height: '128px', margin: '0 auto 10px' }} />
                       <div style={{ fontSize: '9px', color: '#666', fontWeight: 'bold' }}>{ev.fileName}</div>
                     </div>
                   );
                 }
                 // Images → based on displayAs
                 if (ev.displayAs === 'qr') {
-                  const qrData = ev.fileData?.startsWith('idb://') ? ev.fileName : (ev.fileData || ev.fileName);
                   return (
                     <div key={ev.id} style={{ border: '1px solid #E8E8E8', borderRadius: '8px', padding: '12px', textAlign: 'center', background: '#FAFAFA' }}>
-                      <img src={generateQRDataURL(qrData.substring(0, 200), 6)} alt="QR" style={{ width: '128px', height: '128px', margin: '0 auto 10px' }} />
+                      <img src={generateQRDataURL(remoteUrl!, 6)} alt="QR" style={{ width: '128px', height: '128px', margin: '0 auto 10px' }} />
                       <div style={{ fontSize: '9px', color: '#666' }}>{ev.fileName}</div>
                     </div>
                   );

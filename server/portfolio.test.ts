@@ -4,6 +4,8 @@ import type { TrpcContext } from "./_core/context";
 
 // Mock database functions
 vi.mock("./db", () => ({
+  createEvidenceComment: vi.fn().mockResolvedValue({ id: 17 }),
+  createAuditLog: vi.fn().mockResolvedValue({ id: 1 }),
   createPortfolio: vi.fn().mockResolvedValue({ id: 1 }),
   updatePortfolio: vi.fn().mockResolvedValue({ id: 1 }),
   getPortfoliosByUser: vi.fn().mockResolvedValue([
@@ -326,5 +328,128 @@ describe("ai.classifyEvidence", () => {
       description: "دورة تدريبية على منصة مدرستي",
     });
     expect(result.success).toBe(true);
+  });
+});
+
+// Calls the actual protected procedures; verifies forbidden requests never reach
+// storage, mutation helpers, or data-returning helpers.
+describe("legacy portfolio file/share ownership", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it.each([2, 999])("blocks upload to another or missing portfolio %i before storage", async (portfolioId) => {
+    const db = await import("./db");
+    const storage = await import("./storage");
+    const caller = appRouter.createCaller(createUserContext());
+    await expect(caller.file.upload({ portfolioId, fileName: "proof.png", mimeType: "image/png", base64Data: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a2ioAAAAASUVORK5CYII=" }))
+      .rejects.toMatchObject({ code: "FORBIDDEN" });
+    expect(storage.storagePut).not.toHaveBeenCalled();
+    expect(db.createUploadedFile).not.toHaveBeenCalled();
+    expect(db.createAuditLog).not.toHaveBeenCalled();
+  });
+
+  it.each([2, 999])("blocks file and share listings and share creation for portfolio %i", async (portfolioId) => {
+    const db = await import("./db");
+    const caller = appRouter.createCaller(createUserContext());
+    await expect(caller.file.listByPortfolio({ portfolioId })).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(caller.share.listByPortfolio({ portfolioId })).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(caller.share.create({ portfolioId })).rejects.toMatchObject({ code: "FORBIDDEN" });
+    expect(db.getFilesByPortfolio).not.toHaveBeenCalled();
+    expect(db.getShareLinksByPortfolio).not.toHaveBeenCalled();
+    expect(db.createShareLink).not.toHaveBeenCalled();
+    expect(db.createAuditLog).not.toHaveBeenCalled();
+  });
+
+  it("does not turn admin review permission into owner mutation permission", async () => {
+    const caller = appRouter.createCaller(createUserContext("admin", 2));
+    await expect(caller.share.create({ portfolioId: 1 })).rejects.toMatchObject({ code: "FORBIDDEN" });
+  });
+
+  it("allows owner upload and listings with the correct portfolio association", async () => {
+    const db = await import("./db");
+    const caller = appRouter.createCaller(createUserContext());
+    await caller.file.upload({ portfolioId: 1, fileName: "proof.png", mimeType: "image/png", base64Data: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a2ioAAAAASUVORK5CYII=" });
+    expect(db.createUploadedFile).toHaveBeenCalledWith(expect.objectContaining({ userId: 1, portfolioId: 1 }));
+    await caller.file.listByPortfolio({ portfolioId: 1 });
+    await caller.share.listByPortfolio({ portfolioId: 1 });
+    expect(db.getFilesByPortfolio).toHaveBeenCalledWith(1);
+    expect(db.getShareLinksByPortfolio).toHaveBeenCalledWith(1);
+  });
+
+  it("preserves unattached upload support", async () => {
+    const db = await import("./db");
+    const caller = appRouter.createCaller(createUserContext());
+    await caller.file.upload({ fileName: "proof.png", mimeType: "image/png", base64Data: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a2ioAAAAASUVORK5CYII=" });
+    expect(db.getPortfolioById).not.toHaveBeenCalled();
+    expect(db.createUploadedFile).toHaveBeenCalledWith(expect.objectContaining({ userId: 1, portfolioId: null }));
+  });
+});
+
+
+describe("comment transaction authorization and upload reconciliation", () => {
+  beforeEach(() => vi.clearAllMocks());
+  const input = { portfolioId: 1, criterionId: "c", evidenceId: "e", content: "comment" };
+
+  it("passes authenticated administrator status, not client-supplied elevation", async () => {
+    const db = await import("./db");
+    await appRouter.createCaller(createUserContext()).evidenceComment.create({ ...input, isAdmin: true } as typeof input);
+    expect(db.createEvidenceComment).toHaveBeenLastCalledWith(expect.objectContaining({ userId: 1 }), false);
+    await appRouter.createCaller(createUserContext("admin", 2)).evidenceComment.create(input);
+    expect(db.createEvidenceComment).toHaveBeenLastCalledWith(expect.objectContaining({ userId: 2 }), true);
+  });
+
+  it("rejects a foreign user's comment before insertion or success audit", async () => {
+    const db = await import("./db");
+    await expect(appRouter.createCaller(createUserContext("user", 2)).evidenceComment.create(input)).rejects.toMatchObject({ code: "FORBIDDEN" });
+    expect(db.createEvidenceComment).not.toHaveBeenCalled();
+    expect(db.createAuditLog).not.toHaveBeenCalled();
+  });
+
+  it("does not audit success when the locked comment insertion rejects", async () => {
+    const db = await import("./db");
+    const { TRPCError } = await import("@trpc/server");
+    vi.mocked(db.createEvidenceComment).mockRejectedValueOnce(new TRPCError({ code: "FORBIDDEN" }));
+    await expect(appRouter.createCaller(createUserContext()).evidenceComment.create(input)).rejects.toMatchObject({ code: "FORBIDDEN" });
+    expect(db.createAuditLog).not.toHaveBeenCalled();
+  });
+
+  it("records the blob reconciliation key and preserves metadata failure without success audit", async () => {
+    const db = await import("./db");
+    const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
+    vi.mocked(db.createUploadedFile).mockRejectedValueOnce(new Error("metadata unavailable"));
+    try {
+      await expect(appRouter.createCaller(createUserContext()).file.upload({ portfolioId: 1, fileName: "proof.png", mimeType: "image/png", base64Data: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a2ioAAAAASUVORK5CYII=" })).rejects.toThrow("metadata unavailable");
+      const metadata = vi.mocked(db.createUploadedFile).mock.calls[0][0];
+      expect(warning).toHaveBeenCalledTimes(1);
+      expect(warning).toHaveBeenCalledWith("[Storage] Reconciliation required", {
+        event: "storage.metadata_write_failed", fileKey: metadata.fileKey, actorUserId: 1, portfolioId: 1,
+      });
+      expect(db.createAuditLog).not.toHaveBeenCalled();
+    } finally {
+      warning.mockRestore();
+    }
+  });
+});
+
+describe("upload admission before side effects", () => {
+  beforeEach(() => vi.clearAllMocks());
+  it("rejects forged image bytes before storage, database insertion and success audit", async () => {
+    const db = await import("./db");
+    const storage = await import("./storage");
+    await expect(appRouter.createCaller(createUserContext()).file.upload({ fileName: "proof.png", mimeType: "image/png", base64Data: "eA==" })).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    expect(storage.storagePut).not.toHaveBeenCalled();
+    expect(db.createUploadedFile).not.toHaveBeenCalled();
+    expect(db.createAuditLog).not.toHaveBeenCalled();
+  });
+  it("applies the raster-only check to administrator template uploads", async () => {
+    const storage = await import("./storage");
+    await expect(appRouter.createCaller(createUserContext("admin")).templates.uploadImage({ fileName: "proof.pdf", mimeType: "application/pdf", base64Data: Buffer.from("%PDF-1.7\nfixture").toString("base64"), imageType: "cover" })).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    expect(storage.storagePut).not.toHaveBeenCalled();
+  });
+  it("stores canonical type and extension instead of a supplied executable extension", async () => {
+    const db = await import("./db");
+    const storage = await import("./storage");
+    await appRouter.createCaller(createUserContext()).file.upload({ fileName: "proof.html", mimeType: "application/octet-stream", base64Data: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a2ioAAAAASUVORK5CYII=" });
+    expect(storage.storagePut).toHaveBeenCalledWith(expect.stringMatching(/\.png$/), expect.any(Buffer), "image/png");
+    expect(db.createUploadedFile).toHaveBeenCalledWith(expect.objectContaining({ mimeType: "image/png", fileKey: expect.stringMatching(/\.png$/) }));
   });
 });
