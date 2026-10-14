@@ -18,7 +18,19 @@ describe("printed evidence QR truthfulness", () => {
   });
   it("encodes the complete uploaded URL without truncating signed query strings", () => {
     const url = "https://example.com/attachment?token=" + "x".repeat(250);
-    renderToStaticMarkup(createElement(TemplateRenderer, { ...props, evidences: [{ id: "1", type: "video", fileName: "video.mp4", uploadedUrl: url }] }));
+    const html = renderToStaticMarkup(createElement(TemplateRenderer, { ...props, evidences: [{ id: "1", type: "video", fileName: "video.mp4", uploadedUrl: url }] }));
+    expect(html).toContain("width:128px;height:128px");
     expect(generateQRDataURL).toHaveBeenCalledWith(url, 6);
+  });
+  it.each(["javascript:alert(1)", "local.pdf", "data:text/plain,proof"])("rejects an invalid explicit link %s", link => {
+    const html = renderToStaticMarkup(createElement(TemplateRenderer, { ...props, evidences: [{ id: "1", type: "link", fileName: "", link }] }));
+    expect(generateQRDataURL).not.toHaveBeenCalled();
+    expect(html).toContain("لم يُنشأ رمز QR");
+  });
+  it("renders a valid explicit link at printable resolution", () => {
+    const link = "https://example.com/proof";
+    const html = renderToStaticMarkup(createElement(TemplateRenderer, { ...props, evidences: [{ id: "1", type: "link", fileName: "", link }] }));
+    expect(generateQRDataURL).toHaveBeenCalledWith(link, 6);
+    expect(html).toContain("width:128px;height:128px");
   });
 });
