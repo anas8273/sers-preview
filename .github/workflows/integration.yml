@@ -47,15 +47,19 @@ jobs:
         run: pnpm exec drizzle-kit migrate --config drizzle.config.ts
       - name: Domain ownership and IDOR integration tests
         run: pnpm exec vitest run server/domain-integration.test.ts
-      # Real-DB legacy ownership, rollback, and concurrency behavior is enforced
-      # independently by mysql-legacy.yml. The older performance-evidence suite
-      # assumes a silent no-op for forbidden deletes, while the hardened contract
-      # correctly returns FORBIDDEN; running it here would assert obsolete behavior.
-      - name: Existing template DB suite with isolated fixtures
-        run: pnpm exec vitest run server/templates-themes.test.ts
+      # Validate the canonical seed on the migration-clean database before any
+      # suite mutates template fixtures. The seed helper currently short-circuits
+      # when a template already exists, so running fixture-mutating suites first
+      # would produce an order-dependent false failure.
       - name: Seed canonical legacy templates
         run: >-
           pnpm exec tsx -e
           "import('./server/db.ts').then(async (m) => { await m.seedDefaultTemplates(); process.exit(0); })"
       - name: Template/barcode integration suite
         run: pnpm exec vitest run server/copy-templates-barcode.test.ts
+      # Real-DB legacy ownership, rollback, and concurrency behavior is enforced
+      # independently by mysql-legacy.yml. The older performance-evidence suite
+      # assumes a silent no-op for forbidden deletes, while the hardened contract
+      # correctly returns FORBIDDEN; running it here would assert obsolete behavior.
+      - name: Existing template DB suite with isolated fixtures
+        run: pnpm exec vitest run server/templates-themes.test.ts
