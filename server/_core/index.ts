@@ -86,7 +86,7 @@ function assertPayloadSize(value: unknown, maxBytes: number, label: string) {
 function assertSafeHtml(value: unknown) {
   if (typeof value !== "string" || value.trim().length === 0) throw new RemoteImageError("Missing html content", 400);
   if (Buffer.byteLength(value, "utf8") > 2_500_000) throw new RemoteImageError("HTML exceeds the size limit", 413);
-  const activeContent = /<\s*(script|iframe|object|embed|applet|base)\b|javascript\s*:|on[a-z]+\s*=|<\s*meta\b[^>]*http-equiv\s*=|<\s*link\b/iu;
+  const activeContent = /<\s*(script|iframe|object|embed|applet|base)\b|javascript\s*:|on[a-z]+\s*=|<\s*meta\b[^>]*http-equiv\s*=|<\s*link\b/i;
   if (activeContent.test(value)) throw new RemoteImageError("Active or externally linked HTML is not allowed", 400);
   return value;
 }
@@ -94,7 +94,10 @@ function assertSafeHtml(value: unknown) {
 function safeDownloadName(value: unknown, fallback: string, extension: string) {
   const raw = typeof value === "string" ? value.normalize("NFKC") : fallback;
   const withoutPaths = raw.replace(/[\\/]+/g, "-").replace(/[\u0000-\u001f\u007f]/g, "");
-  const clean = withoutPaths.replace(/[^\p{L}\p{N}._ -]+/gu, "").trim().slice(0, 120) || fallback;
+  const clean = withoutPaths
+    .replace(/[^A-Za-z0-9\u0600-\u06FF\u0750-\u077F._ -]+/g, "")
+    .trim()
+    .slice(0, 120) || fallback;
   return clean.toLowerCase().endsWith(extension) ? clean : `${clean}${extension}`;
 }
 
