@@ -1,5 +1,18 @@
 import { useMemo, useState } from "react";
-import { ArrowRight, Building2, FileText, FolderKanban, Link2, Loader2, Plus, Save, Send, Trash2, UserRound } from "lucide-react";
+import {
+  ArrowRight,
+  Building2,
+  FileText,
+  FolderKanban,
+  Link2,
+  Loader2,
+  PencilLine,
+  Plus,
+  Save,
+  Send,
+  Trash2,
+  UserRound,
+} from "lucide-react";
 import { useLocation, useRoute } from "wouter";
 import AppSidebar from "@/components/AppSidebar";
 import { trpc } from "@/lib/trpc";
@@ -15,16 +28,25 @@ export default function WorkDetail() {
   const [location, setLocation] = useLocation();
   const [, params] = useRoute<{ id: string }>("/work/:id");
   const workId = Number(params?.id);
+  const validWorkId = Number.isInteger(workId) && workId > 0;
   const [selectedAssetId, setSelectedAssetId] = useState<number | undefined>();
   const [versionReason, setVersionReason] = useState("");
   const [selectedVersionId, setSelectedVersionId] = useState<number | undefined>();
   const [selectedReviewerId, setSelectedReviewerId] = useState<number | undefined>();
 
   const utils = trpc.useUtils();
-  const workQuery = trpc.domain.work.get.useQuery({ id: workId }, { enabled: Number.isInteger(workId) && workId > 0, retry: false });
+  const workQuery = trpc.domain.work.get.useQuery(
+    { id: workId },
+    { enabled: validWorkId, retry: false },
+  );
   const assetsQuery = trpc.domain.asset.list.useQuery(undefined, { retry: false });
-  const versionsQuery = trpc.reviewSupport.versions.useQuery({ workItemId: workId }, { enabled: Number.isInteger(workId) && workId > 0, retry: false });
-  const organizationId = workQuery.data?.ownerType === "organization" ? workQuery.data.ownerOrganizationId ?? undefined : undefined;
+  const versionsQuery = trpc.reviewSupport.versions.useQuery(
+    { workItemId: workId },
+    { enabled: validWorkId, retry: false },
+  );
+  const organizationId = workQuery.data?.ownerType === "organization"
+    ? workQuery.data.ownerOrganizationId ?? undefined
+    : undefined;
   const reviewersQuery = trpc.reviewSupport.reviewers.useQuery(
     { organizationId: organizationId ?? 0 },
     { enabled: Boolean(organizationId), retry: false },
@@ -63,15 +85,23 @@ export default function WorkDetail() {
     },
   });
 
-  const linkedIds = useMemo(() => new Set((workQuery.data?.assets ?? []).map(asset => asset.id)), [workQuery.data?.assets]);
-  const availableAssets = useMemo(() => (assetsQuery.data ?? []).filter(asset => !linkedIds.has(asset.id)), [assetsQuery.data, linkedIds]);
+  const linkedIds = useMemo(
+    () => new Set((workQuery.data?.assets ?? []).map(asset => asset.id)),
+    [workQuery.data?.assets],
+  );
+  const availableAssets = useMemo(
+    () => (assetsQuery.data ?? []).filter(asset => !linkedIds.has(asset.id)),
+    [assetsQuery.data, linkedIds],
+  );
   const versions = versionsQuery.data ?? [];
   const reviewers = reviewersQuery.data ?? [];
 
-  const makeSnapshot = () => {
+  const makePortfolioSnapshot = () => {
     const work = workQuery.data;
     if (!work) return {};
     return {
+      schemaVersion: 1,
+      kind: "portfolio",
       work: {
         id: work.id,
         title: work.title,
@@ -81,12 +111,18 @@ export default function WorkDetail() {
         ownerOrganizationId: work.ownerOrganizationId,
         status: work.status,
       },
-      assets: work.assets.map(asset => ({ id: asset.id, title: asset.title, kind: asset.kind, role: asset.role, caption: asset.caption })),
+      assets: work.assets.map(asset => ({
+        id: asset.id,
+        title: asset.title,
+        kind: asset.kind,
+        role: asset.role,
+        caption: asset.caption,
+      })),
       capturedAt: new Date().toISOString(),
     };
   };
 
-  if (!Number.isInteger(workId) || workId <= 0) {
+  if (!validWorkId) {
     return <div className="min-h-screen bg-[#F8FAFC] p-8 text-sm text-red-700" dir="rtl">معرّف العمل غير صالح.</div>;
   }
 
@@ -102,7 +138,6 @@ export default function WorkDetail() {
           {workQuery.isLoading && (
             <div className="mt-8 flex items-center justify-center rounded-2xl border border-slate-200 bg-white py-16 text-sm text-slate-500"><Loader2 className="ml-2 h-4 w-4 animate-spin" />جاري تحميل العمل...</div>
           )}
-
           {workQuery.error && (
             <div className="mt-8 rounded-2xl border border-red-200 bg-red-50 p-5 text-sm text-red-700">{workQuery.error.message}</div>
           )}
@@ -127,8 +162,15 @@ export default function WorkDetail() {
                       </div>
                     </div>
                   </div>
-                  <div className="rounded-xl border border-teal-100 bg-teal-50 px-4 py-3 text-xs leading-6 text-teal-900">
-                    الشواهد تبقى أصولًا مستقلة. إزالة الربط من هذا العمل لا تحذف الأصل من المكتبة.
+                  <div className="flex flex-col gap-3 sm:items-end">
+                    {workQuery.data.type === "report" && (
+                      <button onClick={() => setLocation(`/work/${workId}/report`)} className="inline-flex items-center justify-center gap-2 rounded-xl bg-teal-600 px-5 py-3 text-sm font-bold text-white shadow-sm hover:bg-teal-700">
+                        <PencilLine className="h-4 w-4" /> فتح محرر التقرير
+                      </button>
+                    )}
+                    <div className="max-w-md rounded-xl border border-teal-100 bg-teal-50 px-4 py-3 text-xs leading-6 text-teal-900">
+                      الشواهد تبقى أصولًا مستقلة. إزالة الربط من هذا العمل لا تحذف الأصل من المكتبة.
+                    </div>
                   </div>
                 </div>
               </section>
@@ -167,18 +209,29 @@ export default function WorkDetail() {
                 </section>
 
                 <div className="space-y-6">
-                  <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
-                    <p className="text-xs font-bold text-teal-700">نسخة ثابتة</p>
-                    <h2 className="mt-1 text-lg font-bold text-slate-950">إنشاء Version</h2>
-                    <p className="mt-2 text-xs leading-6 text-slate-500">النسخة تحفظ لقطة من بيانات العمل والشواهد الحالية. المراجعات والمخرجات اللاحقة ترتبط بهذه النسخة بدل الحالة المتغيرة.</p>
-                    <label className="mt-4 block text-xs font-bold text-slate-700">سبب إنشاء النسخة</label>
-                    <textarea value={versionReason} onChange={event => setVersionReason(event.target.value)} maxLength={255} rows={3} placeholder="مثال: نسخة جاهزة للمراجعة" className="mt-2 w-full resize-none rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-teal-400 focus:ring-2 focus:ring-teal-100" />
-                    <button onClick={() => createVersion.mutate({ id: workId, reason: versionReason.trim() || undefined, snapshot: makeSnapshot() })} disabled={createVersion.isPending} className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50">
-                      {createVersion.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} إنشاء نسخة ثابتة
-                    </button>
-                    {createVersion.data && <p className="mt-3 rounded-lg bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700">تم إنشاء النسخة {createVersion.data.versionNumber} بنجاح.</p>}
-                    {createVersion.error && <p className="mt-3 text-xs text-red-600">{createVersion.error.message}</p>}
-                  </section>
+                  {workQuery.data.type === "report" ? (
+                    <section className="rounded-2xl border border-teal-200 bg-teal-50 p-5 shadow-sm sm:p-6">
+                      <p className="text-xs font-bold text-teal-700">مصدر الحقيقة</p>
+                      <h2 className="mt-1 text-lg font-bold text-slate-950">أنشئ النسخة من محرر التقرير</h2>
+                      <p className="mt-2 text-xs leading-6 text-slate-600">حتى تحتوي النسخة على النص والقالب والشواهد معًا، لا يسمح هذا المسار بإنشاء لقطة تقرير ناقصة. افتح المحرر واحفظ التقرير ثم أنشئ النسخة هناك.</p>
+                      <button onClick={() => setLocation(`/work/${workId}/report`)} className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-teal-700 px-4 py-2.5 text-sm font-bold text-white hover:bg-teal-800">
+                        <PencilLine className="h-4 w-4" /> تحرير التقرير وإنشاء نسخة
+                      </button>
+                    </section>
+                  ) : (
+                    <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+                      <p className="text-xs font-bold text-teal-700">نسخة ثابتة</p>
+                      <h2 className="mt-1 text-lg font-bold text-slate-950">إنشاء نسخة من ملف الإنجاز</h2>
+                      <p className="mt-2 text-xs leading-6 text-slate-500">النسخة تحفظ لقطة من بيانات العمل والشواهد الحالية. المراجعات والمخرجات اللاحقة ترتبط بهذه النسخة بدل الحالة المتغيرة.</p>
+                      <label className="mt-4 block text-xs font-bold text-slate-700">سبب إنشاء النسخة</label>
+                      <textarea value={versionReason} onChange={event => setVersionReason(event.target.value)} maxLength={255} rows={3} placeholder="مثال: نسخة جاهزة للمراجعة" className="mt-2 w-full resize-none rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-teal-400 focus:ring-2 focus:ring-teal-100" />
+                      <button onClick={() => createVersion.mutate({ id: workId, reason: versionReason.trim() || undefined, snapshot: makePortfolioSnapshot() })} disabled={createVersion.isPending} className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50">
+                        {createVersion.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} إنشاء نسخة ثابتة
+                      </button>
+                      {createVersion.data && <p className="mt-3 rounded-lg bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700">تم إنشاء النسخة {createVersion.data.versionNumber} بنجاح.</p>}
+                      {createVersion.error && <p className="mt-3 text-xs text-red-600">{createVersion.error.message}</p>}
+                    </section>
+                  )}
 
                   {workQuery.data.ownerType === "organization" && (
                     <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
