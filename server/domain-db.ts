@@ -15,8 +15,22 @@ export type NewAsset = typeof assets.$inferInsert;
 
 type WorkRow = typeof workItems.$inferSelect;
 type AssetRow = typeof assets.$inferSelect;
-
 type MembershipRow = typeof memberships.$inferSelect;
+
+export class WorkVersionConflictError extends Error {
+  constructor() {
+    super("Work version conflict");
+    this.name = "WorkVersionConflictError";
+  }
+}
+
+function getAffectedRows(result: unknown): number {
+  const candidate = Array.isArray(result) ? result[0] : result;
+  if (candidate && typeof candidate === "object" && "affectedRows" in candidate) {
+    return Number((candidate as { affectedRows?: number }).affectedRows ?? 0);
+  }
+  return 0;
+}
 
 async function activeMembership(userId: number, organizationId: number): Promise<MembershipRow | undefined> {
   const db = await getDb();
@@ -35,6 +49,12 @@ async function activeMembership(userId: number, organizationId: number): Promise
 
 function canWriteOrganization(role: MembershipRow["role"]) {
   return role === "owner" || role === "admin" || role === "member";
+}
+
+function sameOwnershipScope(work: WorkRow, asset: AssetRow) {
+  if (work.ownerType !== asset.ownerType) return false;
+  if (work.ownerType === "personal") return work.ownerUserId === asset.ownerUserId;
+  return Boolean(work.ownerOrganizationId && work.ownerOrganizationId === asset.ownerOrganizationId);
 }
 
 export async function assertWorkAccess(userId: number, workItemId: number, mode: WorkAccessMode = "read") {
@@ -132,15 +152,20 @@ export async function getWorkItemForUser(userId: number, workItemId: number) {
     .from(workAssetLinks)
     .innerJoin(assets, eq(workAssetLinks.assetId, assets.id))
     .where(and(eq(workAssetLinks.workItemId, workItemId), isNull(assets.deletedAt)));
-  return { ...work, assets: linkedAssets };
+
+  const visibleAssets = [];
+  for (const linkedAsset of linkedAssets) {
+    if (await assertAssetAccess(userId, linkedAsset.id, "read")) visibleAssets.push(linkedAsset);
+  }
+  return { ...work, assets: visibleAssets };
 }
 
-export async function updateWorkItemForUser(userId: number, workItemId: number, patch: { title?: string; status?: WorkRow["status"] }) {
+export async function updateWorkItemForUser(userId: number, workItemId: number, patch: { title?: string }) {
   const work = await assertWorkAccess(userId, workItemId, "write");
   if (!work) return undefined;
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  await db.update(workItems).set(patch).where(eq(workItems.id, workItemId));
+  await db.update(workItems).set({ title: patch.title }).where(and(eq(workItems.id, workItemId), isNull(workItems.deletedAt)));
   return getWorkItemForUser(userId, workItemId);
 }
 
@@ -154,17 +179,62 @@ export async function softDeleteWorkItemForUser(userId: number, workItemId: numb
 }
 
 export async function createWorkVersionForUser(userId: number, workItemId: number, snapshot: Record<string, unknown>, reason?: string) {
-  const work = await assertWorkAccess(userId, workItemId, "write");
-  if (!work) return undefined;
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  const nextVersion = work.currentVersionNumber + 1;
-  const result = await db.transaction(async tx => {
-    const inserted = await tx.insert(workVersions).values({ workItemId, versionNumber: nextVersion, createdByUserId: userId, snapshot, reason: reason ?? null });
-    await tx.update(workItems).set({ currentVersionNumber: nextVersion }).where(eq(workItems.id, workItemId));
-    return Number(inserted[0].insertId);
-  });
-  return { id: result, versionNumber: nextVersion };
+
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      return await db.transaction(async tx => {
+        const [work] = await tx
+          .select()
+          .from(workItems)
+          .where(and(eq(workItems.id, workItemId), isNull(workItems.deletedAt)))
+          .limit(1);
+        if (!work) return undefined;
+
+        if (work.ownerType === "personal") {
+          if (work.ownerUserId !== userId && work.creatorUserId !== userId) return undefined;
+        } else {
+          if (!work.ownerOrganizationId) return undefined;
+          const [membership] = await tx
+            .select()
+            .from(memberships)
+            .where(and(
+              eq(memberships.userId, userId),
+              eq(memberships.organizationId, work.ownerOrganizationId),
+              eq(memberships.status, "active"),
+            ))
+            .limit(1);
+          if (!membership || !canWriteOrganization(membership.role)) return undefined;
+        }
+
+        const expectedVersion = work.currentVersionNumber;
+        const nextVersion = expectedVersion + 1;
+        const updated = await tx
+          .update(workItems)
+          .set({ currentVersionNumber: nextVersion })
+          .where(and(
+            eq(workItems.id, workItemId),
+            eq(workItems.currentVersionNumber, expectedVersion),
+            isNull(workItems.deletedAt),
+          ));
+        if (getAffectedRows(updated) !== 1) throw new WorkVersionConflictError();
+
+        const inserted = await tx.insert(workVersions).values({
+          workItemId,
+          versionNumber: nextVersion,
+          createdByUserId: userId,
+          snapshot,
+          reason: reason ?? null,
+        });
+        return { id: Number(inserted[0].insertId), versionNumber: nextVersion };
+      });
+    } catch (error) {
+      if (!(error instanceof WorkVersionConflictError) || attempt === 2) throw error;
+    }
+  }
+
+  throw new WorkVersionConflictError();
 }
 
 export async function listAssetsForUser(userId: number) {
@@ -221,7 +291,7 @@ export async function createAssetForUser(userId: number, input: {
 export async function linkAssetToWorkForUser(userId: number, input: { workItemId: number; assetId: number; role?: string; caption?: string }) {
   const work = await assertWorkAccess(userId, input.workItemId, "write");
   const asset = await assertAssetAccess(userId, input.assetId, "read");
-  if (!work || !asset) return undefined;
+  if (!work || !asset || !sameOwnershipScope(work, asset)) return undefined;
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   const role = input.role ?? "evidence";
