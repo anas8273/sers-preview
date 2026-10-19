@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { users } from "../drizzle/schema";
 import {
   assets,
@@ -62,6 +62,24 @@ suite("SERS domain integration against real MySQL", () => {
     await db.delete(users);
   }
 
+  async function createOrganizationWork(title: string) {
+    return createWorkItemForUser(ownerId, {
+      title,
+      type: "report",
+      ownerType: "organization",
+      organizationId: orgId,
+    });
+  }
+
+  async function setReviewerRole(role: "reviewer" | "member") {
+    const db = await getDb();
+    if (!db) throw new Error("Database not available");
+    await db.update(memberships).set({ role }).where(and(
+      eq(memberships.organizationId, orgId),
+      eq(memberships.userId, reviewerId),
+    ));
+  }
+
   beforeAll(async () => {
     const db = await getDb();
     if (!db) throw new Error("Database not available");
@@ -100,12 +118,7 @@ suite("SERS domain integration against real MySQL", () => {
   });
 
   it("enforces organization membership and separates reviewer write access", async () => {
-    const work = await createWorkItemForUser(ownerId, {
-      title: "School Work",
-      type: "report",
-      ownerType: "organization",
-      organizationId: orgId,
-    });
+    const work = await createOrganizationWork("School Work");
     expect(await assertWorkAccess(reviewerId, work!.id, "read")).toBeTruthy();
     expect(await assertWorkAccess(reviewerId, work!.id, "write")).toBeUndefined();
     expect(await assertWorkAccess(memberId, work!.id, "write")).toBeTruthy();
@@ -135,13 +148,31 @@ suite("SERS domain integration against real MySQL", () => {
     expect(await assertAssetAccess(ownerId, asset!.id, "read")).toBeTruthy();
   });
 
-  it("binds reviews to immutable versions and rejects ordinary members as reviewers", async () => {
-    const work = await createWorkItemForUser(ownerId, {
-      title: "Review Work",
-      type: "report",
-      ownerType: "organization",
-      organizationId: orgId,
+  it("rejects implicit evidence links across personal and organization ownership scopes", async () => {
+    const work = await createOrganizationWork("Scoped Evidence Work");
+    const personalAsset = await createAssetForUser(ownerId, {
+      title: "Personal Evidence",
+      kind: "text",
+      metadata: { text: "Personal only" },
     });
+    expect(await linkAssetToWorkForUser(ownerId, { workItemId: work!.id, assetId: personalAsset!.id })).toBeUndefined();
+  });
+
+  it("creates unique sequential versions under concurrent writers", async () => {
+    const work = await createWorkItemForUser(ownerId, { title: "Concurrent Versions", type: "report" });
+    const created = await Promise.all([
+      createWorkVersionForUser(ownerId, work!.id, { writer: "A" }, "A"),
+      createWorkVersionForUser(ownerId, work!.id, { writer: "B" }, "B"),
+    ]);
+    expect(created.map(version => version!.versionNumber).sort()).toEqual([1, 2]);
+
+    const db = await getDb();
+    const stored = await db!.select().from(workVersions).where(eq(workVersions.workItemId, work!.id));
+    expect(stored.map(version => version.versionNumber).sort()).toEqual([1, 2]);
+  });
+
+  it("binds reviews to immutable current versions and rejects ordinary members as reviewers", async () => {
+    const work = await createOrganizationWork("Review Work");
     const version = await createWorkVersionForUser(ownerId, work!.id, { title: work!.title, frozen: true }, "Ready for review");
     expect(version?.versionNumber).toBe(1);
 
@@ -157,6 +188,80 @@ suite("SERS domain integration against real MySQL", () => {
     const db = await getDb();
     const [storedVersion] = await db!.select().from(workVersions).where(eq(workVersions.id, version!.id)).limit(1);
     expect(storedVersion.snapshot).toMatchObject({ frozen: true });
+  });
+
+  it("rechecks reviewer membership at decision time", async () => {
+    const work = await createOrganizationWork("Reviewer Revocation");
+    const version = await createWorkVersionForUser(ownerId, work!.id, { frozen: true });
+    const review = await createReviewForUser(ownerId, version!.id, reviewerId);
+
+    await setReviewerRole("member");
+    expect(await decideReviewForUser(reviewerId, review!.id, "approved")).toBeUndefined();
+
+    const db = await getDb();
+    const [storedReview] = await db!.select().from(reviews).where(eq(reviews.id, review!.id)).limit(1);
+    expect(storedReview.status).toBe("pending");
+    await setReviewerRole("reviewer");
+  });
+
+  it("lets only one concurrent decision win", async () => {
+    const work = await createOrganizationWork("Concurrent Decision");
+    const version = await createWorkVersionForUser(ownerId, work!.id, { frozen: true });
+    const review = await createReviewForUser(ownerId, version!.id, reviewerId);
+
+    const decisions = await Promise.allSettled([
+      decideReviewForUser(reviewerId, review!.id, "approved", "first"),
+      decideReviewForUser(reviewerId, review!.id, "rejected", "second"),
+    ]);
+    expect(decisions.filter(result => result.status === "fulfilled")).toHaveLength(1);
+    expect(decisions.filter(result => result.status === "rejected")).toHaveLength(1);
+  });
+
+  it("does not let approval of an older version approve the current work", async () => {
+    const work = await createOrganizationWork("Stale Review");
+    const first = await createWorkVersionForUser(ownerId, work!.id, { revision: 1 });
+    const review = await createReviewForUser(ownerId, first!.id, reviewerId);
+    const second = await createWorkVersionForUser(ownerId, work!.id, { revision: 2 });
+    expect(second?.versionNumber).toBe(2);
+
+    const decided = await decideReviewForUser(reviewerId, review!.id, "approved");
+    expect(decided?.status).toBe("approved");
+
+    const db = await getDb();
+    const [storedWork] = await db!.select().from(workItems).where(eq(workItems.id, work!.id)).limit(1);
+    expect(storedWork.currentVersionNumber).toBe(2);
+    expect(storedWork.status).not.toBe("approved");
+    await expect(createReviewForUser(ownerId, first!.id, reviewerId)).rejects.toThrow(/current work version/i);
+  });
+
+  it("requires exact-version approval before shared output creation", async () => {
+    const work = await createOrganizationWork("Shared Output");
+    const version = await createWorkVersionForUser(ownerId, work!.id, { title: "Frozen shared output" });
+
+    await expect(createOutputForUser(ownerId, {
+      workVersionId: version!.id,
+      type: "link",
+      visibility: "public",
+      token: "not-approved-yet",
+    })).rejects.toThrow(/approved review/i);
+
+    const privatePreview = await createOutputForUser(ownerId, {
+      workVersionId: version!.id,
+      type: "pdf",
+      visibility: "private",
+    });
+    expect(privatePreview?.workVersionId).toBe(version!.id);
+
+    const review = await createReviewForUser(ownerId, version!.id, reviewerId);
+    await decideReviewForUser(reviewerId, review!.id, "approved");
+    const shared = await createOutputForUser(ownerId, {
+      workVersionId: version!.id,
+      type: "link",
+      visibility: "public",
+      token: "approved-output-token",
+      expiresAt: new Date(Date.now() + 60_000),
+    });
+    expect(shared?.visibility).toBe("public");
   });
 
   it("pins outputs to versions and revocation preserves work/version", async () => {

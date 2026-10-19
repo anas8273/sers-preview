@@ -15,6 +15,7 @@ import {
   softDeleteWorkItemForUser,
   unlinkAssetFromWorkForUser,
   updateWorkItemForUser,
+  WorkVersionConflictError,
 } from "./domain-db";
 import {
   addReviewCommentForUser,
@@ -24,12 +25,15 @@ import {
   getReviewForUser,
   listOutputsForWorkForUser,
   listReviewsForUser,
+  OutputValidationError,
+  ReviewConflictError,
   revokeOutputForUser,
 } from "./review-output-db";
 
 const notFound = (message: string) => new TRPCError({ code: "NOT_FOUND", message });
 const forbidden = (message: string) => new TRPCError({ code: "FORBIDDEN", message });
 const badRequest = (message: string) => new TRPCError({ code: "BAD_REQUEST", message });
+const conflict = (message: string) => new TRPCError({ code: "CONFLICT", message });
 const hashOutputPassword = (value: string) => createHash("sha256").update(value, "utf8").digest("hex");
 
 export const domainRouter = router({
@@ -67,12 +71,10 @@ export const domainRouter = router({
     update: protectedProcedure
       .input(z.object({
         id: z.number().int().positive(),
-        title: z.string().trim().min(2).max(255).optional(),
-        status: z.enum(["draft", "in_review", "approved", "archived"]).optional(),
-      }).refine(value => value.title !== undefined || value.status !== undefined, { message: "لا توجد تغييرات للحفظ" }))
+        title: z.string().trim().min(2).max(255),
+      }))
       .mutation(async ({ ctx, input }) => {
-        const { id, ...patch } = input;
-        const updated = await updateWorkItemForUser(ctx.user.id, id, patch);
+        const updated = await updateWorkItemForUser(ctx.user.id, input.id, { title: input.title });
         if (!updated) throw forbidden("لا تملك صلاحية تعديل هذا العمل");
         return updated;
       }),
@@ -84,9 +86,14 @@ export const domainRouter = router({
         snapshot: z.record(z.string(), z.unknown()),
       }))
       .mutation(async ({ ctx, input }) => {
-        const version = await createWorkVersionForUser(ctx.user.id, input.id, input.snapshot, input.reason);
-        if (!version) throw forbidden("لا تملك صلاحية إنشاء نسخة لهذا العمل");
-        return version;
+        try {
+          const version = await createWorkVersionForUser(ctx.user.id, input.id, input.snapshot, input.reason);
+          if (!version) throw forbidden("لا تملك صلاحية إنشاء نسخة لهذا العمل");
+          return version;
+        } catch (error) {
+          if (error instanceof WorkVersionConflictError) throw conflict("تغيرت نسخة العمل أثناء الحفظ؛ أعد المحاولة بعد تحديث الصفحة");
+          throw error;
+        }
       }),
 
     remove: protectedProcedure
@@ -134,7 +141,7 @@ export const domainRouter = router({
       .input(z.object({ workItemId: z.number().int().positive(), assetId: z.number().int().positive(), role: z.string().trim().min(1).max(64).default("evidence"), caption: z.string().trim().max(1000).optional() }))
       .mutation(async ({ ctx, input }) => {
         const linked = await linkAssetToWorkForUser(ctx.user.id, input);
-        if (!linked) throw forbidden("لا تملك صلاحية ربط هذا الشاهد بهذا العمل");
+        if (!linked) throw forbidden("لا تملك صلاحية الربط، أو أن الشاهد والعمل لا ينتميان إلى مساحة الملكية نفسها");
         return linked;
       }),
 
@@ -164,6 +171,7 @@ export const domainRouter = router({
           if (!review) throw forbidden("لا تملك صلاحية إرسال هذه النسخة للمراجعة");
           return review;
         } catch (error) {
+          if (error instanceof ReviewConflictError) throw conflict(error.message);
           if (error instanceof Error && error.message.includes("organization")) throw badRequest("يجب أن يكون العمل مملوكًا لمدرسة وأن يكون المراجع عضوًا نشطًا فيها");
           if (error instanceof Error && error.message.includes("another user")) throw badRequest("اختر مراجعًا آخر");
           throw error;
@@ -179,9 +187,14 @@ export const domainRouter = router({
     decide: protectedProcedure
       .input(z.object({ reviewId: z.number().int().positive(), decision: z.enum(["approved", "changes_requested", "rejected"]), note: z.string().trim().max(4000).optional() }))
       .mutation(async ({ ctx, input }) => {
-        const decided = await decideReviewForUser(ctx.user.id, input.reviewId, input.decision, input.note);
-        if (!decided) throw forbidden("أنت لست المراجع المكلّف بهذه النسخة");
-        return decided;
+        try {
+          const decided = await decideReviewForUser(ctx.user.id, input.reviewId, input.decision, input.note);
+          if (!decided) throw forbidden("أنت لم تعد مراجعًا مخولًا لهذه النسخة");
+          return decided;
+        } catch (error) {
+          if (error instanceof ReviewConflictError) throw conflict(error.message);
+          throw error;
+        }
       }),
   }),
 
@@ -203,19 +216,25 @@ export const domainRouter = router({
       }).superRefine((value, ctx) => {
         if (value.visibility === "protected" && !value.password) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["password"], message: "أدخل رمز حماية للمخرج" });
         if (value.type === "pdf" && value.visibility !== "private") ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["visibility"], message: "مخرج PDF في هذه المرحلة خاص ويحتاج مسار تخزين آمن قبل المشاركة" });
+        if (value.expiresAt && value.expiresAt.getTime() <= Date.now()) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["expiresAt"], message: "يجب أن يكون تاريخ الانتهاء في المستقبل" });
       }))
       .mutation(async ({ ctx, input }) => {
-        const token = input.type === "link" || input.type === "qr" ? nanoid(32) : undefined;
-        const output = await createOutputForUser(ctx.user.id, {
-          workVersionId: input.workVersionId,
-          type: input.type,
-          visibility: input.visibility,
-          token,
-          passwordHash: input.password ? hashOutputPassword(input.password) : undefined,
-          expiresAt: input.expiresAt,
-        });
-        if (!output) throw forbidden("لا تملك صلاحية إنشاء مخرج لهذه النسخة");
-        return output;
+        try {
+          const token = input.type === "link" || input.type === "qr" ? nanoid(32) : undefined;
+          const output = await createOutputForUser(ctx.user.id, {
+            workVersionId: input.workVersionId,
+            type: input.type,
+            visibility: input.visibility,
+            token,
+            passwordHash: input.password ? hashOutputPassword(input.password) : undefined,
+            expiresAt: input.expiresAt,
+          });
+          if (!output) throw forbidden("لا تملك صلاحية إنشاء مخرج لهذه النسخة");
+          return output;
+        } catch (error) {
+          if (error instanceof OutputValidationError) throw badRequest(error.message);
+          throw error;
+        }
       }),
     revoke: protectedProcedure
       .input(z.object({ id: z.number().int().positive() }))
