@@ -4,6 +4,7 @@ import NotFound from "@/pages/NotFound";
 import { Route, Switch, useLocation } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import ReportPdfActions from "./components/ReportPdfActions";
+import ReportShareActions from "./components/ReportShareActions";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { lazy, Suspense } from "react";
 import BottomNav from "./components/BottomNav";
@@ -92,6 +93,7 @@ function AppChrome() {
   if (location.startsWith("/output/")) return null;
   return (
     <>
+      <ReportShareActions />
       <ReportPdfActions />
       <BottomNav />
     </>
