@@ -4,6 +4,7 @@ import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, protectedProcedure, adminProcedure, router } from "./_core/trpc";
 import { invokeLLM } from "./_core/llm";
 import { storagePut } from "./storage";
+import { validateUpload, MAX_UPLOAD_BASE64_LENGTH, MAX_IMAGE_BYTES, MAX_LOGO_BYTES } from "./upload-validation";
 import { notifyOwner } from "./_core/notification";
 import { z } from "zod";
 import { nanoid } from "nanoid";
@@ -29,6 +30,15 @@ const verifyShareAccessCode = (storedValue: string | null, suppliedValue: string
   const received = hashShareAccessCode(suppliedValue);
   return timingSafeEqual(Buffer.from(expected, "hex"), Buffer.from(received, "hex"));
 };
+
+// Owner operations deliberately do not inherit the separate admin review permission.
+async function assertPortfolioOwner(userId: number, portfolioId: number) {
+  const portfolio = await getPortfolioById(portfolioId);
+  if (!portfolio || portfolio.userId !== userId) {
+    throw new TRPCError({ code: "FORBIDDEN", message: "لا تملك صلاحية الوصول إلى هذا الملف" });
+  }
+  return portfolio;
+}
 
 async function assertCommentPortfolioAccess(user: { id: number; role: string }, portfolioId: number) {
   const portfolio = await getPortfolioById(portfolioId);
@@ -183,7 +193,7 @@ export const appRouter = router({
           evidenceId: input.evidenceId,
           userId: ctx.user.id,
           content: input.content,
-        });
+        }, ctx.user.role === "admin");
         await recordAudit({ actorUserId: ctx.user.id, action: "evidence.comment_created", resourceType: "evidence_comment", resourceId: created.id, portfolioId: input.portfolioId, metadata: { criterionId: input.criterionId, evidenceId: input.evidenceId, contentLength: input.content.length } });
         return created;
       }),
@@ -302,37 +312,51 @@ export const appRouter = router({
     upload: protectedProcedure
       .input(z.object({
         portfolioId: z.number().optional(),
-        fileName: z.string(),
-        mimeType: z.string(),
-        base64Data: z.string(),
+        fileName: z.string().min(1).max(255),
+        mimeType: z.string().max(128),
+        base64Data: z.string().min(1).max(MAX_UPLOAD_BASE64_LENGTH),
         criterionId: z.string().optional(),
         subEvidenceId: z.string().optional(),
       }))
       .mutation(async ({ ctx, input }) => {
+        if (input.portfolioId !== undefined) {
+          await assertPortfolioOwner(ctx.user.id, input.portfolioId);
+        }
         const suffix = nanoid(8);
-        const ext = input.fileName.split('.').pop() || 'bin';
-        const fileKey = `evidence/${ctx.user.id}/${suffix}.${ext}`;
-        const buffer = Buffer.from(input.base64Data, 'base64');
-        const { url } = await storagePut(fileKey, buffer, input.mimeType);
+        const { buffer, mimeType, extension } = validateUpload(input);
+        const fileKey = `evidence/${ctx.user.id}/${suffix}.${extension}`;
+        const { url } = await storagePut(fileKey, buffer, mimeType);
 
-        const { id } = await createUploadedFile({
-          userId: ctx.user.id,
-          portfolioId: input.portfolioId ?? null,
-          fileKey,
-          url,
-          originalName: input.fileName,
-          mimeType: input.mimeType,
-          fileSize: buffer.length,
-          criterionId: input.criterionId ?? null,
-          subEvidenceId: input.subEvidenceId ?? null,
-        });
-        await recordAudit({ actorUserId: ctx.user.id, action: "file.uploaded", resourceType: "uploaded_file", resourceId: id, portfolioId: input.portfolioId, metadata: { fileName: input.fileName.slice(0, 160), mimeType: input.mimeType, fileSize: buffer.length } });
+        let id: number;
+        try {
+          ({ id } = await createUploadedFile({
+            userId: ctx.user.id,
+            portfolioId: input.portfolioId ?? null,
+            fileKey,
+            url,
+            originalName: input.fileName,
+            mimeType,
+            fileSize: buffer.length,
+            criterionId: input.criterionId ?? null,
+            subEvidenceId: input.subEvidenceId ?? null,
+          }));
+        } catch (error) {
+          console.warn("[Storage] Reconciliation required", {
+            event: "storage.metadata_write_failed",
+            fileKey,
+            actorUserId: ctx.user.id,
+            portfolioId: input.portfolioId ?? null,
+          });
+          throw error;
+        }
+        await recordAudit({ actorUserId: ctx.user.id, action: "file.uploaded", resourceType: "uploaded_file", resourceId: id, portfolioId: input.portfolioId, metadata: { fileName: input.fileName.slice(0, 160), mimeType, fileSize: buffer.length } });
         return { id, url, fileKey };
       }),
 
     listByPortfolio: protectedProcedure
       .input(z.object({ portfolioId: z.number() }))
-      .query(async ({ input }) => {
+      .query(async ({ ctx, input }) => {
+        await assertPortfolioOwner(ctx.user.id, input.portfolioId);
         return getFilesByPortfolio(input.portfolioId);
       }),
 
@@ -355,6 +379,7 @@ export const appRouter = router({
         password: z.string().min(4).max(64).optional(),
       }))
       .mutation(async ({ ctx, input }) => {
+        await assertPortfolioOwner(ctx.user.id, input.portfolioId);
         const token = nanoid(32);
         const expiresAt = new Date(Date.now() + input.expiresInDays * 24 * 60 * 60 * 1000);
 
@@ -405,7 +430,8 @@ export const appRouter = router({
 
     listByPortfolio: protectedProcedure
       .input(z.object({ portfolioId: z.number() }))
-      .query(async ({ input }) => {
+      .query(async ({ ctx, input }) => {
+        await assertPortfolioOwner(ctx.user.id, input.portfolioId);
         return getShareLinksByPortfolio(input.portfolioId);
       }),
 
@@ -517,17 +543,16 @@ export const appRouter = router({
 
     uploadImage: adminProcedure
       .input(z.object({
-        fileName: z.string(),
-        mimeType: z.string(),
-        base64Data: z.string(),
+        fileName: z.string().min(1).max(255),
+        mimeType: z.string().max(128),
+        base64Data: z.string().min(1).max(MAX_UPLOAD_BASE64_LENGTH),
         imageType: z.enum(['cover', 'logo', 'background']),
       }))
       .mutation(async ({ ctx, input }) => {
         const suffix = nanoid(8);
-        const ext = input.fileName.split('.').pop() || 'png';
-        const fileKey = `templates/${input.imageType}/${suffix}.${ext}`;
-        const buffer = Buffer.from(input.base64Data, 'base64');
-        const { url } = await storagePut(fileKey, buffer, input.mimeType);
+        const { buffer, mimeType, extension } = validateUpload(input, { imagesOnly: true, maxBytes: input.imageType === 'logo' ? MAX_LOGO_BYTES : MAX_IMAGE_BYTES });
+        const fileKey = `templates/${input.imageType}/${suffix}.${extension}`;
+        const { url } = await storagePut(fileKey, buffer, mimeType);
         return { url, fileKey };
       }),
 
