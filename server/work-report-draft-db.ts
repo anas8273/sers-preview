@@ -181,7 +181,7 @@ export async function saveReportDraftForUser(userId: number, input: {
         .where(and(eq(workAssetLinks.workItemId, input.workItemId), isNull(assets.deletedAt)))
       : [];
     const linkedAssetIds = new Set(linkedAssetRows.map((row: { assetId: number }) => row.assetId));
-    const evidenceAssetIds = [...new Set(input.evidenceAssetIds)].filter(id => linkedAssetIds.has(id));
+    const evidenceAssetIds = Array.from(new Set(input.evidenceAssetIds)).filter(id => linkedAssetIds.has(id));
 
     const draft: ReportDraftData = {
       schemaVersion: 1,
