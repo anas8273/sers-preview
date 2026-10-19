@@ -6,18 +6,22 @@ import * as os from "os";
 
 let browserInstance: Awaited<ReturnType<typeof puppeteer.launch>> | null = null;
 
+export const ALLOWED_RENDER_HOSTS = new Set(["fonts.googleapis.com", "fonts.gstatic.com"]);
+
 async function getBrowser() {
-  if (browserInstance && browserInstance.connected) {
-    return browserInstance;
-  }
+  if (browserInstance && browserInstance.connected) return browserInstance;
   browserInstance = await puppeteer.launch({
     headless: true as any,
-    timeout: 60000,
+    timeout: 60_000,
     args: [
       "--no-sandbox",
       "--disable-setuid-sandbox",
       "--disable-dev-shm-usage",
       "--disable-gpu",
+      "--disable-background-networking",
+      "--disable-component-update",
+      "--disable-sync",
+      "--no-first-run",
       "--font-render-hinting=none",
       "--disable-lcd-text",
       "--enable-font-antialiasing",
@@ -27,10 +31,33 @@ async function getBrowser() {
   return browserInstance;
 }
 
+async function configureSafePage(page: Awaited<ReturnType<Awaited<ReturnType<typeof getBrowser>>["newPage"]>>) {
+  await page.setJavaScriptEnabled(false);
+  await page.setRequestInterception(true);
+  page.on("request", request => {
+    const requestUrl = request.url();
+    if (requestUrl === "about:blank" || requestUrl.startsWith("data:") || requestUrl.startsWith("blob:")) {
+      void request.continue();
+      return;
+    }
+
+    try {
+      const url = new URL(requestUrl);
+      const allowedType = request.resourceType() === "stylesheet" || request.resourceType() === "font";
+      if (url.protocol === "https:" && ALLOWED_RENDER_HOSTS.has(url.hostname) && allowedType) {
+        void request.continue();
+        return;
+      }
+    } catch {
+      // Invalid or relative requests are blocked below.
+    }
+    void request.abort("blockedbyclient");
+  });
+}
+
 /**
- * تحويل HTML إلى PDF باستخدام Puppeteer
- * يدعم اللغة العربية بشكل كامل لأن Chromium يعرض النص بشكل صحيح
- * جودة عالية جداً مع خطوط واضحة وإطارات حادة
+ * تحويل HTML إلى PDF باستخدام Chromium مع تعطيل JavaScript وحظر الشبكة العشوائية.
+ * الصور المخصصة يجب أن تكون data/blob URLs أو تمر عبر مرحلة تجهيز موثوقة قبل الاستدعاء.
  */
 export async function renderHtmlToPdf(
   htmlContent: string,
@@ -40,50 +67,26 @@ export async function renderHtmlToPdf(
     printBackground?: boolean;
     margin?: { top?: string; right?: string; bottom?: string; left?: string };
     scale?: number;
-  }
+  },
 ): Promise<Buffer> {
   const browser = await getBrowser();
   const page = await browser.newPage();
 
   try {
-    // تعيين viewport بحجم A4 بدقة عالية (3x للجودة القصوى)
+    await configureSafePage(page);
     await page.setViewport({ width: 794, height: 1123, deviceScaleFactor: 3 });
 
-    // تحميل HTML مع الخطوط العربية
     const fullHtml = wrapWithFonts(htmlContent);
     await page.setContent(fullHtml, {
-      waitUntil: ["networkidle0", "domcontentloaded"],
-      timeout: 60000,
+      waitUntil: ["domcontentloaded", "networkidle2"],
+      timeout: 30_000,
     });
 
-    // انتظار تحميل الخطوط
-    await page.evaluate(() => document.fonts.ready);
-    
-    // انتظار إضافي لضمان تحميل الخطوط العربية بالكامل
-    await new Promise(resolve => setTimeout(resolve, 2500));
-    
-    // انتظار تحميل الصور
-    await page.evaluate(() => {
-      return new Promise<void>((resolve) => {
-        const images = document.querySelectorAll("img");
-        if (images.length === 0) return resolve();
-        let loaded = 0;
-        const total = images.length;
-        images.forEach((img) => {
-          if (img.complete) {
-            loaded++;
-            if (loaded >= total) resolve();
-          } else {
-            img.onload = () => { loaded++; if (loaded >= total) resolve(); };
-            img.onerror = () => { loaded++; if (loaded >= total) resolve(); };
-          }
-        });
-        // Timeout fallback
-        setTimeout(resolve, 10000);
-      });
+    await page.evaluate(async () => {
+      await document.fonts.ready;
     });
+    await page.waitForNetworkIdle({ idleTime: 300, timeout: 5_000 }).catch(() => undefined);
 
-    // إنشاء PDF بجودة عالية
     const pdfBuffer = await page.pdf({
       format: options?.format || "A4",
       landscape: options?.landscape || false,
@@ -99,11 +102,6 @@ export async function renderHtmlToPdf(
   }
 }
 
-/**
- * تغليف HTML بالخطوط العربية والأنماط الأساسية
- * يستخدم خطوط Tajawal و Cairo مع أنماط طباعة عالية الجودة
- * محسّن ليطابق جودة edu-forms.com
- */
 function wrapWithFonts(html: string): string {
   return `<!DOCTYPE html>
 <html lang="ar" dir="rtl">
@@ -114,15 +112,8 @@ function wrapWithFonts(html: string): string {
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@200..1000&family=Tajawal:wght@200;300;400;500;700;800;900&display=swap" rel="stylesheet">
   <style>
-    @page {
-      size: A4;
-      margin: 0;
-    }
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
+    @page { size: A4; margin: 0; }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
     html, body {
       font-family: 'Cairo', 'Tajawal', 'Arial', sans-serif;
       direction: rtl;
@@ -139,10 +130,7 @@ function wrapWithFonts(html: string): string {
       text-rendering: optimizeLegibility;
       font-feature-settings: 'liga' 1, 'calt' 1;
     }
-    body {
-      width: 210mm;
-      min-height: 297mm;
-    }
+    body { width: 210mm; min-height: 297mm; }
     .pdf-page {
       width: 210mm;
       height: 297mm;
@@ -154,10 +142,7 @@ function wrapWithFonts(html: string): string {
       background: white;
       box-sizing: border-box;
     }
-    .pdf-page:last-child {
-      page-break-after: auto;
-    }
-    /* ضمان أن كل صفحة تأخذ حجم A4 بالضبط */
+    .pdf-page:last-child { page-break-after: auto; }
     body > div > div {
       width: 210mm;
       height: 297mm;
@@ -166,28 +151,20 @@ function wrapWithFonts(html: string): string {
       page-break-inside: avoid;
       overflow: hidden;
       box-sizing: border-box;
+      margin-bottom: 0 !important;
+      box-shadow: none !important;
     }
-    body > div > div:last-child {
-      page-break-after: auto;
-    }
-    /* الفواصل الفنية بين الصفحات - إخفاؤها في PDF */
-    [class*="print:hidden"], .print\:hidden {
-      display: none !important;
-    }
-    button, [data-no-print] {
-      display: none !important;
-    }
+    body > div > div:last-child { page-break-after: auto; }
+    [class*="print:hidden"], .print\:hidden, button, [data-no-print] { display: none !important; }
     img {
       max-width: 100%;
       display: inline-block;
       image-rendering: -webkit-optimize-contrast;
       image-rendering: crisp-edges;
     }
-    table {
-      border-collapse: collapse;
-      width: 100%;
-    }
-    td, th {
+    table { border-collapse: collapse; width: 100%; }
+    table td, table th { word-break: break-word; }
+    td, th, [style*="border"], [style*="linear-gradient"] {
       -webkit-print-color-adjust: exact;
       print-color-adjust: exact;
     }
@@ -195,40 +172,10 @@ function wrapWithFonts(html: string): string {
       font-family: 'Cairo', 'Tajawal', sans-serif;
       font-weight: 700;
     }
-    hr, .separator {
-      border: none;
-      height: 2px;
-      background: currentColor;
-    }
-    [style*="border"] {
-      -webkit-print-color-adjust: exact;
-      print-color-adjust: exact;
-    }
-    .field-row, .evidence-item {
-      page-break-inside: avoid;
-    }
-    /* تحسينات جودة الطباعة */
-    svg {
-      shape-rendering: geometricPrecision;
-    }
-    /* تحسين عرض الباركود */
-    img[alt="QR"], img[alt="qr"] {
-      image-rendering: pixelated;
-    }
-    /* ضمان عدم وجود فراغات بين الصفحات */
-    body > div > div {
-      margin-bottom: 0 !important;
-      box-shadow: none !important;
-    }
-    /* تحسين الجداول */
-    table td, table th {
-      word-break: break-word;
-    }
-    /* تحسين الألوان والتدرجات */
-    [style*="linear-gradient"] {
-      -webkit-print-color-adjust: exact;
-      print-color-adjust: exact;
-    }
+    hr, .separator { border: none; height: 2px; background: currentColor; }
+    .field-row, .evidence-item { page-break-inside: avoid; }
+    svg { shape-rendering: geometricPrecision; }
+    img[alt="QR"], img[alt="qr"] { image-rendering: pixelated; }
   </style>
 </head>
 <body>
@@ -238,42 +185,30 @@ ${html}
 }
 
 /**
- * تحويل HTML إلى Word عبر PDF كوسيط
- * ينشئ PDF أولاً ثم يحول كل صفحة إلى صورة PNG عبر pdftoppm ويضعها في Word
- * هذا يضمن تطابق 100% مع المعاينة
+ * تحويل HTML إلى Word عبر PDF كوسيط. المحتوى يمر عبر نفس عزل Chromium المستخدم للـPDF.
  */
 export async function renderHtmlToDocxPuppeteer(htmlContent: string): Promise<Buffer> {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'docx-export-'));
-  
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "docx-export-"));
+
   try {
-    // الخطوة 1: إنشاء PDF من HTML
     const pdfBuffer = await renderHtmlToPdf(htmlContent, {
-      format: 'A4',
+      format: "A4",
       printBackground: true,
-      margin: { top: '0', right: '0', bottom: '0', left: '0' },
+      margin: { top: "0", right: "0", bottom: "0", left: "0" },
       scale: 1,
     });
 
-    // حفظ PDF مؤقتاً
-    const pdfPath = path.join(tmpDir, 'export.pdf');
+    const pdfPath = path.join(tmpDir, "export.pdf");
     fs.writeFileSync(pdfPath, pdfBuffer);
+    const outputPrefix = path.join(tmpDir, "page");
+    execSync(`pdftoppm -png -r 300 "${pdfPath}" "${outputPrefix}"`, { timeout: 120_000 });
 
-    // الخطوة 2: تحويل PDF إلى صور PNG عبر pdftoppm (جودة عالية 300 DPI)
-    const outputPrefix = path.join(tmpDir, 'page');
-    execSync(`pdftoppm -png -r 300 "${pdfPath}" "${outputPrefix}"`, { timeout: 120000 });
-
-    // قراءة جميع الصور المنتجة
     const pngFiles = fs.readdirSync(tmpDir)
-      .filter(f => f.startsWith('page-') && f.endsWith('.png'))
+      .filter(file => file.startsWith("page-") && file.endsWith(".png"))
       .sort();
+    if (pngFiles.length === 0) throw new Error("pdftoppm لم ينتج أي صور");
+    const pageImages = pngFiles.map(file => fs.readFileSync(path.join(tmpDir, file)));
 
-    if (pngFiles.length === 0) {
-      throw new Error('pdftoppm لم ينتج أي صور');
-    }
-
-    const pageImages: Buffer[] = pngFiles.map(f => fs.readFileSync(path.join(tmpDir, f)));
-
-    // الخطوة 3: بناء مستند Word مع صورة لكل صفحة
     const {
       Document: Doc,
       Packer: Pack,
@@ -283,7 +218,7 @@ export async function renderHtmlToDocxPuppeteer(htmlContent: string): Promise<Bu
       PageOrientation: Orient,
     } = await import("docx");
 
-    const sections = pageImages.map((imgBuf) => ({
+    const sections = pageImages.map(image => ({
       properties: {
         page: {
           size: { width: 11906, height: 16838, orientation: Orient.PORTRAIT },
@@ -296,7 +231,7 @@ export async function renderHtmlToDocxPuppeteer(htmlContent: string): Promise<Bu
           spacing: { before: 0, after: 0 },
           children: [
             new ImgRun({
-              data: imgBuf,
+              data: image,
               transformation: { width: 595, height: 842 },
               type: "png",
             }),
@@ -306,22 +241,19 @@ export async function renderHtmlToDocxPuppeteer(htmlContent: string): Promise<Bu
     }));
 
     const doc = new Doc({ sections });
-    const buffer = await Pack.toBuffer(doc);
-    return Buffer.from(buffer);
-  } catch (err) {
-    console.error('[renderHtmlToDocxPuppeteer] Error:', err);
-    throw err;
+    return Buffer.from(await Pack.toBuffer(doc));
+  } catch (error) {
+    console.error("[renderHtmlToDocxPuppeteer] Error:", error);
+    throw error;
   } finally {
-    // تنظيف الملفات المؤقتة
     try {
       fs.rmSync(tmpDir, { recursive: true, force: true });
-    } catch (_) {}
+    } catch {
+      // Best-effort cleanup; temp directories are isolated per job.
+    }
   }
 }
 
-/**
- * إغلاق المتصفح عند إيقاف السيرفر
- */
 export async function closeBrowser() {
   if (browserInstance) {
     await browserInstance.close();
