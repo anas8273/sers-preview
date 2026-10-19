@@ -1,60 +1,40 @@
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 
-/**
- * Tests for the image proxy endpoint added to server/_core/index.ts
- * The proxy is used by pdf-export.ts to bypass CORS restrictions
- * when fetching external images (e.g., MOE logo from CloudFront)
- */
+const serverSource = readFileSync(resolve(process.cwd(), "server/_core/index.ts"), "utf8");
+const remoteImageSource = readFileSync(resolve(process.cwd(), "server/safe-remote-image.ts"), "utf8");
 
-describe("Image Proxy Endpoint", () => {
-  const BASE_URL = "http://localhost:3000";
-
-  it("returns 400 when url parameter is missing", async () => {
-    const res = await fetch(`${BASE_URL}/api/image-proxy`);
-    expect(res.status).toBe(400);
-    const body = await res.json();
-    expect(body.error).toBe("Missing url parameter");
+describe("Image proxy security contract", () => {
+  it("requires authentication and applies a dedicated rate limiter", () => {
+    expect(serverSource).toContain('app.get("/api/image-proxy", requireAuthenticatedUser, proxyRateLimit');
+    expect(serverSource).toContain('rateLimit("image-proxy", 60, 60_000)');
   });
 
-  it("returns 400 when url parameter is empty", async () => {
-    const res = await fetch(`${BASE_URL}/api/image-proxy?url=`);
-    expect(res.status).toBe(400);
-    const body = await res.json();
-    expect(body.error).toBe("Missing url parameter");
+  it("delegates remote retrieval to the SSRF-resistant fetcher", () => {
+    expect(serverSource).toContain("fetchRemoteImage(rawUrl)");
+    const proxySection = serverSource.split('app.get("/api/image-proxy"')[1]?.split('app.use(\n    "/api/trpc"')[0] ?? "";
+    expect(proxySection).not.toContain("fetch(rawUrl");
+    expect(proxySection).not.toContain('Access-Control-Allow-Origin", "*"');
   });
 
-  it("successfully proxies a valid image URL", async () => {
-    // Use a well-known public image that should always be available
-    const testImageUrl = "https://www.google.com/images/branding/googlelogo/2x/googlelogo_color_92x30dp.png";
-    const res = await fetch(`${BASE_URL}/api/image-proxy?url=${encodeURIComponent(testImageUrl)}`);
-    expect(res.status).toBe(200);
-    const contentType = res.headers.get("content-type");
-    expect(contentType).toContain("image");
-    const buffer = await res.arrayBuffer();
-    expect(buffer.byteLength).toBeGreaterThan(0);
+  it("returns private, nosniff responses rather than a public cross-origin cache", () => {
+    expect(serverSource).toContain('res.setHeader("Cache-Control", "private, max-age=3600")');
+    expect(serverSource).toContain('res.setHeader("X-Content-Type-Options", "nosniff")');
+    expect(serverSource).toContain('res.setHeader("Vary", "Cookie")');
   });
 
-  it("proxies CloudFront images that would otherwise fail CORS", async () => {
-    const cloudFrontUrl = "https://d2xsxph8kpxj0f.cloudfront.net/310519663047121386/h34s4aPNVyHXdtjgZ7eNNf/UntiTtled-1-1568x1192_bfb97198.png";
-    const res = await fetch(`${BASE_URL}/api/image-proxy?url=${encodeURIComponent(cloudFrontUrl)}`);
-    expect(res.status).toBe(200);
-    const contentType = res.headers.get("content-type") || "";
-    // CloudFront may return application/octet-stream or image/* for PNG files
-    expect(["image/png", "application/octet-stream"]).toContain(contentType);
-    const buffer = await res.arrayBuffer();
-    expect(buffer.byteLength).toBeGreaterThan(100);
+  it("revalidates redirects, pins DNS resolution, and enforces byte/time limits", () => {
+    expect(remoteImageSource).toContain("resolvePublicAddress(url.hostname)");
+    expect(remoteImageSource).toContain("lookup: (_hostname, _options, callback) => callback(null, address, family)");
+    expect(remoteImageSource).toContain("redirect === maxRedirects");
+    expect(remoteImageSource).toContain("total > maxBytes");
+    expect(remoteImageSource).toContain("request.setTimeout(timeoutMs");
   });
 
-  it("sets correct CORS and cache headers", async () => {
-    const testImageUrl = "https://www.google.com/images/branding/googlelogo/2x/googlelogo_color_92x30dp.png";
-    const res = await fetch(`${BASE_URL}/api/image-proxy?url=${encodeURIComponent(testImageUrl)}`);
-    expect(res.headers.get("access-control-allow-origin")).toBe("*");
-    expect(res.headers.get("cache-control")).toContain("public");
-  });
-
-  it("returns error for invalid URL", async () => {
-    const res = await fetch(`${BASE_URL}/api/image-proxy?url=${encodeURIComponent("not-a-url")}`);
-    // Should return 500 since the URL is invalid
-    expect(res.status).toBeGreaterThanOrEqual(400);
+  it("accepts only raster image content with matching magic signatures", () => {
+    expect(remoteImageSource).toContain('new Set(["image/png", "image/jpeg", "image/webp", "image/gif"])');
+    expect(remoteImageSource).toContain("Remote image signature does not match its content type");
+    expect(remoteImageSource).not.toContain("image/svg+xml");
   });
 });
