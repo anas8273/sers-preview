@@ -49,6 +49,8 @@ jobs:
         run: pnpm exec vitest run server/domain-integration.test.ts
       - name: Server-backed report draft integration tests
         run: pnpm exec vitest run server/work-report-draft-integration.test.ts
+      - name: Immutable WorkVersion output integration tests
+        run: pnpm exec vitest run server/work-version-output-integration.test.ts
       # Validate the canonical seed on the migration-clean database before any
       # suite mutates template fixtures. The seed helper currently short-circuits
       # when a template already exists, so running fixture-mutating suites first
