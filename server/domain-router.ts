@@ -30,6 +30,11 @@ import {
   ReviewConflictError,
   revokeOutputForUser,
 } from "./review-output-db";
+import {
+  generatePrivatePdfForWorkVersion,
+  getPrivatePdfDownloadForUser,
+  OutputArtifactUnavailableError,
+} from "./work-version-output-service";
 
 const notFound = (message: string) => new TRPCError({ code: "NOT_FOUND", message });
 const forbidden = (message: string) => new TRPCError({ code: "FORBIDDEN", message });
@@ -209,21 +214,47 @@ export const domainRouter = router({
         if (!list) throw forbidden("لا تملك صلاحية عرض مخرجات هذا العمل");
         return list;
       }),
+
+    generatePrivatePdf: protectedProcedure
+      .input(z.object({ workVersionId: z.number().int().positive() }))
+      .mutation(async ({ ctx, input }) => {
+        try {
+          const generated = await generatePrivatePdfForWorkVersion(ctx.user.id, input.workVersionId);
+          if (!generated) throw forbidden("لا تملك صلاحية إنشاء PDF لهذه النسخة");
+          return generated;
+        } catch (error) {
+          if (error instanceof OutputArtifactUnavailableError) throw conflict(error.message);
+          throw error;
+        }
+      }),
+
+    downloadPrivatePdf: protectedProcedure
+      .input(z.object({ id: z.number().int().positive() }))
+      .mutation(async ({ ctx, input }) => {
+        try {
+          const download = await getPrivatePdfDownloadForUser(ctx.user.id, input.id);
+          if (!download) throw notFound("المخرج غير موجود أو لا تملك صلاحية تنزيله");
+          return download;
+        } catch (error) {
+          if (error instanceof OutputArtifactUnavailableError) throw badRequest(error.message);
+          throw error;
+        }
+      }),
+
     create: protectedProcedure
       .input(z.object({
         workVersionId: z.number().int().positive(),
-        type: z.enum(["pdf", "link", "qr"]),
+        type: z.enum(["link", "qr"]),
         visibility: z.enum(["private", "protected", "public"]).default("private"),
         password: z.string().min(6).max(128).optional(),
         expiresAt: z.coerce.date().optional(),
       }).superRefine((value, ctx) => {
         if (value.visibility === "protected" && !value.password) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["password"], message: "أدخل رمز حماية للمخرج" });
-        if (value.type === "pdf" && value.visibility !== "private") ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["visibility"], message: "مخرج PDF في هذه المرحلة خاص ويحتاج مسار تخزين آمن قبل المشاركة" });
         if (value.expiresAt && value.expiresAt.getTime() <= Date.now()) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["expiresAt"], message: "يجب أن يكون تاريخ الانتهاء في المستقبل" });
       }))
       .mutation(async ({ ctx, input }) => {
         try {
-          const token = input.type === "link" || input.type === "qr" ? nanoid(32) : undefined;
+          const token = nanoid(32);
           const output = await createOutputForUser(ctx.user.id, {
             workVersionId: input.workVersionId,
             type: input.type,
@@ -239,6 +270,7 @@ export const domainRouter = router({
           throw error;
         }
       }),
+
     revoke: protectedProcedure
       .input(z.object({ id: z.number().int().positive() }))
       .mutation(async ({ ctx, input }) => {
