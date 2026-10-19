@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { outputs, reviews, workItems, workVersions } from "../drizzle/domain-core";
 import { getDb } from "./db";
 import { verifyProtectedOutputPassword } from "./output-password";
@@ -120,7 +120,7 @@ export async function resolvePublicOutput(token: string, password?: string) {
     .from(outputs)
     .innerJoin(workVersions, eq(outputs.workVersionId, workVersions.id))
     .innerJoin(workItems, eq(workVersions.workItemId, workItems.id))
-    .where(and(eq(outputs.token, token), eq(workItems.deletedAt, null as never)))
+    .where(and(eq(outputs.token, token), isNull(workItems.deletedAt)))
     .limit(1);
 
   if (!row) throw new PublicOutputNotFoundError();
