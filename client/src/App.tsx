@@ -3,6 +3,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/NotFound";
 import { Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
+import ReportPdfActions from "./components/ReportPdfActions";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { lazy, Suspense } from "react";
 import BottomNav from "./components/BottomNav";
@@ -91,6 +92,7 @@ function App() {
         <TooltipProvider>
           <Toaster />
           <Router />
+          <ReportPdfActions />
           <BottomNav />
         </TooltipProvider>
       </ThemeProvider>
