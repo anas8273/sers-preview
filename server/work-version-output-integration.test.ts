@@ -83,7 +83,7 @@ suite("immutable WorkVersion PDF output pipeline against real MySQL", () => {
     return { work: work!, version };
   }
 
-  it("renders, hashes, stores, records, and returns a signed private PDF exactly once", async () => {
+  it("renders, hashes, stores, records, and returns a private PDF exactly once on sequential requests", async () => {
     const { version } = await createVersion();
     const pdfBytes = Buffer.from("%PDF-1.4\nimmutable-report-output\n%%EOF", "utf8");
     const expectedHash = createHash("sha256").update(pdfBytes).digest("hex");
@@ -110,6 +110,7 @@ suite("immutable WorkVersion PDF output pipeline against real MySQL", () => {
 
     const first = await generatePrivatePdfForWorkVersion(ownerId, version.id, dependencies);
     expect(first?.reused).toBe(false);
+    expect(first?.rendererVersion).toBe(1);
     expect(first?.contentHash).toBe(expectedHash);
     expect(first?.storageKey).toContain(`/version-${version.id}/${expectedHash}.pdf`);
     expect(first?.downloadUrl).toContain("https://signed.example/");
@@ -128,6 +129,41 @@ suite("immutable WorkVersion PDF output pipeline against real MySQL", () => {
     expect(rows[0].type).toBe("pdf");
     expect(rows[0].visibility).toBe("private");
     expect(rows[0].storageKey).toBe(first?.storageKey);
+  });
+
+  it("deduplicates concurrent PDF generation with one renderer-version output row", async () => {
+    const { version } = await createVersion();
+    const pdfBytes = Buffer.from("%PDF-1.4\nconcurrent-output\n%%EOF", "utf8");
+    let renderCalls = 0;
+    let uploadCalls = 0;
+
+    const dependencies = {
+      renderPdf: async () => {
+        renderCalls += 1;
+        await new Promise(resolve => setTimeout(resolve, 20));
+        return pdfBytes;
+      },
+      putStorage: async (key: string) => {
+        uploadCalls += 1;
+        await new Promise(resolve => setTimeout(resolve, 10));
+        return { key, url: `upload://${key}` };
+      },
+      getStorage: async (key: string) => ({ key, url: `https://signed.example/${encodeURIComponent(key)}` }),
+    };
+
+    const [first, second] = await Promise.all([
+      generatePrivatePdfForWorkVersion(ownerId, version.id, dependencies),
+      generatePrivatePdfForWorkVersion(ownerId, version.id, dependencies),
+    ]);
+
+    expect(first?.outputId).toBe(second?.outputId);
+    expect([first?.reused, second?.reused].sort()).toEqual([false, true]);
+    expect(renderCalls).toBe(2);
+    expect(uploadCalls).toBe(2);
+
+    const db = await getDb();
+    const rows = await db!.select().from(outputs).where(eq(outputs.workVersionId, version.id));
+    expect(rows).toHaveLength(1);
   });
 
   it("does not render or upload when the caller cannot write the WorkVersion", async () => {
@@ -150,7 +186,7 @@ suite("immutable WorkVersion PDF output pipeline against real MySQL", () => {
     expect(uploadCalls).toBe(0);
   });
 
-  it("refuses to issue a download after the output is revoked", async () => {
+  it("refuses download and regeneration after a version output is revoked", async () => {
     const { version } = await createVersion();
     const dependencies = {
       renderPdf: async () => Buffer.from("%PDF-1.4\nrevocable\n%%EOF"),
@@ -164,5 +200,7 @@ suite("immutable WorkVersion PDF output pipeline against real MySQL", () => {
     await expect(getPrivatePdfDownloadForUser(ownerId, generated!.outputId, {
       getStorage: dependencies.getStorage,
     })).rejects.toBeInstanceOf(OutputArtifactUnavailableError);
+    await expect(generatePrivatePdfForWorkVersion(ownerId, version.id, dependencies))
+      .rejects.toThrow(/revoked/i);
   });
 });
