@@ -8,6 +8,8 @@ const DEFAULT_TIMEOUT_MS = 8_000;
 const DEFAULT_MAX_REDIRECTS = 3;
 const ALLOWED_CONTENT_TYPES = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
 
+type ResolvedPublicAddress = { address: string; family: 4 | 6 };
+
 export class RemoteImageError extends Error {
   constructor(message: string, public readonly statusCode = 400) {
     super(message);
@@ -67,10 +69,11 @@ export function validateRemoteImageUrl(value: string, base?: URL) {
   return url;
 }
 
-async function resolvePublicAddress(hostname: string) {
-  if (net.isIP(hostname)) {
+async function resolvePublicAddress(hostname: string): Promise<ResolvedPublicAddress> {
+  const literalFamily = net.isIP(hostname);
+  if (literalFamily) {
     if (!isPublicIpAddress(hostname)) throw new RemoteImageError("Private or reserved image address is not allowed");
-    return { address: hostname, family: net.isIP(hostname) as 4 | 6 };
+    return { address: hostname, family: literalFamily === 6 ? 6 : 4 };
   }
 
   const records = await lookup(hostname, { all: true, verbatim: true });
@@ -78,7 +81,8 @@ async function resolvePublicAddress(hostname: string) {
   if (records.some(record => !isPublicIpAddress(record.address))) {
     throw new RemoteImageError("Image hostname resolves to a private or reserved address");
   }
-  return records[0];
+  const record = records[0];
+  return { address: record.address, family: record.family === 6 ? 6 : 4 };
 }
 
 function normalizeContentType(value?: string) {
