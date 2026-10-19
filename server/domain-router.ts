@@ -17,6 +17,7 @@ import {
   updateWorkItemForUser,
   WorkVersionConflictError,
 } from "./domain-db";
+import { reportDraftRouter } from "./report-draft-router";
 import {
   addReviewCommentForUser,
   createOutputForUser,
@@ -104,6 +105,8 @@ export const domainRouter = router({
         return { success: true } as const;
       }),
   }),
+
+  reportDraft: reportDraftRouter,
 
   asset: router({
     list: protectedProcedure.query(({ ctx }) => listAssetsForUser(ctx.user.id)),
