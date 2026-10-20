@@ -37,7 +37,7 @@ function assertRateLimit(ip: string | undefined, token: string) {
   }
 
   if (buckets.size > 10_000) {
-    for (const [bucketKey, value] of buckets) {
+    for (const [bucketKey, value] of Array.from(buckets.entries())) {
       if (value.resetAt <= now) buckets.delete(bucketKey);
     }
   }
