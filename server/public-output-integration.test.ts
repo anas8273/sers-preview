@@ -137,7 +137,7 @@ suite("public and protected WorkVersion outputs against real MySQL", () => {
   }
 
   it("delivers only safe report fields and selected evidence from an approved public link", async () => {
-    const { version, selected, unselected } = await createReportVersion(true);
+    const { version } = await createReportVersion(true);
     const publicToken = token("public-link");
     const output = await createOutputForUser(ownerId, {
       workVersionId: version.id,
@@ -158,11 +158,15 @@ suite("public and protected WorkVersion outputs against real MySQL", () => {
     expect(resolved.report.evidence).toEqual([
       expect.objectContaining({ title: "شاهد مختار", caption: "دليل التنفيذ المراجع" }),
     ]);
+    expect(resolved.report.evidence[0]).not.toHaveProperty("id");
+    expect(resolved.report.evidence[0]).not.toHaveProperty("externalUrl");
+    expect(resolved.report).not.toHaveProperty("ownerUserId");
+    expect(resolved.report).not.toHaveProperty("ownerOrganizationId");
+    expect(resolved).not.toHaveProperty("storageKey");
 
     const serialized = JSON.stringify(resolved);
-    expect(serialized).not.toContain(String(selected.id));
-    expect(serialized).not.toContain(String(unselected.id));
     expect(serialized).not.toContain("private-source.example");
+    expect(serialized).not.toContain("شاهد غير مختار");
     expect(serialized).not.toContain("ownerUserId");
     expect(serialized).not.toContain("ownerOrganizationId");
     expect(serialized).not.toContain("storageKey");
