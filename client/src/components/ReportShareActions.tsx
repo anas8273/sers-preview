@@ -20,8 +20,8 @@ import { trpc } from "@/lib/trpc";
 type CreatedOutput = {
   id: number;
   token: string | null;
-  type: "link" | "qr" | "pdf";
-  visibility: "private" | "protected" | "public";
+  type: "link" | "qr";
+  visibility: "protected" | "public";
   expiresAt: Date | null;
 };
 
@@ -51,7 +51,7 @@ export default function ReportShareActions() {
     { workItemId: workId },
     { enabled: validWorkId, retry: false, refetchOnWindowFocus: false },
   );
-  const createMutation = trpc.domain.output.create.useMutation();
+  const createMutation = trpc.shareOutput.create.useMutation();
   const revokeMutation = trpc.domain.output.revoke.useMutation();
 
   const versions = useMemo(
