@@ -74,10 +74,12 @@ test('public output browser flow with HTTP fixtures', { timeout: 90_000 }, async
       await page.setViewport({ width: 390, height: 844 });
       await goto('public'); await visible('PUBLIC_REPORT');
       assert.equal(await page.$('#report-share-actions'), null);
+      assert.equal(await page.$('nav'), null);
+      assert.equal(await page.evaluate(() => document.body.innerText.includes('مشاركة النسخة')), false);
       assert.equal(await page.$eval('main', element => element.getAttribute('dir')), 'rtl');
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
     });
-    await t.test('protected report accepts only the correct password and clears the input', async () => {
+    await t.test('protected report accepts only the correct password and hides the password form', async () => {
       await goto('protected'); await visible('هذا المخرج محمي');
       assert.equal(await page.evaluate(() => document.body.innerText.includes('PROTECTED_REPORT')), false);
       await page.type('#output-password', 'wrong-secret'); await clickText('عرض المخرج');
@@ -100,7 +102,11 @@ test('public output browser flow with HTTP fixtures', { timeout: 90_000 }, async
       await goto('slow'); await requested;
       await page.evaluate(path => { history.pushState({}, '', path); dispatchEvent(new PopStateEvent('popstate')); }, `/output/${token('next')}`);
       await visible('NEXT_REPORT');
-      releaseSlow?.(); await page.waitForNetworkIdle({ idleTime: 200 });
+      const lateResponse = page.waitForResponse(response =>
+        response.url().includes('/api/trpc/publicOutput.resolve')
+        && (response.request().postData() ?? '').includes(token('slow')));
+      releaseSlow?.(); await (await lateResponse).json();
+      await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
       assert.equal(await page.evaluate(() => document.body.innerText.includes('OLD_REPORT')), false);
       assert.equal(await page.evaluate(() => document.body.innerText.includes('NEXT_REPORT')), true);
       assert(requests.some(request => request.token === token('next')));
