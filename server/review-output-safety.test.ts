@@ -43,7 +43,7 @@ describe("review/output domain invariants", () => {
 
   it("stores only password hashes for protected outputs", () => {
     expect(schema).toContain('passwordHash: varchar("passwordHash"');
-    expect(router).toContain("hashOutputPassword");
+    expect(router).toContain("hashProtectedOutputPassword");
     expect(reviewService).toContain("passwordHash: input.passwordHash ?? null");
   });
 

@@ -85,6 +85,27 @@
       "when": 1789308825601,
       "tag": "0011_ordinary_rockslide",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "5",
+      "when": 1792603798922,
+      "tag": "0012_equal_stranger",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "5",
+      "when": 1792604294866,
+      "tag": "0013_icy_terrax",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "5",
+      "when": 1792604339914,
+      "tag": "0014_serious_magneto",
+      "breakpoints": true
     }
   ]
 }

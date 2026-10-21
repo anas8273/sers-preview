@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { hashProtectedOutputPassword } from "./output-password";
 import { nanoid } from "nanoid";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
@@ -40,7 +40,6 @@ const notFound = (message: string) => new TRPCError({ code: "NOT_FOUND", message
 const forbidden = (message: string) => new TRPCError({ code: "FORBIDDEN", message });
 const badRequest = (message: string) => new TRPCError({ code: "BAD_REQUEST", message });
 const conflict = (message: string) => new TRPCError({ code: "CONFLICT", message });
-const hashOutputPassword = (value: string) => createHash("sha256").update(value, "utf8").digest("hex");
 
 export const domainRouter = router({
   work: router({
@@ -260,7 +259,8 @@ export const domainRouter = router({
             type: input.type,
             visibility: input.visibility,
             token,
-            passwordHash: input.password ? hashOutputPassword(input.password) : undefined,
+            passwordHash: input.visibility === "protected" && input.password
+              ? hashProtectedOutputPassword(input.password) : undefined,
             expiresAt: input.expiresAt,
           });
           if (!output) throw forbidden("لا تملك صلاحية إنشاء مخرج لهذه النسخة");

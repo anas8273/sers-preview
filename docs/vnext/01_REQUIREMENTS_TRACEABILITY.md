@@ -2,6 +2,7 @@
 
 **المرجع:** `00_MASTER_RECONCILIATION.md`  
 **الحالة:** Baseline للتتبع؛ لا يعني أن المتطلبات التالية منفذة أو معتمدة للإطلاق.
+**مصالحة التنفيذ:** 2026-10-21 — #25–#30 مدمجة؛ #31 غير مدمج، ودليله المثبت على `15ba7d5667de3ffc8e47a26d7d8d64d940e4a860` في [سجل التسليم](07_PHASE_HANDOFF_2026-10-21.md).
 
 ---
 
@@ -29,11 +30,11 @@
 | R04 | رفع الأصل مرة وإعادة استخدامه | PARTIAL | WorkAssetLink وlink/unlink | Used-in، أثر الحذف، مشاركة عابرة للسياقات، إصدارات الأصل |
 | R05 | صورة/فيديو/مستند/رابط/نص | PARTIAL | رابط/نص في النواة، upload قديم، تحسينات PR12 | secure media pipeline، quarantine، scanning، quotas، protected delivery |
 | R06 | اقتراح/إنشاء شاهد ذكي حسب السياق | DESIGNED | متطلبات وAI قديم منفصل | Contextual AI، provenance، confidence، قبول/رفض، منع اختلاق التنفيذ |
-| R07 | تقرير من البيانات والشواهد | PARTIAL | ReportCenter قديم + Work Core | حفظ المحتوى في Work، versioned template، immutable render |
+| R07 | تقرير من البيانات والشواهد | PARTIAL | #27: مسودة خادمية وشواهد مختارة ونسخة ثابتة؛ #29/#30: PDF من النسخة | versioned template/licensing، Word، Golden QA، وترحيل المحررات القديمة |
 | R08 | ملف إنجاز ديناميكي مرجعي | DESIGNED/PARTIAL | محرر قديم ونوع portfolio | تجميع أعمال وأصول مرجعية، نواقص، ترتيب، نسخة ومخرج |
 | R09 | التقويم الذاتي أولوية حديثة | MISSING | لا route/domain متكامل | دورة/لجنة/معيار/تقدير/مراجعة/فجوة/تحسين |
-| R10 | المراجعة والاعتماد على نسخة ثابتة | PARTIAL | Review/Output على WorkVersion | منع status bypass، إعادة تفويض لحظة القرار، concurrency، multi-review policy |
-| R11 | PDF/Word/رابط/QR | PARTIAL | PDF قديم، Output records، روابط قديمة | render من WorkVersion، Word/QR حقيقيان، revoke/expiry/download auth |
+| R10 | المراجعة والاعتماد على نسخة ثابتة | PARTIAL | #26: منع status bypass، إعادة تفويض المراجع، اختبارات القرار المتزامن واعتماد نسخة قديمة | مصفوفة الصلاحيات لجميع القنوات، سحب العضوية، وحسم multi-review policy O002 |
+| R11 | PDF/Word/رابط/QR | PARTIAL | #29/#30: PDF خاص من WorkVersion؛ #31 غير مدمج: رابط/QR محمي وانتهاء وإلغاء، واختبار متصفح→MySQL | Word قابل للتعديل، Golden PDF/Word، فك/مسح QR، الهوية والتخزين الإنتاجيان ومراجعة مسارات التنزيل |
 | R12 | القالب منفصل عن المحتوى | PARTIAL | themes/templates قديمة | Template Version، compatibility، rollback بلا فقد، licensing |
 | R13 | شراء واستحقاق وتطبيق واسترداد | DESIGNED/PARTIAL | Product/Purchase/Entitlement schema، متجر قديم | مزود فعلي، webhook، idempotency، refund، apply/retry |
 | R14 | معايير رسمية بإصدارات ومصادر | DESIGNED/PARTIAL | StandardVersion schema | Registry كامل، مصادر رسمية، effective dates، applicability، change log |
@@ -43,7 +44,7 @@
 | R18 | خصوصية وتصنيف واحتفاظ وإتلاف | MISSING/PARTIAL | ownership/audit جزئي | classification، minors/PII، redaction، retention، deletion، backup handling |
 | R19 | RTL، جوال، وصول، طباعة | PARTIAL | واجهة عربية ونموذج 32 شاشة | browser/device matrix، screen reader، keyboard، visual PDF/Word QA |
 | R20 | AI متعدد المزودين وحصص وتتبع | MISSING/PARTIAL | استدعاءات AI قديمة | AI Gateway، provider abstraction، quotas، timeout، model/prompt version، evals |
-| R21 | حفظ وتزامن وتعارض ونسخ | PARTIAL | WorkVersion، localStorage، قيود DB | server source of truth، autosave، optimistic locking، recovery/import |
+| R21 | حفظ وتزامن وتعارض ونسخ | PARTIAL | #27: مصدر خادمي، autosave وexpectedRevision، حفظ متزامن ونسخة سلطوية؛ local backup للاستعادة | إثبات التعافي عبر المتصفح/الأجهزة لجميع المحررات، recovery/import وrestore-as-new-head |
 | R22 | مراقبة ونسخ احتياطية وتعافٍ | MISSING/PARTIAL | CI وlogs متفرقة | observability، alerts، backup، restore drill، RTO/RPO، runbooks |
 
 ---
@@ -76,7 +77,7 @@
 | P0-022 | RTL وهاتف/سطح مكتب | PARTIAL | device QA وvisual regression |
 | P0-023 | Keyboard/focus/labels/reduced motion | MISSING/PARTIAL | accessibility tests |
 | P0-024 | 5 مستخدمين ثم 3 جدد | MISSING | supervised usability study |
-| P0-025 | IDOR/tenant isolation/role escalation | PARTIAL | integrate PR11/12 + all-channel tests |
+| P0-025 | IDOR/tenant isolation/role escalation | PARTIAL | تكامل PR11/12 اكتمل في #25؛ يبقى all-channel وmembership transition coverage |
 | P0-026 | CSRF/CSP/HSTS/rate/session controls | MISSING/PARTIAL | security headers, limits, session registry |
 | P0-027 | Quarantine/MIME/magic/malware/EXIF | PARTIAL | scanning/CDR/metadata policy |
 | P0-028 | Audit append-only للأحداث الحساسة | PARTIAL | coverage لكل command وread حساس |
@@ -111,7 +112,7 @@
 
 | ID | الحالة | الوضع | شرط الإغلاق |
 |---|---|---|---|
-| F01 | حساب A يشارك/يرفع لملف B | PARTIAL عبر PR12 | API+DB+no-side-effect tests بعد الدمج |
+| F01 | حساب A يشارك/يرفع لملف B | PARTIAL عبر #25 | API+DB+no-side-effect للعمليات المحددة مثبتة؛ تغطية جميع القنوات باقية |
 | F02 | مستخدم يغادر المدرسة | MISSING | list/get/search/export/share/save-late كلها ترفض |
 | F03 | أصل بين مدرستين | MISSING | ShareGrant صريح وإلغاء فعّال |
 | F04 | الكاتب يرسل approved | OPEN | command-only transition واختبار سلبي |
@@ -213,7 +214,7 @@
 
 ## قبل دمج إصلاحات النواة
 
-- مراجعة PR11 وPR12 معًا.
+- اكتملت مراجعة/مصالحة PR11 وPR12 عبر #25؛ يجب الحفاظ على تغطيتهما عند التغييرات اللاحقة.
 - لا workflow متكرر أو اختبارات متضاربة.
 - CI على SHA محدد.
 - MySQL migrations واختبارات ownership/rollback/concurrency.
