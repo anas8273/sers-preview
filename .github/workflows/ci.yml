@@ -42,6 +42,8 @@ jobs:
             --exclude server/image-proxy.test.ts
       - name: Production build
         run: pnpm build
+      - name: Public output browser integration (HTTP fixtures)
+        run: pnpm exec tsx --test tests/browser/public-output.mts
       - name: Document environment-dependent integration suite
         shell: bash
         run: |
