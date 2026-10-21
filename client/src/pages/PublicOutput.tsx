@@ -37,6 +37,10 @@ function PublicOutputSession({ token }: { token: string }) {
       if (error.data?.code === "UNAUTHORIZED") {
         setRequiresPassword(true);
         setPasswordError(error.message.includes("غير صحيحة") ? error.message : undefined);
+      } else {
+        setRequiresPassword(false);
+        setPasswordError(undefined);
+        setPassword("");
       }
     },
   });

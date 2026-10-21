@@ -27,16 +27,19 @@
 | المستودع | `anas8273/sers-preview` |
 | الدور | التنفيذ النشط لـvNext |
 | Stack الحالي | React/Vite + Node/Express/tRPC + Drizzle/MySQL |
-| main SHA عند المصالحة | `2343f757bd1fcd943044ef6c8e085beaf6612460` |
+| main SHA التاريخي عند المصالحة | `2343f757bd1fcd943044ef6c8e085beaf6612460` |
+| main SHA المراجع 2026-10-21 | `3b56072db1b1af0979f9a79af9a29fc062585be5` |
 | حالة الثقة | مرتفعة للكود الموجود؛ تحتاج كل claim إلى SHA/اختبار |
 
 ### PRs مهمة
 
 | PR | الحالة عند الفحص | المعنى |
 |---|---|---|
-| #11 | Draft/Open | MySQL domain integration وtenant-isolation gate |
-| #12 | Draft/Open | legacy ownership/share/upload fixes واختبارات MySQL |
-| #13 | Draft/Open | المصالحة الحاكمة والمتطلبات والـADR والـbacklog |
+| #11 | Closed/Superseded | نُقلت أعماله عبر #24 إلى #25 المدمج |
+| #12 | Closed/Superseded | نُقلت أعماله عبر #23 إلى #25 المدمج |
+| #13 | Merged | وثائق المصالحة؛ لا يعني الدمج حسم جميع القرارات المفتوحة |
+| #25–#30 | Merged | التكامل وضبط النسخ والمراجعة ومحرر التقرير وPDF؛ انظر سجل التسليم |
+| #31 | Draft/Open | مشاركة النسخة؛ آخر دليل `15ba7d5667de3ffc8e47a26d7d8d64d940e4a860`، غير مدمج |
 
 ### Issues التنفيذية الناتجة عن المصالحة
 

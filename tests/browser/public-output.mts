@@ -26,6 +26,7 @@ test('public output browser flow with HTTP fixtures', { timeout: 90_000 }, async
   let releaseSlow: (() => void) | undefined;
   let slowRequested: (() => void) | undefined;
   let failNetwork = true;
+  let protectedRevoked = false;
   const requests: { token: string; password?: string }[] = [];
   app.post('/api/trpc/publicOutput.resolve', async (req, res) => {
     const batched = req.query.batch === '1';
@@ -42,6 +43,7 @@ test('public output browser flow with HTTP fixtures', { timeout: 90_000 }, async
       return send(failure('NOT_FOUND', 'المخرج غير متاح أو انتهت صلاحيته.'));
     }
     if (input.token === token('protected')) {
+      if (protectedRevoked) return send(failure('NOT_FOUND', 'المخرج غير متاح أو انتهت صلاحيته.'));
       if (!input.password) return send(failure('UNAUTHORIZED', 'هذا المخرج محمي بكلمة مرور.'));
       if (input.password !== 'correct-secret') return send(failure('UNAUTHORIZED', 'كلمة المرور غير صحيحة.'));
       return send(success(report('PROTECTED_REPORT', 'protected')));
@@ -90,6 +92,15 @@ test('public output browser flow with HTTP fixtures', { timeout: 90_000 }, async
       assert.equal(await page.$('#output-password'), null);
       assert.equal(await page.evaluate(() => JSON.stringify({ ...localStorage, ...sessionStorage }).includes('correct-secret')), false);
       assert.equal(page.url().includes('secret'), false);
+    });
+    await t.test('revocation while password prompt is open removes the obsolete form', async () => {
+      await goto('protected'); await visible('هذا المخرج محمي');
+      protectedRevoked = true;
+      await page.type('#output-password', 'correct-secret'); await clickText('عرض المخرج');
+      await visible('المخرج غير متاح');
+      assert.equal(await page.$('#output-password'), null);
+      assert.equal(await page.$('article'), null);
+      protectedRevoked = false;
     });
     for (const name of ['revoked', 'expired', 'invalid']) {
       await t.test(`${name} response shows no previous report`, async () => {
