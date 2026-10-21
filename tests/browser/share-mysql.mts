@@ -70,7 +70,10 @@ test('browser creates, opens and revokes protected QR against real MySQL', { tim
     }, text);
     await page.goto(`${base}/work/${work.id}/report`);
     await visible('مشاركة النسخة'); await click('مشاركة النسخة');
-    await page.waitForFunction(() => (document.querySelector('#report-share-actions select') as HTMLSelectElement)?.value !== '');
+    await page.waitForFunction(() => {
+      const select = document.querySelector('#report-share-actions select') as HTMLSelectElement | null;
+      return Boolean(select && select.value);
+    });
     await click('QR'); await click('كلمة مرور');
     await page.type('#report-share-actions input[type=password]', 'browser-secret');
     await click('إنشاء QR');
@@ -100,6 +103,6 @@ test('browser creates, opens and revokes protected QR against real MySQL', { tim
     await browser?.close();
     if (server) { server.closeAllConnections(); await new Promise<void>(resolve => server!.close(() => resolve())); }
     // The entire synthetic service DB is discarded by Actions; close the pool to exit cleanly.
-    await (db as unknown as { $client: { end(): Promise<void> } }).$client.end();
+    await (db as unknown as { $client: { promise(): { end(): Promise<void> } } }).$client.promise().end();
   }
 });
