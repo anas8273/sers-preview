@@ -85,6 +85,13 @@
       "when": 1789308825601,
       "tag": "0011_ordinary_rockslide",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "5",
+      "when": 1792603798922,
+      "tag": "0012_equal_stranger",
+      "breakpoints": true
     }
   ]
 }
