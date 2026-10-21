@@ -69,3 +69,7 @@ jobs:
       # correctly returns FORBIDDEN; running it here would assert obsolete behavior.
       - name: Existing template DB suite with isolated fixtures
         run: pnpm exec vitest run server/templates-themes.test.ts
+      - name: Build browser application
+        run: pnpm build
+      - name: Browser to real MySQL share creation and revocation
+        run: pnpm exec tsx --test tests/browser/share-mysql.mts
