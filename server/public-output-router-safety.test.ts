@@ -16,9 +16,11 @@ describe("public output router safety", () => {
     expect(shareRouterSource).toContain("protectedProcedure");
   });
 
-  it("rate-limits public resolution without storing raw tokens in bucket keys", () => {
-    expect(publicRouterSource).toContain('createHash("sha256").update(token');
-    expect(publicRouterSource).toContain("MAX_ATTEMPTS = 30");
+  it("applies the bounded limiter before resolving public output data", () => {
+    expect(publicRouterSource).toContain("rateLimiter.allow(ip, token)");
+    expect(publicRouterSource.indexOf("assertRateLimit(ctx.req.ip, input.token)")).toBeLessThan(
+      publicRouterSource.indexOf("return await resolvePublicOutput(input.token, input.password)"),
+    );
     expect(publicRouterSource).toContain('code: "TOO_MANY_REQUESTS"');
   });
 

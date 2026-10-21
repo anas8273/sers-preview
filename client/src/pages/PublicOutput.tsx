@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useRef, useState } from "react";
+import React, { FormEvent, useEffect, useRef, useState } from "react";
 import {
   AlertTriangle,
   CalendarClock,
@@ -17,6 +17,11 @@ import { trpc } from "@/lib/trpc";
 export default function PublicOutput() {
   const [, params] = useRoute<{ token: string }>("/output/:token");
   const token = params?.token?.trim() || "";
+  // Reset mutation data and credentials synchronously when the route changes.
+  return <PublicOutputSession key={token} token={token} />;
+}
+
+function PublicOutputSession({ token }: { token: string }) {
   const attemptedRef = useRef(false);
   const [password, setPassword] = useState("");
   const [requiresPassword, setRequiresPassword] = useState(false);
@@ -24,6 +29,7 @@ export default function PublicOutput() {
 
   const resolveMutation = trpc.publicOutput.resolve.useMutation({
     onSuccess: () => {
+      setPassword("");
       setRequiresPassword(false);
       setPasswordError(undefined);
     },

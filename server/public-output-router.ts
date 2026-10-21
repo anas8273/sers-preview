@@ -1,7 +1,7 @@
-import { createHash } from "node:crypto";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { publicProcedure, router } from "./_core/trpc";
+import { createPublicOutputRateLimiter } from "./public-output-rate-limit";
 import {
   PublicOutputNotFoundError,
   PublicOutputPasswordInvalidError,
@@ -9,37 +9,14 @@ import {
   resolvePublicOutput,
 } from "./public-output-service";
 
-type RateBucket = { count: number; resetAt: number };
-const buckets = new Map<string, RateBucket>();
-const WINDOW_MS = 5 * 60_000;
-const MAX_ATTEMPTS = 30;
-
-function requestIdentity(ip: string | undefined, token: string) {
-  const tokenDigest = createHash("sha256").update(token, "utf8").digest("hex").slice(0, 20);
-  return `${ip || "unknown"}:${tokenDigest}`;
-}
+const rateLimiter = createPublicOutputRateLimiter();
 
 function assertRateLimit(ip: string | undefined, token: string) {
-  const now = Date.now();
-  const key = requestIdentity(ip, token);
-  const existing = buckets.get(key);
-  const bucket = !existing || existing.resetAt <= now
-    ? { count: 0, resetAt: now + WINDOW_MS }
-    : existing;
-  bucket.count += 1;
-  buckets.set(key, bucket);
-
-  if (bucket.count > MAX_ATTEMPTS) {
+  if (!rateLimiter.allow(ip, token)) {
     throw new TRPCError({
       code: "TOO_MANY_REQUESTS",
       message: "تم تجاوز عدد المحاولات المسموح. حاول لاحقًا.",
     });
-  }
-
-  if (buckets.size > 10_000) {
-    for (const [bucketKey, value] of Array.from(buckets.entries())) {
-      if (value.resetAt <= now) buckets.delete(bucketKey);
-    }
   }
 }
 

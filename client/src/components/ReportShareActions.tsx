@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   CalendarClock,
   Check,
@@ -36,6 +36,10 @@ export default function ReportShareActions() {
   const [matches, params] = useRoute<{ id: string }>("/work/:id/report");
   const workId = Number(params?.id);
   const validWorkId = matches && Number.isInteger(workId) && workId > 0;
+  return validWorkId ? <ReportShareSession key={workId} workId={workId} /> : null;
+}
+
+function ReportShareSession({ workId }: { workId: number }) {
   const [open, setOpen] = useState(false);
   const [selectedVersionId, setSelectedVersionId] = useState<number | undefined>();
   const [type, setType] = useState<"link" | "qr">("link");
@@ -49,7 +53,7 @@ export default function ReportShareActions() {
 
   const versionsQuery = trpc.reviewSupport.versions.useQuery(
     { workItemId: workId },
-    { enabled: validWorkId, retry: false, refetchOnWindowFocus: false },
+    { retry: false, refetchOnWindowFocus: false },
   );
   const createMutation = trpc.shareOutput.create.useMutation();
   const revokeMutation = trpc.domain.output.revoke.useMutation();
@@ -64,6 +68,8 @@ export default function ReportShareActions() {
   }, [selectedVersionId, versions]);
 
   useEffect(() => {
+    let cancelled = false;
+    setQrDataUrl(undefined);
     if (!created?.token || typeof window === "undefined") {
       setShareUrl("");
       setQrDataUrl(undefined);
@@ -76,10 +82,12 @@ export default function ReportShareActions() {
         width: 420,
         margin: 2,
         errorCorrectionLevel: "M",
-      }).then(setQrDataUrl).catch(() => setQrDataUrl(undefined));
+      }).then(value => { if (!cancelled) setQrDataUrl(value); })
+        .catch(() => { if (!cancelled) setQrDataUrl(undefined); });
     } else {
       setQrDataUrl(undefined);
     }
+    return () => { cancelled = true; };
   }, [created]);
 
   useEffect(() => {
@@ -89,8 +97,6 @@ export default function ReportShareActions() {
     createMutation.reset();
     revokeMutation.reset();
   }, [selectedVersionId]);
-
-  if (!validWorkId) return null;
 
   const createShare = async () => {
     if (!selectedVersionId) return;
@@ -135,7 +141,7 @@ export default function ReportShareActions() {
 
           <div className="space-y-4 p-4">
             <label className="block text-xs font-bold text-slate-700">النسخة الثابتة
-              <select value={selectedVersionId ?? ""} onChange={event => setSelectedVersionId(Number(event.target.value) || undefined)} className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-normal">
+              <select disabled={createMutation.isPending || revokeMutation.isPending} value={selectedVersionId ?? ""} onChange={event => setSelectedVersionId(Number(event.target.value) || undefined)} className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-normal">
                 <option value="">اختر نسخة</option>
                 {versions.map(version => <option key={version.id} value={version.id}>نسخة {version.versionNumber}{version.reason ? ` — ${version.reason}` : ""}</option>)}
               </select>
@@ -168,7 +174,7 @@ export default function ReportShareActions() {
                   </select>
                 </label>
 
-                <button type="button" onClick={() => void createShare()} disabled={createMutation.isPending || (visibility === "protected" && password.length < 6)} className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-teal-700 px-4 py-3 text-sm font-black text-white hover:bg-teal-800 disabled:cursor-not-allowed disabled:opacity-50">
+                <button type="button" onClick={() => void createShare().catch(() => undefined)} disabled={createMutation.isPending || (visibility === "protected" && password.length < 6)} className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-teal-700 px-4 py-3 text-sm font-black text-white hover:bg-teal-800 disabled:cursor-not-allowed disabled:opacity-50">
                   {createMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : type === "qr" ? <QrCode className="h-4 w-4" /> : <Link2 className="h-4 w-4" />}
                   إنشاء {type === "qr" ? "QR" : "الرابط"}
                 </button>
@@ -185,7 +191,7 @@ export default function ReportShareActions() {
                   <button type="button" onClick={() => void copyShareUrl()} className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-700 px-3 py-2.5 text-xs font-bold text-white hover:bg-emerald-800">{copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}{copied ? "تم النسخ" : "نسخ الرابط"}</button>
                   <a href={shareUrl} target="_blank" rel="noreferrer" className="inline-flex items-center justify-center gap-2 rounded-xl border border-emerald-300 bg-white px-3 py-2.5 text-xs font-bold text-emerald-800"><Link2 className="h-4 w-4" /> فتح للاختبار</a>
                 </div>
-                <button type="button" onClick={() => void revokeShare()} disabled={revokeMutation.isPending} className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-red-200 bg-white px-3 py-2.5 text-xs font-bold text-red-700 hover:bg-red-50 disabled:opacity-50">{revokeMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />} إلغاء المخرج</button>
+                <button type="button" onClick={() => void revokeShare().catch(() => undefined)} disabled={revokeMutation.isPending} className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-red-200 bg-white px-3 py-2.5 text-xs font-bold text-red-700 hover:bg-red-50 disabled:opacity-50">{revokeMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />} إلغاء المخرج</button>
                 {revokeMutation.error && <p className="mt-2 text-xs text-red-600">{revokeMutation.error.message}</p>}
               </div>
             )}
