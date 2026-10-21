@@ -12,6 +12,10 @@ describe("upload intent admission before persistence", () => {
     { mimeType: "application/pdf\r\nInjected: value" },
     { expectedBytes: 0 }, { expectedBytes: -1 }, { expectedBytes: 1.5 },
     { expectedBytes: 16 * 1024 * 1024 + 1 },
+    { ownerType: "organization" as const },
+    { ownerType: "organization" as const, organizationId: 0 },
+    { ownerType: "personal" as const, organizationId: 1 },
+    { workId: 0 }, { workId: 1.5 },
   ])("rejects invalid intent without database access: %j", async patch => {
     await expect(beginUploadIntentForUser(1, { ...good, ...patch })).rejects.toThrow();
     expect(getDb).not.toHaveBeenCalled();

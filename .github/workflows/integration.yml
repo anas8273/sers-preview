@@ -55,6 +55,8 @@ jobs:
         run: pnpm exec vitest run server/public-output-integration.test.ts
       - name: Upload intent idempotency and cancellation on MySQL
         run: pnpm exec vitest run server/upload-intent-integration.test.ts
+      - name: Upload quota migration with existing intent records
+        run: pnpm exec vitest run server/upload-intent-migration.test.ts
       # Validate the canonical seed on the migration-clean database before any
       # suite mutates template fixtures. The seed helper currently short-circuits
       # when a template already exists, so running fixture-mutating suites first
