@@ -1,14 +1,16 @@
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/NotFound";
-import { Route, Switch } from "wouter";
+import { Route, Switch, useLocation } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import ReportPdfActions from "./components/ReportPdfActions";
+import ReportShareActions from "./components/ReportShareActions";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { lazy, Suspense } from "react";
 import BottomNav from "./components/BottomNav";
 
 const Home = lazy(() => import("./pages/Home"));
+const PublicOutput = lazy(() => import("./pages/PublicOutput"));
 const WorkHub = lazy(() => import("./pages/WorkHub"));
 const WorkDetail = lazy(() => import("./pages/WorkDetail"));
 const WorkReportEditor = lazy(() => import("./pages/WorkReportEditor"));
@@ -50,6 +52,7 @@ function Router() {
   return (
     <Suspense fallback={<LoadingFallback />}>
       <Switch>
+        <Route path={"/output/:token"} component={PublicOutput} />
         <Route path={"/"} component={Home} />
         <Route path={"/work/:id/report"} component={WorkReportEditor} />
         <Route path={"/work/:id"} component={WorkDetail} />
@@ -85,6 +88,18 @@ function Router() {
   );
 }
 
+function AppChrome() {
+  const [location] = useLocation();
+  if (location.startsWith("/output/")) return null;
+  return (
+    <>
+      <ReportShareActions />
+      <ReportPdfActions />
+      <BottomNav />
+    </>
+  );
+}
+
 function App() {
   return (
     <ErrorBoundary>
@@ -92,8 +107,7 @@ function App() {
         <TooltipProvider>
           <Toaster />
           <Router />
-          <ReportPdfActions />
-          <BottomNav />
+          <AppChrome />
         </TooltipProvider>
       </ThemeProvider>
     </ErrorBoundary>

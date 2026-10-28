@@ -1,0 +1,1 @@
+CREATE INDEX `upload_intent_scope_expiry_idx` ON `upload_intents` (`scopeKey`,`state`,`expiresAt`,`id`);
