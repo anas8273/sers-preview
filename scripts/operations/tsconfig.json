@@ -1,0 +1,6 @@
+{
+  "extends": "../../tsconfig.json",
+  "include": ["./*.mts"],
+  "exclude": ["./*.test.mts"],
+  "compilerOptions": { "incremental": false, "target": "ES2022" }
+}

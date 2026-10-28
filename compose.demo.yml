@@ -1,0 +1,144 @@
+# Linux Docker only: the synthetic harness binds the host's loopback interface.
+# This separate project never starts the production OAuth application.
+name: sers-demo
+
+x-demo: &demo
+  image: sers-demo:local
+  build:
+    context: .
+    args:
+      VITE_APP_ID: synthetic-demo
+      VITE_OAUTH_PORTAL_URL: http://127.0.0.1:3100/demo
+  user: "10001:10001"
+  read_only: true
+  tmpfs: [/tmp:rw,nosuid,nodev,size=512m]
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  environment: &demo-env
+    NODE_ENV: development
+    SERS_DEMO_MODE: synthetic-only
+    SERS_DATABASE_NAME: sers_demo
+    SERS_DATABASE_HOST: mysql
+    MYSQL_PASSWORD_FILE: /var/run/sers-secrets/mysql_password
+    JWT_SECRET_FILE: /var/run/sers-secrets/jwt_secret
+    VITE_APP_ID: synthetic-demo
+    SERS_UPLOADS_ENABLED: "1"
+    SERS_PRIVATE_STORAGE_DIR: /var/lib/sers/evidence
+    SERS_CLAMAV_HOST: clamav
+    SERS_CLAMAV_PORT: "3310"
+    SERS_UPLOAD_PERSONAL_LIMIT_BYTES: "268435456"
+    SERS_UPLOAD_SCHOOL_LIMIT_BYTES: "268435456"
+    SERS_UPLOAD_MAX_ACTIVE_INTENTS: "20"
+  volumes: [evidence:/var/lib/sers/evidence, runtime-secrets:/var/run/sers-secrets:ro]
+  logging:
+    driver: json-file
+    options: {max-size: "10m", max-file: "3"}
+
+services:
+  mysql:
+    image: mysql:8.4
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: sers_demo
+      MYSQL_USER: sers
+      MYSQL_PASSWORD_FILE: /run/secrets/mysql_password
+      MYSQL_ROOT_PASSWORD_FILE: /run/secrets/mysql_root_password
+    secrets: [mysql_password, mysql_root_password]
+    volumes: [mysql-data:/var/lib/mysql]
+    ports: ["127.0.0.1:13306:3306"]
+    networks: [data]
+    healthcheck:
+      test: [CMD-SHELL, 'MYSQL_PWD="$$(cat /run/secrets/mysql_root_password)" mysql -uroot --execute="SELECT 1" --silent']
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+
+  clamav:
+    image: clamav/clamav:1.4
+    restart: unless-stopped
+    volumes: [clamav-data:/var/lib/clamav]
+    ports: ["127.0.0.1:13310:3310"]
+    networks: [data, egress]
+    healthcheck:
+      start_period: 180s
+      interval: 30s
+      timeout: 10s
+      retries: 10
+    mem_limit: 4g
+
+  storage-init:
+    image: sers-demo:local
+    volumes: [evidence:/var/lib/sers/evidence, runtime-secrets:/var/run/sers-secrets]
+    secrets: [mysql_password, jwt_secret]
+    user: "0:0"
+    read_only: true
+    cap_drop: [ALL]
+    cap_add: [CHOWN, FOWNER, DAC_OVERRIDE]
+    security_opt: [no-new-privileges:true]
+    network_mode: none
+    entrypoint: [node, scripts/operations/init-storage.mjs]
+    restart: "no"
+
+  migrate:
+    <<: *demo
+    command: [migrate]
+    profiles: [operations]
+    networks: [data]
+    depends_on:
+      mysql: {condition: service_healthy}
+      storage-init: {condition: service_completed_successfully}
+
+  app:
+    <<: *demo
+    command: [demo]
+    # Publishing a port would not reach a loopback-bound process in a bridge
+    # container. Host networking preserves the mandatory 127.0.0.1 bind.
+    network_mode: host
+    environment:
+      <<: *demo-env
+      SERS_DEMO_HOST: 127.0.0.1
+      SERS_DEMO_PORT: "3100"
+      SERS_DATABASE_HOST: 127.0.0.1
+      SERS_DATABASE_PORT: "13306"
+      SERS_CLAMAV_HOST: 127.0.0.1
+      SERS_CLAMAV_PORT: "13310"
+    restart: "no"
+    depends_on:
+      mysql: {condition: service_healthy}
+      clamav: {condition: service_healthy}
+      storage-init: {condition: service_completed_successfully}
+
+  worker:
+    <<: *demo
+    command: [worker]
+    networks: [data]
+    restart: unless-stopped
+    stop_grace_period: 150s
+    depends_on:
+      mysql: {condition: service_healthy}
+      clamav: {condition: service_healthy}
+      storage-init: {condition: service_completed_successfully}
+    healthcheck:
+      test: [CMD, node, scripts/operations/worker-healthcheck.mjs]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 150s
+
+secrets:
+  mysql_password:
+    file: ${SERS_SECRETS_DIR:?Set an absolute private demo secrets directory}/mysql_password
+  mysql_root_password:
+    file: ${SERS_SECRETS_DIR:?Set an absolute private demo secrets directory}/mysql_root_password
+  jwt_secret:
+    file: ${SERS_SECRETS_DIR:?Set an absolute private demo secrets directory}/jwt_secret
+volumes:
+  mysql-data:
+  evidence:
+  runtime-secrets:
+  clamav-data:
+networks:
+  data:
+    internal: true
+  egress:

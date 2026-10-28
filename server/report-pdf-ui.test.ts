@@ -34,8 +34,11 @@ describe("report WorkVersion PDF controls", () => {
     expect(panelSource).toContain("تحديث رابط التنزيل");
   });
 
-  it("states the current privacy boundary instead of implying public sharing is ready", () => {
+  it("explains the private editable copy boundary", () => {
     expect(panelSource).toContain("هذا المخرج خاص");
-    expect(panelSource).toContain("المشاركة العامة وQR وWord القابل للتعديل");
+    expect(panelSource).toContain("لا تغيّر النسخة المحفوظة في النظام");
+    expect(panelSource).toContain("Word قابل للتعديل");
+    expect(panelSource).toContain("workVersionDocx.generatePrivateDocx.useMutation");
+    expect(panelSource).toContain("ReportArtifactSession key={workId}");
   });
 });

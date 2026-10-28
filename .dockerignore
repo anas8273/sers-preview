@@ -1,0 +1,14 @@
+.git
+node_modules
+dist
+.env
+.env.*
+!.env.example
+**/*.log
+**/coverage
+.manus
+.pending-todos.txt
+ops-private
+backups
+*.tar.gz
+*.tgz

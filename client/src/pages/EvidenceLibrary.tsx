@@ -3,6 +3,7 @@ import { Building2, ExternalLink, FileText, Library, Link2, Loader2, Plus, UserR
 import AppSidebar from "@/components/AppSidebar";
 import { trpc } from "@/lib/trpc";
 import { useLocation } from "wouter";
+import PrivateEvidenceUpload from "@/components/PrivateEvidenceUpload";
 
 export default function EvidenceLibrary() {
   const [location] = useLocation();
@@ -61,14 +62,12 @@ export default function EvidenceLibrary() {
             <button onClick={() => setShowCreate(true)} className="inline-flex items-center justify-center gap-2 rounded-xl bg-teal-600 px-4 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-teal-700"><Plus className="h-4 w-4" />إضافة شاهد</button>
           </header>
 
-          <div className="mt-6 rounded-2xl border border-cyan-100 bg-cyan-50/60 p-4 text-xs leading-6 text-cyan-950">
-            رفع الملفات سيُفتح عبر مسار تخزين آمن مستقل بعد فحص MIME/magic bytes والحجر الأمني. في هذه الشريحة يمكنك إضافة رابط أو نص كشاهد دون تجاوز طبقة الحماية المخطط لها.
-          </div>
+          <PrivateEvidenceUpload />
 
           {assetsQuery.isLoading && <div className="mt-8 flex items-center justify-center rounded-2xl border border-slate-200 bg-white py-16 text-sm text-slate-500"><Loader2 className="ml-2 h-4 w-4 animate-spin" />جاري تحميل مكتبتك...</div>}
 
           {assetsQuery.error && (
-            <div className="mt-8 rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm leading-7 text-amber-900">تعذر تحميل مكتبة الشواهد. يلزم تسجيل الدخول وتطبيق migration الجديدة في بيئة قاعدة البيانات قبل استخدام هذه النواة.</div>
+            <div className="mt-8 rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm leading-7 text-amber-900">تعذر تحميل مكتبة الشواهد. تأكد من تسجيل الدخول ثم أعد المحاولة.</div>
           )}
 
           {assetsQuery.data && assetsQuery.data.length === 0 && (
@@ -96,6 +95,7 @@ export default function EvidenceLibrary() {
                     </div>
                     {asset.kind === "link" && asset.externalUrl && <a href={asset.externalUrl} target="_blank" rel="noreferrer" className="mt-4 flex items-center gap-2 truncate rounded-xl bg-slate-50 px-3 py-2.5 text-xs font-semibold text-teal-700 hover:bg-teal-50"><ExternalLink className="h-3.5 w-3.5 shrink-0" /><span className="truncate">{asset.externalUrl}</span></a>}
                     {textPreview && <p className="mt-4 line-clamp-3 rounded-xl bg-slate-50 px-3 py-2.5 text-xs leading-6 text-slate-600">{textPreview}</p>}
+                    {asset.kind === "file" && <a href={`/api/evidence/assets/${asset.id}/download`} className="mt-4 inline-flex items-center gap-2 rounded-xl bg-teal-50 px-3 py-2.5 text-xs font-bold text-teal-800"><FileText className="h-4 w-4" />تنزيل الملف</a>}
                   </article>
                 );
               })}

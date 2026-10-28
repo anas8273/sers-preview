@@ -17,11 +17,43 @@ export const memberships = mysqlTable("memberships", {
   userId: int("userId").notNull().references(() => users.id, { onDelete: "cascade" }),
   role: mysqlEnum("role", ["owner", "admin", "reviewer", "member"]).default("member").notNull(),
   status: mysqlEnum("status", ["invited", "active", "suspended", "left"]).default("active").notNull(),
+  invitationAccepted: boolean("invitationAccepted").default(true).notNull(),
   joinedAt: timestamp("joinedAt").defaultNow().notNull(),
   leftAt: timestamp("leftAt"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 }, (table) => ({ membershipUnique: uniqueIndex("membership_org_user_unique").on(table.organizationId, table.userId) }));
+
+export const academicYears = mysqlTable("academic_years", {
+  id: int("id").autoincrement().primaryKey(),
+  scopeKey: varchar("scopeKey", { length: 64 }).notNull(),
+  ownerUserId: int("ownerUserId").references(() => users.id, { onDelete: "restrict" }),
+  organizationId: int("organizationId").references(() => organizations.id, { onDelete: "restrict" }),
+  label: varchar("label", { length: 100 }).notNull(),
+  startsOn: varchar("startsOn", { length: 10 }).notNull(),
+  endsOn: varchar("endsOn", { length: 10 }).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, table => ({
+  scopeLabelUnique: uniqueIndex("academic_year_scope_label_unique").on(table.scopeKey, table.label),
+  ownerCheck: check("academic_year_owner_check", sql`(
+    (${table.ownerUserId} IS NOT NULL AND ${table.organizationId} IS NULL)
+    OR (${table.ownerUserId} IS NULL AND ${table.organizationId} IS NOT NULL)
+  )`),
+}));
+
+export const academicTerms = mysqlTable("academic_terms", {
+  id: int("id").autoincrement().primaryKey(),
+  academicYearId: int("academicYearId").notNull().references(() => academicYears.id, { onDelete: "restrict" }),
+  label: varchar("label", { length: 100 }).notNull(),
+  ordinal: int("ordinal").notNull(),
+  startsOn: varchar("startsOn", { length: 10 }).notNull(),
+  endsOn: varchar("endsOn", { length: 10 }).notNull(),
+}, table => ({ yearOrdinalUnique: uniqueIndex("academic_term_year_ordinal_unique").on(table.academicYearId, table.ordinal) }));
+
+export type AcademicContext = {
+  yearId: number; yearLabel: string; yearStartsOn: string; yearEndsOn: string;
+  termId: number | null; termLabel: string | null; termStartsOn: string | null; termEndsOn: string | null;
+};
 
 export const workItems = mysqlTable("work_items", {
   id: int("id").autoincrement().primaryKey(),
@@ -33,6 +65,9 @@ export const workItems = mysqlTable("work_items", {
   title: varchar("title", { length: 255 }).notNull(),
   status: mysqlEnum("status", ["draft", "in_review", "approved", "archived"]).default("draft").notNull(),
   currentVersionNumber: int("currentVersionNumber").default(0).notNull(),
+  academicYearId: int("academicYearId").references(() => academicYears.id, { onDelete: "restrict" }),
+  academicTermId: int("academicTermId").references(() => academicTerms.id, { onDelete: "restrict" }),
+  academicContext: json("academicContext").$type<AcademicContext>(),
   metadata: json("metadata").$type<Record<string, unknown>>(),
   deletedAt: timestamp("deletedAt"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
@@ -146,7 +181,7 @@ export const outputs = mysqlTable("outputs", {
   id: int("id").autoincrement().primaryKey(),
   workVersionId: int("workVersionId").notNull().references(() => workVersions.id, { onDelete: "restrict" }),
   createdByUserId: int("createdByUserId").notNull().references(() => users.id, { onDelete: "restrict" }),
-  type: mysqlEnum("type", ["pdf", "link", "qr"]).notNull(),
+  type: mysqlEnum("type", ["pdf", "link", "qr", "docx"]).notNull(),
   visibility: mysqlEnum("visibility", ["private", "protected", "public"]).default("private").notNull(),
   token: varchar("token", { length: 128 }).unique(),
   passwordHash: varchar("passwordHash", { length: 256 }),

@@ -13,7 +13,7 @@ concurrency:
 jobs:
   mysql-domain-integration:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 40
     services:
       mysql:
         image: mysql:8.4
@@ -27,6 +27,14 @@ jobs:
           --health-interval=5s
           --health-timeout=5s
           --health-retries=20
+      clamav:
+        image: clamav/clamav:1.4
+        ports:
+          - 3310:3310
+        options: >-
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=60
     env:
       DATABASE_URL: mysql://root:root@127.0.0.1:3306/sers_test
       SERS_INTEGRATION: "1"
@@ -43,6 +51,10 @@ jobs:
           cache: pnpm
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+      - name: Install bounded PDF parser and filesystem locking tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qpdf util-linux
       - name: Apply reviewed Drizzle migrations
         run: pnpm exec drizzle-kit migrate --config drizzle.config.ts
       - name: Domain ownership and IDOR integration tests
@@ -57,6 +69,20 @@ jobs:
         run: pnpm exec vitest run server/upload-intent-integration.test.ts
       - name: Upload quota and reception upgrades with existing intent records
         run: pnpm exec vitest run server/upload-intent-migration.test.ts
+      - name: Accounts, academic context and current authorization under concurrency
+        run: pnpm exec vitest run server/account-integration.test.ts
+      - name: Notification isolation and read acknowledgement
+        run: pnpm exec vitest run server/notification-integration.test.ts
+      - name: Scan completion, publication, cleanup and quota lifecycle
+        run: pnpm exec vitest run server/upload-lifecycle-integration.test.ts
+      - name: Core journey upgrade preserves legacy records and invitations
+        run: pnpm exec vitest run server/core-journeys-migration.test.ts
+      - name: Immutable private Word and review authorization
+        run: pnpm exec vitest run server/work-version-docx-integration.test.ts
+      - name: Actual ClamAV and bounded PDF parser adversarial suite
+        env:
+          SERS_SCANNER_INTEGRATION: "1"
+        run: pnpm exec vitest run server/upload-scanner-integration.test.ts
       # Validate the canonical seed on the migration-clean database before any
       # suite mutates template fixtures. The seed helper currently short-circuits
       # when a template already exists, so running fixture-mutating suites first
@@ -77,3 +103,9 @@ jobs:
         run: pnpm build
       - name: Browser to real MySQL share creation and revocation
         run: pnpm exec tsx --test tests/browser/share-mysql.mts
+      - name: Browser account invitations, academic years, work and suspension
+        run: pnpm exec tsx --test tests/browser/account-mysql.mts
+      - name: Browser evidence upload, real scan and private Word download
+        env:
+          SERS_SCANNER_INTEGRATION: "1"
+        run: pnpm exec tsx --test tests/browser/evidence-mysql.mts

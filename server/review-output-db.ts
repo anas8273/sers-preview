@@ -1,6 +1,8 @@
 import { and, desc, eq, inArray, isNull, or } from "drizzle-orm";
 import {
   memberships,
+  notifications,
+  organizations,
   outputs,
   reviewComments,
   reviews,
@@ -12,6 +14,13 @@ import { assertWorkAccess } from "./domain-db";
 import { getDb } from "./db";
 
 type MembershipRow = typeof memberships.$inferSelect;
+type Database = NonNullable<Awaited<ReturnType<typeof getDb>>>;
+type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
+async function lockActiveOrganization(tx: Transaction, id: number) {
+  const [organization] = await tx.select({ status: organizations.status }).from(organizations)
+    .where(eq(organizations.id, id)).limit(1).for("update");
+  return organization?.status === "active";
+}
 
 export class ReviewConflictError extends Error {
   constructor(message = "Review state conflict") {
@@ -59,15 +68,17 @@ async function activeOrganizationMember(userId: number, organizationId: number):
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   const [membership] = await db
-    .select()
+    .select({ membership: memberships })
     .from(memberships)
+    .innerJoin(organizations, eq(organizations.id, memberships.organizationId))
     .where(and(
       eq(memberships.userId, userId),
       eq(memberships.organizationId, organizationId),
       eq(memberships.status, "active"),
+      eq(organizations.status, "active"),
     ))
     .limit(1);
-  return membership;
+  return membership?.membership;
 }
 
 function canWriteOrganization(role: MembershipRow["role"]) {
@@ -76,6 +87,26 @@ function canWriteOrganization(role: MembershipRow["role"]) {
 
 function canReviewOrganization(role: MembershipRow["role"]) {
   return role === "reviewer" || role === "admin" || role === "owner";
+}
+
+// Hint reads only locate the scope. Authorization and mutable state are current
+// locking reads after the scope lock, even at MySQL REPEATABLE READ isolation.
+async function lockWorkAccess(tx: Transaction, userId: number, hint: typeof workItems.$inferSelect, mode: "read" | "write" | "review") {
+  if (hint.ownerType === "organization") {
+    if (!hint.ownerOrganizationId || !await lockActiveOrganization(tx, hint.ownerOrganizationId)) return undefined;
+    const [membership] = await tx.select().from(memberships).where(and(
+      eq(memberships.organizationId, hint.ownerOrganizationId), eq(memberships.userId, userId), eq(memberships.status, "active"),
+    )).limit(1).for("update");
+    if (!membership || (mode === "write" && !canWriteOrganization(membership.role)) || (mode === "review" && !canReviewOrganization(membership.role))) return undefined;
+  } else {
+    if (mode === "review") return undefined;
+    const [user] = await tx.select({ id: users.id }).from(users).where(eq(users.id, userId)).limit(1).for("update");
+    if (!user) return undefined;
+  }
+  const [work] = await tx.select().from(workItems).where(and(eq(workItems.id, hint.id), isNull(workItems.deletedAt))).limit(1).for("update");
+  if (!work || work.ownerType !== hint.ownerType || work.ownerOrganizationId !== hint.ownerOrganizationId) return undefined;
+  if (work.ownerType === "personal" && work.ownerUserId !== userId) return undefined;
+  return work;
 }
 
 export async function listEligibleReviewersForUser(userId: number, organizationId: number) {
@@ -111,31 +142,23 @@ export async function createReviewForUser(requestedByUserId: number, workVersion
     if (row.work.ownerType !== "organization" || !row.work.ownerOrganizationId) {
       throw new Error("Review requires organization-owned work");
     }
+    const work = await lockWorkAccess(tx, requestedByUserId, row.work, "write");
+    if (!work || !work.ownerOrganizationId) return undefined;
+    row.work = work;
     if (row.work.status === "archived") throw new ReviewConflictError("Archived work cannot be reviewed");
     if (row.version.versionNumber !== row.work.currentVersionNumber) {
       throw new ReviewConflictError("Only the current work version can be submitted for review");
     }
-
-    const [requesterMembership] = await tx
-      .select()
-      .from(memberships)
-      .where(and(
-        eq(memberships.userId, requestedByUserId),
-        eq(memberships.organizationId, row.work.ownerOrganizationId),
-        eq(memberships.status, "active"),
-      ))
-      .limit(1);
-    if (!requesterMembership || !canWriteOrganization(requesterMembership.role)) return undefined;
 
     const [reviewerMembership] = await tx
       .select()
       .from(memberships)
       .where(and(
         eq(memberships.userId, reviewerUserId),
-        eq(memberships.organizationId, row.work.ownerOrganizationId),
+        eq(memberships.organizationId, work.ownerOrganizationId),
         eq(memberships.status, "active"),
       ))
-      .limit(1);
+      .limit(1).for("update");
     if (!reviewerMembership || !canReviewOrganization(reviewerMembership.role)) {
       throw new Error("Reviewer is not eligible for organization review");
     }
@@ -144,7 +167,7 @@ export async function createReviewForUser(requestedByUserId: number, workVersion
       .select({ id: reviews.id })
       .from(reviews)
       .where(and(eq(reviews.workVersionId, workVersionId), eq(reviews.status, "pending")))
-      .limit(1);
+      .limit(1).for("update");
     if (pendingReview) throw new ReviewConflictError("A pending review already exists for this version");
 
     const inserted = await tx.insert(reviews).values({
@@ -163,6 +186,15 @@ export async function createReviewForUser(requestedByUserId: number, workVersion
         isNull(workItems.deletedAt),
       ));
     if (getAffectedRows(updatedWork) !== 1) throw new ReviewConflictError("Work changed while review was being requested");
+    await tx.insert(notifications).values({
+      userId: reviewerUserId,
+      type: "review_requested",
+      dedupeKey: `review:${inserted[0].insertId}:requested`,
+      title: "تقرير جديد بانتظار مراجعتك",
+      body: `${row.work.title} — نسخة ${row.version.versionNumber}`,
+      targetType: "review",
+      targetId: String(inserted[0].insertId),
+    });
     return Number(inserted[0].insertId);
   });
 
@@ -210,17 +242,20 @@ export async function listReviewsForUser(userId: number) {
 }
 
 export async function addReviewCommentForUser(userId: number, reviewId: number, content: string, anchor?: Record<string, unknown>) {
-  const review = await getReviewForUser(userId, reviewId);
-  if (!review) return undefined;
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  const result = await db.insert(reviewComments).values({
-    reviewId,
-    userId,
-    content,
-    anchor: anchor ?? null,
+  return db.transaction(async tx => {
+    const [hint] = await tx.select({ work: workItems }).from(reviews)
+      .innerJoin(workVersions, eq(reviews.workVersionId, workVersions.id))
+      .innerJoin(workItems, eq(workVersions.workItemId, workItems.id)).where(eq(reviews.id, reviewId)).limit(1);
+    if (!hint || !await lockWorkAccess(tx, userId, hint.work, "read")) return undefined;
+    const [review] = await tx.select().from(reviews).where(and(eq(reviews.id, reviewId),
+      or(eq(reviews.requestedByUserId, userId), eq(reviews.reviewerUserId, userId)),
+    )).limit(1).for("update");
+    if (!review) return undefined;
+    const result = await tx.insert(reviewComments).values({ reviewId, userId, content, anchor: anchor ?? null });
+    return { id: Number(result[0].insertId) };
   });
-  return { id: Number(result[0].insertId) };
 }
 
 export async function decideReviewForUser(userId: number, reviewId: number, decision: "approved" | "changes_requested" | "rejected", decisionNote?: string) {
@@ -236,19 +271,13 @@ export async function decideReviewForUser(userId: number, reviewId: number, deci
       .where(and(eq(reviews.id, reviewId), eq(reviews.reviewerUserId, userId), isNull(workItems.deletedAt)))
       .limit(1);
     if (!row) return undefined;
-    if (row.review.status !== "pending") throw new ReviewConflictError("Review is already decided");
-    if (row.work.ownerType !== "organization" || !row.work.ownerOrganizationId) return undefined;
-
-    const [membership] = await tx
-      .select()
-      .from(memberships)
-      .where(and(
-        eq(memberships.userId, userId),
-        eq(memberships.organizationId, row.work.ownerOrganizationId),
-        eq(memberships.status, "active"),
-      ))
-      .limit(1);
-    if (!membership || !canReviewOrganization(membership.role)) return undefined;
+    const work = await lockWorkAccess(tx, userId, row.work, "review");
+    if (!work) return undefined;
+    row.work = work;
+    const [review] = await tx.select().from(reviews).where(and(eq(reviews.id, reviewId), eq(reviews.reviewerUserId, userId))).limit(1).for("update");
+    if (!review) return undefined;
+    row.review = review;
+    if (review.status !== "pending") throw new ReviewConflictError("Review is already decided");
 
     const updatedReview = await tx
       .update(reviews)
@@ -273,6 +302,15 @@ export async function decideReviewForUser(userId: number, reviewId: number, deci
       if (getAffectedRows(updatedWork) !== 1) throw new ReviewConflictError("Current work state changed while review was being decided");
     }
 
+    await tx.insert(notifications).values({
+      userId: row.review.requestedByUserId,
+      type: "review_decided",
+      dedupeKey: `review:${reviewId}:decided`,
+      title: decision === "approved" ? "تم اعتماد التقرير" : decision === "changes_requested" ? "التقرير يحتاج تعديلات" : "لم يعتمد التقرير",
+      body: `${row.work.title} — نسخة ${row.version.versionNumber}`,
+      targetType: "review",
+      targetId: String(reviewId),
+    });
     return reviewId;
   });
 
@@ -281,7 +319,7 @@ export async function decideReviewForUser(userId: number, reviewId: number, deci
 
 export async function createOutputForUser(userId: number, input: {
   workVersionId: number;
-  type: "pdf" | "link" | "qr";
+  type: "pdf" | "link" | "qr" | "docx";
   visibility?: "private" | "protected" | "public";
   token?: string;
   passwordHash?: string;
@@ -291,6 +329,10 @@ export async function createOutputForUser(userId: number, input: {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   const visibility = input.visibility ?? "private";
+
+  if (input.type === "docx" && visibility !== "private") {
+    throw new OutputValidationError("Editable DOCX outputs must remain private");
+  }
 
   if ((input.type === "link" || input.type === "qr") && !input.token) {
     throw new OutputValidationError("Link and QR outputs require a token");
@@ -311,28 +353,14 @@ export async function createOutputForUser(userId: number, input: {
       .limit(1);
     if (!row) return undefined;
 
-    if (row.work.ownerType === "personal") {
-      if (row.work.ownerUserId !== userId && row.work.creatorUserId !== userId) return undefined;
-    } else {
-      if (!row.work.ownerOrganizationId) return undefined;
-      const [membership] = await tx
-        .select()
-        .from(memberships)
-        .where(and(
-          eq(memberships.userId, userId),
-          eq(memberships.organizationId, row.work.ownerOrganizationId),
-          eq(memberships.status, "active"),
-        ))
-        .limit(1);
-      if (!membership || !canWriteOrganization(membership.role)) return undefined;
-    }
+    if (!await lockWorkAccess(tx, userId, row.work, "write")) return undefined;
 
     if (visibility !== "private") {
       const [approvedReview] = await tx
         .select({ id: reviews.id })
         .from(reviews)
         .where(and(eq(reviews.workVersionId, input.workVersionId), eq(reviews.status, "approved")))
-        .limit(1);
+        .limit(1).for("update");
       if (!approvedReview) throw new OutputValidationError("Shared outputs require an approved review for this exact version");
     }
 
@@ -379,11 +407,16 @@ export async function listOutputsForWorkForUser(userId: number, workItemId: numb
 }
 
 export async function revokeOutputForUser(userId: number, outputId: number) {
-  const output = await getOutputForUser(userId, outputId);
-  if (!output) return false;
-  if (!(await assertWorkAccess(userId, output.workId, "write"))) return false;
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  await db.update(outputs).set({ revokedAt: new Date() }).where(and(eq(outputs.id, outputId), isNull(outputs.revokedAt)));
-  return true;
+  return db.transaction(async tx => {
+    const [hint] = await tx.select({ work: workItems }).from(outputs)
+      .innerJoin(workVersions, eq(outputs.workVersionId, workVersions.id))
+      .innerJoin(workItems, eq(workVersions.workItemId, workItems.id)).where(eq(outputs.id, outputId)).limit(1);
+    if (!hint || !await lockWorkAccess(tx, userId, hint.work, "write")) return false;
+    const [output] = await tx.select().from(outputs).where(eq(outputs.id, outputId)).limit(1).for("update");
+    if (!output) return false;
+    if (!output.revokedAt) await tx.update(outputs).set({ revokedAt: new Date() }).where(eq(outputs.id, outputId));
+    return true;
+  });
 }
