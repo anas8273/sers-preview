@@ -16,6 +16,9 @@ jobs:
   compose-backup-restore:
     runs-on: ubuntu-latest
     timeout-minutes: 55
+    defaults:
+      run:
+        shell: bash
     env:
       COMPOSE_PROJECT_NAME: sers-ci-${{ github.run_id }}-${{ github.run_attempt }}
       SERS_DATABASE_NAME: sers_demo
