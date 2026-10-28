@@ -1,24 +1,21 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { appRouter } from "./routers";
 import type { TrpcContext } from "./_core/context";
+import { aiTestContext, aiTaxonomy, aiPngDataUrl, configureAiTestEnvironment } from "../tests/fixtures/ai-router";
+vi.mock("./ai-admission-db", async importOriginal => ({
+  ...await importOriginal<typeof import("./ai-admission-db")>(),
+  reserveAiRequest: vi.fn().mockResolvedValue({ requestId: "11111111-1111-4111-8111-111111111111", expiresAt: new Date(Date.now() + 90_000) }),
+  finishAiRequest: vi.fn().mockResolvedValue(true),
+}));
+beforeEach(configureAiTestEnvironment);
+
 
 // Mock invokeLLM to avoid real API calls
 vi.mock("./_core/llm", () => ({
   invokeLLM: vi.fn(),
 }));
 
-function createPublicContext(): TrpcContext {
-  return {
-    user: null,
-    req: {
-      protocol: "https",
-      headers: {},
-    } as TrpcContext["req"],
-    res: {
-      clearCookie: vi.fn(),
-    } as unknown as TrpcContext["res"],
-  };
-}
+function createPublicContext(): TrpcContext { return aiTestContext(); }
 
 describe("genAI.fillReport", () => {
   beforeEach(() => {
@@ -269,7 +266,7 @@ describe("genAI.extractGradesFromImage", () => {
     vi.clearAllMocks();
   });
 
-  it("returns only valid student grades and clamps scores to the declared maximum", async () => {
+  it("returns validated student grades without changing recorded values", async () => {
     const { invokeLLM } = await import("./_core/llm");
     (invokeLLM as any).mockResolvedValue({
       choices: [{
@@ -277,8 +274,7 @@ describe("genAI.extractGradesFromImage", () => {
           content: JSON.stringify({
             students: [
               { name: "سارة أحمد", score: 98 },
-              { name: "محمد علي", score: 105 },
-              { name: "", score: 70 },
+              { name: "محمد علي", score: 95 },
             ],
             unreadableNote: "تم تجاهل صف واحد غير واضح.",
           }),
@@ -288,14 +284,14 @@ describe("genAI.extractGradesFromImage", () => {
 
     const caller = appRouter.createCaller(createPublicContext());
     const result = await caller.genAI.extractGradesFromImage({
-      imageData: "data:image/png;base64,aGVsbG8=",
+      imageData: aiPngDataUrl,
       maxScore: 100,
     });
 
     expect(result.success).toBe(true);
     expect(result.students).toEqual([
       { name: "سارة أحمد", score: 98 },
-      { name: "محمد علي", score: 100 },
+      { name: "محمد علي", score: 95 },
     ]);
     expect(result.unreadableNote).toContain("صف واحد");
     expect(invokeLLM).toHaveBeenCalledWith(expect.objectContaining({ response_format: expect.any(Object) }));

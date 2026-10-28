@@ -36,6 +36,10 @@ jobs:
         run: |
           git diff --exit-code -- drizzle
           test -z "$(git ls-files --others --exclude-standard drizzle)"
+      - name: Install document acceptance tools and Arabic fonts
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y poppler-utils fonts-noto-core
       - name: Hermetic test suite
         shell: bash
         run: |
@@ -48,10 +52,6 @@ jobs:
         run: pnpm build
       - name: Public output browser integration (HTTP fixtures)
         run: pnpm exec tsx --test tests/browser/public-output.mts
-      - name: Install document acceptance tools and Arabic fonts
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y poppler-utils fonts-noto-core
       - name: Immutable Arabic PDF and Word pagination and digital QR acceptance
         run: node --import tsx scripts/verify-work-version-outputs.ts qa-artifacts/work-version-outputs
       - name: Preserve synthetic document verification artifacts

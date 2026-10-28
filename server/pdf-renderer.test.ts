@@ -1,5 +1,10 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
-import { renderHtmlToPdf, closeBrowser } from "./pdf-renderer";
+import {
+  renderHtmlToPdf,
+  renderHtmlToDocxPuppeteer,
+  closeBrowser,
+} from "./pdf-renderer";
+import JSZip from "jszip";
 
 describe("pdf-renderer", () => {
   afterEach(async () => {
@@ -80,6 +85,30 @@ describe("pdf-renderer", () => {
     expect(Buffer.isBuffer(pdfBuffer)).toBe(true);
     expect(pdfBuffer.toString("utf-8", 0, 5)).toBe("%PDF-");
   }, 30000);
+
+  it("rejects excess pages rather than silently returning a truncated PDF", async () => {
+    const html = Array.from(
+      { length: 82 },
+      (_, index) =>
+        `<section style="page-break-after:always;height:280mm"><p>صفحة ${index + 1}</p></section>`
+    ).join("");
+    await expect(renderHtmlToPdf(html)).rejects.toMatchObject({
+      statusCode: 413,
+    });
+  }, 45000);
+
+  it("renders visual Word through actual bounded asynchronous Poppler", async () => {
+    const result = await renderHtmlToDocxPuppeteer(
+      '<p style="padding:20mm">مستند اصطناعي للتحقق</p>'
+    );
+    const zip = await JSZip.loadAsync(result);
+    expect(
+      Object.keys(zip.files).filter(name => /^word\/media\/.*\.png$/.test(name))
+    ).toHaveLength(1);
+    expect(await zip.file("word/document.xml")!.async("string")).toContain(
+      "w:drawing"
+    );
+  }, 45000);
 });
 
 describe("closeBrowser", () => {

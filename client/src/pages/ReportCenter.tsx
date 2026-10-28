@@ -18,6 +18,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
+import { LegacyUploadNotice, legacyUploadFailureMessage } from "@/components/LegacyUploadNotice";
+import { aiFailureMessage } from "@/lib/ai-feedback";
 import { useAuth } from "@/_core/hooks/useAuth";
 import TemplateSelector, { THEMES, FONT_OPTIONS, type ThemeConfig } from "@/components/TemplateSelector";
 import { exportToPDF, printElement } from "@/lib/pdf-export";
@@ -416,7 +418,7 @@ export default function ReportCenter() {
       setAttachments((previous) => [...previous, { id: generateId(), title: file.name.replace(/\.[^.]+$/, ""), description: "", url: result.url, fileName: file.name }]);
       toast.success("تم رفع المرفق وإضافته إلى التقرير.");
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "تعذر رفع المرفق.");
+      toast.error(legacyUploadFailureMessage(error));
     } finally {
       setAttachmentUploading(false);
     }
@@ -484,7 +486,7 @@ export default function ReportCenter() {
         toast.error("لم تنجح التعبئة، حاول مرة أخرى");
       }
     } catch (err) {
-      toast.error("حدث خطأ أثناء التعبئة بالذكاء الاصطناعي");
+      toast.error(aiFailureMessage(err));
     } finally {
       setAiLoading(false);
     }
@@ -565,6 +567,7 @@ export default function ReportCenter() {
       </div>
 
       <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6">
+        <LegacyUploadNotice />
         <>
           {/* ═══ Templates View ═══ */}
           {view === "templates" && (

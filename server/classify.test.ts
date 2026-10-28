@@ -1,158 +1,36 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { appRouter } from "./routers";
-import type { TrpcContext } from "./_core/context";
-
-// Mock invokeLLM to avoid actual API calls
-vi.mock("./_core/llm", () => ({
-  invokeLLM: vi.fn().mockResolvedValue({
-    choices: [
-      {
-        message: {
-          content: JSON.stringify({
-            standardId: "std-1",
-            standardNumber: 1,
-            standardName: "أداء الواجبات الوظيفية",
-            indicatorIndex: 2,
-            indicatorText: "الالتزام بالحضور والانصراف",
-            subIndicatorIndex: 1,
-            subIndicatorText: "سجل الحضور",
-            confidence: 0.85,
-            reasoning: "الصورة تحتوي على سجل حضور",
-            contentDescription: "سجل حضور المعلم",
-            suggestedPriority: "essential",
-            suggestedKeywords: ["حضور", "انصراف", "سجل"],
-          }),
-        },
-      },
-    ],
-  }),
+import { invokeLLM } from "./_core/llm";
+import { aiClassification, aiPngDataUrl, aiTaxonomy, aiTestContext, configureAiTestEnvironment } from "../tests/fixtures/ai-router";
+vi.mock("./_core/llm", () => ({ invokeLLM: vi.fn() }));
+vi.mock("./ai-admission-db", async importOriginal => ({
+  ...await importOriginal<typeof import("./ai-admission-db")>(),
+  reserveAiRequest: vi.fn().mockResolvedValue({ requestId: "11111111-1111-4111-8111-111111111111", expiresAt: new Date(Date.now() + 90_000) }),
+  finishAiRequest: vi.fn().mockResolvedValue(true),
 }));
+const model = vi.mocked(invokeLLM);
+beforeEach(() => { vi.clearAllMocks(); configureAiTestEnvironment(); model.mockResolvedValue({ choices: [{ message: { content: JSON.stringify(aiClassification) } }] } as any); });
 
-function createPublicContext(): TrpcContext {
-  return {
-    user: null,
-    req: {
-      protocol: "https",
-      headers: {},
-    } as TrpcContext["req"],
-    res: {
-      clearCookie: () => {},
-    } as TrpcContext["res"],
-  };
-}
-
-describe("ai.classifyEvidence", () => {
-  it("classifies evidence based on file name and returns classification", async () => {
-    const ctx = createPublicContext();
-    const caller = appRouter.createCaller(ctx);
-
-    const result = await caller.ai.classifyEvidence({
-      fileName: "سجل_الحضور.jpg",
-      fileType: "image/jpeg",
-      description: "سجل حضور المعلم",
-      jobTitle: "معلم",
-      criteriaList: [
-        {
-          id: "std-1",
-          title: "أداء الواجبات الوظيفية",
-          subEvidences: [
-            { id: "std-1-item-1", title: "الالتزام بالأنظمة" },
-            { id: "std-1-item-2", title: "الالتزام بالحضور والانصراف" },
-          ],
-        },
-      ],
-    });
-
+describe("AI classification admission and output", () => {
+  it("returns an exact canonical destination from the supplied taxonomy", async () => {
+    const result = await appRouter.createCaller(aiTestContext()).ai.classifyEvidence({ criteriaList: aiTaxonomy, fileName: "مادة.pdf", description: "مادة تعليمية" });
     expect(result.success).toBe(true);
-    expect(result.classification).toBeDefined();
-    expect(result.classification.standardId).toBe("std-1");
-    expect(result.classification.standardNumber).toBe(1);
-    expect(result.classification.confidence).toBeGreaterThan(0);
-    expect(result.classification.contentDescription).toBeTruthy();
+    expect(result.classification).toMatchObject({ standardId: "std-1", subEvidenceId: "std-1-item-2", confidence: 0.85, indicatorText: aiTaxonomy[0].subEvidences[1].title });
   });
-
-  it("returns success false when LLM returns invalid JSON", async () => {
-    const { invokeLLM } = await import("./_core/llm");
-    (invokeLLM as any).mockResolvedValueOnce({
-      choices: [
-        {
-          message: {
-            content: "invalid json",
-          },
-        },
-      ],
-    });
-
-    const ctx = createPublicContext();
-    const caller = appRouter.createCaller(ctx);
-
-    const result = await caller.ai.classifyEvidence({
-      fileName: "test.pdf",
-      fileType: "application/pdf",
-    });
-
-    expect(result.success).toBe(false);
-    expect(result.classification).toBeNull();
+  it("rejects a missing taxonomy before model invocation", async () => {
+    await expect(appRouter.createCaller(aiTestContext()).ai.classifyEvidence({ fileName: "مادة.pdf" } as any)).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    expect(model).not.toHaveBeenCalled();
   });
-
-  it("works without criteriaList (uses default standards)", async () => {
-    const { invokeLLM } = await import("./_core/llm");
-    (invokeLLM as any).mockResolvedValueOnce({
-      choices: [
-        {
-          message: {
-            content: JSON.stringify({
-              standardId: "std-2",
-              standardNumber: 2,
-              standardName: "التفاعل مع المجتمع المهني",
-              indicatorIndex: 1,
-              indicatorText: "المشاركة في المجتمعات المهنية",
-              subIndicatorIndex: 0,
-              subIndicatorText: "",
-              confidence: 0.7,
-              reasoning: "شهادة مشاركة في ورشة",
-              contentDescription: "شهادة حضور ورشة عمل",
-              suggestedPriority: "supporting",
-              suggestedKeywords: ["ورشة", "تدريب", "شهادة"],
-            }),
-          },
-        },
-      ],
-    });
-
-    const ctx = createPublicContext();
-    const caller = appRouter.createCaller(ctx);
-
-    const result = await caller.ai.classifyEvidence({
-      fileName: "شهادة_ورشة.pdf",
-      fileType: "application/pdf",
-      description: "شهادة حضور ورشة عمل",
-    });
-
-    expect(result.success).toBe(true);
-    expect(result.classification.standardId).toBe("std-2");
+  it("fails safely for syntactically valid but structurally invalid provider JSON", async () => {
+    model.mockResolvedValueOnce({ choices: [{ message: { content: '{"confidence":-99,"unexpected":"value"}' } }] } as any);
+    expect(await appRouter.createCaller(aiTestContext()).ai.classifyEvidence({ criteriaList: aiTaxonomy })).toEqual({ classification: null, success: false });
   });
-
-  it("includes learning context in classification", async () => {
-    const ctx = createPublicContext();
-    const caller = appRouter.createCaller(ctx);
-
-    const result = await caller.ai.classifyEvidence({
-      fileName: "خطة_درس.pdf",
-      fileType: "application/pdf",
-      jobTitle: "معلم",
-      learningContext: [
-        {
-          fileName: "خطة_سابقة.pdf",
-          criterionId: "std-6",
-          criterionTitle: "إعداد وتنفيذ خطة التعلم",
-          subEvidenceId: "std-6-item-1",
-          subEvidenceTitle: "إعداد خطة الدرس",
-        },
-      ],
-    });
-
-    expect(result.success).toBe(true);
-    expect(result.classification).toBeDefined();
+  it("accepts a bounded inline image but never a remote image URL", async () => {
+    const caller = appRouter.createCaller(aiTestContext());
+    await expect(caller.ai.classifyEvidence({ criteriaList: aiTaxonomy, fileUrl: "https://example.invalid/private.png" })).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    expect(model).not.toHaveBeenCalled();
+    expect((await caller.ai.classifyEvidence({ criteriaList: aiTaxonomy, fileUrl: aiPngDataUrl })).success).toBe(true);
+    const user = model.mock.calls[0][0].messages.find(message => message.role === "user");
+    expect(user?.content).toEqual(expect.arrayContaining([expect.objectContaining({ type: "image_url" })]));
   });
 });

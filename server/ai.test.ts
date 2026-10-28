@@ -1,6 +1,14 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { appRouter } from "./routers";
 import type { TrpcContext } from "./_core/context";
+import { aiTestContext, aiTaxonomy, aiClassification, aiPngDataUrl, configureAiTestEnvironment } from "../tests/fixtures/ai-router";
+vi.mock("./ai-admission-db", async importOriginal => ({
+  ...await importOriginal<typeof import("./ai-admission-db")>(),
+  reserveAiRequest: vi.fn().mockResolvedValue({ requestId: "11111111-1111-4111-8111-111111111111", expiresAt: new Date(Date.now() + 90_000) }),
+  finishAiRequest: vi.fn().mockResolvedValue(true),
+}));
+beforeEach(configureAiTestEnvironment);
+
 
 // Mock invokeLLM to avoid real API calls
 vi.mock("./_core/llm", () => ({
@@ -10,18 +18,7 @@ vi.mock("./_core/llm", () => ({
 import { invokeLLM } from "./_core/llm";
 const mockedInvokeLLM = vi.mocked(invokeLLM);
 
-function createPublicContext(): TrpcContext {
-  return {
-    user: null,
-    req: {
-      protocol: "https",
-      headers: {},
-    } as TrpcContext["req"],
-    res: {
-      clearCookie: vi.fn(),
-    } as unknown as TrpcContext["res"],
-  };
-}
+function createPublicContext(): TrpcContext { return aiTestContext(); }
 
 type AuthenticatedUser = NonNullable<TrpcContext["user"]>;
 
@@ -39,7 +36,7 @@ function createAuthContext(): TrpcContext {
   };
   return {
     user,
-    req: { protocol: "https", headers: {} } as TrpcContext["req"],
+    req: { protocol: "https", headers: { origin: "http://127.0.0.1:3000" } } as TrpcContext["req"],
     res: { clearCookie: vi.fn() } as unknown as TrpcContext["res"],
   };
 }
@@ -373,6 +370,7 @@ describe("ai.classifyEvidence", () => {
 
   it("classifies evidence to the correct standard and indicator", async () => {
     const classification = {
+      ...aiClassification,
       standardId: "std-1",
       standardNumber: 1,
       standardName: "أداء الواجبات الوظيفية",
@@ -402,6 +400,7 @@ describe("ai.classifyEvidence", () => {
     const caller = appRouter.createCaller(ctx);
 
     const result = await caller.ai.classifyEvidence({
+      criteriaList: aiTaxonomy,
       description: "صورة من سجل الحضور والانصراف",
       fileName: "attendance_record.jpg",
       fileType: "image",
@@ -445,6 +444,7 @@ describe("ai.classifyEvidence", () => {
     const caller = appRouter.createCaller(ctx);
 
     const result = await caller.ai.classifyEvidence({
+      criteriaList: aiTaxonomy,
       description: "ملف غير واضح",
     });
 
@@ -452,8 +452,9 @@ describe("ai.classifyEvidence", () => {
     expect(result.classification).toBeNull();
   });
 
-  it("works with minimal input (only fileName)", async () => {
+  it("rejects a proposed standard outside the supplied taxonomy", async () => {
     const classification = {
+      ...aiClassification,
       standardId: "std-7",
       standardNumber: 7,
       standardName: "توظيف تقنيات ووسائل التعلم المناسبة",
@@ -483,11 +484,12 @@ describe("ai.classifyEvidence", () => {
     const caller = appRouter.createCaller(ctx);
 
     const result = await caller.ai.classifyEvidence({
+      criteriaList: aiTaxonomy,
       fileName: "screenshot_madrasati_platform.png",
     });
 
-    expect(result.success).toBe(true);
-    expect(result.classification.standardId).toBe("std-7");
+    expect(result.success).toBe(false);
+    expect(result.classification).toBeNull();
   });
 });
 

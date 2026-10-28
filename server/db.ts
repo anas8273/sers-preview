@@ -331,10 +331,20 @@ export async function getShareLinkByToken(token: string) {
   return result.length > 0 ? result[0] : undefined;
 }
 
-export async function incrementShareLinkViews(id: number) {
+export async function incrementShareLinkViews(id: number, expectedPasswordHash: string | null): Promise<boolean> {
   const db = await getDb();
-  if (!db) return;
-  await db.update(shareLinks).set({ viewCount: sql`${shareLinks.viewCount} + 1` }).where(eq(shareLinks.id, id));
+  if (!db) throw new Error("Share view admission unavailable");
+  // Claim exactly one view while the grant is still the one whose password was
+  // verified. This statement finishes before parent/file reads to avoid a
+  // share→portfolio lock order opposite to create/delete operations.
+  try {
+    const [result] = await db.update(shareLinks).set({ viewCount: sql`COALESCE(${shareLinks.viewCount}, 0) + 1` }).where(and(
+      eq(shareLinks.id, id), eq(shareLinks.isActive, true), gt(shareLinks.expiresAt, sql`CURRENT_TIMESTAMP`),
+      sql`BINARY ${shareLinks.passwordHash} <=> BINARY ${expectedPasswordHash}`,
+      sql`(COALESCE(${shareLinks.maxViews}, 0) = 0 OR COALESCE(${shareLinks.viewCount}, 0) < ${shareLinks.maxViews})`,
+    ));
+    return result.affectedRows === 1;
+  } catch { throw new Error("Share view admission unavailable"); }
 }
 
 export async function getShareLinksByPortfolio(portfolioId: number) {

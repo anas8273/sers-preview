@@ -8,15 +8,17 @@ import { useState, useMemo, useRef, useCallback, useEffect } from "react";
 import { useLocation } from "wouter";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
-import { getEvidenceRemoteUrl, retryEvidenceUpload } from "@/lib/evidence-upload-state";
-import { dataUrlUploadPayload } from "@/lib/upload-data-url";
+import { LegacyUploadNotice, LEGACY_UPLOAD_MESSAGE } from "@/components/LegacyUploadNotice";
+import { getEvidenceRemoteUrl } from "@/lib/evidence-upload-state";
+import { aiFailureMessage } from "@/lib/ai-feedback";
+import { EvidenceClassificationReview, type EvidenceReviewProposal } from "@/components/EvidenceClassificationReview";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { usePortfolio } from "@/hooks/usePortfolio";
 import { useOfflineSync } from "@/hooks/useOfflineSync";
 import { usePreviewScale } from "@/hooks/usePreviewScale";
 
 const A4_WIDTH_PX = 793.7; // 210mm in px
-import { saveFileToIDB, getFileFromIDB, deleteFileFromIDB, cleanOldFiles } from "@/hooks/useIndexedDB";
+import { saveFileToIDB, getFileFromIDB, deleteFileFromIDB } from "@/hooks/useIndexedDB";
 import { getLoginUrl } from "@/const";
 import { generateQRDataURL } from "@/lib/qr-utils";
 import { exportToPDF, exportMultipleReportsToPDF, printElement } from "@/lib/pdf-export";
@@ -78,6 +80,7 @@ interface EvidenceItem {
   comment?: string; priority?: EvidencePriority; keywords?: string[]; showBarcode?: boolean;
   uploadedUrl?: string; // رابط S3 العام للملف المرفوع - يُستخدم في QR Code
 }
+interface PendingEvidenceProposal extends EvidenceReviewProposal { evidence: EvidenceItem; }
 interface CriterionData { score: number; notes: string; evidences: EvidenceItem[]; customSubEvidences: SubEvidence[]; }
 
 // ===== بناء البنود للوظائف غير المعلم =====
@@ -400,12 +403,14 @@ function saveStateToStorage(data: {
       };
     }
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...data, criteriaData: cleanCriteria, timestamp: Date.now() }));
+    return true;
   } catch {
     // localStorage ممتلئ - حاول حذف البيانات القديمة
     try {
       localStorage.removeItem(STORAGE_AUTOSAVE_KEY);
       localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...data, timestamp: Date.now() }));
-    } catch { /* ignore */ }
+      return true;
+    } catch { return false; }
   }
 }
 
@@ -414,11 +419,6 @@ function loadStateFromStorage(): any | null {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return null;
     const data = JSON.parse(raw);
-    // تجاهل البيانات القديمة (أكثر من 24 ساعة)
-    if (Date.now() - (data.timestamp || 0) > 86400000) {
-      localStorage.removeItem(STORAGE_KEY);
-      return null;
-    }
     return data;
   } catch { return null; }
 }
@@ -517,16 +517,13 @@ export default function PerformanceEvidence() {
   // tRPC share mutation
   const shareMutation = trpc.share.create.useMutation();
 
-  // tRPC file upload mutation - لرفع الملفات إلى S3 للحصول على رابط عام للباركود
-  const uploadFileMutation = trpc.file.upload.useMutation();
-  const retryingUploadIds = useRef(new Set<string>());
-  const [retryingUploads, setRetryingUploads] = useState<Set<string>>(new Set());
 
   // tRPC AI mutations
   const suggestMutation = trpc.ai.suggest.useMutation();
   const fillFormMutation = trpc.ai.fillFormFields.useMutation();
   const improveMutation = trpc.ai.improveText.useMutation();
   const classifyMutation = trpc.ai.classifyEvidence.useMutation();
+  const aiAccess = trpc.aiAccess.status.useQuery(undefined, { retry: false, staleTime: 30_000 });
 
   // User themes (moved to top level to follow Rules of Hooks)
   const userThemesQuery = trpc.userThemes.list.useQuery(undefined, { staleTime: 60000, enabled: isAuthenticated });
@@ -572,23 +569,15 @@ export default function PerformanceEvidence() {
         reader.onerror = () => reject(new Error("تعذر قراءة الصورة"));
         reader.readAsDataURL(file);
       });
-      let backgroundUrl = dataUrl;
-      if (isAuthenticated) {
-        const uploaded = await uploadFileMutation.mutateAsync({
-          fileName: `cover-background-${Date.now()}-${file.name}`,
-          ...dataUrlUploadPayload(dataUrl),
-        });
-        backgroundUrl = uploaded.url || dataUrl;
-      }
+      const backgroundUrl = dataUrl;
       setSelectedTheme((current) => ({ ...current, coverBackgroundUrl: backgroundUrl }));
-      toast.success("تم تطبيق خلفية الغلاف المخصصة.");
+      toast.success("تم تطبيق خلفية الغلاف محليًا؛ لم تُرفع إلى رابط عام.");
     } catch (error) {
-      console.error("Cover background upload failed", error);
-      toast.error("تعذر رفع الخلفية. حاول بصورة أخرى أو أعد المحاولة.");
+      toast.error("تعذرت قراءة الخلفية. بقيت الخلفية الحالية دون تغيير.");
     } finally {
       setIsCoverBackgroundUploading(false);
     }
-  }, [isAuthenticated, uploadFileMutation]);
+  }, [isAuthenticated]);
 
   const [personalInfo, setPersonalInfo] = useState({
     name: "", school: "",
@@ -600,6 +589,8 @@ export default function PerformanceEvidence() {
   });
 
   const [criteriaData, setCriteriaData] = useState<Record<string, CriterionData>>({});
+  const criteriaDataRef = useRef(criteriaData);
+  criteriaDataRef.current = criteriaData;
 
   const allCriteria = useMemo(() => [...(selectedJob?.criteria || []), ...customCriteria], [selectedJob, customCriteria]);
 
@@ -618,10 +609,7 @@ export default function PerformanceEvidence() {
     setStep("dashboard");
   };
 
-  // ===== تنظيف ملفات IndexedDB القديمة =====
-  useEffect(() => {
-    cleanOldFiles().catch(() => {});
-  }, []);
+  // Referenced local files are retained until explicit removal; age alone is not a deletion policy.
 
   // ===== استعادة الـ state من localStorage عند تحميل الصفحة (حل مشكلة الجوال + إغلاق المتصفح) =====
   useEffect(() => {
@@ -802,29 +790,9 @@ export default function PerformanceEvidence() {
     });
   };
 
-  const retryUpload = async (criterionId: string, ev: EvidenceItem, displayAsQR = false): Promise<boolean> => {
-    if (!isAuthenticated) {
-      toast.info('سجل دخولك لرفع الملف وتفعيل الباركود');
-      return false;
-    }
-    if (retryingUploadIds.current.has(ev.id)) return false;
-    retryingUploadIds.current.add(ev.id);
-    setRetryingUploads(new Set(retryingUploadIds.current));
-    try {
-      const url = await retryEvidenceUpload({ fileName: ev.fileName, fileData: ev.fileData || undefined }, {
-        readLocalFile: getFileFromIDB,
-        upload: input => uploadFileMutation.mutateAsync(input),
-      });
-      updateEvidence(criterionId, ev.id, { uploadedUrl: url, ...(displayAsQR ? { displayAs: 'qr' as const } : {}) });
-      toast.success('تم رفع المرفق بنجاح');
-      return true;
-    } catch {
-      toast.error('لم يكتمل رفع المرفق', { description: 'بقي الشاهد دون تغيير. أعد المحاولة، أو أعد إرفاق الملف إذا لم تعد نسخته المحلية متاحة.' });
-      return false;
-    } finally {
-      retryingUploadIds.current.delete(ev.id);
-      setRetryingUploads(new Set(retryingUploadIds.current));
-    }
+  const retryUpload = async (_criterionId: string, _ev: EvidenceItem, _displayAsQR = false): Promise<boolean> => {
+    toast.info(LEGACY_UPLOAD_MESSAGE);
+    return false;
   };
 
   const updateFormField = (criterionId: string, evidenceId: string, fieldId: string, value: string) => {
@@ -1039,7 +1007,7 @@ export default function PerformanceEvidence() {
     
     // تحديث سجل التعلم بالنقل اليدوي (يعزز دقة التصنيفات المستقبلية)
     try {
-      const logKey = `sers_learning_log_${selectedJob?.id || 'default'}`;
+      const logKey = `sers_learning_log_v2_${user?.id ?? 'guest'}_${selectedJob?.id || 'default'}`;
       const existingLog = JSON.parse(localStorage.getItem(logKey) || '[]');
       const newEntry = {
         fileName: evidence.fileName || evidence.text || 'manual-move',
@@ -1049,15 +1017,16 @@ export default function PerformanceEvidence() {
         subEvidenceTitle: toSubName || '',
         timestamp: Date.now(),
         isManualCorrection: true,
+        confirmedByUser: true,
       };
       const updatedLog = [...existingLog, newEntry].slice(-50);
       localStorage.setItem(logKey, JSON.stringify(updatedLog));
     } catch {}
     
     setShowMoveDialog(null);
-  }, [allCriteria, criteriaData, selectedJob]);
+  }, [allCriteria, criteriaData, selectedJob, user?.id]);
 
-  // ===== رفع ذكي مع تصنيف AI تلقائي =====
+  // Files remain unclassified until the user confirms an exact current taxonomy target.
   const [isSmartUploading, setIsSmartUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<{ stage: string; percent: number; framePreview?: string } | null>(null);
   const isUploadingRef = useRef(false); // flag لمنع حفظ localStorage أثناء الرفع
@@ -1166,336 +1135,154 @@ export default function PerformanceEvidence() {
     });
   }, []);
 
-  // ===== معالجة ملف واحد للتصنيف الذكي =====
+  const pendingStorageKey = selectedJob ? `sers_pending_evidence_v2_${user?.id ?? "guest"}_${selectedJob.id}` : "";
+  const pendingContextRef = useRef(pendingStorageKey);
+  pendingContextRef.current = pendingStorageKey;
+  const [loadedPendingKey, setLoadedPendingKey] = useState("");
+  const [pendingEvidence, setPendingEvidence] = useState<PendingEvidenceProposal[]>([]);
+  const confirmingEvidence = useRef(new Set<string>());
+
+  useEffect(() => {
+    let restored: PendingEvidenceProposal[] = [];
+    try {
+      const parsed: unknown = JSON.parse(localStorage.getItem(pendingStorageKey) ?? "[]");
+      if (Array.isArray(parsed)) restored = parsed.filter((item): item is PendingEvidenceProposal =>
+        item && typeof item.id === "string" && typeof item.fileName === "string" && item.evidence?.id === item.id &&
+        typeof item.evidence.fileData === "string" && item.evidence.fileData === `idb://${item.id}` &&
+        ["proposed", "unclassified"].includes(item.status) && typeof item.reason === "string"
+      ).slice(0, 50).map(item => ({ ...item, analyzing: false, reason: item.analyzing ? "استُعيد الملف دون تصنيف. اختر المعيار والبند يدويًا." : item.reason }));
+    } catch { /* A damaged optional local index must not block manual work. */ }
+    setPendingEvidence(restored);
+    setLoadedPendingKey(pendingStorageKey);
+  }, [pendingStorageKey]);
+
+  useEffect(() => {
+    if (!pendingStorageKey || loadedPendingKey !== pendingStorageKey) return;
+    try {
+      localStorage.setItem(pendingStorageKey, JSON.stringify(pendingEvidence.filter(item => item.persisted)));
+    } catch {
+      toast.warning("تعذر حفظ قائمة المراجعة على الجهاز. أبق الصفحة مفتوحة إلى أن تكمل المراجعة.");
+    }
+  }, [pendingEvidence, loadedPendingKey, pendingStorageKey]);
+
+  const confirmEvidenceProposal = useCallback(async (id: string, criterionId: string, subEvidenceId: string) => {
+    const pending = pendingEvidence.find(item => item.id === id);
+    const criterion = allCriteria.find(item => item.id === criterionId);
+    const sub = [...(criterion?.subEvidences ?? []), ...(criteriaData[criterionId]?.customSubEvidences ?? [])].find(item => item.id === subEvidenceId);
+    if (!pending || pending.analyzing || !criterion || !sub || !criteriaData[criterionId] || confirmingEvidence.current.has(id)) return;
+    confirmingEvidence.current.add(id);
+    try {
+      let evidence = { ...pending.evidence, subEvidenceId };
+      if (!pending.persisted) {
+        const data = evidence.fileData;
+        if (!data?.startsWith("data:")) {
+          toast.error("الملف المحلي غير متاح؛ أعد اختيار الملف قبل الاعتماد.");
+          return;
+        }
+        try {
+          const mimeType = data.slice(5, data.indexOf(";"));
+          await saveFileToIDB({ id, data, fileName: pending.fileName, fileType: mimeType, timestamp: Date.now() });
+          if ((await getFileFromIDB(id))?.data !== data) throw new Error("Local bytes not retained");
+          evidence = { ...evidence, fileData: `idb://${id}` };
+          setPendingEvidence(items => items.map(item => item.id === id ? { ...item, persisted: true, evidence } : item));
+        } catch {
+          setPendingEvidence(items => items.map(item => item.id === id ? { ...item, reason: "تعذر حفظ الملف على الجهاز؛ لم يُعتمد التصنيف. أبق الصفحة مفتوحة، ثم أعد الاعتماد بعد إتاحة مساحة." } : item));
+          toast.warning("تعذر حفظ الملف على الجهاز؛ لم يُضف شاهد أو سجل تعلم. أبق الصفحة مفتوحة وأعد المحاولة.");
+          return;
+        }
+      }
+      if (evidence.fileData?.startsWith("idb://") && !await getFileFromIDB(id)) {
+        setPendingEvidence(items => items.map(item => item.id === id ? { ...item, persisted: false, reason: "تعذر العثور على الملف المحلي. أعد اختيار الملف قبل اعتماده." } : item));
+        toast.error("الملف المحلي غير متاح؛ لم يُضف أي شاهد. أعد اختياره.");
+        return;
+      }
+      if (pendingContextRef.current !== pendingStorageKey) return;
+      const current = criteriaDataRef.current;
+      if (!current[criterionId]) return;
+      const existing = Object.values(current).flatMap(value => value.evidences).find(item => item.id === id);
+      const confirmedEvidence = { ...evidence, ...existing, subEvidenceId, fileData: evidence.fileData };
+      // A failed local save may leave this ID in memory. Reconcile a retry to
+      // the user's latest selected target, rather than recording a different
+      // learning target from the actual association.
+      const next = Object.fromEntries(Object.entries(current).map(([key, value]) => [key, {
+        ...value, evidences: value.evidences.filter(item => item.id !== id),
+      }]));
+      next[criterionId] = { ...next[criterionId], evidences: [...next[criterionId].evidences, confirmedEvidence] };
+      // Keep a retryable pending entry if the local mapping cannot be persisted.
+      const saved = !!selectedJob && saveStateToStorage({ step, jobId: selectedJob.id, themeId: selectedTheme.id, criteriaData: next, personalInfo, customCriteria, currentCriterionIndex, activeTab, expandedSubEvidence });
+      if (!saved) {
+        toast.warning("تعذر حفظ التصنيف على الجهاز؛ بقي الملف في قائمة المراجعة ولم يُضف إلى البنود. أعد الاعتماد بعد إتاحة مساحة.");
+        return;
+      }
+      criteriaDataRef.current = next;
+      setCriteriaData(next);
+      try {
+        const key = `sers_learning_log_v2_${user?.id ?? "guest"}_${selectedJob?.id || "default"}`;
+        const parsed: unknown = JSON.parse(localStorage.getItem(key) ?? "[]");
+        const confirmed = Array.isArray(parsed) ? parsed.filter(entry => entry?.confirmedByUser === true && entry.evidenceId !== id) : [];
+        localStorage.setItem(key, JSON.stringify([...confirmed, { evidenceId: id, fileName: pending.fileName, criterionId, criterionTitle: criterion.title, subEvidenceId, subEvidenceTitle: sub.title, timestamp: Date.now(), confirmedByUser: true }].slice(-50)));
+      } catch { /* Learning is optional and cannot block a user-confirmed mapping. */ }
+      setPendingEvidence(items => items.filter(item => item.id !== id));
+      toast.success("أُضيف الشاهد وفق التصنيف الذي اعتمدته. الملف محلي حتى يُرفع عبر مكتبة الشواهد.");
+    } catch {
+      setPendingEvidence(items => items.map(item => item.id === id ? { ...item, reason: "تعذرت قراءة الملف المحلي؛ لم يُعتمد التصنيف. أعد الاعتماد عندما تتاح مساحة التخزين." } : item));
+      toast.error("تعذرت قراءة الملف المحلي؛ لم يُعتمد التصنيف. يمكنك إعادة المحاولة.");
+    } finally { confirmingEvidence.current.delete(id); }
+  }, [pendingEvidence, allCriteria, criteriaData, pendingStorageKey, selectedJob, step, selectedTheme.id, personalInfo, customCriteria, currentCriterionIndex, activeTab, expandedSubEvidence, user?.id]);
+
+  const rejectEvidenceProposal = useCallback((id: string) => {
+    setPendingEvidence(items => items.map(item => item.id === id ? { ...item, status: "unclassified", criterionId: undefined, subEvidenceId: undefined, confidence: undefined, description: undefined, reason: "رُفض الاقتراح. الملف محفوظ دون تصنيف؛ اختر المعيار والبند يدويًا." } : item));
+  }, []);
+
   const processSmartFile = useCallback(async (file: File, fileIndex: number, totalFiles: number): Promise<{ success: boolean; criterion?: string; indicator?: string }> => {
+    const contextKey = pendingStorageKey;
+    const canSuggest = isAuthenticated && aiAccess.data?.available !== false;
+    const unavailableReason = !isAuthenticated ? "سجّل الدخول للحصول على اقتراح ذكي، أو اختر التصنيف يدويًا." : "المساعدة الذكية غير مفعلة الآن. الملف محفوظ دون تصنيف؛ اختر المعيار والبند يدويًا.";
     const isImage = file.type.startsWith("image/");
     const isVideo = file.type.startsWith("video/");
-    const batchPrefix = totalFiles > 1 ? `[ملف ${fileIndex + 1}/${totalFiles}] ` : "";
-
-    // === مرحلة 1: قراءة الملف ===
-    setUploadProgress({ stage: `${batchPrefix}جاري قراءة الملف...`, percent: Math.round(5 + (80 * fileIndex / totalFiles)) });
-
-    return new Promise((resolve) => {
-      const reader = new FileReader();
-      reader.onload = async () => {
+    const evId = `ev_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+    setUploadProgress({ stage: `قراءة الملف ${fileIndex + 1} من ${totalFiles}: ${file.name}`, percent: Math.round(10 + 80 * fileIndex / totalFiles) });
+    try {
+      const originalBytes = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => typeof reader.result === "string" ? resolve(reader.result) : reject(new Error("Unreadable file"));
+        reader.onerror = () => reject(new Error("Unreadable file"));
+        reader.readAsDataURL(file);
+      });
+      const evidence = { ...createEmptyEvidence(), id: evId, type: isImage ? "image" as const : isVideo ? "video" as const : "file" as const, fileName: file.name, text: file.name, fileData: originalBytes, displayAs: isImage ? "image" as const : "qr" as const };
+      let persisted = false;
+      try {
+        await saveFileToIDB({ id: evId, data: originalBytes, fileName: file.name, fileType: file.type, timestamp: Date.now() });
+        persisted = (await getFileFromIDB(evId))?.data === originalBytes;
+        if (persisted) evidence.fileData = `idb://${evId}`;
+      } catch { /* Keep the original bytes in memory and state the limitation. */ }
+      if (pendingContextRef.current !== contextKey) return { success: false };
+      setPendingEvidence(items => [...items, { id: evId, fileName: file.name, evidence, persisted, status: "unclassified", analyzing: canSuggest, reason: canSuggest ? "الملف بانتظار مراجعتك." : unavailableReason }]);
+      if (!canSuggest) return { success: true };
+      try {
+        const aiImageUrl = isImage ? await compressImage(originalBytes, 800, 0.5) : isVideo ? (await extractVideoFrame(file)) ?? undefined : undefined;
+        const criteriaList = allCriteria.map(criterion => ({ id: criterion.id, title: criterion.title, subEvidences: [...criterion.subEvidences, ...(criteriaData[criterion.id]?.customSubEvidences ?? [])].map(sub => ({ id: sub.id, title: sub.title, isCustom: !!sub.isCustom })) }));
+        let learningContext: Array<{ fileName: string; criterionId: string; criterionTitle: string; subEvidenceId: string; subEvidenceTitle: string }> = [];
         try {
-          const rawBase64 = reader.result as string;
-          let storageBase64 = rawBase64;
-          let aiImageUrl: string | undefined;
-          
-          if (isImage) {
-            // === مرحلة 2: ضغط الصورة ===
-            setUploadProgress({ stage: `${batchPrefix}جاري ضغط الصورة...`, percent: Math.round(15 + (80 * fileIndex / totalFiles)) });
-            storageBase64 = await compressImageForStorage(rawBase64, 1200, 0.7);
-            aiImageUrl = await compressImage(rawBase64, 800, 0.5);
-          } else if (isVideo) {
-            // Extract a preview for classification only; retain the original video bytes.
-            setUploadProgress({ stage: `${batchPrefix}جاري استخراج إطار من الفيديو...`, percent: Math.round(15 + (80 * fileIndex / totalFiles)) });
-            const videoFrame = await extractVideoFrame(file);
-            if (videoFrame) {
-              aiImageUrl = videoFrame;
-              // عرض معاينة الإطار المستخرج
-              setUploadProgress({ stage: `${batchPrefix}تم استخراج المعاينة - حفظ الفيديو الأصلي كاملًا`, percent: Math.round(25 + (80 * fileIndex / totalFiles)), framePreview: videoFrame });
-            }
-            
-            // Never replace the evidence with a canvas recording: it loses audio
-            // and the previous implementation stopped after 30 seconds.
-
-          }
-
-          let targetCriterionId: string | null = null;
-          let targetSubId: string = "";
-          let contentDesc: string = file.name;
-          let classificationSuccess = false;
-          let criterionTitle = "";
-          let indicatorText = "";
-          
-          // === مرحلة 3: التصنيف الذكي ===
-          setUploadProgress(prev => ({ stage: `${batchPrefix}جاري التصنيف الذكي...`, percent: Math.round(45 + (80 * fileIndex / totalFiles)), framePreview: prev?.framePreview }));
-          
-          try {
-            // بناء قائمة البنود الفعلية + المخصصة للوظيفة الحالية
-            const criteriaListForAI = allCriteria.map(c => ({
-              id: c.id,
-              title: c.title,
-              subEvidences: [
-                ...c.subEvidences.map(s => ({ id: s.id, title: s.title, isCustom: !!s.isCustom })),
-                ...(criteriaData[c.id]?.customSubEvidences || []).map(s => ({ id: s.id, title: s.title, isCustom: true })),
-              ],
-            }));
-            
-            // جلب سجل التعلم من localStorage (آخر 10 تصنيفات ناجحة)
-            let learningContext: { fileName: string; criterionId: string; criterionTitle: string; subEvidenceId: string; subEvidenceTitle: string }[] = [];
-            try {
-              const stored = localStorage.getItem(`sers_learning_log_${selectedJob?.id || 'default'}`);
-              if (stored) {
-                const parsed = JSON.parse(stored);
-                learningContext = Array.isArray(parsed) ? parsed.slice(-10) : [];
-              }
-            } catch {}
-            
-            const result = await classifyMutation.mutateAsync({
-              fileName: file.name,
-              fileType: file.type,
-              description: file.name.replace(/\.[^/.]+$/, "").replace(/[-_]/g, " "),
-              fileUrl: aiImageUrl,
-              jobId: selectedJob?.id,
-              jobTitle: selectedJob?.title,
-              criteriaList: criteriaListForAI,
-              learningContext,
-            });
-
-            if (result.success && result.classification) {
-              const cls = result.classification;
-              
-              // دالة مساعدة لتنظيف النص العربي للمقارنة
-              const normalize = (t: string) => t.replace(/[\u0640\u064B-\u065F]/g, '').replace(/[إأآا]/g, 'ا').replace(/[ىئ]/g, 'ي').replace(/ة/g, 'ه').replace(/\s+/g, ' ').trim().toLowerCase();
-              
-              // === تحسين البحث عن المعيار: بحث متعدد المستويات ===
-              let targetCriterion = allCriteria.find(c => c.id === cls.standardId);
-              if (!targetCriterion) {
-                // بحث بالاسم مع normalize
-                const normalizedStdName = normalize(cls.standardName);
-                targetCriterion = allCriteria.find(c => {
-                  const normTitle = normalize(c.title);
-                  return normTitle === normalizedStdName || normTitle.includes(normalizedStdName) || normalizedStdName.includes(normTitle);
-                });
-              }
-              if (!targetCriterion && cls.standardNumber > 0 && cls.standardNumber <= allCriteria.length) {
-                // بحث بالرقم كـ fallback
-                targetCriterion = allCriteria[cls.standardNumber - 1];
-              }
-              
-              if (targetCriterion && criteriaData[targetCriterion.id]) {
-                const subs = [...targetCriterion.subEvidences, ...(criteriaData[targetCriterion.id]?.customSubEvidences || [])];
-                
-                // === خوارزمية توجيه ذكية متعددة المستويات ===
-                let targetSub = subs[0]; // fallback أولي
-                let matched = false;
-                
-                // تحقق: هل البند الفرعي "غير محدد" أو فارغ أو عام؟
-                const isSubUndetermined = !cls.subIndicatorText || 
-                  cls.subIndicatorText.length <= 3 || 
-                  normalize(cls.subIndicatorText).includes('غير محدد') ||
-                  normalize(cls.subIndicatorText).includes('غير معروف') ||
-                  normalize(cls.subIndicatorText).includes('عام') ||
-                  cls.subIndicatorIndex === 0;
-                
-                // === المستوى 1: مطابقة دقيقة بنص البند الفرعي (فقط إذا كان محدداً) ===
-                if (!isSubUndetermined && cls.subIndicatorText && cls.subIndicatorText.length > 3) {
-                  const normalizedSub = normalize(cls.subIndicatorText);
-                  // أولاً: تطابق تام
-                  let exactMatch = subs.find(s => normalize(s.title) === normalizedSub);
-                  if (exactMatch) { targetSub = exactMatch; matched = true; }
-                  // ثانياً: احتواء
-                  if (!matched) {
-                    const containMatch = subs.find(s => normalize(s.title).includes(normalizedSub) || normalizedSub.includes(normalize(s.title)));
-                    if (containMatch) { targetSub = containMatch; matched = true; }
-                  }
-                }
-                
-                // === المستوى 2: مطابقة بنص البند الرئيسي ===
-                if (!matched && cls.indicatorText && cls.indicatorText.length > 3) {
-                  const normalizedInd = normalize(cls.indicatorText);
-                  // تجاهل نصوص "غير محدد" في البند الرئيسي أيضاً
-                  if (!normalizedInd.includes('غير محدد') && !normalizedInd.includes('غير معروف')) {
-                    const exactMatch = subs.find(s => normalize(s.title) === normalizedInd);
-                    if (exactMatch) { targetSub = exactMatch; matched = true; }
-                    if (!matched) {
-                      const containMatch = subs.find(s => normalize(s.title).includes(normalizedInd) || normalizedInd.includes(normalize(s.title)));
-                      if (containMatch) { targetSub = containMatch; matched = true; }
-                    }
-                  }
-                }
-                
-                // === المستوى 3: مطابقة بالفهرس الهيكلي ===
-                if (!matched && cls.indicatorIndex > 0) {
-                  const stdPrefix = targetCriterion.id;
-                  const targetItemId = `${stdPrefix}-item-${cls.indicatorIndex}`;
-                  
-                  if (cls.subIndicatorIndex > 0) {
-                    // البحث عن البند الفرعي المحدد
-                    const subItemId = `${stdPrefix}-${cls.indicatorIndex}-${cls.subIndicatorIndex}`;
-                    const subMatch = subs.find(s => s.id === subItemId);
-                    if (subMatch) { targetSub = subMatch; matched = true; }
-                  }
-                  
-                  if (!matched) {
-                    // البحث عن البند الرئيسي بالـ ID
-                    const itemMatch = subs.find(s => s.id === targetItemId);
-                    if (itemMatch) { targetSub = itemMatch; matched = true; }
-                  }
-                  
-                  if (!matched) {
-                    // fallback: البحث بالفهرس في القائمة المسطحة
-                    const mainItems = targetCriterion.subEvidences.filter(s => !s.isSubItem);
-                    const idx = Math.min(cls.indicatorIndex - 1, mainItems.length - 1);
-                    if (idx >= 0 && idx < mainItems.length) {
-                      targetSub = mainItems[idx];
-                      matched = true;
-                    }
-                  }
-                }
-                
-                // === المستوى 4: مطابقة ذكية بالكلمات المفتاحية (Fuzzy Scoring) ===
-                if (!matched && (cls.indicatorText || cls.subIndicatorText || cls.contentDescription)) {
-                  const textsToSearch = [cls.subIndicatorText, cls.indicatorText, cls.contentDescription, file.name].filter(Boolean);
-                  const searchTexts = textsToSearch.map(t => normalize(t!)).filter(t => !t.includes('غير محدد') && !t.includes('غير معروف'));
-                  const allWords = searchTexts.flatMap(t => t.split(/\s+/).filter((w: string) => w.length > 2));
-                  const stopWords = new Set(['من', 'في', 'على', 'إلى', 'عن', 'مع', 'هذا', 'هذه', 'التي', 'الذي', 'بين', 'عند', 'حول', 'غير', 'محدد']);
-                  const keywords = allWords.filter(w => !stopWords.has(w));
-                  
-                  if (keywords.length > 0) {
-                    let bestMatch = subs[0];
-                    let bestScore = 0;
-                    for (const sub of subs) {
-                      const subNorm = normalize(sub.title);
-                      const descNorm = sub.description ? normalize(sub.description) : '';
-                      let score = 0;
-                      for (const kw of keywords) {
-                        if (subNorm.includes(kw)) score += 3;
-                        if (descNorm.includes(kw)) score += 1;
-                      }
-                      if (sub.isSubItem && score > 0) score += 1;
-                      if (score > bestScore) {
-                        bestScore = score;
-                        bestMatch = sub;
-                      }
-                    }
-                    if (bestScore >= 2) {
-                      targetSub = bestMatch;
-                      matched = true;
-                    }
-                  }
-                }
-                
-                // === المستوى 5: إذا لم يتم التطابق، إدراج تحت البند الرئيسي الأقرب ===
-                if (!matched && cls.indicatorIndex > 0) {
-                  const mainItems = subs.filter(s => !s.isSubItem);
-                  const idx = Math.min(cls.indicatorIndex - 1, mainItems.length - 1);
-                  if (idx >= 0) {
-                    targetSub = mainItems[idx];
-                    matched = true; // اعتبره matched لأننا وجدنا البند الرئيسي
-                  }
-                }
-                
-                // === المستوى 6 (جديد): Fallback نهائي - أول بند رئيسي في المعيار ===
-                if (!matched) {
-                  const mainItems = subs.filter(s => !s.isSubItem);
-                  if (mainItems.length > 0) {
-                    targetSub = mainItems[0];
-                  } else if (subs.length > 0) {
-                    targetSub = subs[0];
-                  }
-                }
-                
-                targetCriterionId = targetCriterion.id;
-                targetSubId = targetSub?.id || subs[0]?.id || "";
-                contentDesc = cls.contentDescription || file.name;
-                classificationSuccess = true;
-                criterionTitle = targetCriterion.title;
-                
-                // بناء نص المؤشر للعرض
-                const matchedSubTitle = targetSub?.title || '';
-                indicatorText = cls.indicatorText || '';
-                if (matchedSubTitle && matchedSubTitle !== indicatorText) {
-                  indicatorText += ` → ${matchedSubTitle}`;
-                }
-                
-                // === حفظ في سجل التعلم (Learning Log) ===
-                try {
-                  const logKey = `sers_learning_log_${selectedJob?.id || 'default'}`;
-                  const existingLog = JSON.parse(localStorage.getItem(logKey) || '[]');
-                  const newEntry = {
-                    fileName: file.name,
-                    criterionId: targetCriterion.id,
-                    criterionTitle: targetCriterion.title,
-                    subEvidenceId: targetSub?.id || '',
-                    subEvidenceTitle: matchedSubTitle,
-                    timestamp: Date.now(),
-                  };
-                  // احتفظ بآخر 50 تصنيف فقط
-                  const updatedLog = [...existingLog, newEntry].slice(-50);
-                  localStorage.setItem(logKey, JSON.stringify(updatedLog));
-                } catch {
-                  // تجاهل أخطاء localStorage
-                }
-              }
-            }
-          } catch (aiErr) {
-            console.error("AI classification error:", aiErr);
-          }
-          
-          if (!classificationSuccess) {
-            const firstCriterion = allCriteria[0];
-            if (firstCriterion) {
-              targetCriterionId = firstCriterion.id;
-              // إدراج في أول بند رئيسي (غير فرعي) بدلاً من أول بند مطلقاً
-              const mainSubs = firstCriterion.subEvidences.filter(s => !s.isSubItem);
-              targetSubId = mainSubs[0]?.id || firstCriterion.subEvidences[0]?.id || "";
-              criterionTitle = firstCriterion.title;
-            }
-          }
-          
-          // === مرحلة 4: إضافة الشاهد ===
-          setUploadProgress(prev => ({ stage: `${batchPrefix}جاري حفظ الشاهد...`, percent: Math.round(75 + (80 * fileIndex / totalFiles)), framePreview: prev?.framePreview }));
-          
-          if (targetCriterionId) {
-            const evId = `ev_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-            const newEv = createEmptyEvidence(targetSubId);
-            newEv.id = evId;
-            newEv.type = isImage ? "image" : isVideo ? "video" : "file";
-            newEv.fileName = file.name;
-            newEv.text = contentDesc;
-            newEv.displayAs = isImage ? "image" : "qr";
-            
-            try {
-              await saveFileToIDB({
-                id: evId,
-                data: storageBase64,
-                fileName: file.name,
-                fileType: file.type,
-                timestamp: Date.now(),
-              });
-              if (isImage && storageBase64.length < 200000) {
-                newEv.fileData = storageBase64;
-              } else {
-                newEv.fileData = `idb://${evId}`;
-              }
-            } catch {
-              newEv.fileData = storageBase64;
-            }
-            
-            // رفع الملف إلى S3 للحصول على رابط عام للباركود (فقط إذا كان المستخدم مسجلاً)
-            if (isAuthenticated) {
-              try {
-                const uploadResult = await uploadFileMutation.mutateAsync({
-                  fileName: file.name,
-                  ...dataUrlUploadPayload(storageBase64),
-                });
-                const remoteUrl = getEvidenceRemoteUrl({ type: newEv.type, uploadedUrl: uploadResult.url });
-                if (!remoteUrl) throw new Error('Upload returned no valid URL');
-                newEv.uploadedUrl = remoteUrl;
-              } catch (uploadErr) {
-                console.warn("Evidence upload failed; local copy retained:", uploadErr);
-                toast.warning("لم يُرفع المرفق؛ النسخة محلية فقط ويمكن إعادة المحاولة من الشاهد");
-              }
-            }
-            
-            addEvidenceToCriterion(targetCriterionId, newEv);
-            resolve({ success: classificationSuccess, criterion: criterionTitle, indicator: indicatorText });
-          } else {
-            resolve({ success: false });
-          }
-        } catch (err) {
-          console.error("Smart upload error:", err);
-          resolve({ success: false });
-        }
-      };
-      reader.onerror = () => resolve({ success: false });
-      reader.readAsDataURL(file);
-    });
-  }, [allCriteria, criteriaData, classifyMutation, compressImage, compressImageForStorage, addEvidenceToCriterion, uploadFileMutation, extractVideoFrame, selectedJob, isAuthenticated]);
+          const parsed: unknown = JSON.parse(localStorage.getItem(`sers_learning_log_v2_${user?.id ?? "guest"}_${selectedJob?.id || "default"}`) ?? "[]");
+          if (Array.isArray(parsed)) learningContext = parsed.filter(entry => entry?.confirmedByUser === true).slice(-10).map(({ fileName, criterionId, criterionTitle, subEvidenceId, subEvidenceTitle }) => ({ fileName, criterionId, criterionTitle, subEvidenceId, subEvidenceTitle }));
+        } catch { /* Old unconfirmed suggestions are deliberately not learning examples. */ }
+        const result = await classifyMutation.mutateAsync({ fileName: file.name, fileType: file.type, description: file.name.replace(/\.[^/.]+$/, "").replace(/[-_]/g, " "), fileUrl: aiImageUrl, jobId: selectedJob?.id, jobTitle: selectedJob?.title, criteriaList, learningContext });
+        const classification = result.success ? result.classification : null;
+        const criterion = allCriteria.find(item => item.id === classification?.standardId);
+        const canonicalSubId = classification && "subEvidenceId" in classification ? classification.subEvidenceId : undefined;
+        const sub = [...(criterion?.subEvidences ?? []), ...(criteriaData[criterion?.id ?? ""]?.customSubEvidences ?? [])].find(item => item.id === canonicalSubId);
+        const valid = !!classification && !!criterion && !!sub && Number.isFinite(classification.confidence) && classification.confidence >= 0 && classification.confidence <= 1;
+        setPendingEvidence(items => items.map(item => item.id === evId ? valid ? { ...item, analyzing: false, status: "proposed", criterionId: criterion!.id, subEvidenceId: sub!.id, confidence: classification!.confidence, description: classification!.contentDescription, reason: "اقتراح غير معتمد. راجع الوجهة أو عدّلها ثم اعتمد التصنيف." } : { ...item, analyzing: false, reason: "لم ينتج اقتراح مطابق للبنود الحالية. الملف محفوظ دون تصنيف؛ اختر الوجهة يدويًا." } : item));
+      } catch (error) {
+        setPendingEvidence(items => items.map(item => item.id === evId ? { ...item, analyzing: false, reason: aiFailureMessage(error) } : item));
+      }
+      return { success: true };
+    } catch {
+      toast.error(`تعذرت قراءة ${file.name}. أعد اختيار الملف؛ لم يُضف إلى أي بند.`);
+      return { success: false };
+    }
+  }, [pendingStorageKey, allCriteria, criteriaData, classifyMutation, compressImage, extractVideoFrame, selectedJob, isAuthenticated, aiAccess.data?.available, user?.id]);
 
   const handleSmartUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     e.preventDefault();
@@ -1514,7 +1301,10 @@ export default function PerformanceEvidence() {
     if (oversized.length > 0) {
       toast.error(`${oversized.length} ملف تجاوز الحد الأقصى (16MB)`, { description: oversized.map(f => f.name).join(', ') });
     }
-    const validFiles = fileList.filter(f => f.size <= 16 * 1024 * 1024);
+    const validFiles = fileList.filter(f => f.size <= 16 * 1024 * 1024).slice(0, Math.min(10, Math.max(0, 50 - pendingEvidence.length)));
+    if (validFiles.length < fileList.filter(file => file.size <= 16 * 1024 * 1024).length) {
+      toast.warning("يمكن مراجعة عشرة ملفات في الدفعة وحتى خمسين ملفًا معلقًا. أكمل المراجعة ثم أضف بقية الملفات.");
+    }
     if (validFiles.length === 0) return;
     
     // تفعيل flag منع الحفظ أثناء الرفع
@@ -1540,54 +1330,12 @@ export default function PerformanceEvidence() {
       results.push({ ...result, fileName: currentFile.name });
     }
     
-    // عرض ملخص النتائج
-    const successCount = results.filter(r => r.success).length;
-    const failCount = results.filter(r => !r.success).length;
-    
-    if (totalFiles === 1) {
-      const r = results[0];
-      if (r.success) {
-        // إشعار مرئي محسّن يعرض مسار التصنيف الكامل
-        const pathParts = [r.criterion, r.indicator].filter(Boolean);
-        const classificationPath = pathParts.join(' \u2190 ');
-        toast.success(`\u2728 تم التصنيف الذكي بنجاح`, {
-          description: `\ud83d\udcc1 ${r.fileName}\n\ud83d\udccd المسار: ${classificationPath}\n\u270f\ufe0f يمكنك تعديل التصنيف من زر النقل بجانب الشاهد`,
-          duration: 8000,
-        });
-      } else {
-        toast.warning("لم يتمكن النظام من تصنيف الشاهد تلقائياً", {
-          description: `\ud83d\udcc1 ${r.fileName}\nتم إضافته للبند الأول. يمكنك نقله يدوياً باستخدام زر النقل.`,
-          duration: 6000,
-        });
-      }
-    } else {
-      // ملخص الدفعة مع مسارات التصنيف
-      const summaryLines = results.map(r => {
-        if (r.success) {
-          const pathParts = [r.criterion, r.indicator].filter(Boolean);
-          return `\u2705 ${r.fileName}\n   \u2192 ${pathParts.join(' \u2190 ')}`;
-        }
-        return `\u26a0\ufe0f ${r.fileName} \u2192 البند الأول (لم يُصنّف)`;
-      }).join('\n');
-      
-      if (successCount === totalFiles) {
-        toast.success(`\u2728 تم تصنيف ${totalFiles} شواهد بنجاح!`, {
-          description: `${summaryLines}\n\n\u270f\ufe0f يمكنك تعديل التصنيف من زر النقل`,
-          duration: 10000,
-        });
-      } else if (successCount > 0) {
-        toast.info(`تم تصنيف ${successCount} من ${totalFiles} شواهد`, {
-          description: `${summaryLines}\n\n\u270f\ufe0f يمكنك تعديل التصنيف من زر النقل`,
-          duration: 10000,
-        });
-      } else {
-        toast.warning(`تم إضافة ${totalFiles} شواهد للبند الأول`, {
-          description: "لم يتمكن النظام من تصنيفها تلقائياً. يمكنك نقلها يدوياً باستخدام زر النقل.",
-          duration: 6000,
-        });
-      }
+    const savedCount = results.filter(result => result.success).length;
+    if (savedCount) {
+      toast.info(`أُضيف ${savedCount} ملف إلى قائمة المراجعة دون تصنيف تلقائي.`);
+      document.getElementById("pending-evidence-heading")?.focus();
     }
-    
+
     setUploadProgress({ stage: "اكتمل!", percent: 100 });
     setTimeout(() => {
       setUploadProgress(null);
@@ -1600,7 +1348,7 @@ export default function PerformanceEvidence() {
         return { ...prev };
       });
     }, 1200);
-  }, [processSmartFile]);
+  }, [processSmartFile, pendingEvidence.length]);
 
   // ===== رفع ملف عادي (بدون تصنيف ذكي) - يدعم رفع متعدد =====
   const handleFileUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1670,22 +1418,7 @@ export default function PerformanceEvidence() {
           newEv.fileData = processedData;
         }
         
-        // رفع الملف إلى S3 للحصول على رابط عام للباركود (فقط إذا كان المستخدم مسجلاً)
-        if (isAuthenticated) {
-          try {
-            const uploadResult = await uploadFileMutation.mutateAsync({
-              fileName: file.name,
-              ...dataUrlUploadPayload(processedData),
-            });
-            const remoteUrl = getEvidenceRemoteUrl({ type: newEv.type, uploadedUrl: uploadResult.url });
-            if (!remoteUrl) throw new Error('Upload returned no valid URL');
-            newEv.uploadedUrl = remoteUrl;
-          } catch (uploadErr) {
-            console.warn("Evidence upload failed; local copy retained:", uploadErr);
-            toast.warning("لم يُرفع المرفق؛ النسخة محلية فقط ويمكن إعادة المحاولة من الشاهد");
-          }
-        }
-        
+        // This legacy editor keeps a local attachment only. Secure publication is in Evidence Library.
         addEvidenceToCriterion(criterionId, newEv);
         addedCount++;
       } catch {
@@ -1696,7 +1429,7 @@ export default function PerformanceEvidence() {
     isUploadingRef.current = false;
     if (addedCount > 0) {
       toast.success(
-        addedCount === 1 ? "تم إضافة الشاهد بنجاح" : `تم إضافة ${addedCount} شواهد بنجاح`,
+        addedCount === 1 ? "أُضيف الشاهد محليًا دون رابط مشاركة" : `أُضيف ${addedCount} شواهد محليًا دون روابط مشاركة`,
         { description: validFiles.map(f => f.name).join(', '), duration: 3000 }
       );
       // تفعيل حفظ بعد انتهاء الرفع
@@ -1705,7 +1438,7 @@ export default function PerformanceEvidence() {
       }, 200);
     }
     try { localStorage.removeItem(STORAGE_PENDING_UPLOAD); } catch {}
-  }, [compressImageForStorage, addEvidenceToCriterion, uploadFileMutation, isAuthenticated]);
+  }, [compressImageForStorage, addEvidenceToCriterion, isAuthenticated]);
 
   const triggerFileUpload = (criterionId: string, subEvidenceId: string) => {
     activeUploadRef.current = { criterionId, subEvidenceId };
@@ -1727,12 +1460,12 @@ export default function PerformanceEvidence() {
       });
       if (result.content) {
         setAiChat((prev) => ({ ...prev, [key]: [...(prev[key] || []), result.content] }));
+        setAiPrompt("");
       }
-    } catch {
-      setAiChat((prev) => ({ ...prev, [key]: [...(prev[key] || []), "حدث خطأ في الاتصال بالذكاء الاصطناعي. يرجى المحاولة مرة أخرى."] }));
+    } catch (error) {
+      setAiChat((prev) => ({ ...prev, [key]: [...(prev[key] || []), aiFailureMessage(error)] }));
     }
     setAiLoading(null);
-    setAiPrompt("");
   };
 
   const fillFormWithAI = async (criterionId: string, subId: string, evId: string, fields: FormField[]) => {
@@ -1753,7 +1486,7 @@ export default function PerformanceEvidence() {
         });
         toast.success("تم تعبئة النموذج بالذكاء الاصطناعي");
       }
-    } catch { toast.error("فشل تعبئة النموذج"); }
+    } catch (error) { toast.error(aiFailureMessage(error)); }
     setAiLoading(null);
   };
 
@@ -1767,7 +1500,7 @@ export default function PerformanceEvidence() {
         updateFormField(criterionId, evId, fieldId, result.improved);
         toast.success("تم تحسين النص");
       }
-    } catch { /* ignore */ }
+    } catch (error) { toast.error(aiFailureMessage(error)); }
     setAiLoading(null);
   };
 
@@ -1988,6 +1721,10 @@ export default function PerformanceEvidence() {
   // handleExportDocx تم حذفه - الاكتفاء بـ PDF
 
   const handleShareLink = async () => {
+    if (shareAccessCode.trim() && shareAccessCode.trim().length < 6) {
+      toast.error("رمز الوصول الجديد يحتاج إلى 6 أحرف أو أرقام على الأقل.");
+      return;
+    }
     if (!isAuthenticated) {
       toast.error("يجب تسجيل الدخول أولاً لمشاركة الملف كرابط");
       return;
@@ -2245,7 +1982,7 @@ export default function PerformanceEvidence() {
                     if (getEvidenceRemoteUrl(ev)) updateEvidence(criterionId, ev.id, { displayAs: 'qr' });
                     else await retryUpload(criterionId, ev, true);
                   } else updateEvidence(criterionId, ev.id, { displayAs: 'image' });
-                }} disabled={retryingUploads.has(ev.id)}
+                }}
                   className={`p-1.5 rounded-lg text-xs ${ev.displayAs === 'qr' ? 'bg-violet-100 text-violet-600' : 'bg-blue-100 text-blue-600'}`}>
                   {ev.displayAs === 'image' ? <QrCode className="w-3.5 h-3.5" /> : <Image className="w-3.5 h-3.5" />}
                 </button>
@@ -2301,11 +2038,7 @@ export default function PerformanceEvidence() {
       {['image', 'video', 'file'].includes(ev.type) && !getEvidenceRemoteUrl(ev) && (
         <div role="status" className="my-2 flex flex-wrap items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900">
           <span>لم يُرفع المرفق — لا يوجد رابط للمشاركة أو باركود صالح. النسخة المحلية، إن كانت متاحة، لا تُعد رفعًا ناجحًا.</span>
-          {isAuthenticated ? (
-            <button type="button" disabled={retryingUploads.has(ev.id)} onClick={() => void retryUpload(criterionId, ev)} className="rounded border border-amber-500 px-2 py-1 font-medium disabled:opacity-50">
-              {retryingUploads.has(ev.id) ? 'جاري الرفع…' : 'إعادة محاولة الرفع'}
-            </button>
-          ) : <span>سجل دخولك لرفع المرفق.</span>}
+          <a href="/evidence" className="rounded border border-amber-500 px-2 py-1 font-medium underline">فتح مكتبة الشواهد للرفع</a>
         </div>
       )}
       {(ev.type === 'image' || ev.type === 'video' || ev.type === 'file') && ev.fileData && (
@@ -2476,7 +2209,7 @@ export default function PerformanceEvidence() {
     const grade = getGrade(percentage);
     return (
       <div className="min-h-screen pb-20 lg:pb-0 bg-background p-3 sm:p-4 md:p-6" dir="rtl">
-        <input type="file" ref={smartUploadRef} className="hidden" accept="image/*,video/*,.pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx" multiple onChange={handleSmartUpload} />
+        <input type="file" aria-label="إضافة ملفات للمراجعة" ref={smartUploadRef} className="hidden" accept="image/*,video/*,.pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx" multiple onChange={handleSmartUpload} />
         <div className="max-w-6xl mx-auto">
 
           {/* ===== Header Bar - Mobile Optimized ===== */}
@@ -2562,7 +2295,7 @@ export default function PerformanceEvidence() {
                   <Button onClick={(e) => { e.preventDefault(); e.stopPropagation(); try { localStorage.setItem(STORAGE_PENDING_UPLOAD, "smart"); } catch {} smartUploadRef.current?.click(); }} disabled={isSmartUploading}
                     variant="default" size="sm" className="gap-1.5 bg-violet-600 hover:bg-violet-700 shadow-sm text-xs h-8 sm:h-9 w-full sm:w-auto">
                     {isSmartUploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
-                    {isSmartUploading ? "جاري التصنيف..." : "رفع شواهد مع تصنيف ذكي"}
+                    {isSmartUploading ? "جاري التصنيف..." : "إضافة شواهد باقتراح ذكي"}
                   </Button>
                   <Button onClick={(e) => { e.preventDefault(); e.stopPropagation(); setShowCoverageReport(true); }}
                     variant="outline" size="sm" className="gap-1.5 text-xs h-8 sm:h-9 w-full sm:w-auto border-teal-300 text-teal-700 hover:bg-teal-50 dark:border-teal-700 dark:text-teal-400 dark:hover:bg-teal-950/30">
@@ -2573,6 +2306,15 @@ export default function PerformanceEvidence() {
                 </div>
               </div>
 
+              <p className="mb-3 text-xs leading-6 text-muted-foreground">عند طلب الاقتراح الذكي يُرسل اسم الملف ووصفه ومعاينة الصورة إلى مزود المساعدة. راجع المحتوى والبيانات الشخصية قبل اختياره. يمكنك إضافة الشاهد يدويًا من البند دون طلب اقتراح.</p>
+              {aiAccess.data?.available === false && <p role="status" className="mb-3 text-sm text-amber-700">{aiAccess.data.requiresSignIn ? <>للاقتراحات الذكية <a href={getLoginUrl()} className="underline">سجّل الدخول</a>. يمكنك متابعة التصنيف والكتابة يدويًا.</> : "المساعدة الذكية غير متاحة حاليًا؛ الإدخال اليدوي وقائمة المراجعة متاحان."}</p>}
+              <LegacyUploadNotice />
+              <EvidenceClassificationReview
+                items={loadedPendingKey === pendingStorageKey ? pendingEvidence : []}
+                criteria={allCriteria.map(criterion => ({ ...criterion, subEvidences: [...criterion.subEvidences, ...(criteriaData[criterion.id]?.customSubEvidences ?? [])] }))}
+                onConfirm={(id, criterionId, subEvidenceId) => { void confirmEvidenceProposal(id, criterionId, subEvidenceId); }}
+                onReject={rejectEvidenceProposal}
+              />
               {/* شريط تقدم التصنيف الذكي */}
               {uploadProgress && (
                 <div
@@ -4624,7 +4366,7 @@ export default function PerformanceEvidence() {
                     </select>
                     <p className="text-[10px] text-muted-foreground mt-1">ينتهي الرابط بعد {shareExpiryDays} يوم من إنشائه</p>
                     <label className="block text-xs font-medium text-muted-foreground mt-3 mb-1">رمز وصول اختياري</label>
-                    <input type="password" dir="ltr" value={shareAccessCode} onChange={(event) => setShareAccessCode(event.target.value)} minLength={4} maxLength={64} placeholder="4 أحرف أو أرقام على الأقل" className="w-full px-2 py-1.5 rounded-md border border-input text-sm bg-background" />
+                    <input type="password" dir="ltr" value={shareAccessCode} onChange={(event) => setShareAccessCode(event.target.value)} minLength={6} maxLength={64} autoComplete="new-password" placeholder="6 أحرف أو أرقام على الأقل" className="w-full px-2 py-1.5 rounded-md border border-input text-sm bg-background" />
                     <p className="text-[10px] text-muted-foreground mt-1">يُحفظ الرمز بصورة مجزأة، ولا يظهر لزائر الرابط إلا بعد إدخاله بشكل صحيح.</p>
                   </div>
                 )}
@@ -4902,13 +4644,9 @@ export default function PerformanceEvidence() {
                     </Button>
                     <Button variant="outline" size="sm" className="text-xs h-7 gap-1"
                       onClick={async () => {
-                        if (retryingUploadIds.current.size > 0) return;
                         const images = Object.entries(criteriaData).flatMap(([criterionId, data]) => data.evidences.filter(ev => ev.type === 'image').map(ev => ({ criterionId, ev })));
                         const pending = images.filter(({ ev }) => !getEvidenceRemoteUrl(ev));
-                        if (pending.length && !isAuthenticated) toast.info('سجل دخولك لرفع الصور وإنشاء الباركود');
-                        if (isAuthenticated) {
-                          for (const { criterionId, ev } of pending) await retryUpload(criterionId, ev, true);
-                        }
+                        if (pending.length) toast.info(LEGACY_UPLOAD_MESSAGE);
                         setCriteriaData(prev => Object.fromEntries(Object.entries(prev).map(([key, data]) => [key, {
                           ...data, evidences: data.evidences.map(ev => ev.type === 'image' && getEvidenceRemoteUrl(ev) ? { ...ev, displayAs: 'qr' as const } : ev),
                         }])));

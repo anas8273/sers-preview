@@ -18,7 +18,7 @@ ARG SERS_BUILD_REVISION
 LABEL org.opencontainers.image.revision=$SERS_BUILD_REVISION
 WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates chromium fonts-noto-core fonts-noto-extra qpdf tini util-linux \
+    ca-certificates chromium fonts-noto-core fonts-noto-extra qpdf poppler-utils tini util-linux \
     && rm -rf /var/lib/apt/lists/* \
     && groupadd --gid 10001 sers \
     && useradd --uid 10001 --gid 10001 --create-home --shell /usr/sbin/nologin sers \
