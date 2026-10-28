@@ -26,7 +26,10 @@ export async function sha256(file) {
   return hash.digest('hex');
 }
 export async function command(binary, args, options = {}) {
-  const child = spawn(binary, args, { cwd: repoRoot, env: process.env, stdio: ['pipe', 'pipe', 'pipe'] });
+  const timeoutMs = options.timeoutMs ?? 600_000;
+  if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 3_600_000) throw new Error('Invalid command deadline');
+  const child = spawn(binary, args, { cwd: repoRoot, env: options.env ? { ...process.env, ...options.env } : process.env, stdio: ['pipe', 'pipe', 'pipe'] });
+  const timer = setTimeout(() => child.kill('SIGKILL'), timeoutMs);
   let stderr = '', output = '';
   child.stderr.on('data', chunk => { if (stderr.length < 4096) stderr += chunk.toString(); });
   const completion = new Promise((resolve, reject) => {
@@ -46,6 +49,7 @@ export async function command(binary, args, options = {}) {
   const input = options.inputFile ? pipeline(createReadStream(options.inputFile), child.stdin) : Promise.resolve(child.stdin.end(options.input || ''));
   try { await Promise.all([completion, transfer, input]); }
   catch (error) { child.kill('SIGKILL'); throw error; }
+  finally { clearTimeout(timer); }
   return output;
 }
 export const compose = (args, options) => command('docker', ['compose', '-f', path.join(repoRoot, process.env.SERS_COMPOSE_MODE === 'demo' ? 'compose.demo.yml' : 'compose.staging.yml'), ...args], options);

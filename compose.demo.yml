@@ -9,6 +9,7 @@ x-demo: &demo
     args:
       VITE_APP_ID: synthetic-demo
       VITE_OAUTH_PORTAL_URL: http://127.0.0.1:3100/demo
+      SERS_BUILD_REVISION: ${SERS_BUILD_REVISION:?Set the full build commit revision}
   user: "10001:10001"
   read_only: true
   tmpfs: [/tmp:rw,nosuid,nodev,size=512m]
@@ -21,6 +22,9 @@ x-demo: &demo
     SERS_DATABASE_HOST: mysql
     MYSQL_PASSWORD_FILE: /var/run/sers-secrets/mysql_password
     JWT_SECRET_FILE: /var/run/sers-secrets/jwt_secret
+    SERS_HEALTHCHECK_TOKEN_FILE: /var/run/sers-secrets/healthcheck_token
+    SERS_WORKER_HEARTBEAT_PATH: /var/run/sers-worker/heartbeat.json
+    APP_PUBLIC_ORIGIN: http://127.0.0.1:3100
     VITE_APP_ID: synthetic-demo
     SERS_UPLOADS_ENABLED: "1"
     SERS_PRIVATE_STORAGE_DIR: /var/lib/sers/evidence
@@ -29,7 +33,7 @@ x-demo: &demo
     SERS_UPLOAD_PERSONAL_LIMIT_BYTES: "268435456"
     SERS_UPLOAD_SCHOOL_LIMIT_BYTES: "268435456"
     SERS_UPLOAD_MAX_ACTIVE_INTENTS: "20"
-  volumes: [evidence:/var/lib/sers/evidence, runtime-secrets:/var/run/sers-secrets:ro]
+  volumes: [evidence:/var/lib/sers/evidence, runtime-secrets:/var/run/sers-secrets:ro, worker-state:/var/run/sers-worker:ro]
   logging:
     driver: json-file
     options: {max-size: "10m", max-file: "3"}
@@ -69,8 +73,8 @@ services:
 
   storage-init:
     image: sers-demo:local
-    volumes: [evidence:/var/lib/sers/evidence, runtime-secrets:/var/run/sers-secrets]
-    secrets: [mysql_password, jwt_secret]
+    volumes: [evidence:/var/lib/sers/evidence, runtime-secrets:/var/run/sers-secrets, worker-state:/var/run/sers-worker]
+    secrets: [mysql_password, jwt_secret, healthcheck_token]
     user: "0:0"
     read_only: true
     cap_drop: [ALL]
@@ -111,6 +115,7 @@ services:
 
   worker:
     <<: *demo
+    volumes: [evidence:/var/lib/sers/evidence, runtime-secrets:/var/run/sers-secrets:ro, worker-state:/var/run/sers-worker]
     command: [worker]
     networks: [data]
     restart: unless-stopped
@@ -133,10 +138,13 @@ secrets:
     file: ${SERS_SECRETS_DIR:?Set an absolute private demo secrets directory}/mysql_root_password
   jwt_secret:
     file: ${SERS_SECRETS_DIR:?Set an absolute private demo secrets directory}/jwt_secret
+  healthcheck_token:
+    file: ${SERS_SECRETS_DIR:?Set an absolute private demo secrets directory}/healthcheck_token
 volumes:
   mysql-data:
   evidence:
   runtime-secrets:
+  worker-state:
   clamav-data:
 networks:
   data:

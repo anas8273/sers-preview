@@ -15,19 +15,28 @@ concurrency:
 jobs:
   compose-backup-restore:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 55
     env:
       COMPOSE_PROJECT_NAME: sers-ci-${{ github.run_id }}-${{ github.run_attempt }}
       SERS_DATABASE_NAME: sers_demo
+      SERS_BUILD_REVISION: ${{ github.sha }}
+      SERS_PREVIOUS_REVISION: ${{ github.event.pull_request.base.sha || github.sha }}
       VITE_APP_ID: synthetic-ci-only
-      VITE_OAUTH_PORTAL_URL: http://127.0.0.1:3999
-      OAUTH_SERVER_URL: http://127.0.0.1:3999
+      APP_PUBLIC_ORIGIN: https://sers-ci.invalid
+      VITE_OAUTH_PORTAL_URL: https://oauth-ci.invalid
+      OAUTH_PORTAL_URL: https://oauth-ci.invalid
+      OAUTH_SERVER_URL: https://oauth-ci.invalid
       PUPPETEER_SKIP_DOWNLOAD: "true"
       SERS_BACKUP_MODE: quiesced
+      # Explicit fixture thresholds, not commitments for production datasets.
+      SERS_DR_TARGET_RESTORE_SECONDS: "300"
+      SERS_DR_TARGET_BACKUP_AGE_SECONDS: "900"
     steps:
       - name: Set disposable private paths
         run: printf 'SERS_SECRETS_DIR=%s/sers-secrets\n' "$RUNNER_TEMP" >> "$GITHUB_ENV"
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
@@ -38,7 +47,7 @@ jobs:
       - name: Check operational scripts and refusal boundaries
         run: |
           node node_modules/typescript/bin/tsc -p scripts/operations/tsconfig.json
-          node --import tsx --test scripts/operations/operations.test.mts
+          node --import tsx --test scripts/operations/*.test.mts
       - name: Create disposable secrets and validate Compose
         run: |
           node scripts/operations/init-secrets.mjs "$SERS_SECRETS_DIR"
@@ -46,26 +55,50 @@ jobs:
           docker compose -f compose.demo.yml config --quiet
       - name: Build non-root runtime with real parsers
         run: docker compose -f compose.staging.yml build app
+      - name: Build the actual previous code artifact for the rollback decision
+        run: |
+          git worktree add --detach "$RUNNER_TEMP/sers-previous" "$SERS_PREVIOUS_REVISION"
+          docker build --tag sers-rollback:previous --build-arg VITE_APP_ID="$VITE_APP_ID" --build-arg VITE_OAUTH_PORTAL_URL="$VITE_OAUTH_PORTAL_URL" --build-arg SERS_BUILD_REVISION="$SERS_PREVIOUS_REVISION" "$RUNNER_TEMP/sers-previous"
+          previous_image=$(docker image inspect sers-rollback:previous --format '{{.Id}}')
+          printf 'SERS_PREVIOUS_IMAGE_ID=%s\n' "$previous_image" >> "$GITHUB_ENV"
       - name: Start isolated MySQL and real ClamAV
         run: docker compose -f compose.staging.yml up -d --wait --wait-timeout 600 mysql clamav
       - name: Apply reviewed migrations and verify synthetic evidence and Word
         run: |
           docker compose -f compose.staging.yml run --rm migrate
           docker compose -f compose.staging.yml run --rm seed-demo verify-demo
+      - name: Validate image contents, schema and configuration before release
+        run: docker compose -f compose.staging.yml run --rm --no-deps app preflight | tee "$RUNNER_TEMP/preflight-result.json"
       - name: Verify production entrypoint readiness and explicit worker
         run: |
           docker compose -f compose.staging.yml up -d --wait --wait-timeout 240 app worker
           curl --fail --silent http://127.0.0.1:3000/readyz
           test "$(curl --silent -o /dev/null -w '%{http_code}' http://127.0.0.1:3000/api/evidence/assets/1/download)" = 401
           docker compose -f compose.staging.yml exec -T worker node scripts/operations/worker-healthcheck.mjs
+      - name: Fail database, scanner and worker, then verify actual recovery
+        run: node scripts/operations/failure-drill.mjs | tee "$RUNNER_TEMP/failure-result.json"
+      - name: Exercise previous-image schema compatibility without reverting data
+        run: node scripts/operations/rollback-drill.mjs | tee "$RUNNER_TEMP/rollback-result.json"
       - name: Quiesce writers, back up, and restore into a disposable database
         run: |
           docker compose -f compose.staging.yml stop app worker
           node scripts/operations/backup.mjs "$RUNNER_TEMP/sers-backups"
           backup_dir=$(find "$RUNNER_TEMP/sers-backups" -mindepth 1 -maxdepth 1 -type d)
           node scripts/operations/restore-drill.mjs "$backup_dir" | tee "$RUNNER_TEMP/restore-result.json"
-          node --input-type=module -e 'import fs from "node:fs";const r=JSON.parse(fs.readFileSync(process.env.RUNNER_TEMP+"/restore-result.json","utf8"));if(!r.passed||r.privateContentVerified.uploads<1||r.privateContentVerified.outputs<1)process.exit(1)'
+          node --input-type=module -e 'import fs from "node:fs";const r=JSON.parse(fs.readFileSync(process.env.RUNNER_TEMP+"/restore-result.json","utf8"));if(!r.passed||r.privateContentVerified.uploads<1||r.privateContentVerified.outputs<1||r.recoveryObservations.actualLostCommits!==null||r.recoveryObservations.fullServiceRtoMeasured!==false||!Object.values(r.recoveryObservations.checks).every(v=>v===true))process.exit(1)'
           node scripts/operations/verify-restore-isolation.mjs "$backup_dir"
+      - name: Preserve sanitized measurements only
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: operations-measurements-${{ github.run_id }}
+          retention-days: 14
+          if-no-files-found: ignore
+          path: |
+            ${{ runner.temp }}/preflight-result.json
+            ${{ runner.temp }}/failure-result.json
+            ${{ runner.temp }}/rollback-result.json
+            ${{ runner.temp }}/restore-result.json
       - name: Show service status on failure
         if: failure()
         run: |
@@ -75,4 +108,5 @@ jobs:
         if: always()
         run: |
           docker compose -f compose.staging.yml down --volumes --remove-orphans
-          rm -rf "$RUNNER_TEMP/sers-secrets" "$RUNNER_TEMP/sers-backups" "$RUNNER_TEMP/restore-result.json"
+          git worktree remove --force "$RUNNER_TEMP/sers-previous" || true
+          rm -rf "$RUNNER_TEMP/sers-secrets" "$RUNNER_TEMP/sers-backups" "$RUNNER_TEMP/restore-result.json" "$RUNNER_TEMP/preflight-result.json" "$RUNNER_TEMP/failure-result.json" "$RUNNER_TEMP/rollback-result.json"

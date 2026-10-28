@@ -73,12 +73,20 @@ jobs:
         run: pnpm exec vitest run server/account-integration.test.ts
       - name: Notification isolation and read acknowledgement
         run: pnpm exec vitest run server/notification-integration.test.ts
+      - name: Durable OAuth attempts and revocable application sessions
+        run: pnpm exec vitest run server/auth-session-integration.test.ts
+      - name: Production OAuth routes against a separate synthetic issuer
+        run: pnpm exec vitest run server/auth-http-integration.test.ts
+      - name: Private monitoring and readiness loss recovery
+        run: pnpm exec vitest run server/runtime-observability-integration.test.ts
       - name: Scan completion, publication, cleanup and quota lifecycle
         run: pnpm exec vitest run server/upload-lifecycle-integration.test.ts
       - name: Core journey upgrade preserves legacy records and invitations
         run: pnpm exec vitest run server/core-journeys-migration.test.ts
       - name: Immutable private Word and review authorization
         run: pnpm exec vitest run server/work-version-docx-integration.test.ts
+      - name: Private output bytes and revocation across renderer upgrades
+        run: pnpm exec vitest run server/work-output-private-reader-integration.test.ts
       - name: Actual ClamAV and bounded PDF parser adversarial suite
         env:
           SERS_SCANNER_INTEGRATION: "1"
@@ -105,6 +113,8 @@ jobs:
         run: pnpm exec tsx --test tests/browser/share-mysql.mts
       - name: Browser account invitations, academic years, work and suspension
         run: pnpm exec tsx --test tests/browser/account-mysql.mts
+      - name: Browser OAuth, persisted session, work creation, logout and replay denial
+        run: pnpm exec tsx --test tests/browser/auth-mysql.mts
       - name: Browser evidence upload, real scan and private Word download
         env:
           SERS_SCANNER_INTEGRATION: "1"

@@ -1,183 +1,112 @@
+import qrcode from "qrcode-generator";
+import { sanitizeInlinePng } from "./work-version-inline-image";
+
 type ReportAssetSnapshot = {
-  id?: number;
-  title?: string;
-  kind?: string;
-  mimeType?: string | null;
-  role?: string;
-  caption?: string | null;
+  id?: number; title?: string; kind?: string; role?: string; caption?: string | null;
+  preview?: { mimeType?: string; dataBase64?: string };
 };
-
-type ReportDraftSnapshot = {
-  templateId?: string;
-  themeId?: string;
-  fontFamily?: string;
-  fields?: Record<string, unknown>;
-  evidenceAssetIds?: unknown[];
-  updatedAt?: string;
-};
-
 type ReportVersionSnapshot = {
-  schemaVersion?: number;
-  kind?: string;
-  work?: {
-    id?: number;
-    title?: string;
-    ownerType?: string;
-    ownerUserId?: number | null;
-    ownerOrganizationId?: number | null;
-  };
-  reportDraft?: ReportDraftSnapshot;
-  assets?: ReportAssetSnapshot[];
-  capturedAt?: string;
+  kind?: string; work?: { title?: string };
+  reportDraft?: { templateId?: string; themeId?: string; fontFamily?: string; fields?: Record<string, unknown>; evidenceAssetIds?: unknown[]; updatedAt?: string };
+  assets?: ReportAssetSnapshot[]; capturedAt?: string;
+  academicContext?: { yearLabel?: string; termLabel?: string | null };
+  shareReference?: { url?: string; label?: string };
 };
-
 const FIELD_DEFINITIONS = [
-  ["summary", "ملخص التقرير"],
-  ["objectives", "الأهداف"],
-  ["audience", "الفئة المستهدفة"],
-  ["implementation", "آلية التنفيذ"],
-  ["results", "النتائج والمخرجات"],
-  ["impact", "قياس الأثر"],
+  ["summary", "ملخص التقرير"], ["objectives", "الأهداف"], ["audience", "الفئة المستهدفة"],
+  ["implementation", "آلية التنفيذ"], ["results", "النتائج والمخرجات"], ["impact", "قياس الأثر"],
   ["recommendations", "التوصيات والخطوات التالية"],
 ] as const;
-
 const TEMPLATE_LABELS: Record<string, string> = {
-  custom: "تقرير عام",
-  "program-report": "تقرير برنامج",
-  "initiative-report": "تقرير مبادرة",
-  "workshop-report": "تقرير ورشة",
-  "meeting-report": "محضر/تقرير اجتماع",
-  "visit-report": "تقرير زيارة",
+  custom: "تقرير عام", "program-report": "تقرير برنامج", "initiative-report": "تقرير مبادرة",
+  "workshop-report": "تقرير ورشة", "meeting-report": "محضر/تقرير اجتماع", "visit-report": "تقرير زيارة",
 };
-
-const THEME_COLORS: Record<string, { primary: string; accent: string; soft: string }> = {
-  classic: { primary: "#0f172a", accent: "#0f766e", soft: "#f0fdfa" },
-  formal: { primary: "#134e4a", accent: "#0f766e", soft: "#f0fdfa" },
-  minimal: { primary: "#334155", accent: "#475569", soft: "#f8fafc" },
-};
-
-const ALLOWED_FONTS: Record<string, string> = {
-  Cairo: "Cairo",
-  Tajawal: "Tajawal",
-  "Noto Kufi Arabic": "Cairo",
-};
-
-function escapeHtml(value: unknown) {
-  return String(value ?? "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;");
+const THEME_COLORS: Record<string, string> = { classic: "#0f172a", formal: "#134e4a", minimal: "#334155" };
+function text(value: unknown, maximum = 40_000) {
+  if (value === undefined || value === null) return "";
+  if (typeof value !== "string" || value.length > maximum) throw new Error("Report text exceeds the PDF export limit");
+  return value.replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, "").trim();
 }
-
-function normalizeSnapshot(value: unknown): Required<Pick<ReportVersionSnapshot, "kind" | "work" | "reportDraft" | "assets">> & Pick<ReportVersionSnapshot, "capturedAt"> {
+function escapeHtml(value: string) {
+  return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+}
+function normalizeSnapshot(value: unknown) {
   if (!value || typeof value !== "object") throw new Error("WorkVersion snapshot is missing");
   const snapshot = value as ReportVersionSnapshot;
   if (snapshot.kind !== "report") throw new Error("WorkVersion is not a report snapshot");
   if (!snapshot.work || typeof snapshot.work !== "object") throw new Error("Report snapshot work metadata is missing");
   if (!snapshot.reportDraft || typeof snapshot.reportDraft !== "object") throw new Error("Report draft snapshot is missing");
-  return {
-    kind: "report",
-    work: snapshot.work,
-    reportDraft: snapshot.reportDraft,
-    assets: Array.isArray(snapshot.assets) ? snapshot.assets : [],
-    capturedAt: snapshot.capturedAt,
-  };
+  if (snapshot.assets && (!Array.isArray(snapshot.assets) || snapshot.assets.length > 100)) throw new Error("Too many report evidence entries");
+  return snapshot;
 }
-
 function formatSnapshotDate(value?: string) {
-  if (!value) return "غير محدد";
-  const timestamp = Date.parse(value);
-  if (!Number.isFinite(timestamp)) return "غير محدد";
-  return new Intl.DateTimeFormat("ar-SA", {
-    calendar: "gregory",
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    timeZone: "UTC",
-  }).format(new Date(timestamp));
+  if (!value || !Number.isFinite(Date.parse(value))) return "غير محدد";
+  return new Intl.DateTimeFormat("ar-SA", { calendar: "gregory", year: "numeric", month: "long", day: "numeric", timeZone: "UTC" }).format(new Date(value));
 }
 
-function pageFrame(inner: string, footer: string, palette: { primary: string; accent: string; soft: string }, font: string) {
-  return `<div class="pdf-page" style="font-family:'${font}',sans-serif;background:#fff;color:#172033;">
-    <div style="height:14mm;background:${palette.primary};"></div>
-    <div style="padding:16mm 16mm 22mm;min-height:254mm;position:relative;">
-      ${inner}
-      <div style="position:absolute;right:16mm;left:16mm;bottom:9mm;border-top:1px solid #dbe3ea;padding-top:3mm;display:flex;justify-content:space-between;gap:8px;font-size:9px;color:#64748b;">
-        <span>${footer}</span><span>SERS</span>
-      </div>
-    </div>
-  </div>`;
-}
-
+/** A flowing print document: page fragmentation belongs to Chromium, not a fixed
+ * height overflow-hidden frame. All content is frozen text or bounded inline PNG;
+ * source URLs and storage keys are never fetched or included. */
 export function renderReportWorkVersionHtml(snapshotValue: unknown, versionNumber: number) {
-  const snapshot = normalizeSnapshot(snapshotValue);
-  const workTitle = escapeHtml(snapshot.work.title || "تقرير بدون عنوان");
-  const draft = snapshot.reportDraft;
-  const fields = draft.fields && typeof draft.fields === "object" ? draft.fields : {};
-  const palette = THEME_COLORS[draft.themeId || "classic"] || THEME_COLORS.classic;
-  const font = ALLOWED_FONTS[draft.fontFamily || "Cairo"] || "Cairo";
+  if (!Number.isSafeInteger(versionNumber) || versionNumber < 1) throw new Error("Invalid version number");
+  const snapshot = normalizeSnapshot(snapshotValue), draft = snapshot.reportDraft!;
+  const title = escapeHtml(text(snapshot.work!.title, 255) || "تقرير بدون عنوان");
   const templateLabel = escapeHtml(TEMPLATE_LABELS[draft.templateId || "custom"] || "تقرير");
-  const capturedAt = formatSnapshotDate(snapshot.capturedAt || draft.updatedAt);
-  const footer = `نسخة ${versionNumber} · ${escapeHtml(capturedAt)}`;
-
-  const cover = pageFrame(`
-    <div style="display:flex;min-height:210mm;flex-direction:column;align-items:center;justify-content:center;text-align:center;">
-      <div style="display:inline-flex;align-items:center;justify-content:center;border-radius:999px;background:${palette.soft};color:${palette.accent};padding:3mm 7mm;font-size:12px;font-weight:800;">${templateLabel}</div>
-      <div style="margin-top:14mm;width:28mm;height:2mm;background:${palette.accent};border-radius:999px;"></div>
-      <h1 style="margin:12mm auto 0;max-width:155mm;font-size:30px;line-height:1.65;color:${palette.primary};font-weight:900;">${workTitle}</h1>
-      <p style="margin-top:8mm;font-size:13px;color:#64748b;">نسخة ثابتة مرتبطة ببيانات العمل والشواهد</p>
-      <div style="margin-top:18mm;border:1px solid #dbe3ea;border-radius:16px;padding:6mm 10mm;background:#f8fafc;font-size:11px;color:#475569;">
-        رقم النسخة: <strong>${versionNumber}</strong><br/>تاريخ تثبيت المحتوى: <strong>${escapeHtml(capturedAt)}</strong>
-      </div>
-    </div>`, footer, palette, font);
-
-  const contentPages = FIELD_DEFINITIONS.flatMap(([key, label]) => {
-    const rawValue = fields[key];
-    if (typeof rawValue !== "string" || !rawValue.trim()) return [];
-    const paragraphs = escapeHtml(rawValue.trim()).replace(/\r?\n/g, "<br/>");
-    return [pageFrame(`
-      <div style="display:flex;align-items:center;gap:4mm;">
-        <span style="width:5mm;height:16mm;border-radius:999px;background:${palette.accent};"></span>
-        <div>
-          <p style="font-size:10px;font-weight:800;color:${palette.accent};">محتوى التقرير</p>
-          <h2 style="margin-top:1mm;font-size:22px;line-height:1.5;color:${palette.primary};">${escapeHtml(label)}</h2>
-        </div>
-      </div>
-      <div style="margin-top:10mm;border:1px solid #e2e8f0;border-radius:18px;padding:9mm;background:#fff;font-size:14px;line-height:2.15;color:#334155;white-space:normal;overflow-wrap:anywhere;">${paragraphs}</div>
-    `, footer, palette, font)];
+  const color = THEME_COLORS[draft.themeId || "classic"] || THEME_COLORS.classic;
+  const font = ["Arial", "Cairo", "Tajawal"].includes(draft.fontFamily || "") ? draft.fontFamily! : "Cairo";
+  const date = escapeHtml(formatSnapshotDate(snapshot.capturedAt || draft.updatedAt));
+  const year = escapeHtml(text(snapshot.academicContext?.yearLabel, 100));
+  const term = escapeHtml(text(snapshot.academicContext?.termLabel, 100));
+  let totalText = 0;
+  const sections = FIELD_DEFINITIONS.flatMap(([key, label]) => {
+    const value = text(draft.fields?.[key]); totalText += value.length;
+    if (totalText > 180_000) throw new Error("Report text exceeds the PDF export limit");
+    if (!value) return [];
+    return [`<section class="report-section"><h2>${label}</h2>${value.split(/\r?\n/).map(line => `<p>${escapeHtml(line) || "&nbsp;"}</p>`).join("")}</section>`];
   });
-
-  const selectedIds = new Set(
-    Array.isArray(draft.evidenceAssetIds)
-      ? draft.evidenceAssetIds.filter((id): id is number => Number.isInteger(id) && Number(id) > 0)
-      : [],
-  );
-  const selectedAssets = snapshot.assets.filter(asset => typeof asset.id === "number" && selectedIds.has(asset.id));
-  const evidencePage = selectedAssets.length > 0
-    ? pageFrame(`
-      <div style="display:flex;align-items:center;gap:4mm;">
-        <span style="width:5mm;height:16mm;border-radius:999px;background:${palette.accent};"></span>
-        <div><p style="font-size:10px;font-weight:800;color:${palette.accent};">مصادر مرتبطة بالنسخة</p><h2 style="margin-top:1mm;font-size:22px;color:${palette.primary};">الشواهد المستخدمة</h2></div>
-      </div>
-      <div style="margin-top:10mm;display:grid;gap:4mm;">
-        ${selectedAssets.map((asset, index) => `<div style="display:flex;gap:5mm;border:1px solid #e2e8f0;border-radius:14px;padding:5mm;background:${index % 2 === 0 ? "#fff" : palette.soft};">
-          <div style="display:flex;width:10mm;height:10mm;align-items:center;justify-content:center;border-radius:10px;background:${palette.accent};color:#fff;font-size:11px;font-weight:900;">${index + 1}</div>
-          <div style="min-width:0;flex:1;"><div style="font-size:13px;font-weight:800;color:#1e293b;">${escapeHtml(asset.title || `شاهد ${index + 1}`)}</div>
-          <div style="margin-top:1.5mm;font-size:10px;color:#64748b;">${escapeHtml(asset.kind || "asset")} · ${escapeHtml(asset.role || "evidence")}</div>
-          ${asset.caption ? `<div style="margin-top:2mm;font-size:11px;line-height:1.8;color:#475569;">${escapeHtml(asset.caption)}</div>` : ""}</div>
-        </div>`).join("")}
-      </div>
-      <div style="margin-top:8mm;border-radius:14px;background:#fff7ed;padding:5mm;font-size:10px;line-height:1.9;color:#9a3412;">هذه الصفحة تسجل الشواهد المرتبطة بالنسخة. لا تدّعي أن محتوى الشاهد صحيح أو أن النشاط نُفّذ إلا بعد المراجعة البشرية والاعتماد.</div>
-    `, footer, palette, font)
-    : "";
-
-  const emptyPage = contentPages.length === 0
-    ? pageFrame(`<div style="display:flex;min-height:205mm;align-items:center;justify-content:center;text-align:center;"><div><h2 style="font-size:22px;color:${palette.primary};">لا يوجد محتوى نصي مثبت في هذه النسخة</h2><p style="margin-top:4mm;font-size:12px;color:#64748b;">ارجع إلى مسودة التقرير وأضف البيانات ثم أنشئ نسخة جديدة.</p></div></div>`, footer, palette, font)
-    : "";
-
-  return `<div>${cover}${contentPages.join("")}${evidencePage}${emptyPage}</div>`;
+  if (!sections.length) sections.push('<section class="report-section"><h2>لا يوجد محتوى نصي مثبت في هذه النسخة</h2></section>');
+  const selectedIds = new Set((Array.isArray(draft.evidenceAssetIds) ? draft.evidenceAssetIds : []).filter((id): id is number => Number.isSafeInteger(id) && Number(id) > 0));
+  const selected = (snapshot.assets ?? []).filter(asset => asset && typeof asset.id === "number" && selectedIds.has(asset.id));
+  if (selected.length) {
+    sections.push(`<section class="report-section"><h2>الشواهد المستخدمة</h2><table><thead><tr><th>الشاهد</th><th>الوصف</th></tr></thead><tbody>${selected.map((asset, index) => `<tr><td>${index + 1}. ${escapeHtml(text(asset.title, 255) || "شاهد")}</td><td>${escapeHtml(text(asset.caption, 4000)) || "—"}</td></tr>`).join("")}</tbody></table></section>`);
+    const images: string[] = [];
+    for (const asset of selected) {
+      if (!asset.preview) continue;
+      if (images.length >= 4 || asset.preview.mimeType !== "image/png" || typeof asset.preview.dataBase64 !== "string") throw new Error("Unsupported report preview");
+      const preview = sanitizeInlinePng(asset.preview.dataBase64);
+      images.push(`<figure><figcaption>${escapeHtml(text(asset.title, 255) || "صورة الشاهد")}</figcaption><img src="data:image/png;base64,${preview.bytes.toString("base64")}" width="${preview.width}" height="${preview.height}" alt="${escapeHtml(text(asset.title, 255))}"/></figure>`);
+    }
+    if (images.length) sections.push(`<section class="report-section report-previews"><h2>صور الشواهد</h2>${images.join("")}</section>`);
+  }
+  if (snapshot.shareReference) {
+    const reference = snapshot.shareReference;
+    let url: URL;
+    try { url = new URL(text(reference.url, 512)); } catch { throw new Error("Invalid report share reference"); }
+    if (url.protocol !== "https:" || url.username || url.password || url.search || url.hash || !/^\/output\/[A-Za-z0-9_-]{20,128}$/.test(url.pathname)) throw new Error("Invalid report share reference");
+    const code = qrcode(0, "M"); code.addData(url.href, "Byte"); code.make();
+    sections.push(`<section class="report-section report-share"><h2>${escapeHtml(text(reference.label, 255) || "رابط النسخة المشتركة")}</h2><div class="report-qr">${code.createSvgTag({ cellSize: 4, margin: 16, scalable: true })}</div><p dir="ltr">${escapeHtml(url.href)}</p></section>`);
+  }
+  return `<style>
+    @page { size: A4; margin: 18mm 16mm; @top-right { content: "SERS"; font: 9pt Arial; color: #64748b; } @bottom-center { content: "نسخة ${versionNumber} · " counter(page); font: 9pt Arial; color: #64748b; } }
+    body { width: auto; min-height: 0; }
+    .work-version-document { font-family: '${font}', 'Noto Naskh Arabic', 'DejaVu Sans', sans-serif; direction: rtl; color: #263445; font-size: 12pt; line-height: 1.8; overflow-wrap: anywhere; }
+    .work-version-document h1, .work-version-document h2 { font-family: inherit; color: ${color}; break-after: avoid; }
+    .work-version-document h1 { font-size: 24pt; line-height: 1.65; margin: 12mm 0; }
+    .work-version-document h2 { font-size: 18pt; line-height: 1.5; margin: 0 0 8mm; }
+    .work-version-document p { margin: 0 0 5mm; orphans: 3; widows: 3; }
+    .report-cover { min-height: 250mm; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
+    .report-section { break-before: page; }
+    .work-version-document table { width: 100%; table-layout: fixed; border-collapse: collapse; font-size: 11pt; }
+    .work-version-document thead { display: table-header-group; }
+    .work-version-document th, .work-version-document td { border: 1px solid #d9d9d9; padding: 3mm; vertical-align: middle; text-align: right; }
+    .work-version-document th:first-child { width: 39%; }
+    .work-version-document th { background: #eaf1f8; color: #000; font-weight: bold; }
+    .work-version-document tr { break-inside: avoid; }
+    .work-version-document figure { margin: 0 0 8mm; break-inside: avoid; text-align: center; }
+    .work-version-document figcaption { text-align: right; font-weight: bold; margin-bottom: 4mm; }
+    .work-version-document img { width: auto; height: auto; max-width: 100%; max-height: 180mm; object-fit: contain; }
+    .report-qr { width: 48mm; height: 48mm; margin: 12mm auto 6mm; }
+    .report-qr svg { width: 100%; height: 100%; }
+    .report-share p { text-align: center; font-size: 9pt; }
+  </style><article class="work-version-document" dir="rtl"><header class="report-cover"><p>SERS · ${templateLabel}</p><h1>${title}</h1><p>نسخة ${versionNumber}</p><p>${date}</p>${year ? `<p>العام الدراسي <bdi>${year}</bdi></p>` : ""}${term ? `<p>${term}</p>` : ""}</header>${sections.join("")}</article>`;
 }

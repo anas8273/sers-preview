@@ -39,6 +39,8 @@ export async function readPrivateOutputForUser(userId: number, id: number) {
   if (!output || output.visibility !== "private" || !["pdf", "docx"].includes(output.type) || !output.storageKey || output.revokedAt || (output.expiresAt && output.expiresAt.getTime() <= Date.now())) return undefined;
   const identity = artifactIdentity(output.storageKey);
   if (identity.type !== output.type || identity.workId !== output.workId || identity.versionId !== output.workVersionId || !output.token?.startsWith(`artifact:v${output.workVersionId}:${output.type}:r`)) return undefined;
+  const { hasRevokedRendererArtifact, recognizedRenderer } = await import("./work-version-output-service");
+  if (!recognizedRenderer(output.token, output.workVersionId, identity.type) || await hasRevokedRendererArtifact(output.workVersionId, identity.type, output.workId)) return undefined;
   const storage = await getConfiguredPrivateStorage();
   const head = await storage.headPrivate(identity.key);
   if (head.status !== "found" || !head.private || head.sha256 !== identity.sha256 || head.bytes > MAX_EVIDENCE_BYTES) return undefined;
@@ -47,6 +49,7 @@ export async function readPrivateOutputForUser(userId: number, id: number) {
   // Membership and revocation can change while reading from storage.
   const current = await getOutputForUser(userId, id);
   if (!current || current.storageKey !== output.storageKey || current.visibility !== "private" || current.revokedAt || (current.expiresAt && current.expiresAt.getTime() <= Date.now())) return undefined;
+  if (await hasRevokedRendererArtifact(output.workVersionId, identity.type, output.workId)) return undefined;
   const version = await getWorkVersionForUser(userId, output.workVersionId);
   if (!version) return undefined;
   const rawTitle = (version.snapshot as { work?: { title?: unknown } }).work?.title;

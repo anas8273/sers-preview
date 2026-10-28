@@ -1,8 +1,10 @@
 import { useState } from "react";
-import { Building2, CalendarDays, Loader2, Plus, UserRound } from "lucide-react";
+import { Building2, CalendarDays, Loader2, LogOut, Plus, UserRound } from "lucide-react";
 import { useLocation } from "wouter";
 import AppSidebar from "@/components/AppSidebar";
 import { trpc } from "@/lib/trpc";
+import { useAuth } from "@/_core/hooks/useAuth";
+import { getLoginUrl } from "@/const";
 
 type Role = "owner" | "admin" | "reviewer" | "member";
 const roleLabels: Record<Role, string> = { owner: "مالك", admin: "مدير", reviewer: "مراجع", member: "عضو" };
@@ -47,9 +49,11 @@ function SchoolMembers({ organizationId, owner }: { organizationId: number; owne
 
 export default function AccountHub() {
   const [location] = useLocation();
+  const { user, logout, loading: authLoading } = useAuth();
+  const [logoutError, setLogoutError] = useState("");
   const utils = trpc.useUtils();
-  const overview = trpc.account.overview.useQuery(undefined, { retry: false });
-  const years = trpc.account.academicYears.useQuery(undefined, { retry: false });
+  const overview = trpc.account.overview.useQuery(undefined, { retry: false, enabled: Boolean(user) });
+  const years = trpc.account.academicYears.useQuery(undefined, { retry: false, enabled: Boolean(user) });
   const [schoolName, setSchoolName] = useState("");
   const [scope, setScope] = useState("personal");
   const [yearLabel, setYearLabel] = useState("");
@@ -61,10 +65,12 @@ export default function AccountHub() {
   const accept = trpc.account.acceptInvitation.useMutation({ onSuccess: refresh });
   const createYear = trpc.account.createAcademicYear.useMutation({ onSuccess: async () => { setYearLabel(""); await utils.account.academicYears.invalidate(); } });
   const manageable = overview.data?.schools.filter(s => s.status === "active" && ["owner", "admin"].includes(s.role)) ?? [];
+  if (!user) return <div dir="rtl" className="min-h-screen bg-slate-50 pb-24"><AppSidebar currentPath={location} /><main className="px-4 py-8 lg:mr-72"><h1 className="text-3xl font-black text-slate-950">الحساب والمدرسة</h1>{authLoading ? <Loader2 aria-label="جارٍ التحميل" className="mt-6 animate-spin" /> : <a href={getLoginUrl()} className="mt-6 inline-flex rounded-xl bg-teal-700 px-4 py-2.5 text-sm font-bold text-white">تسجيل الدخول</a>}</main></div>;
   return <div dir="rtl" className="min-h-screen bg-slate-50 pb-24 lg:pb-8">
     <AppSidebar currentPath={location} />
     <main className="lg:mr-72"><div className="mx-auto max-w-5xl space-y-6 px-4 py-8 sm:px-6">
       <header><p className="text-xs font-bold text-teal-700">الهوية والملكية</p><h1 className="mt-2 text-3xl font-black text-slate-950">الحساب والمدرسة</h1><p className="mt-3 text-sm leading-7 text-slate-500">عضويات واضحة وسنوات دراسية مستقلة تحفظ أعمال كل عام في سياقها.</p></header>
+      {user ? <div><button type="button" disabled={authLoading} className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 disabled:opacity-50" onClick={() => { setLogoutError(""); void logout().catch(() => setLogoutError("تعذر إنهاء الجلسة الآن. أعد المحاولة حتى يكتمل تسجيل الخروج.")); }}><LogOut className="h-4 w-4" />تسجيل الخروج</button>{logoutError && <p role="alert" className="mt-2 text-sm text-red-700">{logoutError}</p>}</div> : !authLoading && <a href={getLoginUrl()} className="inline-flex rounded-xl bg-teal-700 px-4 py-2.5 text-sm font-bold text-white">تسجيل الدخول</a>}
       {overview.isLoading && <Loader2 aria-label="جارٍ التحميل" className="animate-spin" />}
       {overview.error && <p role="alert" className="rounded-xl bg-amber-50 p-4 text-amber-900">تعذر تحميل الحساب. سجل الدخول ثم أعد المحاولة.</p>}
       {overview.data && <section className="rounded-2xl border border-slate-200 bg-white p-5"><div className="flex items-center gap-3"><UserRound className="h-7 w-7 text-teal-700" /><div><h2 className="font-bold">{overview.data.user.name || "حسابي"}</h2><p className="mt-1 text-sm text-slate-600">معرّف حسابك: <strong>{overview.data.user.id}</strong></p>{overview.data.user.email && <p className="mt-1 text-xs text-slate-500" dir="ltr">{overview.data.user.email}</p>}</div></div></section>}

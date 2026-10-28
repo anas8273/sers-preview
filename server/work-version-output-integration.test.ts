@@ -16,7 +16,7 @@ import {
 } from "../drizzle/domain-core";
 import { createWorkItemForUser } from "./domain-db";
 import { getDb } from "./db";
-import { revokeOutputForUser } from "./review-output-db";
+import { createOutputForUser, revokeOutputForUser } from "./review-output-db";
 import { createReportDraftVersionForUser, saveReportDraftForUser } from "./work-report-draft-db";
 import {
   generatePrivatePdfForWorkVersion,
@@ -110,7 +110,7 @@ suite("immutable WorkVersion PDF output pipeline against real MySQL", () => {
 
     const first = await generatePrivatePdfForWorkVersion(ownerId, version.id, dependencies);
     expect(first?.reused).toBe(false);
-    expect(first?.rendererVersion).toBe(1);
+    expect(first?.rendererVersion).toBe(2);
     expect(first?.contentHash).toBe(expectedHash);
     expect(first?.storageKey).toContain(`/version-${version.id}/${expectedHash}.pdf`);
     expect(first?.downloadUrl).toContain("https://signed.example/");
@@ -184,6 +184,42 @@ suite("immutable WorkVersion PDF output pipeline against real MySQL", () => {
     expect(result).toBeUndefined();
     expect(renderCalls).toBe(0);
     expect(uploadCalls).toBe(0);
+  });
+
+  it("keeps r1 downloads readable and blocks resurrection across the r2 renderer upgrade", async () => {
+    const { work, version } = await createVersion();
+    const oldBytes = Buffer.from("%PDF-1.4\nold-renderer\n%%EOF");
+    const oldHash = createHash("sha256").update(oldBytes).digest("hex");
+    const old = (await createOutputForUser(ownerId, { workVersionId: version.id, type: "pdf", visibility: "private",
+      token: `artifact:v${version.id}:pdf:r1`, storageKey: `outputs/work-${work.id}/version-${version.id}/${oldHash}.pdf` }))!;
+    let renders = 0;
+    const dependencies = { renderPdf: async () => { renders++; return Buffer.from("%PDF-1.4\nnew-renderer\n%%EOF"); },
+      putStorage: async (key: string) => ({ key, url: "" }), getStorage: async (key: string) => ({ key, url: `https://signed.example/${key}` }) };
+    expect(await getPrivatePdfDownloadForUser(ownerId, old.id, dependencies)).toMatchObject({ rendererVersion: 1, contentHash: oldHash });
+    const current = (await generatePrivatePdfForWorkVersion(ownerId, version.id, dependencies))!;
+    expect(current).toMatchObject({ rendererVersion: 2, reused: false });
+    expect(current.outputId).not.toBe(old.id);
+    expect(await getPrivatePdfDownloadForUser(ownerId, old.id, dependencies)).toMatchObject({ rendererVersion: 1 });
+    await revokeOutputForUser(ownerId, old.id);
+    await expect(generatePrivatePdfForWorkVersion(ownerId, version.id, dependencies)).rejects.toThrow(/revoked/);
+    await expect(getPrivatePdfDownloadForUser(ownerId, current.outputId, dependencies)).rejects.toThrow(/revoked/);
+    expect(renders).toBe(1);
+
+    const next = await createVersion();
+    const legacy = (await createOutputForUser(ownerId, { workVersionId: next.version.id, type: "pdf", visibility: "private",
+      token: `artifact:v${next.version.id}:pdf:r1`, storageKey: `outputs/work-${next.work.id}/version-${next.version.id}/${oldHash}.pdf` }))!;
+    await revokeOutputForUser(ownerId, legacy.id);
+    await expect(generatePrivatePdfForWorkVersion(ownerId, next.version.id, dependencies)).rejects.toThrow(/revoked/);
+    expect(renders).toBe(1);
+  });
+
+  it("rejects an old renderer record whose storage identity belongs to another work/version", async () => {
+    const { work, version } = await createVersion();
+    const record = (await createOutputForUser(ownerId, { workVersionId: version.id, type: "pdf", visibility: "private",
+      token: `artifact:v${version.id}:pdf:r1`, storageKey: `outputs/work-${work.id + 1}/version-${version.id}/${"a".repeat(64)}.pdf` }))!;
+    let reads = 0;
+    await expect(getPrivatePdfDownloadForUser(ownerId, record.id, { getStorage: async key => { reads++; return { key, url: "https://signed.example" }; } })).rejects.toThrow(/Private artifact/);
+    expect(reads).toBe(0);
   });
 
   it("refuses download and regeneration after a version output is revoked", async () => {

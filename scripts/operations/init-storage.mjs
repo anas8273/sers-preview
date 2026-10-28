@@ -14,10 +14,15 @@ await mkdir(secrets, { recursive: true, mode: 0o700 });
 const secretInfo = await lstat(secrets);
 if (!secretInfo.isDirectory() || secretInfo.isSymbolicLink()) throw new Error('Invalid runtime secret directory');
 await chown(secrets, 10001, 10001); await chmod(secrets, 0o700);
-for (const name of ['mysql_password', 'jwt_secret']) {
+for (const name of ['mysql_password', 'jwt_secret', 'healthcheck_token']) {
   const value = (await readFile(`/run/secrets/${name}`, 'utf8')).trim();
   if (!/^[a-f0-9]{64}$/.test(value)) throw new Error('Use 32-byte hexadecimal staging secrets');
   const file = await open(`${secrets}/${name}`, constants.O_WRONLY | constants.O_CREAT | constants.O_TRUNC | constants.O_NOFOLLOW, 0o600);
   try { await file.chown(10001, 10001); await file.chmod(0o600); await file.writeFile(value); await file.sync(); }
   finally { await file.close(); }
 }
+const workerState = '/var/run/sers-worker';
+await mkdir(workerState, { recursive: true, mode: 0o700 });
+const workerInfo = await lstat(workerState);
+if (!workerInfo.isDirectory() || workerInfo.isSymbolicLink()) throw new Error('Invalid worker state directory');
+await chown(workerState, 10001, 10001); await chmod(workerState, 0o700);

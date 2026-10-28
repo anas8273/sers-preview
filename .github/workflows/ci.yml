@@ -48,6 +48,20 @@ jobs:
         run: pnpm build
       - name: Public output browser integration (HTTP fixtures)
         run: pnpm exec tsx --test tests/browser/public-output.mts
+      - name: Install document acceptance tools and Arabic fonts
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y poppler-utils fonts-noto-core
+      - name: Immutable Arabic PDF and Word pagination and digital QR acceptance
+        run: node --import tsx scripts/verify-work-version-outputs.ts qa-artifacts/work-version-outputs
+      - name: Preserve synthetic document verification artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: work-version-output-acceptance
+          path: qa-artifacts/work-version-outputs
+          if-no-files-found: ignore
+          retention-days: 14
       - name: Document environment-dependent integration suite
         shell: bash
         run: |

@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNotNull } from "drizzle-orm";
 import { outputs } from "../drizzle/domain-core";
 import { getDb } from "./db";
 import { renderHtmlToPdf } from "./pdf-renderer";
@@ -9,7 +9,7 @@ import { renderReportWorkVersionHtml } from "./work-version-report-renderer";
 import { renderReportWorkVersionDocx } from "./work-version-docx-renderer";
 import { getConfiguredPrivateStorage } from "./upload-runtime";
 
-export const REPORT_PDF_RENDERER_VERSION = 1;
+export const REPORT_PDF_RENDERER_VERSION = 2;
 export const REPORT_DOCX_RENDERER_VERSION = 1;
 const DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 type ArtifactType = "pdf" | "docx";
@@ -36,6 +36,24 @@ const defaultPdf: PdfOutputDependencies = {
 const defaultDocx: DocxOutputDependencies = { ...defaultStorage, renderDocx: renderReportWorkVersionDocx };
 const rendererVersion = (type: ArtifactType) => type === "pdf" ? REPORT_PDF_RENDERER_VERSION : REPORT_DOCX_RENDERER_VERSION;
 const artifactToken = (versionId: number, type: ArtifactType) => `artifact:v${versionId}:${type}:r${rendererVersion(type)}`;
+export function recognizedRenderer(token: string | null, versionId: number, type: ArtifactType) {
+  const match = token?.match(new RegExp(`^artifact:v${versionId}:${type}:r([1-9][0-9]*)$`));
+  const revision = match ? Number(match[1]) : 0;
+  return revision >= 1 && revision <= rendererVersion(type) ? revision : undefined;
+}
+export async function hasRevokedRendererArtifact(workVersionId: number, type: ArtifactType, workId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const revoked = await db.select({ token: outputs.token, storageKey: outputs.storageKey }).from(outputs).where(and(
+    eq(outputs.workVersionId, workVersionId), eq(outputs.type, type), eq(outputs.visibility, "private"), isNotNull(outputs.revokedAt),
+  ));
+  const identity = new RegExp(`^outputs/work-${workId}/version-${workVersionId}/[a-f0-9]{64}[.]${type}$`);
+  return revoked.some(output => recognizedRenderer(output.token, workVersionId, type) && output.storageKey && identity.test(output.storageKey));
+}
+async function assertNoRevokedRendererArtifact(workVersionId: number, type: ArtifactType, workId: number) {
+  if (await hasRevokedRendererArtifact(workVersionId, type, workId)) throw new OutputArtifactUnavailableError("This WorkVersion output was revoked; create a new WorkVersion before generating another artifact");
+}
+
 function safeFileName(title: string, versionNumber: number, type: ArtifactType) {
   const normalized = title.normalize("NFKC").replace(/[\\/]+/g, "-")
     .replace(/[\u0000-\u001f\u007f]/g, "").replace(/[^A-Za-z0-9\u0600-\u06FF\u0750-\u077F._ -]+/g, "").trim().slice(0, 90) || "report";
@@ -54,7 +72,11 @@ async function buildDownloadResult(userId: number, outputId: number, type: Artif
   if (!output) return undefined;
   if (output.revokedAt) throw new OutputArtifactUnavailableError("Output has been revoked; create a new WorkVersion to generate a new artifact");
   if (output.expiresAt && output.expiresAt.getTime() <= Date.now()) throw new OutputArtifactUnavailableError("Output has expired");
-  if (output.type !== type || output.visibility !== "private" || !output.storageKey || output.token !== artifactToken(output.workVersionId, type)) throw new OutputArtifactUnavailableError("Private artifact is not available");
+  const actualRendererVersion = recognizedRenderer(output.token, output.workVersionId, type);
+  const identity = output.storageKey?.match(new RegExp(`^outputs/work-${output.workId}/version-${output.workVersionId}/([a-f0-9]{64})[.]${type}$`));
+  if (output.type !== type || output.visibility !== "private" || !output.storageKey || !actualRendererVersion || !identity) throw new OutputArtifactUnavailableError("Private artifact is not available");
+  // A renderer upgrade must not restore access to a revoked version artifact.
+  await assertNoRevokedRendererArtifact(output.workVersionId, type, output.workId);
   const version = await getWorkVersionForUser(userId, output.workVersionId);
   if (!version) return undefined;
   const snapshotTitle = (version.snapshot as { work?: { title?: unknown } }).work?.title;
@@ -62,8 +84,8 @@ async function buildDownloadResult(userId: number, outputId: number, type: Artif
   const stored = await dependencies.getStorage(output.storageKey);
   // getStorage may return an authenticated application route in a self-host setup.
   return { outputId: output.id, workId: output.workId, workVersionId: output.workVersionId,
-    versionNumber: output.versionNumber, rendererVersion: rendererVersion(type), type,
-    storageKey: output.storageKey, contentHash: output.storageKey.match(/\/([a-f0-9]{64})\.(?:pdf|docx)$/i)?.[1]?.toLowerCase(),
+    versionNumber: output.versionNumber, rendererVersion: actualRendererVersion, type,
+    storageKey: output.storageKey, contentHash: identity[1],
     fileSize, filename: safeFileName(title, output.versionNumber, type), downloadUrl: dependencies.getStorage === storageGet && process.env.SERS_PRIVATE_STORAGE_DIR
       ? `/api/work-outputs/${output.id}/download` : stored.url, reused,
   };
@@ -72,6 +94,7 @@ async function generateArtifact(userId: number, workVersionId: number, type: Art
   render: (snapshot: unknown, versionNumber: number) => Promise<Buffer>) {
   const version = await getWorkVersionForUser(userId, workVersionId, "write");
   if (!version) return undefined;
+  await assertNoRevokedRendererArtifact(workVersionId, type, version.work.id);
   const existing = await findRendererArtifact(userId, workVersionId, type);
   if (existing) {
     if (existing.revokedAt) throw new OutputArtifactUnavailableError("This WorkVersion output was revoked; create a new WorkVersion before generating another artifact");
@@ -85,6 +108,7 @@ async function generateArtifact(userId: number, workVersionId: number, type: Art
   await dependencies.putStorage(storageKey, buffer, type === "pdf" ? "application/pdf" : DOCX_MIME);
   let created;
   try {
+    await assertNoRevokedRendererArtifact(workVersionId, type, version.work.id);
     created = await createOutputForUser(userId, { workVersionId, type, visibility: "private", token: artifactToken(workVersionId, type), storageKey });
   } catch (error) {
     const raced = await findRendererArtifact(userId, workVersionId, type);
