@@ -1,13 +1,15 @@
-import { and, asc, eq, isNull, sql } from "drizzle-orm";
+import { and, asc, eq, isNull } from "drizzle-orm";
 import {
   assets,
   contentBlocks,
   memberships,
+  organizations,
   workAssetLinks,
   workItems,
   workVersions,
 } from "../drizzle/domain-core";
 import { getDb } from "./db";
+import { users } from "../drizzle/schema";
 
 export const REPORT_DOCUMENT_BLOCK = "report_document";
 
@@ -65,28 +67,21 @@ function normalizeDraft(value: unknown): ReportDraftData {
 }
 
 async function assertWriteAccessInTransaction(tx: any, userId: number, workItemId: number) {
-  const [work] = await tx
-    .select()
-    .from(workItems)
-    .where(and(eq(workItems.id, workItemId), isNull(workItems.deletedAt)))
-    .limit(1);
-  if (!work) return undefined;
-
-  if (work.ownerType === "personal") {
-    return work.ownerUserId === userId || work.creatorUserId === userId ? work : undefined;
+  const [hint] = await tx.select().from(workItems).where(and(eq(workItems.id, workItemId), isNull(workItems.deletedAt))).limit(1);
+  if (!hint) return undefined;
+  if (hint.ownerType === "personal") {
+    if (hint.ownerUserId !== userId) return undefined;
+    const [user] = await tx.select({ id: users.id }).from(users).where(eq(users.id, userId)).limit(1).for("update");
+    if (!user) return undefined;
+  } else {
+    if (!hint.ownerOrganizationId) return undefined;
+    const [organization] = await tx.select().from(organizations).where(eq(organizations.id, hint.ownerOrganizationId)).limit(1).for("update");
+    if (!organization || organization.status !== "active") return undefined;
+    const [membership] = await tx.select().from(memberships).where(and(eq(memberships.userId, userId), eq(memberships.organizationId, hint.ownerOrganizationId), eq(memberships.status, "active"))).limit(1).for("update");
+    if (!membership || !canWriteOrganization(membership.role)) return undefined;
   }
-
-  if (!work.ownerOrganizationId) return undefined;
-  const [membership] = await tx
-    .select()
-    .from(memberships)
-    .where(and(
-      eq(memberships.userId, userId),
-      eq(memberships.organizationId, work.ownerOrganizationId),
-      eq(memberships.status, "active"),
-    ))
-    .limit(1);
-  if (!membership || !canWriteOrganization(membership.role)) return undefined;
+  const [work] = await tx.select().from(workItems).where(and(eq(workItems.id, workItemId), isNull(workItems.deletedAt))).limit(1).for("update");
+  if (!work || work.ownerType !== hint.ownerType || work.ownerUserId !== hint.ownerUserId || work.ownerOrganizationId !== hint.ownerOrganizationId) return undefined;
   return work;
 }
 
@@ -101,20 +96,22 @@ async function assertReadAccess(userId: number, workItemId: number) {
   if (!work) return undefined;
 
   if (work.ownerType === "personal") {
-    return work.ownerUserId === userId || work.creatorUserId === userId ? work : undefined;
+    return work.ownerUserId === userId ? work : undefined;
   }
 
   if (!work.ownerOrganizationId) return undefined;
-  const [membership] = await db
-    .select()
+  const [memberRow] = await db
+    .select({ membership: memberships })
     .from(memberships)
+    .innerJoin(organizations, eq(organizations.id, memberships.organizationId))
     .where(and(
+      eq(organizations.status, "active"),
       eq(memberships.userId, userId),
       eq(memberships.organizationId, work.ownerOrganizationId),
       eq(memberships.status, "active"),
     ))
     .limit(1);
-  return membership ? work : undefined;
+  return memberRow?.membership ? work : undefined;
 }
 
 export async function getReportDraftForUser(userId: number, workItemId: number) {
@@ -158,7 +155,6 @@ export async function saveReportDraftForUser(userId: number, input: {
   if (!db) throw new Error("Database not available");
 
   return db.transaction(async tx => {
-    await tx.execute(sql`SELECT id FROM work_items WHERE id = ${input.workItemId} FOR UPDATE`);
     const work = await assertWriteAccessInTransaction(tx, userId, input.workItemId);
     if (!work) throw new ReportDraftAccessError();
     if (work.type !== "report") throw new ReportDraftAccessError("Only report work supports a report draft");
@@ -169,7 +165,7 @@ export async function saveReportDraftForUser(userId: number, input: {
       .from(contentBlocks)
       .where(and(eq(contentBlocks.workItemId, input.workItemId), eq(contentBlocks.blockType, REPORT_DOCUMENT_BLOCK)))
       .orderBy(asc(contentBlocks.id))
-      .limit(1);
+      .limit(1).for("update");
     const current = block ? normalizeDraft(block.data) : normalizeDraft(undefined);
     if (current.revision !== input.expectedRevision) throw new ReportDraftConflictError();
 
@@ -178,7 +174,7 @@ export async function saveReportDraftForUser(userId: number, input: {
         .select({ assetId: workAssetLinks.assetId })
         .from(workAssetLinks)
         .innerJoin(assets, eq(workAssetLinks.assetId, assets.id))
-        .where(and(eq(workAssetLinks.workItemId, input.workItemId), isNull(assets.deletedAt)))
+        .where(and(eq(workAssetLinks.workItemId, input.workItemId), isNull(assets.deletedAt))).for("update")
       : [];
     const linkedAssetIds = new Set(linkedAssetRows.map((row: { assetId: number }) => row.assetId));
     const evidenceAssetIds = Array.from(new Set(input.evidenceAssetIds)).filter(id => linkedAssetIds.has(id));
@@ -221,7 +217,6 @@ export async function createReportDraftVersionForUser(userId: number, input: {
   if (!db) throw new Error("Database not available");
 
   return db.transaction(async tx => {
-    await tx.execute(sql`SELECT id FROM work_items WHERE id = ${input.workItemId} FOR UPDATE`);
     const work = await assertWriteAccessInTransaction(tx, userId, input.workItemId);
     if (!work) throw new ReportDraftAccessError();
     if (work.type !== "report") throw new ReportDraftAccessError("Only report work supports a report draft");
@@ -232,7 +227,7 @@ export async function createReportDraftVersionForUser(userId: number, input: {
       .from(contentBlocks)
       .where(and(eq(contentBlocks.workItemId, input.workItemId), eq(contentBlocks.blockType, REPORT_DOCUMENT_BLOCK)))
       .orderBy(asc(contentBlocks.id))
-      .limit(1);
+      .limit(1).for("update");
     if (!block) throw new ReportDraftConflictError("Save the report before creating a version");
     const draft = normalizeDraft(block.data);
     if (draft.revision !== input.expectedRevision) throw new ReportDraftConflictError();
@@ -248,10 +243,11 @@ export async function createReportDraftVersionForUser(userId: number, input: {
       })
       .from(workAssetLinks)
       .innerJoin(assets, eq(workAssetLinks.assetId, assets.id))
-      .where(and(eq(workAssetLinks.workItemId, input.workItemId), isNull(assets.deletedAt)));
+      .where(and(eq(workAssetLinks.workItemId, input.workItemId), isNull(assets.deletedAt))).for("update");
 
     const nextVersion = work.currentVersionNumber + 1;
-    await tx.update(workItems).set({ currentVersionNumber: nextVersion }).where(eq(workItems.id, input.workItemId));
+    // Keep older review decisions intact while the new version awaits review.
+    await tx.update(workItems).set({ currentVersionNumber: nextVersion, status: "draft" }).where(eq(workItems.id, input.workItemId));
     const snapshot = {
       schemaVersion: 1,
       kind: "report",
@@ -262,6 +258,7 @@ export async function createReportDraftVersionForUser(userId: number, input: {
         ownerUserId: work.ownerUserId,
         ownerOrganizationId: work.ownerOrganizationId,
       },
+      academicContext: work.academicContext,
       reportDraft: draft,
       assets: linkedAssets,
       capturedAt: new Date().toISOString(),

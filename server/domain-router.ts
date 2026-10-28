@@ -17,6 +17,7 @@ import {
   updateWorkItemForUser,
   WorkVersionConflictError,
 } from "./domain-db";
+import { AccountAccessError, AccountValidationError } from "./account-db";
 import { reportDraftRouter } from "./report-draft-router";
 import {
   addReviewCommentForUser,
@@ -43,7 +44,7 @@ const conflict = (message: string) => new TRPCError({ code: "CONFLICT", message 
 
 export const domainRouter = router({
   work: router({
-    list: protectedProcedure.query(({ ctx }) => listWorkItemsForUser(ctx.user.id)),
+    list: protectedProcedure.input(z.object({ academicYearId: z.number().int().positive().optional(), academicTermId: z.number().int().positive().optional(), unassigned: z.boolean().optional() }).optional()).query(({ ctx, input }) => listWorkItemsForUser(ctx.user.id, input)),
 
     get: protectedProcedure
       .input(z.object({ id: z.number().int().positive() }))
@@ -59,6 +60,8 @@ export const domainRouter = router({
         type: z.enum(["report", "portfolio"]),
         ownerType: z.enum(["personal", "organization"]).default("personal"),
         organizationId: z.number().int().positive().optional(),
+        academicYearId: z.number().int().positive().optional(),
+        academicTermId: z.number().int().positive().optional(),
       }).superRefine((value, ctx) => {
         if (value.ownerType === "organization" && !value.organizationId) {
           ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["organizationId"], message: "اختر المدرسة المالكة للعمل" });
@@ -68,6 +71,8 @@ export const domainRouter = router({
         try {
           return await createWorkItemForUser(ctx.user.id, input);
         } catch (error) {
+          if (error instanceof AccountAccessError) throw forbidden("السنة أو الفصل لا يتبعان مساحة ملكية العمل");
+          if (error instanceof AccountValidationError) throw badRequest(error.message);
           if (error instanceof Error && error.message.includes("access denied")) throw forbidden("لا تملك صلاحية إنشاء عمل لهذه المدرسة");
           throw error;
         }
@@ -119,7 +124,7 @@ export const domainRouter = router({
       .input(z.object({
         title: z.string().trim().min(2).max(255),
         kind: z.enum(["link", "text"]),
-        externalUrl: z.string().url().max(2000).optional(),
+        externalUrl: z.string().url().max(2000).refine(value => /^https?:\/\//i.test(value), "استخدم رابط HTTP أو HTTPS").optional(),
         text: z.string().trim().max(10000).optional(),
         ownerType: z.enum(["personal", "organization"]).default("personal"),
         organizationId: z.number().int().positive().optional(),

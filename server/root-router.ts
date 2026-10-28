@@ -4,6 +4,10 @@ import { publicOutputRouter } from "./public-output-router";
 import { reviewSupportRouter } from "./review-support-router";
 import { shareOutputRouter } from "./share-output-router";
 import { appRouter as legacyAppRouter } from "./routers";
+import { accountRouter } from "./account-router";
+import { evidenceUploadRouter } from "./evidence-upload-router";
+import { notificationRouter } from "./notification-router";
+import { workVersionDocxRouter } from "./work-version-docx-router";
 
 const domainRootRouter = router({ domain: domainRouter });
 const publicOutputRootRouter = router({ publicOutput: publicOutputRouter });
@@ -16,5 +20,6 @@ export const appRouter = mergeRouters(
   publicOutputRootRouter,
   reviewSupportRootRouter,
   shareOutputRootRouter,
+  router({ account: accountRouter, evidenceUpload: evidenceUploadRouter, notification: notificationRouter, workVersionDocx: workVersionDocxRouter }),
 );
 export type AppRouter = typeof appRouter;

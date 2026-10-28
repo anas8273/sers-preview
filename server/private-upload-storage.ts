@@ -11,6 +11,9 @@ export interface PrivateUploadStorage {
     privateObjects: boolean;
     conditionalCreate: boolean;
     versionedDelete: boolean;
+    /** If true, deleted/missing from conditional delete permanently consumes the
+     * key: delayed or future puts cannot recreate it, including after restart. */
+    permanentKeyRetirement?: boolean;
   };
   putPrivateIfAbsent(input: { key: string; bytes: Uint8Array; sha256: string }): Promise<
     { status: "created"; version: string } | { status: "exists" } | { status: "unknown" }
@@ -26,6 +29,13 @@ export interface PrivateUploadStorage {
   /** Must enforce maxBytes before/during reading, never return an unbounded body. */
   readPrivate(key: string, version: string, maxBytes: number): Promise<
     { status: "found"; bytes: Uint8Array } | { status: "missing" } | { status: "unknown" }
+  >;
+  /** Optional durable pre-write identity, for terminal cleanup ONLY. This is not
+   * proof that object bytes exist/are complete/private/scan-ready. The caller must
+   * match its DB digest+size and use conditional deletion with permanent retirement. */
+  inspectPrivatePreparation?(key: string): Promise<
+    { status: "prepared"; version: string; bytes: number; sha256: string }
+    | { status: "missing" } | { status: "unknown" }
   >;
   /** Atomic version precondition. Unknown outcomes must be reconciled, not retried
    * as an unconditional delete. Live-reference authorization belongs to caller. */

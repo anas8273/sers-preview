@@ -32,6 +32,10 @@ jobs:
         env:
           DATABASE_URL: mysql://ci:ci@127.0.0.1:3306/sers
         run: pnpm exec drizzle-kit generate --config drizzle.config.ts
+      - name: Require committed schema migration
+        run: |
+          git diff --exit-code -- drizzle
+          test -z "$(git ls-files --others --exclude-standard drizzle)"
       - name: Hermetic test suite
         shell: bash
         run: |

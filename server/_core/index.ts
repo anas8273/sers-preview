@@ -9,7 +9,10 @@ import { appRouter } from "../root-router";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
 import { sdk } from "./sdk";
-import { seedDefaultTemplates } from "../db";
+import { getDb, seedDefaultTemplates } from "../db";
+import { sql } from "drizzle-orm";
+import { registerEvidenceHttpRoutes } from "../evidence-http-routes";
+import { registerPrivateOutputRoutes } from "../output-artifact-storage";
 import { renderHtmlToPdf } from "../pdf-renderer";
 import { fetchRemoteImage, RemoteImageError } from "../safe-remote-image";
 
@@ -114,6 +117,17 @@ async function startServer() {
   const app = express();
   const server = createServer(app);
   app.disable("x-powered-by");
+  app.get("/healthz", (_req, res) => res.json({ status: "ok" }));
+  app.get("/readyz", async (_req, res) => {
+    try {
+      const db = await getDb();
+      if (!db) throw new Error("Database unavailable");
+      await db.execute(sql`SELECT 1`);
+      res.json({ status: "ready" });
+    } catch { res.status(503).json({ status: "unavailable" }); }
+  });
+  registerEvidenceHttpRoutes(app, { authenticate: req => sdk.authenticateRequest(req) });
+  registerPrivateOutputRoutes(app, req => sdk.authenticateRequest(req));
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
   registerOAuthRoutes(app);

@@ -1,0 +1,173 @@
+name: sers-staging
+
+x-app: &app
+  image: sers-staging:${SERS_IMAGE_TAG:-local}
+  build:
+    context: .
+    args:
+      VITE_APP_ID: ${VITE_APP_ID:?Set the staging OAuth app ID}
+      VITE_OAUTH_PORTAL_URL: ${VITE_OAUTH_PORTAL_URL:?Set the staging OAuth portal URL}
+  user: "10001:10001"
+  read_only: true
+  tmpfs:
+    - /tmp:rw,nosuid,nodev,size=512m
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  environment: &app-env
+    NODE_ENV: production
+    PORT: "3000"
+    SERS_DATABASE_HOST: mysql
+    SERS_DATABASE_NAME: ${SERS_DATABASE_NAME:-sers_staging}
+    SERS_DATABASE_USER: sers
+    MYSQL_PASSWORD_FILE: /var/run/sers-secrets/mysql_password
+    JWT_SECRET_FILE: /var/run/sers-secrets/jwt_secret
+    VITE_APP_ID: ${VITE_APP_ID:?Set the staging OAuth app ID}
+    OAUTH_SERVER_URL: ${OAUTH_SERVER_URL:?Set the staging OAuth server URL}
+    VITE_OAUTH_PORTAL_URL: ${VITE_OAUTH_PORTAL_URL:?Set the staging OAuth portal URL}
+    OWNER_OPEN_ID: ${OWNER_OPEN_ID:-}
+    SERS_UPLOADS_ENABLED: ${SERS_UPLOADS_ENABLED:-1}
+    SERS_PRIVATE_STORAGE_DIR: /var/lib/sers/evidence
+    SERS_CLAMAV_HOST: clamav
+    SERS_CLAMAV_PORT: "3310"
+    # Explicit staging quotas. These are not production policy defaults.
+    SERS_UPLOAD_PERSONAL_LIMIT_BYTES: "268435456"
+    SERS_UPLOAD_SCHOOL_LIMIT_BYTES: "1073741824"
+    SERS_UPLOAD_MAX_ACTIVE_INTENTS: "20"
+  volumes:
+    - evidence:/var/lib/sers/evidence
+    - runtime-secrets:/var/run/sers-secrets:ro
+  networks: [data, egress]
+  logging:
+    driver: json-file
+    options: {max-size: "10m", max-file: "3"}
+
+services:
+  mysql:
+    image: mysql:8.4
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: ${SERS_DATABASE_NAME:-sers_staging}
+      MYSQL_USER: sers
+      MYSQL_PASSWORD_FILE: /run/secrets/mysql_password
+      MYSQL_ROOT_PASSWORD_FILE: /run/secrets/mysql_root_password
+    secrets: [mysql_password, mysql_root_password]
+    volumes:
+      - mysql-data:/var/lib/mysql
+    networks: [data]
+    healthcheck:
+      test: [CMD-SHELL, 'MYSQL_PWD="$$(cat /run/secrets/mysql_root_password)" mysql -uroot -h127.0.0.1 --execute="SELECT 1" --silent']
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+    logging:
+      driver: json-file
+      options: {max-size: "10m", max-file: "3"}
+
+  clamav:
+    image: clamav/clamav:1.4
+    restart: unless-stopped
+    volumes:
+      - clamav-data:/var/lib/clamav
+    networks: [data, egress]
+    # The official image healthcheck checks clamd. Initial signatures can take minutes.
+    healthcheck:
+      start_period: 180s
+      interval: 30s
+      timeout: 10s
+      retries: 10
+    mem_limit: 4g
+    logging:
+      driver: json-file
+      options: {max-size: "10m", max-file: "3"}
+
+  storage-init:
+    image: sers-staging:${SERS_IMAGE_TAG:-local}
+    volumes:
+      - evidence:/var/lib/sers/evidence
+      - runtime-secrets:/var/run/sers-secrets
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    user: "0:0"
+    entrypoint: [node, scripts/operations/init-storage.mjs]
+    command: []
+    cap_add: [CHOWN, FOWNER, DAC_OVERRIDE]
+    secrets: [mysql_password, jwt_secret]
+    environment: {}
+    network_mode: none
+    restart: "no"
+
+  migrate:
+    <<: *app
+    command: [migrate]
+    profiles: [operations]
+    restart: "no"
+    depends_on:
+      mysql: {condition: service_healthy}
+      storage-init: {condition: service_completed_successfully}
+
+  app:
+    <<: *app
+    command: [serve]
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${SERS_HTTP_PORT:-3000}:3000"
+    depends_on:
+      mysql: {condition: service_healthy}
+      clamav: {condition: service_healthy}
+      storage-init: {condition: service_completed_successfully}
+    healthcheck:
+      test: [CMD, node, scripts/operations/healthcheck.mjs]
+      interval: 30s
+      timeout: 8s
+      retries: 3
+      start_period: 30s
+
+  seed-demo:
+    <<: *app
+    command: [seed-demo]
+    profiles: [demo]
+    restart: "no"
+    environment:
+      <<: *app-env
+      NODE_ENV: development
+      SERS_DEMO_MODE: synthetic-only
+    depends_on:
+      mysql: {condition: service_healthy}
+      storage-init: {condition: service_completed_successfully}
+
+  worker:
+    <<: *app
+    command: [worker]
+    restart: unless-stopped
+    stop_grace_period: 150s
+    depends_on:
+      mysql: {condition: service_healthy}
+      clamav: {condition: service_healthy}
+      storage-init: {condition: service_completed_successfully}
+    healthcheck:
+      test: [CMD, node, scripts/operations/worker-healthcheck.mjs]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 150s
+
+secrets:
+  mysql_password:
+    file: ${SERS_SECRETS_DIR:?Set an absolute secrets directory outside the repository}/mysql_password
+  mysql_root_password:
+    file: ${SERS_SECRETS_DIR:?Set an absolute secrets directory outside the repository}/mysql_root_password
+  jwt_secret:
+    file: ${SERS_SECRETS_DIR:?Set an absolute secrets directory outside the repository}/jwt_secret
+
+volumes:
+  mysql-data:
+  evidence:
+  runtime-secrets:
+  clamav-data:
+
+networks:
+  data:
+    internal: true
+  egress:

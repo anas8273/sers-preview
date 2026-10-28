@@ -1,0 +1,78 @@
+name: SERS Disposable Operations Drill
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sers-operations-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  compose-backup-restore:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      COMPOSE_PROJECT_NAME: sers-ci-${{ github.run_id }}-${{ github.run_attempt }}
+      SERS_DATABASE_NAME: sers_demo
+      VITE_APP_ID: synthetic-ci-only
+      VITE_OAUTH_PORTAL_URL: http://127.0.0.1:3999
+      OAUTH_SERVER_URL: http://127.0.0.1:3999
+      PUPPETEER_SKIP_DOWNLOAD: "true"
+      SERS_BACKUP_MODE: quiesced
+    steps:
+      - name: Set disposable private paths
+        run: printf 'SERS_SECRETS_DIR=%s/sers-secrets\n' "$RUNNER_TEMP" >> "$GITHUB_ENV"
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install locked verification toolchain
+        run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Check operational scripts and refusal boundaries
+        run: |
+          node node_modules/typescript/bin/tsc -p scripts/operations/tsconfig.json
+          node --import tsx --test scripts/operations/operations.test.mts
+      - name: Create disposable secrets and validate Compose
+        run: |
+          node scripts/operations/init-secrets.mjs "$SERS_SECRETS_DIR"
+          docker compose -f compose.staging.yml config --quiet
+          docker compose -f compose.demo.yml config --quiet
+      - name: Build non-root runtime with real parsers
+        run: docker compose -f compose.staging.yml build app
+      - name: Start isolated MySQL and real ClamAV
+        run: docker compose -f compose.staging.yml up -d --wait --wait-timeout 600 mysql clamav
+      - name: Apply reviewed migrations and verify synthetic evidence and Word
+        run: |
+          docker compose -f compose.staging.yml run --rm migrate
+          docker compose -f compose.staging.yml run --rm seed-demo verify-demo
+      - name: Verify production entrypoint readiness and explicit worker
+        run: |
+          docker compose -f compose.staging.yml up -d --wait --wait-timeout 240 app worker
+          curl --fail --silent http://127.0.0.1:3000/readyz
+          test "$(curl --silent -o /dev/null -w '%{http_code}' http://127.0.0.1:3000/api/evidence/assets/1/download)" = 401
+          docker compose -f compose.staging.yml exec -T worker node scripts/operations/worker-healthcheck.mjs
+      - name: Quiesce writers, back up, and restore into a disposable database
+        run: |
+          docker compose -f compose.staging.yml stop app worker
+          node scripts/operations/backup.mjs "$RUNNER_TEMP/sers-backups"
+          backup_dir=$(find "$RUNNER_TEMP/sers-backups" -mindepth 1 -maxdepth 1 -type d)
+          node scripts/operations/restore-drill.mjs "$backup_dir" | tee "$RUNNER_TEMP/restore-result.json"
+          node --input-type=module -e 'import fs from "node:fs";const r=JSON.parse(fs.readFileSync(process.env.RUNNER_TEMP+"/restore-result.json","utf8"));if(!r.passed||r.privateContentVerified.uploads<1||r.privateContentVerified.outputs<1)process.exit(1)'
+          node scripts/operations/verify-restore-isolation.mjs "$backup_dir"
+      - name: Show service status on failure
+        if: failure()
+        run: |
+          docker compose -f compose.staging.yml ps --all
+          docker compose -f compose.staging.yml logs --tail 100 app worker clamav
+      - name: Remove disposable containers, volumes and private artifacts
+        if: always()
+        run: |
+          docker compose -f compose.staging.yml down --volumes --remove-orphans
+          rm -rf "$RUNNER_TEMP/sers-secrets" "$RUNNER_TEMP/sers-backups" "$RUNNER_TEMP/restore-result.json"

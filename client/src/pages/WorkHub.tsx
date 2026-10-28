@@ -18,9 +18,14 @@ export default function WorkHub() {
   const [type, setType] = useState<"report" | "portfolio">("report");
   const [ownerType, setOwnerType] = useState<"personal" | "organization">("personal");
   const [organizationId, setOrganizationId] = useState<number | undefined>();
+  const [academicYearId, setAcademicYearId] = useState<number | undefined>();
+  const [academicTermId, setAcademicTermId] = useState<number | undefined>();
+  const [yearFilter, setYearFilter] = useState("");
+  const [termFilter, setTermFilter] = useState<number | undefined>();
 
   const utils = trpc.useUtils();
-  const workQuery = trpc.domain.work.list.useQuery(undefined, { retry: false });
+  const workQuery = trpc.domain.work.list.useQuery(yearFilter === "unassigned" ? { unassigned: true } : yearFilter ? { academicYearId: Number(yearFilter), academicTermId: termFilter } : undefined, { retry: false });
+  const yearsQuery = trpc.account.academicYears.useQuery(undefined, { retry: false });
   const organizationsQuery = trpc.domain.organization.listMine.useQuery(undefined, { retry: false });
   const createWork = trpc.domain.work.create.useMutation({
     onSuccess: async created => {
@@ -28,18 +33,23 @@ export default function WorkHub() {
       setType("report");
       setOwnerType("personal");
       setOrganizationId(undefined);
+      setAcademicYearId(undefined);
+      setAcademicTermId(undefined);
       setShowCreate(false);
       await utils.domain.work.list.invalidate();
       if (created?.id) setLocation(`/work/${created.id}`);
     },
   });
 
-  const organizations = organizationsQuery.data ?? [];
-  const canSubmit = useMemo(() => title.trim().length >= 2 && (ownerType === "personal" || Boolean(organizationId)), [title, ownerType, organizationId]);
+  const organizations = (organizationsQuery.data ?? []).filter(org => ["owner", "admin", "member"].includes(org.role));
+  const scopeYears = (yearsQuery.data ?? []).filter(year => ownerType === "personal" ? year.ownerUserId !== null : year.organizationId === organizationId);
+  const chosenYear = scopeYears.find(year => year.id === academicYearId);
+  const filterYear = yearsQuery.data?.find(year => year.id === Number(yearFilter));
+  const canSubmit = useMemo(() => title.trim().length >= 2 && Boolean(chosenYear) && Boolean(academicTermId && chosenYear?.terms.some(term => term.id === academicTermId)) && (ownerType === "personal" || Boolean(organizationId)), [title, ownerType, organizationId, chosenYear, academicTermId]);
 
   const submit = () => {
     if (!canSubmit || createWork.isPending) return;
-    createWork.mutate({ title: title.trim(), type, ownerType, organizationId });
+    createWork.mutate({ title: title.trim(), type, ownerType, organizationId, academicYearId, academicTermId });
   };
 
   return (
@@ -58,20 +68,32 @@ export default function WorkHub() {
             </button>
           </header>
 
+          <div className="mt-6 flex flex-wrap gap-3">
+            <label className="text-xs font-bold text-slate-600">السنة الدراسية
+              <select aria-label="تصفية حسب السنة الدراسية" value={yearFilter} onChange={event => { setYearFilter(event.target.value); setTermFilter(undefined); }} className="mr-2 rounded-xl border border-slate-200 bg-white p-2.5 text-sm">
+                <option value="">كل السنوات</option><option value="unassigned">أعمال قديمة دون سنة</option>
+                {yearsQuery.data?.map(year => <option key={year.id} value={year.id}>{year.label} — {year.ownerUserId ? "شخصي" : organizationsQuery.data?.find(org => org.id === year.organizationId)?.name || "مدرسي"}</option>)}
+              </select>
+            </label>
+            {filterYear && <label className="text-xs font-bold text-slate-600">الفصل
+              <select aria-label="تصفية حسب الفصل الدراسي" value={termFilter ?? ""} onChange={event => setTermFilter(Number(event.target.value) || undefined)} className="mr-2 rounded-xl border border-slate-200 bg-white p-2.5 text-sm"><option value="">كل الفصول</option>{filterYear.terms.map(term => <option key={term.id} value={term.id}>{term.label}</option>)}</select>
+            </label>}
+          </div>
+
           {workQuery.isLoading && (
             <div className="mt-8 flex items-center justify-center rounded-2xl border border-slate-200 bg-white py-16 text-sm text-slate-500"><Loader2 className="ml-2 h-4 w-4 animate-spin" />جاري تحميل أعمالك...</div>
           )}
 
           {workQuery.error && (
             <div className="mt-8 rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm leading-7 text-amber-900">
-              تعذر تحميل مساحة العمل. إذا لم تكن مسجلًا فادخل بحسابك أولًا، وإذا كانت البيئة لم تطبق migration الجديدة بعد فستبقى هذه الصفحة محمية دون الرجوع للبيانات القديمة.
+              تعذر تحميل مساحة العمل. تحقق من تسجيل الدخول والاتصال ثم أعد المحاولة.
             </div>
           )}
 
           {workQuery.data && workQuery.data.length === 0 && (
             <section className="mt-8 rounded-2xl border border-dashed border-slate-200 bg-white px-6 py-16 text-center">
               <FolderKanban className="mx-auto h-9 w-9 text-slate-300" />
-              <h2 className="mt-4 text-base font-bold text-slate-900">لا توجد أعمال بعد</h2>
+              <h2 className="mt-4 text-base font-bold text-slate-900">{yearFilter ? "لا توجد أعمال في هذا الاختيار" : "لا توجد أعمال بعد"}</h2>
               <p className="mx-auto mt-2 max-w-lg text-sm leading-7 text-slate-500">أنشئ أول تقرير أو ملف إنجاز. الشواهد التي تضيفها إلى المكتبة ستبقى أصولًا مستقلة يمكن ربطها بأكثر من عمل.</p>
               <button onClick={() => setShowCreate(true)} className="mt-5 inline-flex items-center gap-2 rounded-xl bg-teal-600 px-4 py-2.5 text-sm font-bold text-white"><Plus className="h-4 w-4" />إنشاء أول عمل</button>
             </section>
@@ -92,6 +114,7 @@ export default function WorkHub() {
                         </div>
                         <h2 className="mt-3 truncate text-sm font-bold text-slate-900">{work.title}</h2>
                         <p className="mt-1 text-xs text-slate-500">{work.type === "report" ? "تقرير" : "ملف إنجاز"}</p>
+                        <p className="mt-2 text-xs text-teal-700">{work.academicContext ? `${work.academicContext.yearLabel} · ${work.academicContext.termLabel || "السنة كاملة"}` : "عمل قديم دون سنة"}</p>
                       </div>
                     </div>
                     <div className="mt-5 flex items-center gap-2 border-t border-slate-100 pt-4 text-[11px] text-slate-500">
@@ -118,7 +141,7 @@ export default function WorkHub() {
             </div>
 
             <label className="mt-5 block text-xs font-bold text-slate-700">اسم العمل</label>
-            <input value={title} onChange={event => setTitle(event.target.value)} maxLength={255} placeholder="مثال: تقرير برنامج الانضباط" className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-teal-400 focus:ring-2 focus:ring-teal-100" />
+            <input aria-label="اسم العمل الجديد" value={title} onChange={event => setTitle(event.target.value)} maxLength={255} placeholder="مثال: تقرير برنامج الانضباط" className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-teal-400 focus:ring-2 focus:ring-teal-100" />
 
             <div className="mt-4 grid grid-cols-2 gap-2">
               <button onClick={() => setType("report")} className={`rounded-xl border p-3 text-right ${type === "report" ? "border-teal-300 bg-teal-50" : "border-slate-200"}`}><FileText className="mb-2 h-4 w-4 text-teal-700" /><span className="block text-xs font-bold text-slate-800">تقرير</span></button>
@@ -127,16 +150,23 @@ export default function WorkHub() {
 
             <label className="mt-4 block text-xs font-bold text-slate-700">الملكية</label>
             <div className="mt-2 grid grid-cols-2 gap-2">
-              <button onClick={() => { setOwnerType("personal"); setOrganizationId(undefined); }} className={`rounded-xl border p-3 text-right ${ownerType === "personal" ? "border-teal-300 bg-teal-50" : "border-slate-200"}`}><UserRound className="mb-2 h-4 w-4" /><span className="block text-xs font-bold">شخصي</span></button>
-              <button onClick={() => setOwnerType("organization")} disabled={organizations.length === 0} className={`rounded-xl border p-3 text-right disabled:cursor-not-allowed disabled:opacity-50 ${ownerType === "organization" ? "border-teal-300 bg-teal-50" : "border-slate-200"}`}><Building2 className="mb-2 h-4 w-4" /><span className="block text-xs font-bold">مدرسي</span></button>
+              <button onClick={() => { setOwnerType("personal"); setOrganizationId(undefined); setAcademicYearId(undefined); setAcademicTermId(undefined); }} className={`rounded-xl border p-3 text-right ${ownerType === "personal" ? "border-teal-300 bg-teal-50" : "border-slate-200"}`}><UserRound className="mb-2 h-4 w-4" /><span className="block text-xs font-bold">شخصي</span></button>
+              <button onClick={() => { setOwnerType("organization"); setAcademicYearId(undefined); setAcademicTermId(undefined); }} disabled={organizations.length === 0} className={`rounded-xl border p-3 text-right disabled:cursor-not-allowed disabled:opacity-50 ${ownerType === "organization" ? "border-teal-300 bg-teal-50" : "border-slate-200"}`}><Building2 className="mb-2 h-4 w-4" /><span className="block text-xs font-bold">مدرسي</span></button>
             </div>
 
             {ownerType === "organization" && (
-              <select value={organizationId ?? ""} onChange={event => setOrganizationId(Number(event.target.value) || undefined)} className="mt-3 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm">
+              <select aria-label="مدرسة العمل" value={organizationId ?? ""} onChange={event => { setOrganizationId(Number(event.target.value) || undefined); setAcademicYearId(undefined); setAcademicTermId(undefined); }} className="mt-3 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm">
                 <option value="">اختر المدرسة</option>
                 {organizations.map(org => <option key={org.id} value={org.id}>{org.name} — {org.role}</option>)}
               </select>
             )}
+
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              <label className="text-xs font-bold text-slate-700">السنة الدراسية<select aria-label="سنة العمل" value={academicYearId ?? ""} onChange={event => { setAcademicYearId(Number(event.target.value) || undefined); setAcademicTermId(undefined); }} className="mt-2 w-full rounded-xl border border-slate-200 p-2.5 text-sm"><option value="">اختر السنة</option>{scopeYears.map(year => <option key={year.id} value={year.id}>{year.label}</option>)}</select></label>
+              <label className="text-xs font-bold text-slate-700">الفصل الدراسي<select aria-label="فصل العمل" value={academicTermId ?? ""} disabled={!chosenYear} onChange={event => setAcademicTermId(Number(event.target.value) || undefined)} className="mt-2 w-full rounded-xl border border-slate-200 p-2.5 text-sm disabled:opacity-50"><option value="">اختر الفصل</option>{chosenYear?.terms.map(term => <option key={term.id} value={term.id}>{term.label}</option>)}</select></label>
+            </div>
+            {scopeYears.length === 0 && <p className="mt-3 text-xs leading-6 text-amber-800">أضف سنة وفصولًا من <a href="/account" className="font-bold underline">الحساب والمدرسة</a> لهذه المساحة، أو اطلب من مالك المدرسة إعدادها.</p>}
+            {yearsQuery.error && <p role="alert" className="mt-3 text-xs text-red-700">تعذر تحميل السنوات الدراسية.</p>}
 
             {createWork.error && <p className="mt-3 text-xs leading-6 text-red-600">{createWork.error.message}</p>}
             <div className="mt-5 flex justify-end gap-2 border-t border-slate-100 pt-4">
