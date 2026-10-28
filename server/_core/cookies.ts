@@ -1,48 +1,18 @@
 import type { CookieOptions, Request } from "express";
+import { ENV } from "./env";
 
-const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "::1"]);
+export const OAUTH_ATTEMPT_COOKIE = "oauth_attempt";
 
-function isIpAddress(host: string) {
-  // Basic IPv4 check and IPv6 presence detection.
-  if (/^\d{1,3}(\.\d{1,3}){3}$/.test(host)) return true;
-  return host.includes(":");
+/** Cookie security comes from deployment configuration, never forwarded headers. */
+export function getSessionCookieOptions(_req?: Request): Pick<CookieOptions, "httpOnly" | "path" | "sameSite" | "secure"> {
+  let explicitLocalHttp = false;
+  try {
+    const origin = new URL(ENV.appPublicOrigin);
+    explicitLocalHttp = !ENV.isProduction && origin.protocol === "http:" && ["localhost", "127.0.0.1", "[::1]"].includes(origin.hostname);
+  } catch { /* Missing configuration defaults to the stronger cookie flags. */ }
+  return { httpOnly: true, path: "/", sameSite: "lax", secure: !explicitLocalHttp };
 }
 
-function isSecureRequest(req: Request) {
-  if (req.protocol === "https") return true;
-
-  const forwardedProto = req.headers["x-forwarded-proto"];
-  if (!forwardedProto) return false;
-
-  const protoList = Array.isArray(forwardedProto)
-    ? forwardedProto
-    : forwardedProto.split(",");
-
-  return protoList.some(proto => proto.trim().toLowerCase() === "https");
-}
-
-export function getSessionCookieOptions(
-  req: Request
-): Pick<CookieOptions, "domain" | "httpOnly" | "path" | "sameSite" | "secure"> {
-  // const hostname = req.hostname;
-  // const shouldSetDomain =
-  //   hostname &&
-  //   !LOCAL_HOSTS.has(hostname) &&
-  //   !isIpAddress(hostname) &&
-  //   hostname !== "127.0.0.1" &&
-  //   hostname !== "::1";
-
-  // const domain =
-  //   shouldSetDomain && !hostname.startsWith(".")
-  //     ? `.${hostname}`
-  //     : shouldSetDomain
-  //       ? hostname
-  //       : undefined;
-
-  return {
-    httpOnly: true,
-    path: "/",
-    sameSite: "none",
-    secure: isSecureRequest(req),
-  };
+export function getOAuthAttemptCookieOptions() {
+  return { ...getSessionCookieOptions(), path: "/api/oauth" };
 }

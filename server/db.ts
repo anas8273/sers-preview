@@ -11,7 +11,7 @@ export async function getDb() {
     try {
       _db = drizzle(process.env.DATABASE_URL);
     } catch (error) {
-      console.warn("[Database] Failed to connect:", error);
+      console.warn(JSON.stringify({ event: "database_initialization_failed" }));
       _db = null;
     }
   }
@@ -43,7 +43,7 @@ export async function upsertUser(user: InsertUser): Promise<void> {
     if (!values.lastSignedIn) values.lastSignedIn = new Date();
     if (Object.keys(updateSet).length === 0) updateSet.lastSignedIn = new Date();
     await db.insert(users).values(values).onDuplicateKeyUpdate({ set: updateSet });
-  } catch (error) { console.error("[Database] Failed to upsert user:", error); throw error; }
+  } catch (error) { console.error(JSON.stringify({ event: "user_persistence_failed" })); throw error; }
 }
 
 export async function getUserByOpenId(openId: string) {

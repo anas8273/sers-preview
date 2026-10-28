@@ -1,7 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { appRouter } from "./routers";
 import { COOKIE_NAME } from "../shared/const";
 import type { TrpcContext } from "./_core/context";
+import { sdk } from "./_core/sdk";
 
 type CookieCall = {
   name: string;
@@ -42,6 +43,15 @@ function createAuthContext(): { ctx: TrpcContext; clearedCookies: CookieCall[] }
 }
 
 describe("auth.logout", () => {
+  it("preserves the cookie and returns an error when durable revocation fails", async () => {
+    const { ctx, clearedCookies } = createAuthContext();
+    const revoke = vi.spyOn(sdk, "revokeSessionForRequest").mockRejectedValue(new Error("synthetic database unavailable"));
+    try {
+      await expect(appRouter.createCaller(ctx).auth.logout()).rejects.toMatchObject({ code: "INTERNAL_SERVER_ERROR" });
+      expect(clearedCookies).toEqual([]);
+    } finally { revoke.mockRestore(); }
+  });
+
   it("clears the session cookie and reports success", async () => {
     const { ctx, clearedCookies } = createAuthContext();
     const caller = appRouter.createCaller(ctx);
@@ -54,7 +64,7 @@ describe("auth.logout", () => {
     expect(clearedCookies[0]?.options).toMatchObject({
       maxAge: -1,
       secure: true,
-      sameSite: "none",
+      sameSite: "lax",
       httpOnly: true,
       path: "/",
     });

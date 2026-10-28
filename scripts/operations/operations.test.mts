@@ -27,7 +27,7 @@ test('runtime reads bounded secrets, encodes database credentials and does not m
   const directory = await mkdtemp(path.join(tmpdir(), 'sers-ops-secret-'));
   try {
     const secret = path.join(directory, 'secret'); await writeFile(secret, 'a'.repeat(64), { mode: 0o600 });
-    const source = { SERS_DATABASE_NAME: 'sers_demo', SERS_DATABASE_HOST: '127.0.0.1', SERS_DATABASE_PORT: '13306', MYSQL_PASSWORD_FILE: secret, JWT_SECRET_FILE: secret };
+    const source = { SERS_DATABASE_NAME: 'sers_demo', SERS_DATABASE_HOST: '127.0.0.1', SERS_DATABASE_PORT: '13306', MYSQL_PASSWORD_FILE: secret, JWT_SECRET_FILE: secret, SERS_HEALTHCHECK_TOKEN_FILE: secret };
     const env = await runtimeEnvironment(source), url = new URL(env.DATABASE_URL);
     assert.equal(url.pathname, '/sers_demo'); assert.equal(url.port, '13306'); assert.equal(url.password, 'a'.repeat(64));
     assert.equal(Object.hasOwn(source, 'DATABASE_URL'), false);

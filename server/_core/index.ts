@@ -5,12 +5,13 @@ import net from "net";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import type { User } from "../../drizzle/schema";
 import { registerOAuthRoutes } from "./oauth";
+import { ENV, getAuthConfig } from "./env";
 import { appRouter } from "../root-router";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
 import { sdk } from "./sdk";
-import { getDb, seedDefaultTemplates } from "../db";
-import { sql } from "drizzle-orm";
+import { seedDefaultTemplates } from "../db";
+import { registerRuntimeObservability } from "../runtime-observability";
 import { registerEvidenceHttpRoutes } from "../evidence-http-routes";
 import { registerPrivateOutputRoutes } from "../output-artifact-storage";
 import { renderHtmlToPdf } from "../pdf-renderer";
@@ -109,23 +110,16 @@ function sendRouteError(res: Response, error: unknown, context: string) {
     res.status(error.statusCode).json({ error: error.message });
     return;
   }
-  console.error(`[${context}] Error:`, error);
+  console.error(JSON.stringify({ event: "route_failed", operation: context, requestId: res.getHeader("X-Request-ID") }));
   res.status(500).json({ error: `${context} failed` });
 }
 
 async function startServer() {
+  if (ENV.isProduction) getAuthConfig();
   const app = express();
   const server = createServer(app);
   app.disable("x-powered-by");
-  app.get("/healthz", (_req, res) => res.json({ status: "ok" }));
-  app.get("/readyz", async (_req, res) => {
-    try {
-      const db = await getDb();
-      if (!db) throw new Error("Database unavailable");
-      await db.execute(sql`SELECT 1`);
-      res.json({ status: "ready" });
-    } catch { res.status(503).json({ status: "unavailable" }); }
-  });
+  registerRuntimeObservability(app);
   registerEvidenceHttpRoutes(app, { authenticate: req => sdk.authenticateRequest(req) });
   registerPrivateOutputRoutes(app, req => sdk.authenticateRequest(req));
   app.use(express.json({ limit: "50mb" }));

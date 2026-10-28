@@ -7,6 +7,7 @@ x-app: &app
     args:
       VITE_APP_ID: ${VITE_APP_ID:?Set the staging OAuth app ID}
       VITE_OAUTH_PORTAL_URL: ${VITE_OAUTH_PORTAL_URL:?Set the staging OAuth portal URL}
+      SERS_BUILD_REVISION: ${SERS_BUILD_REVISION:?Set the full build commit revision}
   user: "10001:10001"
   read_only: true
   tmpfs:
@@ -21,6 +22,10 @@ x-app: &app
     SERS_DATABASE_USER: sers
     MYSQL_PASSWORD_FILE: /var/run/sers-secrets/mysql_password
     JWT_SECRET_FILE: /var/run/sers-secrets/jwt_secret
+    SERS_HEALTHCHECK_TOKEN_FILE: /var/run/sers-secrets/healthcheck_token
+    SERS_WORKER_HEARTBEAT_PATH: /var/run/sers-worker/heartbeat.json
+    APP_PUBLIC_ORIGIN: ${APP_PUBLIC_ORIGIN:?Set the canonical HTTPS application origin}
+    OAUTH_PORTAL_URL: ${OAUTH_PORTAL_URL:-${VITE_OAUTH_PORTAL_URL}}
     VITE_APP_ID: ${VITE_APP_ID:?Set the staging OAuth app ID}
     OAUTH_SERVER_URL: ${OAUTH_SERVER_URL:?Set the staging OAuth server URL}
     VITE_OAUTH_PORTAL_URL: ${VITE_OAUTH_PORTAL_URL:?Set the staging OAuth portal URL}
@@ -36,6 +41,7 @@ x-app: &app
   volumes:
     - evidence:/var/lib/sers/evidence
     - runtime-secrets:/var/run/sers-secrets:ro
+    - worker-state:/var/run/sers-worker:ro
   networks: [data, egress]
   logging:
     driver: json-file
@@ -86,6 +92,7 @@ services:
     volumes:
       - evidence:/var/lib/sers/evidence
       - runtime-secrets:/var/run/sers-secrets
+      - worker-state:/var/run/sers-worker
     read_only: true
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
@@ -93,7 +100,7 @@ services:
     entrypoint: [node, scripts/operations/init-storage.mjs]
     command: []
     cap_add: [CHOWN, FOWNER, DAC_OVERRIDE]
-    secrets: [mysql_password, jwt_secret]
+    secrets: [mysql_password, jwt_secret, healthcheck_token]
     environment: {}
     network_mode: none
     restart: "no"
@@ -139,6 +146,10 @@ services:
 
   worker:
     <<: *app
+    volumes:
+      - evidence:/var/lib/sers/evidence
+      - runtime-secrets:/var/run/sers-secrets:ro
+      - worker-state:/var/run/sers-worker
     command: [worker]
     restart: unless-stopped
     stop_grace_period: 150s
@@ -160,11 +171,14 @@ secrets:
     file: ${SERS_SECRETS_DIR:?Set an absolute secrets directory outside the repository}/mysql_root_password
   jwt_secret:
     file: ${SERS_SECRETS_DIR:?Set an absolute secrets directory outside the repository}/jwt_secret
+  healthcheck_token:
+    file: ${SERS_SECRETS_DIR:?Set an absolute secrets directory outside the repository}/healthcheck_token
 
 volumes:
   mysql-data:
   evidence:
   runtime-secrets:
+  worker-state:
   clamav-data:
 
 networks:

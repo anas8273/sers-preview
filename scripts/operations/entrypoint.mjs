@@ -23,6 +23,7 @@ export async function runtimeEnvironment(source = process.env) {
   if (database.protocol !== 'mysql:' || !/^\/sers_(staging|demo)$/.test(database.pathname)) throw new Error('Operations refuse databases other than sers_staging or sers_demo');
   if (!env.JWT_SECRET) env.JWT_SECRET = await secret(env.JWT_SECRET_FILE, 'Session secret');
   if (env.JWT_SECRET.length < 32) throw new Error('Session secret is too short');
+  if (!env.SERS_HEALTHCHECK_TOKEN) env.SERS_HEALTHCHECK_TOKEN = await secret(env.SERS_HEALTHCHECK_TOKEN_FILE, 'Health probe secret');
   return env;
 }
 
@@ -36,9 +37,16 @@ export async function main() {
     demo: ['--import', 'tsx', 'scripts/operations/demo-server.mts'],
     worker: ['--import', 'tsx', 'scripts/operations/upload-worker.mts'],
     'verify-demo': ['--import', 'tsx', 'scripts/operations/verify-demo.mts'],
+    preflight: ['scripts/operations/release-preflight.mjs'],
+    'inspect-health': ['scripts/operations/inspect-health.mjs'],
   };
   if (!Object.hasOwn(commands, action)) throw new Error('Unknown operations action');
   if (action === 'serve' && (!env.VITE_APP_ID || !env.OAUTH_SERVER_URL || !env.VITE_OAUTH_PORTAL_URL)) throw new Error('Staging OAuth configuration is required');
+  if (['serve', 'worker', 'demo'].includes(action)) {
+    const { releasePreflight } = await import('./release-preflight.mjs');
+    try { await releasePreflight(env); }
+    catch (error) { throw new Error(`Startup refused. ${error.message}`); }
+  }
   const child = spawn(process.execPath, commands[action], { env, stdio: 'inherit' });
   for (const signal of ['SIGTERM', 'SIGINT']) process.on(signal, () => child.kill(signal));
   child.on('error', () => { console.error('Unable to start staging process'); process.exitCode = 1; });

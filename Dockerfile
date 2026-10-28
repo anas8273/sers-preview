@@ -9,10 +9,13 @@ RUN pnpm install --frozen-lockfile --ignore-scripts
 COPY . .
 ARG VITE_APP_ID
 ARG VITE_OAUTH_PORTAL_URL
+ARG SERS_BUILD_REVISION
 ENV VITE_APP_ID=$VITE_APP_ID VITE_OAUTH_PORTAL_URL=$VITE_OAUTH_PORTAL_URL
-RUN pnpm build
+RUN pnpm build && SERS_BUILD_REVISION=$SERS_BUILD_REVISION node scripts/operations/release-contract.mjs write
 
 FROM node:22-bookworm-slim AS runtime
+ARG SERS_BUILD_REVISION
+LABEL org.opencontainers.image.revision=$SERS_BUILD_REVISION
 WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates chromium fonts-noto-core fonts-noto-extra qpdf tini util-linux \
