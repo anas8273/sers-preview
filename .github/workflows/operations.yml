@@ -19,13 +19,14 @@ jobs:
     env:
       COMPOSE_PROJECT_NAME: sers-ci-${{ github.run_id }}-${{ github.run_attempt }}
       SERS_DATABASE_NAME: sers_demo
-      SERS_SECRETS_DIR: ${{ runner.temp }}/sers-secrets
       VITE_APP_ID: synthetic-ci-only
       VITE_OAUTH_PORTAL_URL: http://127.0.0.1:3999
       OAUTH_SERVER_URL: http://127.0.0.1:3999
       PUPPETEER_SKIP_DOWNLOAD: "true"
       SERS_BACKUP_MODE: quiesced
     steps:
+      - name: Set disposable private paths
+        run: printf 'SERS_SECRETS_DIR=%s/sers-secrets\n' "$RUNNER_TEMP" >> "$GITHUB_ENV"
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4

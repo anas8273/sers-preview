@@ -5,9 +5,9 @@ import JSZip from "jszip";
 import { users } from "../drizzle/schema";
 import { contentBlocks, memberships, notifications, organizations, outputs, reviewComments, reviews, workAssetLinks, workItems, workVersions } from "../drizzle/domain-core";
 import { getDb } from "./db";
-import { createWorkItemForUser } from "./domain-db";
+import { createWorkItemForUser, createWorkVersionForUser } from "./domain-db";
 import { createReportDraftVersionForUser, saveReportDraftForUser } from "./work-report-draft-db";
-import { addReviewCommentForUser, createOutputForUser, createReviewForUser, decideReviewForUser, revokeOutputForUser } from "./review-output-db";
+import { addReviewCommentForUser, createOutputForUser, createReviewForUser, decideReviewForUser, getOutputForUser, revokeOutputForUser } from "./review-output-db";
 import { renderReportWorkVersionDocx } from "./work-version-docx-renderer";
 import { generatePrivateDocxForWorkVersion, generatePrivatePdfForWorkVersion, getPrivateDocxDownloadForUser, getPrivatePdfDownloadForUser } from "./work-version-output-service";
 
@@ -118,6 +118,37 @@ suite("immutable editable WorkVersion DOCX on disposable MySQL", () => {
     expect(await createReviewForUser(owner, frozen.id, reviewer)).toBeUndefined();
     expect(await createOutputForUser(owner, { workVersionId: frozen.id, type: "docx", storageKey: "test.docx" })).toBeUndefined();
     await db.update(organizations).set({ status: "active" }).where(eq(organizations.id, school));
+  });
+
+  it.each(["report", "generic"] as const)("starts a new review after approving version one through the %s version creator", async creator => {
+    const { work, frozen, draft } = await version(true);
+    const db = (await getDb())!;
+    const [original] = await db.select().from(workVersions).where(eq(workVersions.id, frozen.id));
+    const firstReview = (await createReviewForUser(owner, frozen.id, reviewer))!;
+    await decideReviewForUser(reviewer, firstReview.id, "approved");
+    const sharedFirst = (await createOutputForUser(owner, { workVersionId: frozen.id, type: "link", visibility: "public", token: randomUUID() }))!;
+    expect((await db.select().from(workItems).where(eq(workItems.id, work.id)))[0]).toMatchObject({ status: "approved", currentVersionNumber: 1 });
+    const nextDraft = await saveReportDraftForUser(owner, { workItemId: work.id, expectedRevision: draft.revision, templateId: "custom", themeId: "formal", fontFamily: "Arial", fields: { summary: "محتوى النسخة الثانية قيد المراجعة" }, evidenceAssetIds: [] });
+    const createNext = () => creator === "report"
+      ? createReportDraftVersionForUser(owner, { workItemId: work.id, expectedRevision: nextDraft.revision })
+      : createWorkVersionForUser(owner, work.id, { ...(original.snapshot as Record<string, unknown>), reportDraft: nextDraft });
+    const second = (await createNext())!;
+    versionIds.push(second.id);
+    expect(second.versionNumber).toBe(2);
+    expect((await db.select().from(workItems).where(eq(workItems.id, work.id)))[0]).toMatchObject({ status: "draft", currentVersionNumber: 2 });
+    expect((await db.select().from(workVersions).where(eq(workVersions.id, frozen.id)))[0].snapshot).toEqual(original.snapshot);
+    expect(await getOutputForUser(owner, sharedFirst.id)).toMatchObject({ workVersionId: frozen.id, revokedAt: null });
+    await expect(createOutputForUser(owner, { workVersionId: second.id, type: "link", visibility: "public", token: randomUUID() })).rejects.toThrow(/approved review/);
+    const secondReview = (await createReviewForUser(owner, second.id, reviewer))!;
+    expect((await db.select().from(workItems).where(eq(workItems.id, work.id)))[0]).toMatchObject({ status: "in_review", currentVersionNumber: 2 });
+    await decideReviewForUser(reviewer, secondReview.id, "approved");
+    expect((await db.select().from(workItems).where(eq(workItems.id, work.id)))[0]).toMatchObject({ status: "approved", currentVersionNumber: 2 });
+    expect(await db.select().from(reviews).where(inArray(reviews.id, [firstReview.id, secondReview.id]))).toMatchObject([{ status: "approved" }, { status: "approved" }]);
+    expect(await createOutputForUser(owner, { workVersionId: second.id, type: "link", visibility: "public", token: randomUUID() })).toMatchObject({ workVersionId: second.id });
+    // Creating a new version must not become an implicit unarchive operation.
+    await db.update(workItems).set({ status: "archived" }).where(eq(workItems.id, work.id));
+    await expect(createNext()).rejects.toThrow();
+    expect((await db.select().from(workItems).where(eq(workItems.id, work.id)))[0]).toMatchObject({ status: "archived", currentVersionNumber: 2 });
   });
 
   it("rechecks current membership after waiting on the organization lock", async () => {

@@ -197,9 +197,11 @@ export async function softDeleteWorkItemForUser(userId: number, workItemId: numb
 
 export async function createWorkVersionForUser(userId: number, workItemId: number, snapshot: Record<string, unknown>, reason?: string) {
   return withWorkWrite(userId, workItemId, async (tx, work) => {
+    if (work.status === "archived") throw new WorkVersionConflictError();
     const expectedVersion = work.currentVersionNumber;
     const nextVersion = expectedVersion + 1;
-    const updated = await tx.update(workItems).set({ currentVersionNumber: nextVersion }).where(and(eq(workItems.id, workItemId), eq(workItems.currentVersionNumber, expectedVersion)));
+    // Approval belongs to the previous immutable version, never its successor.
+    const updated = await tx.update(workItems).set({ currentVersionNumber: nextVersion, status: "draft" }).where(and(eq(workItems.id, workItemId), eq(workItems.currentVersionNumber, expectedVersion)));
     if (getAffectedRows(updated) !== 1) throw new WorkVersionConflictError();
     const inserted = await tx.insert(workVersions).values({ workItemId, versionNumber: nextVersion,
       createdByUserId: userId, snapshot: { ...snapshot, academicContext: work.academicContext }, reason: reason ?? null });

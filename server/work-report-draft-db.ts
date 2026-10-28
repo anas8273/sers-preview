@@ -246,7 +246,8 @@ export async function createReportDraftVersionForUser(userId: number, input: {
       .where(and(eq(workAssetLinks.workItemId, input.workItemId), isNull(assets.deletedAt))).for("update");
 
     const nextVersion = work.currentVersionNumber + 1;
-    await tx.update(workItems).set({ currentVersionNumber: nextVersion }).where(eq(workItems.id, input.workItemId));
+    // Keep older review decisions intact while the new version awaits review.
+    await tx.update(workItems).set({ currentVersionNumber: nextVersion, status: "draft" }).where(eq(workItems.id, input.workItemId));
     const snapshot = {
       schemaVersion: 1,
       kind: "report",

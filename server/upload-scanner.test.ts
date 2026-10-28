@@ -118,4 +118,19 @@ describe("fail-closed upload scanner", () => {
     expect(hasDisallowedPdfObjects({ "obj:7 0 R": { stream: { dict: { "/Type": "/EmbeddedFile" } } } })).toBe(true);
     expect(hasDisallowedPdfObjects({ "obj:2 0 R": { value: { "/Type": "/Pages", "/Count": 1 } } })).toBe(false);
   });
+
+  it("accepts only a validated in-document initial page view, never an executable OpenAction", () => {
+    const objects = (action: unknown) => ({ "obj:20 0 R": { value: { "/Type": "/Catalog", "/OpenAction": action } }, "obj:3 0 R": { value: { "/Type": "/Page" } } });
+    expect(hasDisallowedPdfObjects(objects(["3 0 R", "/FitH", null]))).toBe(false);
+    expect(hasDisallowedPdfObjects(objects(["3 0 R", "/XYZ", 0, null, 1]))).toBe(false);
+    for (const action of [
+      { "/S": "/JavaScript", "/JS": "app.alert('test')" },
+      { "/S": "/GoTo", "/D": ["3 0 R", "/FitH", null] },
+      "4 0 R", "/NamedDestination", ["999 0 R", "/FitH", null],
+      ["20 0 R", "/FitH", null], [3, "/FitH", null], ["3 0 R", "/Launch"],
+      ["3 0 R", "/FitH", { "/JS": "test" }], ["3 0 R", "/XYZ", 0, 0, -1],
+      ["3 0 R", "/FitH", null, "extra"],
+    ]) expect(hasDisallowedPdfObjects(objects(action))).toBe(true);
+    expect(hasDisallowedPdfObjects({ ...objects(["3 0 R", "/FitH", null]), "obj:8 0 R": { value: { "/JS": "still forbidden elsewhere" } } })).toBe(true);
+  });
 });

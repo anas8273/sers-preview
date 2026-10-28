@@ -30,7 +30,7 @@ COPY --from=build --chown=sers:sers /app/server ./server
 COPY --from=build --chown=sers:sers /app/shared ./shared
 COPY --from=build --chown=sers:sers /app/drizzle ./drizzle
 COPY --from=build --chown=sers:sers /app/scripts ./scripts
-COPY --from=build --chown=sers:sers /app/package.json /app/drizzle.config.ts ./
+COPY --from=build --chown=sers:sers /app/package.json /app/drizzle.config.ts /app/tsconfig.json ./
 USER 10001:10001
 EXPOSE 3000
 ENTRYPOINT ["/usr/bin/tini", "--", "node", "scripts/operations/entrypoint.mjs"]

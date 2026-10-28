@@ -133,6 +133,25 @@ function runQpdf(options: ClamAvScannerOptions, args: string[], signal: AbortSig
   });
 }
 const DISALLOWED_PDF_NAMES = new Set(["/JavaScript", "/JS", "/OpenAction", "/AA", "/Launch", "/EmbeddedFile", "/EmbeddedFiles", "/RichMedia", "/XFA", "/GoToR", "/SubmitForm", "/ImportData"]);
+function isInDocumentView(value: unknown, objects: unknown): boolean {
+  // PDF 1.7 8.2.1: an OpenAction may be a passive initial-page destination,
+  // rather than executable action. Only direct explicit arrays are supported.
+  // Named destinations, indirect arrays and action dictionaries stay rejected.
+  if (!Array.isArray(value) || value.length < 2 || value.length > 6 || typeof value[0] !== "string" || !/^[1-9][0-9]{0,9} [0-9]{1,5} R$/.test(value[0]) || !objects || typeof objects !== "object") return false;
+  const key = `obj:${value[0]}`;
+  if (!Object.hasOwn(objects, key)) return false;
+  const page = (objects as Record<string, { value?: Record<string, unknown> }>)[key];
+  if (!page || page.value?.["/Type"] !== "/Page") return false;
+  const number = (item: unknown) => typeof item === "number" && Number.isFinite(item);
+  const coordinate = (item: unknown) => item === null || number(item);
+  switch (value[1]) {
+    case "/Fit": case "/FitB": return value.length === 2;
+    case "/FitH": case "/FitV": case "/FitBH": case "/FitBV": return value.length === 3 && coordinate(value[2]);
+    case "/FitR": return value.length === 6 && value.slice(2).every(number);
+    case "/XYZ": return value.length === 5 && coordinate(value[2]) && coordinate(value[3]) && (value[4] === null || (number(value[4]) && value[4] >= 0));
+    default: return false;
+  }
+}
 export function hasDisallowedPdfObjects(value: unknown): boolean {
   const pending: unknown[] = [value]; let count = 0;
   while (pending.length) {
@@ -140,7 +159,11 @@ export function hasDisallowedPdfObjects(value: unknown): boolean {
     const current = pending.pop();
     if (typeof current === "string" && DISALLOWED_PDF_NAMES.has(current)) return true;
     if (current && typeof current === "object") {
-      for (const [key, child] of Object.entries(current)) { if (DISALLOWED_PDF_NAMES.has(key)) return true; pending.push(child); }
+      for (const [key, child] of Object.entries(current)) {
+        if (key === "/OpenAction") { if (!isInDocumentView(child, value)) return true; continue; }
+        if (DISALLOWED_PDF_NAMES.has(key)) return true;
+        pending.push(child);
+      }
     }
   }
   return false;

@@ -27,7 +27,7 @@ export async function seedDemoFixtures(): Promise<{ owner: User; reviewer: User;
     const [locks] = await lock.query("SELECT GET_LOCK('sers-demo-fixtures-v1',10) AS acquired");
     if (Number((locks as { acquired: number }[])[0].acquired) !== 1) throw new Error('Demo seed is already running');
     locked = true;
-    const [foreign] = await lock.query("SELECT COUNT(*) AS count FROM users WHERE openId NOT LIKE 'sers-demo-%'");
+    const [foreign] = await lock.query("SELECT COUNT(*) AS count FROM users WHERE openId NOT IN ('sers-demo-owner','sers-demo-reviewer')");
     const [foreignSchools] = await lock.query("SELECT COUNT(*) AS count FROM organizations WHERE name <> 'SERS Demo — synthetic only'");
     if (Number((foreign as { count: number }[])[0].count) || Number((foreignSchools as { count: number }[])[0].count)) throw new Error('Demo database contains non-fixture identities or schools');
     const db = (await getDb())!;
