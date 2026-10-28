@@ -53,9 +53,9 @@ jobs:
         run: pnpm exec vitest run server/work-version-output-integration.test.ts
       - name: Public and protected WorkVersion delivery tests
         run: pnpm exec vitest run server/public-output-integration.test.ts
-      - name: Upload intent idempotency and cancellation on MySQL
+      - name: Upload reception, recovery, quota and cancellation on MySQL
         run: pnpm exec vitest run server/upload-intent-integration.test.ts
-      - name: Upload quota migration with existing intent records
+      - name: Upload quota and reception upgrades with existing intent records
         run: pnpm exec vitest run server/upload-intent-migration.test.ts
       # Validate the canonical seed on the migration-clean database before any
       # suite mutates template fixtures. The seed helper currently short-circuits

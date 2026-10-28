@@ -1,303 +1,117 @@
-# SERS - نظام السجلات التعليمية الذكي
-## Smart Educational Records System
+# SERS — نظام السجلات التعليمية الذكي
 
-> A comprehensive digital platform for Saudi Ministry of Education employees to build, manage, and share professional performance portfolios (ملف الإنجاز الوظيفي) aligned with official evaluation standards.
+SERS (Smart Educational Records System) هو مشروع لإدارة الأعمال والتقارير والشواهد التعليمية. هذا المستودع `anas8273/sers-preview` هو مسار التنفيذ الحالي وفق [قرار المستودع والترحيل](docs/adr/0001-canonical-repository-and-migration-strategy.md).
 
----
+آخر تحديث: 28 أكتوبر 2026. المشروع قيد التطوير؛ نجاح الاختبارات لا يعني إغلاق Pilot أو الجاهزية لاستخدام بيانات مدارس حقيقية.
 
-## Project Overview
+## الرحلة المنفذة
 
-SERS enables teachers, school principals, counselors, and other educational staff to:
+إنشاء عمل شخصي أو مدرسي → تحرير تقرير وحفظه في الخادم → ربط شواهد نصية وروابط → إنشاء `WorkVersion` ثابتة → إرسالها للمراجعة واعتمادها → توليد PDF من النسخة → مشاركة النسخة المعتمدة برابط أو QR.
 
-- Build structured performance portfolios mapped to official Ministry of Education criteria (11 standards, 45+ indicators)
-- Upload evidence files (images, PDFs, videos, links) with AI-powered auto-classification
-- Export professional PDF/DOCX reports with Ministry of Education visual identity
-- Share portfolios via secure, time-limited links
-- Manage templates and themes from an admin dashboard
-- Work offline with automatic sync when connectivity is restored
+- محرر التقرير يحفظ المسودة في MySQL، ويدعم الحفظ التلقائي وكشف تعارض التعديلات. النسخة المحلية وسيلة استعادة مؤقتة، وليست قاعدة البيانات الرئيسية أو ضمان مزامنة كاملة دون اتصال.
+- `WorkVersion` snapshot ثابت؛ تعديل المسودة لا يغير النسخة السابقة. المراجعة والمخرجات ترتبطان بالنسخة المحددة.
+- المشاركة العامة أو المحمية تستخدم token عشوائيًا، وانتهاءً اختياريًا وإلغاءً. كلمات المرور الجديدة تخزن بصيغة salted scrypt؛ التحقق من SHA-256 القديم للتوافق الانتقالي فقط.
+- صفحة `/output/:token` تعرض حقول التقرير والشواهد المختارة فقط، دون روابط الأصول أو مفاتيح التخزين أو بيانات الملكية. يوجد حد طلبات في ذاكرة العملية، وليس حدًا موزعًا بين الخوادم.
+- دمج [PR #31](https://github.com/anas8273/sers-preview/pull/31) في `main` عند `ac06f50` أغلق دفعة المشاركة الأساسية. لا يمثل الدمج نشرًا لبيئة تشغيل.
 
-### Supported Job Roles
+## حدود القدرات الحالية
 
-| Role | Standards |
-|------|-----------|
-| معلم / معلمة | 11 معيار، 45 مؤشر |
-| مدير المدرسة | 19 بند |
-| وكيل المدرسة | 19 بند |
-| الموجه الطلابي | 13 بند |
-| الموجه الصحي | 14 بند |
-| رائد النشاط | 15 بند |
-| محضر المختبر | 13 بند |
-| معلمة رياض الأطفال | 19 بند |
-| المشرف التربوي | 8 بند |
-| معلم تربية خاصة | 11 معيار |
-| أمين مصادر التعلم | بنود مخصصة |
+| القدرة | الحالة |
+|---|---|
+| Work / Asset / Version / Review / Output | نواة خادمية وصلاحيات واختبارات عزل MySQL |
+| مكتبة الشواهد الجديدة | إنشاء نص/رابط وإعادة استخدام الأصل وربطه بالأعمال |
+| رفع ملفات الشواهد الجديد | استقبال داخلي دائم وحجر ومصالحة بعقد مزود محقون؛ لم يربط بواجهة أو مزود إنتاجي |
+| الفحص والنشر والتنزيل والتنظيف | لم تكتمل رحلة malware → Asset → تنزيل محمي → تنظيف مشروط |
+| PDF من WorkVersion | منفذ عبر خادم الرسم وعقد التخزين الحالي؛ يحتاج تحققًا بصريًا وتشغيليًا على بيئة النشر |
+| Word من WorkVersion | غير منفذ؛ وجود أدوات DOCX القديمة لا يثبت اكتمال هذا المسار |
+| عضويات المدرسة | عقود بيانات وصلاحيات موجودة؛ واجهة إدارة الحساب والعضويات غير مكتملة |
+| السنة والفصل والتكليفات والإشعارات | غير مكتملة كرحلات تشغيل متصلة |
+| Smart Evidence والتقويم الذاتي وخطة التحسين | ضمن المتطلبات التالية، وليست قدرات مكتملة في النواة الجديدة |
+| الاستعادة والمراقبة وUAT | بوابات تشغيل مفتوحة |
 
----
+الأدوات القديمة للشهادات والسيرة والاختبارات والإذاعة وغيرها باقية أثناء الترحيل. لا تعد بديلًا عن رحلة vNext، ولا يفترض أن كل قدراتها القديمة تحقق عقود النواة الجديدة.
 
-## Tech Stack
+## التقنية وبنية المصدر
 
-| Layer | Technology |
-|-------|-----------|
-| Frontend | React 19 + TypeScript + Vite 7 |
-| Styling | Tailwind CSS 4 + Radix UI |
-| Routing | Wouter |
-| State / API | tRPC 11 + TanStack Query 5 |
-| Backend | Express 4 + Node.js |
-| Database | MySQL / TiDB via Drizzle ORM |
-| Auth | JWT sessions + OAuth (optional) |
-| Storage | AWS S3 via Forge API proxy |
-| AI | OpenAI-compatible API (Gemini 2.5 Flash) |
-| PDF Export | Puppeteer (server-side) + html2canvas (client-side) |
-| DOCX Export | docx library + Puppeteer screenshot |
-| Testing | Vitest |
+React 19 وTypeScript وVite 7، مع Tailwind/Radix، وtRPC 11 وExpress، وMySQL عبر Drizzle. تستخدم اختبارات التكامل MySQL 8.4؛ لا تدعي هذه النتائج إثبات كل قواعد البيانات المتوافقة مع MySQL.
 
----
+| المسار | الغرض |
+|---|---|
+| `client/src/pages/WorkReportEditor.tsx` | محرر التقرير الخادمي |
+| `client/src/pages/PublicOutput.tsx` | عرض النسخة المشتركة |
+| `server/root-router.ts` | تجميع مسارات التطبيق |
+| `server/domain-db.ts` و`server/review-output-db.ts` | الملكية والأعمال والمراجعة والمخرجات |
+| `server/work-report-draft-db.ts` | حفظ المسودة وكشف التعارض |
+| `server/work-version-output-service.ts` | PDF من النسخة الثابتة |
+| `server/upload-intent-db.ts` و`server/upload-reception-service.ts` | الحصص والاستقبال والحجر والاستعادة |
+| `server/private-upload-storage.ts` | عقد التخزين الخاص المحدود؛ ليس مزودًا إنتاجيًا |
+| `server/storage.ts` | proxy التخزين القديم/الحالي للمخرجات؛ لا يثبت وحده خصوصية حجر الشواهد |
+| `drizzle/` | المخططات والترحيلات المراجعة |
+| `tests/browser/` | اختبارات المتصفح بالردود الاختبارية وبـMySQL |
+| `docs/vnext/` | المتطلبات والقرارات وحدود الدفعات |
 
-## Project Structure
+## التطوير المحلي
 
-```
-sers-preview/
-├── client/                  # React frontend
-│   ├── src/
-│   │   ├── pages/           # Route-level page components
-│   │   ├── components/      # Shared UI components
-│   │   ├── hooks/           # Custom React hooks
-│   │   ├── lib/             # Utilities (PDF export, QR, data)
-│   │   ├── contexts/        # React contexts (Theme)
-│   │   └── _core/           # Auth hook
-├── server/                  # Express backend
-│   ├── _core/               # Server infrastructure (tRPC, auth, LLM, env)
-│   ├── routers.ts           # All tRPC API endpoints
-│   ├── db.ts                # Database access layer
-│   ├── storage.ts           # S3 file upload/download
-│   ├── pdf-renderer.ts      # Puppeteer PDF generation
-│   └── docx-renderer.ts     # DOCX generation
-├── shared/                  # Shared types and constants
-├── drizzle/                 # Database schema and migrations
-└── .env                     # Environment variables (see below)
-```
-
----
-
-## Setup Instructions
-
-### Prerequisites
-
-- Node.js 20+
-- pnpm (`npm install -g pnpm`)
-- MySQL 8+ or TiDB (optional - app works locally without it)
-
-### 1. Install Dependencies
+المتطلبات: Node.js 22، وإصدار pnpm المحدد في `packageManager`، وقاعدة MySQL مستقلة للتطوير. تشغيل الرحلات الخادمية يحتاج قاعدة بيانات ومصادقة مهيأتين؛ لا يوجد تسجيل دخول إنتاجي بديل ضمن اختبارات المتصفح.
 
 ```bash
-pnpm install
+corepack enable
+pnpm install --frozen-lockfile
 ```
 
-> Note: `postinstall` automatically downloads Puppeteer's Chrome binary.
+ينزل `postinstall` متصفح Chrome المطلوب لـPuppeteer. إذا عُطلت scripts أثناء تثبيت الاعتماديات، شغّل `pnpm exec puppeteer browsers install chrome` قبل اختبار PDF والمتصفح.
 
-### 2. Configure Environment Variables
+اضبط المتغيرات وفق `server/_core/env.ts` و`client/src/const.ts` في بيئة محلية غير متتبعة بـgit:
 
-Copy the template and fill in your values:
+| المتغير | الاستخدام |
+|---|---|
+| `DATABASE_URL` | اتصال MySQL للتطوير أو بيئة التشغيل المقصودة |
+| `JWT_SECRET` | سر جلسات مستقل وقوي للبيئة |
+| `VITE_APP_ID` | معرف تطبيق المصادقة |
+| `OAUTH_SERVER_URL` و`VITE_OAUTH_PORTAL_URL` | إعداد خادم وبوابة OAuth الحالية |
+| `OWNER_OPEN_ID` | معرف مالك الإدارة عند الحاجة |
+| `BUILT_IN_FORGE_API_URL` و`BUILT_IN_FORGE_API_KEY` | تكاملات Forge القائمة، ومنها تخزين المخرجات |
+| `PORT` | منفذ التطبيق، الافتراضي 3000 |
 
-```bash
-cp .env.example .env
-```
+لا تضع الأسرار في متغيرات `VITE_*` أو في ملفات متتبعة. مزود الرفع الجديد وسياسة إقامته واحتفاظه لم يختارا بعد، ولا يفعّل بمجرد ضبط متغيرات Forge.
 
-See the [Environment Variables](#environment-variables) section below.
-
-### 3. Run Database Migrations (optional)
-
-Only needed if `DATABASE_URL` is configured:
-
-```bash
-pnpm db:push
-```
-
-### 4. Start Development Server
+طبّق الترحيلات الموجودة على قاعدة تطوير فارغة، ثم شغّل التطبيق:
 
 ```bash
+pnpm exec drizzle-kit migrate --config drizzle.config.ts
 pnpm dev
 ```
 
-The app will be available at `http://localhost:3000`.
+راجع أي ترحيل جديد قبل تطبيقه. الأمر `db:push` في المشروع يجمع التوليد والتطبيق؛ ليس خطوة تشغيل إنتاجية تلقائية.
 
-### 5. Build for Production
+## التحقق
 
 ```bash
+pnpm check
+pnpm exec vitest run \
+  --exclude server/performance-evidence.test.ts \
+  --exclude server/templates-themes.test.ts \
+  --exclude server/copy-templates-barcode.test.ts \
+  --exclude server/image-proxy.test.ts
 pnpm build
-pnpm start
+pnpm exec tsx --test tests/browser/public-output.mts
 ```
 
----
+تتخطى اختبارات MySQL المتخصصة التشغيل دون `SERS_INTEGRATION=1`. ذلك ليس دليل نجاح لها؛ تشغّلها بوابة GitHub Actions على قاعدة مؤقتة معزولة، وتتحقق اختبارات الرفع من اسم القاعدة وإصدار MySQL وهوية بيئة CI قبل كتابة fixtures.
 
-## Environment Variables
+| البوابة | الإثبات |
+|---|---|
+| [SERS CI](.github/workflows/ci.yml) | TypeScript وتوليد Drizzle واختبارات معزولة وبناء واختبارات عرض المتصفح |
+| [SERS Integration Gate](.github/workflows/integration.yml) | ترحيلات MySQL والعزل والمراجعة والمشاركة والحصص والاستقبال والمصالحة وupgrade، ثم رحلة مشاركة من المتصفح إلى MySQL |
+| [Legacy MySQL](.github/workflows/mysql-legacy.yml) | ملكية وعزل وتزامن المسارات القديمة |
 
-Create a `.env` file in the project root with the following variables:
+رحلة المتصفح إلى MySQL تستخدم هوية اصطناعية داخل خادم الاختبار فقط. لا تثبت مصادقة OAuth الإنتاجية أو التخزين السحابي أو مسح QR بجهاز فعلي أو جودة طباعة كل المستندات.
 
-```env
-# ─── Server ───────────────────────────────────────────────
-NODE_ENV=development
-PORT=3000
+## خطة الإكمال
 
-# ─── Auth / Session ───────────────────────────────────────
-# Required: used to sign JWT session tokens
-JWT_SECRET=your-strong-secret-here
+1. إكمال فحص الشواهد والنشر الذري والتنزيل والتنظيف، واختيار مزود خاص مع اختبارات عقد فعلية، ثم ربط واجهة الرفع.
+2. إغلاق العضويات والسنة/الفصل في رحلة مستخدم فعلية.
+3. Word قابل للتعديل من WorkVersion وGolden Arabic QA للمخرجات.
+4. Staging ببيانات اصطناعية، وUAT، ومراقبة ونسخ احتياطي وتجربة استعادة وحماية إصدار.
 
-# Required: used to sign session cookies
-COOKIE_SECRET=your-cookie-secret-here
-
-# ─── OAuth (optional) ─────────────────────────────────────
-# Leave empty to disable OAuth login. App works without it.
-OAUTH_SERVER_URL=
-VITE_OAUTH_PORTAL_URL=
-VITE_APP_ID=
-
-# ─── Database (optional) ──────────────────────────────────
-# MySQL connection string. Leave empty to use localStorage only.
-# Example: mysql://user:password@localhost:3306/sers_db
-DATABASE_URL=
-
-# ─── AWS S3 (optional) ────────────────────────────────────
-# Leave empty to disable cloud file uploads. Files saved to IndexedDB locally.
-AWS_ACCESS_KEY_ID=
-AWS_SECRET_ACCESS_KEY=
-AWS_REGION=
-AWS_BUCKET_NAME=
-
-# ─── AI / LLM (optional) ──────────────────────────────────
-# OpenAI-compatible API. Leave empty to disable AI features.
-# Default endpoint: https://forge.manus.im/v1/chat/completions
-BUILT_IN_FORGE_API_URL=
-BUILT_IN_FORGE_API_KEY=
-
-# ─── Analytics (optional) ─────────────────────────────────
-VITE_ANALYTICS_ENDPOINT=
-VITE_ANALYTICS_WEBSITE_ID=
-```
-
-### Graceful Degradation
-
-The app is designed to work without any external services:
-
-| Service | Without credentials |
-|---------|-------------------|
-| Database | Data saved in localStorage / IndexedDB |
-| S3 Storage | Files saved in browser IndexedDB |
-| AI Features | AI buttons show a clear Arabic error message |
-| OAuth | Login page is skipped, app runs unauthenticated |
-
----
-
-## API Endpoints
-
-All API calls go through tRPC at `/api/trpc`. Key routers:
-
-| Router | Procedures | Auth |
-|--------|-----------|------|
-| `auth.me` | Get current user | Public |
-| `auth.logout` | Clear session | Public |
-| `portfolio.*` | CRUD for portfolios | Protected |
-| `file.upload` | Upload evidence file to S3 | Protected |
-| `share.*` | Create/view share links | Mixed |
-| `admin.*` | Review portfolios | Admin only |
-| `templates.*` | PDF template management | Mixed |
-| `userThemes.*` | Custom theme management | Protected |
-| `ai.classifyEvidence` | AI evidence classification | Public |
-| `ai.suggestEvidence` | AI content suggestions | Public |
-| `ai.fillFormFields` | AI form auto-fill | Public |
-| `ai.improveText` | AI text improvement | Public |
-| `ai.analyzeGaps` | AI gap analysis | Public |
-| `genAI.*` | Reports, radio, CV, exams | Public |
-
-### REST Endpoints
-
-| Method | Path | Description |
-|--------|------|-------------|
-| POST | `/api/export-pdf` | Server-side PDF via Puppeteer |
-| POST | `/api/export-docx` | Server-side DOCX export |
-| GET | `/api/image-proxy?url=` | CORS proxy for images in PDF export |
-| GET | `/api/oauth/callback` | OAuth authorization callback |
-
----
-
-## Pages & Routes
-
-| Route | Page | Description |
-|-------|------|-------------|
-| `/` | Home | Landing page with feature cards |
-| `/performance-evidence` | PerformanceEvidence | Main portfolio builder |
-| `/certificates` | CertificateBuilder | Certificate generator |
-| `/grade-analysis` | GradeAnalysis | Grade analysis tool |
-| `/covers` | CoverBuilder | Cover page builder |
-| `/treatment-plans` | TreatmentPlan | Treatment plan forms |
-| `/portfolio-builder` | PortfolioBuilder | Portfolio management |
-| `/report-center` | ReportCenter | Report generation hub |
-| `/school-radio` | SchoolRadio | AI school radio script generator |
-| `/smart-cv` | SmartCV | AI-powered CV builder |
-| `/exam-builder` | ExamBuilder | Exam question builder |
-| `/store` | Store | Template store |
-| `/admin` | AdminDashboard | Admin review dashboard |
-| `/template-manager` | TemplateManager | PDF template management |
-| `/shared/:token` | SharedPortfolio | Public portfolio viewer |
-| `/template/:token` | SharedTemplate | Public template viewer |
-
----
-
-## Database Schema
-
-Six tables managed by Drizzle ORM:
-
-- `users` - User accounts (openId, name, email, role)
-- `portfolios` - Performance portfolios (jobId, criteriaData JSON, status)
-- `uploaded_files` - S3 file references (fileKey, url, mimeType)
-- `share_links` - Temporary share tokens (expiresAt, viewCount, password)
-- `pdf_templates` - Admin-managed PDF templates (colors, layout JSON)
-- `user_themes` - User custom themes (themeData JSON)
-
----
-
-## Testing
-
-```bash
-# Run all tests (Vitest)
-pnpm test
-```
-
-The test suite covers: AI classification, portfolio CRUD, share links, admin review, PDF templates, evidence upload, and offline sync logic.
-
----
-
-## Known Limitations & Roadmap
-
-### Current Limitations
-
-- Share link passwords are stored as plaintext (no bcrypt hashing yet)
-- No rate limiting on public AI endpoints
-- No database indexes on foreign keys (performance impact at scale)
-- Offline sync queue marks actions as synced without calling the API (placeholder)
-
-### Recommended Production Improvements
-
-**Security**
-- Add bcrypt hashing for share link passwords
-- Add rate limiting middleware (e.g., `express-rate-limit`) on AI and export endpoints
-- Add CSRF protection for state-changing requests
-- Validate and sanitize all JSON column inputs
-
-**Performance**
-- Add database indexes on `portfolios.userId`, `uploadedFiles.portfolioId`, `shareLinks.token`
-- Implement Redis caching for frequently-read templates
-- Use streaming for large PDF exports instead of buffering in memory
-
-**Features**
-- Implement actual API calls in `useOfflineSync.syncPendingActions()`
-- Add conflict resolution for concurrent portfolio edits
-- Add audit logging for admin actions
-- Add soft deletes to preserve data history
-- Add email notifications for portfolio review status changes
-
-**Infrastructure**
-- Add health check endpoint (`/api/health`)
-- Add structured logging (e.g., pino)
-- Add environment variable validation with Zod on startup
-- Move Puppeteer to a separate microservice for better resource isolation
+ابدأ من [حالة الاستقبال الدائم](docs/vnext/12_B04_DURABLE_RECEPTION.md)، و[سجل القرارات](docs/vnext/03_DECISION_REGISTER.md)، و[تتبع المتطلبات](docs/vnext/01_REQUIREMENTS_TRACEABILITY.md). الوثائق المؤرخة تصف حالة دفعتها؛ وصف PR ونتائج CI على SHA محدد هما مرجع تحقق التحديث نفسه.

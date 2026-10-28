@@ -1,5 +1,5 @@
-import { randomUUID } from "node:crypto";
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { createHash, randomUUID } from "node:crypto";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { users } from "../drizzle/schema";
 import { memberships, organizations, workItems } from "../drizzle/domain-core";
@@ -9,7 +9,39 @@ import {
   beginUploadIntentForUser, getUploadIntentForUser, cancelUploadIntentForUser,
   expireUploadIntentsForScope, UploadIntentConflictError,
   UploadIntentAccessError, UploadIntentQuotaError,
+  claimUploadReceptionForUser, prepareUploadReception, finishUploadReception,
 } from "./upload-intent-db";
+import { receiveUploadIntentForUser, reconcileUploadIntentForUser, reconcileUploadReceptionsForScope } from "./upload-reception-service";
+import type { PrivateUploadStorage } from "./private-upload-storage";
+
+const bytes = new Uint8Array(128).fill(7);
+const digest = createHash("sha256").update(bytes).digest("hex");
+async function* source() { yield bytes; }
+// Test-only provider. No production adapter is configured by these tests.
+function storage() {
+  const objects = new Map<string, { bytes: Uint8Array; sha256: string; version: string }>();
+  const adapter: PrivateUploadStorage = {
+    capabilities: { privateObjects: true, conditionalCreate: true, versionedDelete: true },
+    putPrivateIfAbsent: vi.fn(async ({ key, bytes, sha256 }) => {
+      if (objects.has(key)) return { status: "exists" as const };
+      objects.set(key, { bytes: bytes.slice(), sha256, version: randomUUID() });
+      return { status: "created" as const, version: objects.get(key)!.version };
+    }),
+    headPrivate: vi.fn(async (key, version) => {
+      const item = objects.get(key);
+      return item && (!version || version === item.version)
+        ? { status: "found" as const, version: item.version, bytes: item.bytes.length, sha256: item.sha256, private: true }
+        : { status: "missing" as const };
+    }),
+    readPrivate: vi.fn(async (key, version, maxBytes) => {
+      const item = objects.get(key);
+      return item && version === item.version && item.bytes.length <= maxBytes
+        ? { status: "found" as const, bytes: item.bytes.slice() } : { status: "unknown" as const };
+    }),
+    deletePrivateIfVersion: vi.fn(async () => ({ status: "unknown" as const })),
+  };
+  return { adapter, objects };
+}
 
 const enabled = process.env.SERS_INTEGRATION === "1";
 const suite = enabled ? describe : describe.skip;
@@ -28,6 +60,15 @@ suite("upload intent scopes and reservations on real MySQL", () => {
   async function setBudget(values: { limitBytes?: number; maxActiveIntents?: number }, scopeKey = `personal:${owner}`) {
     const db = (await getDb())!;
     await db.update(uploadQuotaBudgets).set(values).where(eq(uploadQuotaBudgets.scopeKey, scopeKey));
+  }
+  async function persisted(id: string) {
+    const db = (await getDb())!;
+    const [row] = await db.select().from(uploadIntents).where(eq(uploadIntents.id, id));
+    return row;
+  }
+  async function makeRecoveryDue(id: string) {
+    const db = (await getDb())!;
+    await db.update(uploadIntents).set({ leaseUntil: sql`DATE_SUB(CURRENT_TIMESTAMP, INTERVAL 1 SECOND)`, nextAttemptAt: null }).where(eq(uploadIntents.id, id));
   }
 
   beforeAll(async () => {
@@ -238,5 +279,182 @@ suite("upload intent scopes and reservations on real MySQL", () => {
     await db.update(organizations).set({ status: "archived" }).where(eq(organizations.id, school));
     await expect(beginUploadIntentForUser(owner, schoolInput())).rejects.toBeInstanceOf(UploadIntentAccessError);
     expect(await budget(`organization:${school}`)).toMatchObject({ reservedBytes: 0, activeIntents: 0 });
+  });
+
+  it("receives once, persists the digest before put, and charges quarantine without exposing internals", async () => {
+    const first = await beginUploadIntentForUser(owner, input());
+    const { adapter, objects } = storage();
+    const put = adapter.putPrivateIfAbsent;
+    adapter.putPrivateIfAbsent = vi.fn(async args => {
+      expect(await persisted(first.id)).toMatchObject({ state: "receiving", sha256: digest, actualBytes: 128, objectKey: args.key });
+      expect(await budget()).toMatchObject({ reservedBytes: 0, retainedBytes: 128, activeIntents: 1 });
+      return put(args);
+    });
+    const result = await receiveUploadIntentForUser(owner, { id: first.id, expectedRevision: 0, source: source() }, adapter);
+    expect(result?.state).toBe("quarantined");
+    expect(Object.keys(result!).sort()).toEqual(["createdAt", "expiresAt", "id", "revision", "state"]);
+    expect(await persisted(first.id)).toMatchObject({ storageChargeHeld: true, reservationHeld: false, sha256: digest, leaseToken: null });
+    await expect(receiveUploadIntentForUser(owner, { id: first.id, expectedRevision: result!.revision, source: source() }, adapter)).rejects.toBeInstanceOf(UploadIntentConflictError);
+    expect(objects.size).toBe(1);
+    expect(adapter.putPrivateIfAbsent).toHaveBeenCalledOnce();
+    expect(adapter.deletePrivateIfVersion).not.toHaveBeenCalled();
+  });
+
+  it("grants a single reception lease across concurrent attempts and rolls back a failed quota transfer", async () => {
+    const first = await beginUploadIntentForUser(owner, input());
+    const results = await Promise.allSettled(Array.from({ length: 6 }, () => claimUploadReceptionForUser(owner, first.id, 0)));
+    expect(results.filter(result => result.status === "fulfilled")).toHaveLength(1);
+    expect(await budget()).toMatchObject({ reservedBytes: 0, retainedBytes: 128, activeIntents: 1 });
+    const second = await beginUploadIntentForUser(owner, input());
+    const db = (await getDb())!;
+    await db.update(uploadQuotaBudgets).set({ reservedBytes: 0 }).where(eq(uploadQuotaBudgets.scopeKey, `personal:${owner}`));
+    await expect(claimUploadReceptionForUser(owner, second.id, 0)).rejects.toBeInstanceOf(UploadIntentQuotaError);
+    expect(await persisted(second.id)).toMatchObject({ state: "issued", reservationHeld: true, objectKey: null });
+  });
+
+  it("retains bytes at the quota limit after transfer from reservation into reception", async () => {
+    await setBudget({ limitBytes: 128 });
+    const first = await beginUploadIntentForUser(owner, input());
+    await claimUploadReceptionForUser(owner, first.id, 0);
+    await expect(beginUploadIntentForUser(owner, input())).rejects.toBeInstanceOf(UploadIntentQuotaError);
+    expect(await budget()).toMatchObject({ reservedBytes: 0, retainedBytes: 128, activeIntents: 1 });
+  });
+
+  it("rejects a short source and releases only its proven unwritten charge once", async () => {
+    const first = await beginUploadIntentForUser(owner, input());
+    const { adapter } = storage();
+    async function* short() { yield bytes.subarray(0, 1); }
+    expect((await receiveUploadIntentForUser(owner, { id: first.id, expectedRevision: 0, source: short() }, adapter))?.state).toBe("rejected");
+    expect(await budget()).toMatchObject({ reservedBytes: 0, retainedBytes: 0, activeIntents: 0 });
+    expect((await cancelUploadIntentForUser(owner, first.id, 0))?.state).toBe("rejected");
+    expect(adapter.putPrivateIfAbsent).not.toHaveBeenCalled();
+  });
+
+  it("recovers a stored object after the process loses its DB finalization without another put", async () => {
+    const first = await beginUploadIntentForUser(owner, input());
+    const lease = (await claimUploadReceptionForUser(owner, first.id, 0))!;
+    await prepareUploadReception(lease, 128, digest);
+    const { adapter, objects } = storage();
+    await adapter.putPrivateIfAbsent({ key: lease.key, bytes, sha256: digest });
+    // Simulate a crash at the storage/DB boundary: no finalization was committed.
+    await makeRecoveryDue(first.id);
+    const outcomes = await Promise.all([reconcileUploadReceptionsForScope(`personal:${owner}`, adapter), reconcileUploadReceptionsForScope(`personal:${owner}`, adapter)]);
+    expect(outcomes.reduce((sum, outcome) => sum + outcome.processed, 0)).toBe(1);
+    expect(await persisted(first.id)).toMatchObject({ state: "quarantined", sha256: digest, storageChargeHeld: true });
+    expect(adapter.putPrivateIfAbsent).toHaveBeenCalledOnce();
+    expect(objects.size).toBe(1);
+    expect(adapter.deletePrivateIfVersion).not.toHaveBeenCalled();
+    expect(await budget()).toMatchObject({ retainedBytes: 128, activeIntents: 1 });
+  });
+
+  it("recovers a lost put acknowledgement and honors retry backoff", async () => {
+    const first = await beginUploadIntentForUser(owner, input());
+    const { adapter } = storage();
+    const put = adapter.putPrivateIfAbsent;
+    adapter.putPrivateIfAbsent = vi.fn(async args => { await put(args); return { status: "unknown" }; });
+    expect((await receiveUploadIntentForUser(owner, { id: first.id, expectedRevision: 0, source: source() }, adapter))?.state).toBe("receiving");
+    expect(await reconcileUploadIntentForUser(owner, first.id, adapter)).toBeUndefined();
+    await makeRecoveryDue(first.id);
+    expect((await reconcileUploadIntentForUser(owner, first.id, adapter))?.state).toBe("quarantined");
+    expect(adapter.putPrivateIfAbsent).toHaveBeenCalledOnce();
+  });
+
+  it("recovers after a real put when finalization cannot start its database transaction", async () => {
+    const first = await beginUploadIntentForUser(owner, input());
+    const { adapter, objects } = storage();
+    const db = (await getDb())!;
+    const head = adapter.headPrivate;
+    let transactionFailure: ReturnType<typeof vi.spyOn> | undefined;
+    adapter.headPrivate = vi.fn(async (...args) => {
+      const result = await head(...args);
+      transactionFailure = vi.spyOn(db, "transaction").mockRejectedValueOnce(new Error("DB unavailable after put"));
+      return result;
+    });
+    try {
+      await expect(receiveUploadIntentForUser(owner, { id: first.id, expectedRevision: 0, source: source() }, adapter)).rejects.toThrow("DB unavailable after put");
+    } finally { transactionFailure?.mockRestore(); adapter.headPrivate = head; }
+    expect(objects.size).toBe(1);
+    expect(await persisted(first.id)).toMatchObject({ state: "receiving", sha256: digest, storageChargeHeld: true });
+    await makeRecoveryDue(first.id);
+    expect((await reconcileUploadIntentForUser(owner, first.id, adapter))?.state).toBe("quarantined");
+    expect(adapter.putPrivateIfAbsent).toHaveBeenCalledOnce();
+    expect(adapter.deletePrivateIfVersion).not.toHaveBeenCalled();
+  });
+
+  it("keeps missing or mismatched objects charged and stops automatic recovery after eight attempts", async () => {
+    const first = await beginUploadIntentForUser(owner, input());
+    const lease = (await claimUploadReceptionForUser(owner, first.id, 0))!;
+    await prepareUploadReception(lease, 128, digest);
+    const { adapter, objects } = storage();
+    await makeRecoveryDue(first.id);
+    expect((await reconcileUploadIntentForUser(owner, first.id, adapter))?.state).toBe("receiving");
+    objects.set(lease.key, { version: "v1", bytes: bytes.slice().fill(1), sha256: digest });
+    for (let i = 0; i < 6; i++) {
+      await makeRecoveryDue(first.id);
+      expect((await reconcileUploadIntentForUser(owner, first.id, adapter))?.state).toBe("receiving");
+    }
+    await makeRecoveryDue(first.id);
+    expect(await reconcileUploadIntentForUser(owner, first.id, adapter)).toBeUndefined();
+    expect(await persisted(first.id)).toMatchObject({ state: "receiving", attempts: 8, errorCode: "reconciliation_required" });
+    expect(await budget()).toMatchObject({ retainedBytes: 128, activeIntents: 1 });
+    expect(adapter.putPrivateIfAbsent).not.toHaveBeenCalled();
+    expect(adapter.deletePrivateIfVersion).not.toHaveBeenCalled();
+  });
+
+  it("fences a stalled pre-storage writer on recovery before releasing its charge", async () => {
+    const first = await beginUploadIntentForUser(owner, input());
+    const lease = (await claimUploadReceptionForUser(owner, first.id, 0))!;
+    await makeRecoveryDue(first.id);
+    const { adapter } = storage();
+    expect((await reconcileUploadIntentForUser(owner, first.id, adapter))?.state).toBe("rejected");
+    await expect(prepareUploadReception(lease, 128, digest)).rejects.toBeInstanceOf(UploadIntentAccessError);
+    expect(await budget()).toMatchObject({ retainedBytes: 0, activeIntents: 0 });
+    expect(adapter.headPrivate).not.toHaveBeenCalled();
+  });
+
+  it("never reopens cancellation when an already prepared write completes late", async () => {
+    const first = await beginUploadIntentForUser(owner, input());
+    const lease = (await claimUploadReceptionForUser(owner, first.id, 0))!;
+    await prepareUploadReception(lease, 128, digest);
+    expect((await cancelUploadIntentForUser(owner, first.id, 1))?.state).toBe("cancelled");
+    const { adapter } = storage();
+    const put = await adapter.putPrivateIfAbsent({ key: lease.key, bytes, sha256: digest });
+    if (put.status !== "created") throw new Error("Missing test receipt");
+    expect((await finishUploadReception(lease, { status: "confirmed", receipt: { key: lease.key, version: put.version, bytes: 128, sha256: digest } }))?.state).toBe("cancelled");
+    expect(await reconcileUploadIntentForUser(owner, first.id, adapter)).toBeUndefined();
+    expect(await budget()).toMatchObject({ retainedBytes: 128, activeIntents: 1 });
+    expect(adapter.deletePrivateIfVersion).not.toHaveBeenCalled();
+  });
+
+  it("rejects foreign actors before reading source and rechecks revoked membership before storage", async () => {
+    const first = await beginUploadIntentForUser(owner, schoolInput());
+    const { adapter } = storage();
+    let consumed = false;
+    async function* tracked() { consumed = true; yield bytes; }
+    await expect(receiveUploadIntentForUser(outsider, { id: first.id, expectedRevision: 0, source: tracked() }, adapter)).rejects.toBeInstanceOf(UploadIntentAccessError);
+    expect(consumed).toBe(false);
+    const db = (await getDb())!;
+    async function* revoked() {
+      await db.update(memberships).set({ status: "suspended" }).where(and(eq(memberships.organizationId, school), eq(memberships.userId, owner)));
+      yield bytes;
+    }
+    expect(await receiveUploadIntentForUser(owner, { id: first.id, expectedRevision: 0, source: revoked() }, adapter)).toBeUndefined();
+    expect(adapter.putPrivateIfAbsent).not.toHaveBeenCalled();
+    expect(await persisted(first.id)).toMatchObject({ state: "receiving", storageChargeHeld: true });
+    await db.update(uploadIntents).set({ expiresAt: sql`DATE_SUB(CURRENT_TIMESTAMP, INTERVAL 1 SECOND)` }).where(eq(uploadIntents.id, first.id));
+    expect(await expireUploadIntentsForScope(`organization:${school}`)).toEqual({ expired: 1 });
+    expect(await persisted(first.id)).toMatchObject({ state: "expired", storageChargeHeld: true });
+    expect(await budget(`organization:${school}`)).toMatchObject({ retainedBytes: 128 });
+  });
+
+  it("expires quarantine without releasing possible stored bytes", async () => {
+    const first = await beginUploadIntentForUser(owner, input());
+    const { adapter } = storage();
+    await receiveUploadIntentForUser(owner, { id: first.id, expectedRevision: 0, source: source() }, adapter);
+    const db = (await getDb())!;
+    await db.update(uploadIntents).set({ expiresAt: sql`DATE_SUB(CURRENT_TIMESTAMP, INTERVAL 1 SECOND)` }).where(eq(uploadIntents.id, first.id));
+    expect((await getUploadIntentForUser(owner, first.id))?.state).toBe("expired");
+    expect(await budget()).toMatchObject({ reservedBytes: 0, retainedBytes: 128, activeIntents: 1 });
+    expect(adapter.deletePrivateIfVersion).not.toHaveBeenCalled();
   });
 });

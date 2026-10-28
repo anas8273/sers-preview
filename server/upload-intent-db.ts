@@ -1,12 +1,13 @@
 import { createHash, randomUUID } from "node:crypto";
-import { and, eq, isNull, lte, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, lte, sql } from "drizzle-orm";
 import { uploadIntents, uploadQuotaBudgets } from "../drizzle/upload-intents";
 import { memberships, organizations, workItems } from "../drizzle/domain-core";
 import { users } from "../drizzle/schema";
 import { getDb } from "./db";
 import { MAX_EVIDENCE_BYTES } from "./upload-validation";
+import type { PrivateUploadResult } from "./private-upload-storage";
 
-/** Reservation foundation only: no storage I/O or asset publication. */
+/** Transactional reception state. Network I/O never happens inside a transaction. */
 export interface BeginUploadIntentInput {
   idempotencyKey: string;
   fileName: string;
@@ -89,7 +90,7 @@ async function lockBudget(tx: Transaction, scopeKey: string) {
   return budget;
 }
 function validBudget(budget: Budget | undefined): budget is Budget {
-  return !!budget && [budget.limitBytes, budget.reservedBytes, budget.maxActiveIntents, budget.activeIntents].every(n => Number.isSafeInteger(n) && n >= 0);
+  return !!budget && [budget.limitBytes, budget.reservedBytes, budget.retainedBytes, budget.maxActiveIntents, budget.activeIntents].every(n => Number.isSafeInteger(n) && n >= 0);
 }
 async function release(tx: Transaction, row: Intent, budget: Budget | undefined) {
   if (!row.reservationHeld) return;
@@ -99,8 +100,8 @@ async function release(tx: Transaction, row: Intent, budget: Budget | undefined)
   budget.reservedBytes -= row.expectedBytes; budget.activeIntents -= 1;
 }
 async function expireIfDue(tx: Transaction, row: Intent, budget: Budget | undefined): Promise<Intent> {
-  if (row.state !== "issued") return row;
-  await tx.update(uploadIntents).set({ state: "expired", revision: row.revision + 1 }).where(and(eq(uploadIntents.id, row.id), eq(uploadIntents.revision, row.revision), eq(uploadIntents.state, "issued"), lte(uploadIntents.expiresAt, sql`CURRENT_TIMESTAMP`)));
+  if (!["issued", "receiving", "quarantined"].includes(row.state)) return row;
+  await tx.update(uploadIntents).set({ state: "expired", revision: row.revision + 1, leaseToken: null, leaseUntil: null }).where(and(eq(uploadIntents.id, row.id), eq(uploadIntents.revision, row.revision), eq(uploadIntents.state, row.state), lte(uploadIntents.expiresAt, sql`CURRENT_TIMESTAMP`)));
   const [current] = await tx.select().from(uploadIntents).where(eq(uploadIntents.id, row.id)).limit(1);
   if (!current) throw new Error("Upload intent disappeared");
   if (current.state === "expired") { await release(tx, current, budget); current.reservationHeld = false; }
@@ -116,7 +117,7 @@ export async function beginUploadIntentForUser(userId: number, input: BeginUploa
       if (existing.requestFingerprint !== value.requestFingerprint) throw new UploadIntentConflictError();
       return project(await expireIfDue(tx, existing, budget));
     }
-    if (!validBudget(budget) || value.expectedBytes > budget.limitBytes - budget.reservedBytes || budget.activeIntents >= budget.maxActiveIntents) throw new UploadIntentQuotaError();
+    if (!validBudget(budget) || value.expectedBytes > budget.limitBytes - budget.reservedBytes - budget.retainedBytes || budget.activeIntents >= budget.maxActiveIntents) throw new UploadIntentQuotaError();
     const id = randomUUID();
     await tx.insert(uploadIntents).values({ id, actorUserId: userId, ...value, reservationHeld: true, expiresAt: sql`DATE_ADD(CURRENT_TIMESTAMP, INTERVAL 15 MINUTE)` });
     await tx.update(uploadQuotaBudgets).set({ reservedBytes: budget.reservedBytes + value.expectedBytes, activeIntents: budget.activeIntents + 1 }).where(eq(uploadQuotaBudgets.scopeKey, value.scopeKey));
@@ -124,7 +125,7 @@ export async function beginUploadIntentForUser(userId: number, input: BeginUploa
     return project(row);
   });
 }
-async function ownedTransaction(userId: number, id: string, operation: (tx: Transaction, row: Intent, budget: Budget | undefined) => Promise<ReturnType<typeof project>>) {
+async function ownedTransaction<T>(userId: number, id: string, operation: (tx: Transaction, row: Intent, budget: Budget | undefined) => Promise<T>) {
   assertActor(userId); const db = await database();
   // Non-locking lookup only obtains immutable scope; authorization and all mutations
   // happen inside the transaction after the budget has been locked.
@@ -146,23 +147,140 @@ export async function cancelUploadIntentForUser(userId: number, id: string, expe
   if (!Number.isSafeInteger(expectedRevision) || expectedRevision < 0) throw new Error("Invalid upload revision");
   return ownedTransaction(userId, id, async (tx, found, budget) => {
     const row = await expireIfDue(tx, found, budget);
-    if (row.state !== "issued") return project(row);
+    if (!["issued", "receiving", "quarantined"].includes(row.state)) return project(row);
     if (row.revision !== expectedRevision) throw new UploadIntentConflictError();
-    await tx.update(uploadIntents).set({ state: "cancelled", revision: row.revision + 1 }).where(and(eq(uploadIntents.id, row.id), eq(uploadIntents.state, "issued"), eq(uploadIntents.revision, expectedRevision)));
+    await tx.update(uploadIntents).set({ state: "cancelled", revision: row.revision + 1, leaseToken: null, leaseUntil: null }).where(and(eq(uploadIntents.id, row.id), eq(uploadIntents.state, row.state), eq(uploadIntents.revision, expectedRevision)));
     await release(tx, row, budget);
     return project({ ...row, state: "cancelled", revision: row.revision + 1, reservationHeld: false });
   });
 }
 
 /** Trusted maintenance only, deliberately not exported through an application router.
- * Releases only pre-storage reservations; no blob cleanup and no user impersonation. */
+ * Releases only pre-storage reservations. Possible stored bytes remain charged. */
 export async function expireUploadIntentsForScope(scopeKey: string, limit = 100) {
   if (!/^(personal|organization):[1-9][0-9]*$/.test(scopeKey) || !Number.isSafeInteger(limit) || limit < 1 || limit > 100) throw new Error("Invalid expiry sweep");
   const db = await database();
   return db.transaction(async tx => {
     const budget = await lockBudget(tx, scopeKey);
-    const rows = await tx.select().from(uploadIntents).where(and(eq(uploadIntents.scopeKey, scopeKey), eq(uploadIntents.state, "issued"), lte(uploadIntents.expiresAt, sql`CURRENT_TIMESTAMP`))).orderBy(uploadIntents.expiresAt, uploadIntents.id).limit(limit).for("update");
+    const rows = await tx.select().from(uploadIntents).where(and(eq(uploadIntents.scopeKey, scopeKey), inArray(uploadIntents.state, ["issued", "receiving", "quarantined"]), lte(uploadIntents.expiresAt, sql`CURRENT_TIMESTAMP`))).orderBy(uploadIntents.expiresAt, uploadIntents.id).limit(limit).for("update");
     for (const row of rows) await expireIfDue(tx, row, budget);
     return { expired: rows.length };
   });
+}
+
+/** Server-only capability. Never serialize a lease or its object key to a client. */
+export interface UploadReceptionLease {
+  id: string;
+  userId: number;
+  token: string;
+  key: string;
+  expectedBytes: number;
+  sha256: string | null;
+}
+const leaseFor = (row: Intent, userId: number): UploadReceptionLease => ({
+  id: row.id, userId, token: row.leaseToken!, key: row.objectKey!,
+  expectedBytes: row.expectedBytes, sha256: row.sha256,
+});
+async function leaseIsLive(tx: Transaction, row: Intent, lease: UploadReceptionLease) {
+  if (row.state !== "receiving" || row.leaseToken !== lease.token || row.objectKey !== lease.key) return false;
+  const [clock] = await tx.select({ live: sql<number>`${uploadIntents.leaseUntil} > CURRENT_TIMESTAMP` })
+    .from(uploadIntents).where(eq(uploadIntents.id, row.id));
+  return Number(clock?.live) === 1;
+}
+
+export async function claimUploadReceptionForUser(userId: number, id: string, expectedRevision: number) {
+  if (!Number.isSafeInteger(expectedRevision) || expectedRevision < 0) throw new Error("Invalid upload revision");
+  return ownedTransaction(userId, id, async (tx, found, budget) => {
+    const row = await expireIfDue(tx, found, budget);
+    if (["cancelled", "expired", "rejected"].includes(row.state)) return undefined;
+    if (row.state !== "issued" || row.revision !== expectedRevision) throw new UploadIntentConflictError();
+    if (!row.reservationHeld || row.storageChargeHeld || !validBudget(budget) || budget.reservedBytes < row.expectedBytes || budget.activeIntents < 1 || !Number.isSafeInteger(budget.retainedBytes + row.expectedBytes)) throw new UploadIntentQuotaError();
+    // Commit the key and charge BEFORE accepting any bytes or contacting storage.
+    const token = randomUUID(), key = `quarantine/${randomUUID()}`;
+    await tx.update(uploadQuotaBudgets).set({
+      reservedBytes: budget.reservedBytes - row.expectedBytes,
+      retainedBytes: budget.retainedBytes + row.expectedBytes,
+    }).where(eq(uploadQuotaBudgets.scopeKey, row.scopeKey));
+    await tx.update(uploadIntents).set({ state: "receiving", revision: row.revision + 1,
+      reservationHeld: false, storageChargeHeld: true, objectKey: key,
+      leaseToken: token, leaseUntil: sql`DATE_ADD(CURRENT_TIMESTAMP, INTERVAL 60 SECOND)`, attempts: 1,
+    }).where(eq(uploadIntents.id, row.id));
+    return leaseFor({ ...row, objectKey: key, leaseToken: token }, userId);
+  });
+}
+
+/** Called only with the digest derived from the bounded server-side source.
+ * A lost commit acknowledgement must stop the writer. Recovery inspects this row. */
+export async function prepareUploadReception(lease: UploadReceptionLease, bytes: number, sha256: string) {
+  if (bytes !== lease.expectedBytes || !/^[a-f0-9]{64}$/.test(sha256)) throw new UploadIntentConflictError();
+  const prepared = await ownedTransaction(lease.userId, lease.id, async (tx, found, budget) => {
+    const row = await expireIfDue(tx, found, budget);
+    if (!await leaseIsLive(tx, row, lease) || row.sha256 !== null) return false;
+    await tx.update(uploadIntents).set({ sha256, actualBytes: bytes }).where(eq(uploadIntents.id, row.id));
+    return true;
+  });
+  if (!prepared) throw new UploadIntentAccessError();
+}
+
+export async function finishUploadReception(lease: UploadReceptionLease, result: PrivateUploadResult) {
+  return ownedTransaction(lease.userId, lease.id, async (tx, found, budget) => {
+    const row = await expireIfDue(tx, found, budget);
+    if (!await leaseIsLive(tx, row, lease)) return project(row);
+    if (result.status === "confirmed") {
+      const receipt = result.receipt;
+      if (!row.sha256 || receipt.key !== row.objectKey || receipt.bytes !== row.expectedBytes || receipt.sha256 !== row.sha256 || !receipt.version || receipt.version.length > 1024) throw new UploadIntentConflictError();
+      await tx.update(uploadIntents).set({ state: "quarantined", revision: row.revision + 1,
+        objectVersion: receipt.version, leaseToken: null, leaseUntil: null, nextAttemptAt: null, errorCode: null,
+      }).where(eq(uploadIntents.id, row.id));
+      return project({ ...row, state: "quarantined", revision: row.revision + 1 });
+    }
+    // Only a source rejection before durable preparation proves no put was started.
+    if (result.status === "rejected" && row.sha256 === null) {
+      if (!row.storageChargeHeld || !validBudget(budget) || budget.retainedBytes < row.expectedBytes || budget.activeIntents < 1) throw new UploadIntentQuotaError();
+      await tx.update(uploadQuotaBudgets).set({ retainedBytes: budget.retainedBytes - row.expectedBytes,
+        activeIntents: budget.activeIntents - 1,
+      }).where(eq(uploadQuotaBudgets.scopeKey, row.scopeKey));
+      await tx.update(uploadIntents).set({ state: "rejected", revision: row.revision + 1,
+        storageChargeHeld: false, leaseToken: null, leaseUntil: null, nextAttemptAt: null, errorCode: "source_rejected",
+      }).where(eq(uploadIntents.id, row.id));
+      return project({ ...row, state: "rejected", revision: row.revision + 1 });
+    }
+    // A timeout can hide a successful put. Keep both the charge and stable digest.
+    await tx.update(uploadIntents).set({ leaseToken: null, leaseUntil: null,
+      nextAttemptAt: sql`DATE_ADD(CURRENT_TIMESTAMP, INTERVAL 30 SECOND)`,
+      errorCode: row.attempts >= 8 ? "reconciliation_required" : "storage_unconfirmed",
+    }).where(eq(uploadIntents.id, row.id));
+    return project(row);
+  });
+}
+
+/** Recovery never accepts another source or repeats put. A stale writer cannot
+ * replace the committed digest, even after process restart or lease takeover. */
+export async function claimUploadReconciliationForUser(userId: number, id: string) {
+  return ownedTransaction(userId, id, async (tx, found, budget) => {
+    const row = await expireIfDue(tx, found, budget);
+    if (row.state !== "receiving" || !row.objectKey || !row.storageChargeHeld || row.attempts >= 8) return undefined;
+    const [clock] = await tx.select({ due: sql<number>`
+      (${uploadIntents.leaseUntil} IS NULL OR ${uploadIntents.leaseUntil} <= CURRENT_TIMESTAMP)
+      AND (${uploadIntents.nextAttemptAt} IS NULL OR ${uploadIntents.nextAttemptAt} <= CURRENT_TIMESTAMP)` })
+      .from(uploadIntents).where(eq(uploadIntents.id, row.id));
+    if (Number(clock?.due) !== 1) return undefined;
+    const token = randomUUID();
+    await tx.update(uploadIntents).set({ leaseToken: token,
+      leaseUntil: sql`DATE_ADD(CURRENT_TIMESTAMP, INTERVAL 60 SECOND)`, attempts: row.attempts + 1,
+    }).where(eq(uploadIntents.id, row.id));
+    return leaseFor({ ...row, leaseToken: token }, userId);
+  });
+}
+
+/** Trusted bounded maintenance discovery; not an application router. */
+export async function listUploadReconciliationCandidates(scopeKey: string, limit = 100) {
+  if (!/^(personal|organization):[1-9][0-9]*$/.test(scopeKey) || !Number.isSafeInteger(limit) || limit < 1 || limit > 100) throw new Error("Invalid reconciliation sweep");
+  const db = await database();
+  return db.select({ id: uploadIntents.id, userId: uploadIntents.actorUserId }).from(uploadIntents)
+    .where(and(eq(uploadIntents.scopeKey, scopeKey), eq(uploadIntents.state, "receiving"),
+      sql`${uploadIntents.attempts} < 8`,
+      sql`(${uploadIntents.leaseUntil} IS NULL OR ${uploadIntents.leaseUntil} <= CURRENT_TIMESTAMP)`,
+      sql`(${uploadIntents.nextAttemptAt} IS NULL OR ${uploadIntents.nextAttemptAt} <= CURRENT_TIMESTAMP)`))
+    .orderBy(uploadIntents.expiresAt, uploadIntents.id).limit(limit);
 }
