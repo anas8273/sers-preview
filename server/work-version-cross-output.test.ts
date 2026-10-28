@@ -25,6 +25,7 @@ describe("cross-output immutable report acceptance", () => {
     Object.assign(snapshot.assets[0], { storageKey: "private/never-export", externalUrl: "https://private.invalid/never-fetch" });
     const html = renderReportWorkVersionHtml(snapshot, 7);
     expect(html).toContain("B09LONGTAIL");
+    expect(html).toContain('<bdi dir="ltr">2026–2027</bdi>');
     expect(html).toContain("<thead>");
     expect(html.match(/src="data:image\/png;base64,/g)).toHaveLength(2);
     expect(html).toContain(snapshot.shareReference.url);

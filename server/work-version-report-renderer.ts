@@ -55,7 +55,8 @@ export function renderReportWorkVersionHtml(snapshotValue: unknown, versionNumbe
   const color = THEME_COLORS[draft.themeId || "classic"] || THEME_COLORS.classic;
   const font = ["Arial", "Cairo", "Tajawal"].includes(draft.fontFamily || "") ? draft.fontFamily! : "Cairo";
   const date = escapeHtml(formatSnapshotDate(snapshot.capturedAt || draft.updatedAt));
-  const year = escapeHtml(text(snapshot.academicContext?.yearLabel, 100));
+  // Numeric ranges need their own LTR isolate inside an otherwise Arabic label.
+  const year = escapeHtml(text(snapshot.academicContext?.yearLabel, 100)).replace(/[0-9٠-٩]+(?:[-–—/][0-9٠-٩]+)+/g, range => `<bdi dir="ltr">${range}</bdi>`);
   const term = escapeHtml(text(snapshot.academicContext?.termLabel, 100));
   let totalText = 0;
   const sections = FIELD_DEFINITIONS.flatMap(([key, label]) => {

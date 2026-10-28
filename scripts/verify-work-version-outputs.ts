@@ -60,6 +60,7 @@ try {
     await writeFile(pdfPath, pdf);
     const extracted = execFileSync("pdftotext", ["-enc", "UTF-8", pdfPath, "-"], { encoding: "utf8", maxBuffer: 8 * 1024 * 1024 });
     await writeFile(resolve(directory, `${name}-text.txt`), extracted);
+    assert.ok(comparableText(extracted).includes("2026–2027"), `${name}: academic-year numeric range is reversed`);
     for (const marker of expectedMarkers) assert.ok(extracted.includes(marker), `${name}: clipped paragraph or table row ${marker}`);
     const sourceArabic = arabicCount(Object.values(snapshot.reportDraft.fields).join(" "));
     assert.ok(arabicCount(extracted) >= sourceArabic * 0.98, `${name}: Arabic text extraction lost report content`);
@@ -95,7 +96,7 @@ try {
     assert.deepEqual(decodedPages.map(value => value.url), [snapshot.shareReference.url], `${name}: actual rendered PDF QR failed digital decoding`);
     checks[name] = { snapshotSha256: hash(frozen), pages: pages.length, words, lines, requiredMarkers: expectedMarkers.length, retainedMarkers: expectedMarkers.length,
       arabicSourceLetters: sourceArabic, arabicExtractedLetters: arabicCount(extracted), nativeDocxTable: true, editableDocxText: true,
-      docxQrDecoded: inspected.decodedQr, pdfQrDecoded: decodedPages, pageBoundsPassed: true, evidenceImagesPresent: true };
+      docxQrDecoded: inspected.decodedQr, pdfQrDecoded: decodedPages, pageBoundsPassed: true, evidenceImagesPresent: true, academicYearRangePreserved: "2026–2027" };
     artifacts.push({ name: pdfName, bytes: pdf.length, sha256: hash(pdf) });
   }
   assert.ok((checks["long-rtl"] as { pages: number }).pages > (checks.golden as { pages: number }).pages, "Long content did not paginate beyond the golden report");
