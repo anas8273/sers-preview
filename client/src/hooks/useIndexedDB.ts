@@ -31,19 +31,23 @@ export interface StoredFile {
 
 /** Save a file to IndexedDB */
 export async function saveFileToIDB(file: StoredFile): Promise<void> {
-  try {
-    const db = await openDB();
-    return new Promise((resolve, reject) => {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    let finished = false;
+    const finish = (error?: unknown) => {
+      if (finished) return;
+      finished = true;
+      db.close();
+      if (error) reject(new Error("Local file storage unavailable")); else resolve();
+    };
+    try {
       const tx = db.transaction(FILE_STORE, "readwrite");
-      const store = tx.objectStore(FILE_STORE);
-      const request = store.put(file);
-      request.onsuccess = () => resolve();
-      request.onerror = () => reject(request.error);
-      tx.oncomplete = () => db.close();
-    });
-  } catch (err) {
-    console.error("IndexedDB save error:", err);
-  }
+      tx.oncomplete = () => finish();
+      tx.onabort = () => finish(tx.error ?? new Error("Local transaction aborted"));
+      tx.onerror = () => finish(tx.error ?? new Error("Local transaction failed"));
+      tx.objectStore(FILE_STORE).put(file).onerror = event => finish((event.target as IDBRequest).error ?? new Error("Local file write failed"));
+    } catch (error) { finish(error); }
+  });
 }
 
 /** Get a file from IndexedDB */

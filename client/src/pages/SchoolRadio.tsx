@@ -18,6 +18,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
+import { aiFailureMessage } from "@/lib/ai-feedback";
 import TemplateSelector, { THEMES, type ThemeConfig } from "@/components/TemplateSelector";
 import { exportToPDF, printElement } from "@/lib/pdf-export";
 import { usePreviewScale } from "@/hooks/usePreviewScale";
@@ -308,7 +309,7 @@ export default function SchoolRadio() {
         toast.success("تم توليد المحتوى بالذكاء الاصطناعي بنجاح");
       }
     } catch (err) {
-      toast.error("حدث خطأ أثناء التوليد بالذكاء الاصطناعي");
+      toast.error(aiFailureMessage(err));
     } finally {
       setAiLoading(false);
     }

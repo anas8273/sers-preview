@@ -7,6 +7,7 @@ import { useState, useRef, useCallback } from "react";
 import { useLocation } from "wouter";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
+import { LegacyUploadNotice, LEGACY_TEMPLATE_UPLOAD_MESSAGE } from "@/components/LegacyUploadNotice";
 import { useAuth } from "@/_core/hooks/useAuth";
 import {
   ArrowLeft, Plus, Trash2, Save, Edit3, Palette,
@@ -279,6 +280,7 @@ export default function TemplateManager() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-background to-muted/30 p-3 sm:p-4 md:p-8" dir="rtl">
+      <LegacyUploadNotice template />
       <div className="max-w-6xl mx-auto">
         {/* Header */}
         <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
@@ -498,7 +500,7 @@ function ImageUploadField({
       onChange(url);
       toast.success("تم رفع الصورة بنجاح");
     } catch {
-      toast.error("فشل رفع الصورة");
+      toast.error(LEGACY_TEMPLATE_UPLOAD_MESSAGE);
     }
     if (fileRef.current) fileRef.current.value = '';
   }, [onUpload, imageType, onChange]);

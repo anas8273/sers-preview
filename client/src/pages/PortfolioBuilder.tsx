@@ -17,6 +17,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
+import { LegacyUploadNotice, legacyUploadFailureMessage } from "@/components/LegacyUploadNotice";
+import { aiFailureMessage } from "@/lib/ai-feedback";
 import { useAuth } from "@/_core/hooks/useAuth";
 import TemplateSelector, { THEMES, type ThemeConfig } from "@/components/TemplateSelector";
 import { exportToPDF, printElement } from "@/lib/pdf-export";
@@ -348,6 +350,7 @@ export default function PortfolioBuilder() {
   const [selectedTheme, setSelectedTheme] = useState<ThemeConfig>(THEMES[0]);
   const [selectedFont, setSelectedFont] = useState("Cairo");
   const [aiLoading, setAiLoading] = useState(false);
+  const [goalProposal, setGoalProposal] = useState("");
   const [evidenceUploading, setEvidenceUploading] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
@@ -446,7 +449,7 @@ export default function PortfolioBuilder() {
       }));
       toast.success("تم رفع الشاهد وإضافته إلى ملف الإنجاز.");
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "تعذر رفع الشاهد.");
+      toast.error(legacyUploadFailureMessage(error));
     } finally {
       setEvidenceUploading(false);
     }
@@ -460,52 +463,29 @@ export default function PortfolioBuilder() {
   const handleSave = useCallback(() => { savePortfolioToStorage(data); toast.success("تم حفظ ملف الإنجاز بنجاح"); }, [data]);
 
   const handleAIGenerate = useCallback(async () => {
-    if (!data.personalInfo.fullName && !data.personalInfo.jobTitle) {
-      toast.error("أدخل الاسم والمسمى الوظيفي أولاً"); return;
-    }
+    if (!data.personalInfo.jobTitle) { toast.error("أدخل المسمى الوظيفي أولًا"); return; }
     setAiLoading(true);
     try {
       const result = await generatePortfolioMutation.mutateAsync({
-        section: "ملف إنجاز شامل",
-        jobTitle: data.personalInfo.jobTitle || "معلم",
-        existingData: `الاسم: ${data.personalInfo.fullName}\nالمدرسة: ${data.personalInfo.school}\nالقسم: ${data.personalInfo.department}`,
+        section: "اقترح أهداف تطوير مهنية مستقبلية فقط، كل هدف في سطر. لا تنشئ شهادات أو جوائز أو أنشطة منفذة أو مؤهلات.",
+        jobTitle: data.personalInfo.jobTitle,
+        existingData: data.goals.join("\n") || undefined,
       });
       if (result.content) {
-        // Parse AI response - try JSON first, then extract from text
-        let ai: any = {};
-        try {
-          ai = JSON.parse(result.content);
-        } catch {
-          // AI returned text, create structured data from it
-          ai = {
-            certificates: [{ title: "دورة التطوير المهني", issuer: "وزارة التعليم", date: "1445/06", hours: "30", type: "training" }],
-            achievements: [{ title: "التميز في الأداء الوظيفي", description: result.content.slice(0, 200), date: "1445", category: "award" }],
-            activities: [{ title: "مبادرة تطوير التعليم", description: "مبادرة لتحسين مخرجات التعلم", date: "1445", type: "school" }],
-            goals: ["تطوير الممارسات التعليمية", "المساهمة في تحقيق رؤية 2030", "الحصول على شهادات مهنية متقدمة"],
-          };
-        }
-        updateData((prev) => ({
-          ...prev,
-          personalInfo: {
-            ...prev.personalInfo,
-            qualification: ai.qualification || prev.personalInfo.qualification,
-          },
-          certificates: ai.certificates?.length ? ai.certificates.map((c: any) => ({
-            id: genId(), title: c.title || "", issuer: c.issuer || "", date: c.date || "", hours: c.hours || "", type: (c.type || "training") as Certificate["type"],
-          })) : prev.certificates,
-          achievements: ai.achievements?.length ? ai.achievements.map((a: any) => ({
-            id: genId(), title: a.title || "", description: a.description || "", date: a.date || "", category: (a.category || "award") as Achievement["category"],
-          })) : prev.achievements,
-          activities: ai.activities?.length ? ai.activities.map((a: any) => ({
-            id: genId(), title: a.title || "", description: a.description || "", date: a.date || "", type: (a.type || "school") as Activity["type"],
-          })) : prev.activities,
-          goals: ai.goals?.length ? ai.goals : prev.goals,
-        }));
-        toast.success("تم توليد محتوى ملف الإنجاز بالذكاء الاصطناعي");
+        setGoalProposal(result.content);
+        toast.info("الاقتراح جاهز للمراجعة. لم تتغير بيانات ملف الإنجاز.");
       }
-    } catch { toast.error("حدث خطأ أثناء التوليد"); }
+    } catch (error) { toast.error(aiFailureMessage(error)); }
     finally { setAiLoading(false); }
-  }, [data.personalInfo, generatePortfolioMutation, updateData]);
+  }, [data.personalInfo.jobTitle, data.goals, generatePortfolioMutation]);
+
+  const applyGoalProposal = () => {
+    const proposedGoals = goalProposal.split("\n").map(line => line.replace(/^[•\-*\d.]+\s*/, "").trim()).filter(Boolean).slice(0, 10).map(line => line.slice(0, 1000));
+    if (!proposedGoals.length) return;
+    updateData(previous => ({ ...previous, goals: Array.from(new Set([...previous.goals, ...proposedGoals])) }));
+    setGoalProposal("");
+    toast.success("أُضيفت الأهداف التي راجعتها. بقيت الشهادات والإنجازات الفعلية كما هي.");
+  };
 
   const handleExportPDF = useCallback(async () => {
     setExporting(true);
@@ -556,6 +536,7 @@ export default function PortfolioBuilder() {
       </div>
 
       <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6">
+        <LegacyUploadNotice />
         {/* Theme Selector */}
         <div className="mb-4">
           <TemplateSelector selectedTheme={selectedTheme} onThemeChange={setSelectedTheme} selectedFont={selectedFont} onFontChange={setSelectedFont} compact />
@@ -566,10 +547,21 @@ export default function PortfolioBuilder() {
           <Button onClick={handleAIGenerate} variant="outline" disabled={aiLoading}
             className="gap-1.5 border-purple-200 text-purple-600 hover:bg-purple-50">
             {aiLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-            {aiLoading ? "جاري التوليد..." : "تعبئة بالذكاء الاصطناعي"}
+            {aiLoading ? "جاري الاقتراح..." : "اقتراح أهداف تطوير"}
           </Button>
-          <span className="text-xs text-gray-400">يولّد محتوى تجريبي بناءً على بياناتك الشخصية</span>
+          <span className="text-xs text-gray-400">مسودة أهداف مستقبلية تراجعها قبل إضافتها؛ لا تُنشئ سجل إنجازات</span>
         </div>
+
+        {goalProposal && <section aria-labelledby="goal-proposal-heading" className="mb-4 space-y-3 rounded-xl border border-purple-200 p-4">
+          <h2 id="goal-proposal-heading" className="font-bold">مراجعة أهداف التطوير المقترحة</h2>
+          <p className="text-sm text-muted-foreground">عدّل المسودة ثم اعتمد ما يناسبك. الاقتراح لا يثبت الحصول على شهادة أو تنفيذ نشاط.</p>
+          <label className="block text-sm" htmlFor="goal-proposal">الأهداف المقترحة</label>
+          <textarea id="goal-proposal" value={goalProposal} onChange={event => setGoalProposal(event.target.value)} maxLength={10000} className="min-h-36 w-full rounded-md border bg-background p-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" />
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" onClick={applyGoalProposal}>إضافة الأهداف بعد المراجعة</Button>
+            <Button type="button" variant="outline" onClick={() => setGoalProposal("")}>رفض الاقتراح</Button>
+          </div>
+        </section>}
 
         <section className="mb-5 overflow-hidden rounded-xl border border-sky-100 bg-gradient-to-l from-sky-50 to-white p-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">

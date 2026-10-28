@@ -17,7 +17,7 @@ describe("audit log", () => {
 
   it("records significant portfolio, file, comment, and exam operations", () => {
     expect(routerSource).toContain('action: "portfolio.updated"');
-    expect(routerSource).toContain('action: "file.uploaded"');
+    expect(routerSource).not.toContain('action: "file.uploaded"'); // Retired writes never emit a success audit.
     expect(routerSource).toContain('action: "evidence.comment_created"');
     expect(routerSource).toContain('action: "online_exam.created"');
     expect(routerSource).toContain('action: "share_link.created"');

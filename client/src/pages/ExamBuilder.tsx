@@ -17,6 +17,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
+import { aiFailureMessage } from "@/lib/ai-feedback";
 import { useAuth } from "@/_core/hooks/useAuth";
 import TemplateSelector, { THEMES, type ThemeConfig } from "@/components/TemplateSelector";
 import { exportToPDF, printElement } from "@/lib/pdf-export";
@@ -344,7 +345,7 @@ export default function ExamBuilder() {
         setQuestions((prev) => [...prev, ...newQuestions]);
         toast.success(`تم توليد ${newQuestions.length} سؤال بالذكاء الاصطناعي`);
       }
-    } catch { toast.error("حدث خطأ أثناء التوليد"); }
+    } catch (error) { toast.error(aiFailureMessage(error)); }
     finally { setAiLoading(false); }
   }, [subject, grade, title, sourceContent, generateExamMutation]);
 

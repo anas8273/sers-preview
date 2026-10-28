@@ -1,3 +1,5 @@
+import { withDocumentRenderBudget, RENDER_LIMITS } from "../render-limits";
+import { ResourceLimitError, requireActive } from "../bounded-work";
 import "dotenv/config";
 import express, { type NextFunction, type Request, type Response } from "express";
 import { createServer } from "http";
@@ -106,7 +108,7 @@ function safeDownloadName(value: unknown, fallback: string, extension: string) {
 }
 
 function sendRouteError(res: Response, error: unknown, context: string) {
-  if (error instanceof RemoteImageError) {
+  if (error instanceof RemoteImageError || error instanceof ResourceLimitError) {
     res.status(error.statusCode).json({ error: error.message });
     return;
   }
@@ -166,11 +168,21 @@ async function startServer() {
           throw new RemoteImageError("Image payload exceeds the size limit", 413);
         }
         const { renderImageToDocx } = await import("../docx-renderer");
-        docxBuffer = await renderImageToDocx(imageBase64, width, height);
+        docxBuffer = await withDocumentRenderBudget(async signal => {
+          requireActive(signal);
+          const bytes = await renderImageToDocx(imageBase64, width, height);
+          requireActive(signal);
+          return bytes;
+        }, RENDER_LIMITS.docxTimeoutMs);
       } else if (data) {
         assertPayloadSize(data, 5_000_000, "Structured DOCX data");
         const { renderStructuredDocx } = await import("../docx-renderer");
-        docxBuffer = await renderStructuredDocx(data);
+        docxBuffer = await withDocumentRenderBudget(async signal => {
+          requireActive(signal);
+          const bytes = await renderStructuredDocx(data);
+          requireActive(signal);
+          return bytes;
+        }, RENDER_LIMITS.docxTimeoutMs);
       } else {
         throw new RemoteImageError("Missing data, imageBase64, or html content", 400);
       }

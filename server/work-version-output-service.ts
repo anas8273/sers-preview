@@ -8,6 +8,8 @@ import { storageGet, storagePut } from "./output-artifact-storage";
 import { renderReportWorkVersionHtml } from "./work-version-report-renderer";
 import { renderReportWorkVersionDocx } from "./work-version-docx-renderer";
 import { getConfiguredPrivateStorage } from "./upload-runtime";
+import { withDocumentRenderBudget, RENDER_LIMITS } from "./render-limits";
+import { requireActive } from "./bounded-work";
 
 export const REPORT_PDF_RENDERER_VERSION = 2;
 export const REPORT_DOCX_RENDERER_VERSION = 1;
@@ -33,7 +35,12 @@ const defaultPdf: PdfOutputDependencies = {
   ...defaultStorage,
   renderPdf: html => renderHtmlToPdf(html, { format: "A4", printBackground: true, margin: { top: "0", right: "0", bottom: "0", left: "0" } }),
 };
-const defaultDocx: DocxOutputDependencies = { ...defaultStorage, renderDocx: renderReportWorkVersionDocx };
+const defaultDocx: DocxOutputDependencies = { ...defaultStorage, renderDocx: (snapshot, version) => withDocumentRenderBudget(async signal => {
+  requireActive(signal);
+  const bytes = await renderReportWorkVersionDocx(snapshot, version);
+  requireActive(signal);
+  return bytes;
+}, RENDER_LIMITS.docxTimeoutMs) };
 const rendererVersion = (type: ArtifactType) => type === "pdf" ? REPORT_PDF_RENDERER_VERSION : REPORT_DOCX_RENDERER_VERSION;
 const artifactToken = (versionId: number, type: ArtifactType) => `artifact:v${versionId}:${type}:r${rendererVersion(type)}`;
 export function recognizedRenderer(token: string | null, versionId: number, type: ArtifactType) {

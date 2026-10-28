@@ -5,6 +5,7 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
+import { legacyUploadFailureMessage } from "@/components/LegacyUploadNotice";
 
 interface PortfolioState {
   id: number | null;
@@ -137,7 +138,9 @@ export function usePortfolio(isAuthenticated: boolean = false) {
           });
           resolve(result);
         } catch (err) {
-          reject(err);
+          const message = legacyUploadFailureMessage(err);
+          toast.error(message, { action: { label: "مكتبة الشواهد", onClick: () => { window.location.href = "/evidence"; } } });
+          reject(new Error(message));
         }
       };
       reader.onerror = reject;

@@ -37,12 +37,13 @@ export async function main() {
     demo: ['--import', 'tsx', 'scripts/operations/demo-server.mts'],
     worker: ['--import', 'tsx', 'scripts/operations/upload-worker.mts'],
     'verify-demo': ['--import', 'tsx', 'scripts/operations/verify-demo.mts'],
+    'verify-output-runtime': ['--import', 'tsx', 'scripts/operations/verify-output-runtime.mts'],
     preflight: ['scripts/operations/release-preflight.mjs'],
     'inspect-health': ['scripts/operations/inspect-health.mjs'],
   };
   if (!Object.hasOwn(commands, action)) throw new Error('Unknown operations action');
   if (action === 'serve' && (!env.VITE_APP_ID || !env.OAUTH_SERVER_URL || !env.VITE_OAUTH_PORTAL_URL)) throw new Error('Staging OAuth configuration is required');
-  if (['serve', 'worker', 'demo'].includes(action)) {
+  if (['serve', 'worker', 'demo', 'verify-output-runtime'].includes(action)) {
     const { releasePreflight } = await import('./release-preflight.mjs');
     try { await releasePreflight(env); }
     catch (error) { throw new Error(`Startup refused. ${error.message}`); }

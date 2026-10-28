@@ -31,7 +31,7 @@ export async function releasePreflight(env = process.env, root = process.cwd()) 
   stage = 'image-contents';
   const contract = await verifyReleaseContract(root);
   stage = 'parser-binaries';
-  for (const binary of ['/usr/bin/qpdf', '/usr/bin/prlimit', '/usr/bin/flock']) await access(binary, constants.X_OK);
+  for (const binary of ['/usr/bin/qpdf', '/usr/bin/prlimit', '/usr/bin/flock', '/usr/bin/pdfinfo', '/usr/bin/pdftoppm']) await access(binary, constants.X_OK);
   const storage = await lstat(env.SERS_PRIVATE_STORAGE_DIR);
   if (!storage.isDirectory() || storage.isSymbolicLink() || storage.uid !== 10001 || (storage.mode & 0o077) !== 0) throw new Error('Private storage ownership or mode is invalid');
   stage = 'database-connectivity';

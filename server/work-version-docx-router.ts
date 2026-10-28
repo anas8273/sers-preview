@@ -3,6 +3,7 @@ import { z } from "zod";
 import { protectedProcedure, router } from "./_core/trpc";
 import { generatePrivateDocxForWorkVersion, getPrivateDocxDownloadForUser, OutputArtifactUnavailableError, PrivateDocxStorageUnavailableError } from "./work-version-output-service";
 import { ReportDocxValidationError } from "./work-version-docx-renderer";
+import { ResourceLimitError } from "./bounded-work";
 
 export const workVersionDocxRouter = router({
   generatePrivateDocx: protectedProcedure.input(z.object({ workVersionId: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
@@ -11,6 +12,7 @@ export const workVersionDocxRouter = router({
       if (!result) throw new TRPCError({ code: "FORBIDDEN", message: "لا تملك صلاحية إنشاء Word لهذه النسخة" });
       return result;
     } catch (error) {
+      if (error instanceof ResourceLimitError) throw new TRPCError({ code: error.statusCode === 413 ? "PAYLOAD_TOO_LARGE" : error.statusCode === 504 ? "TIMEOUT" : "SERVICE_UNAVAILABLE", message: "تعذر إكمال التصدير ضمن حدود الخدمة. حاول لاحقًا أو قلل حجم المحتوى." });
       if (error instanceof PrivateDocxStorageUnavailableError) throw new TRPCError({ code: "PRECONDITION_FAILED", message: error.message });
       if (error instanceof OutputArtifactUnavailableError) throw new TRPCError({ code: "CONFLICT", message: error.message });
       if (error instanceof ReportDocxValidationError) throw new TRPCError({ code: "BAD_REQUEST", message: "محتوى النسخة غير صالح لتصدير Word" });

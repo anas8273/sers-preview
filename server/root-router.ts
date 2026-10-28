@@ -8,6 +8,7 @@ import { accountRouter } from "./account-router";
 import { evidenceUploadRouter } from "./evidence-upload-router";
 import { notificationRouter } from "./notification-router";
 import { workVersionDocxRouter } from "./work-version-docx-router";
+import { aiAccessRouter } from "./ai-admission";
 
 const domainRootRouter = router({ domain: domainRouter });
 const publicOutputRootRouter = router({ publicOutput: publicOutputRouter });
@@ -20,6 +21,6 @@ export const appRouter = mergeRouters(
   publicOutputRootRouter,
   reviewSupportRootRouter,
   shareOutputRootRouter,
-  router({ account: accountRouter, evidenceUpload: evidenceUploadRouter, notification: notificationRouter, workVersionDocx: workVersionDocxRouter }),
+  router({ account: accountRouter, evidenceUpload: evidenceUploadRouter, notification: notificationRouter, workVersionDocx: workVersionDocxRouter, aiAccess: aiAccessRouter }),
 );
 export type AppRouter = typeof appRouter;

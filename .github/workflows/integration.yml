@@ -54,7 +54,7 @@ jobs:
       - name: Install bounded PDF parser and filesystem locking tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y qpdf util-linux
+          sudo apt-get install -y qpdf util-linux poppler-utils
       - name: Apply reviewed Drizzle migrations
         run: pnpm exec drizzle-kit migrate --config drizzle.config.ts
       - name: Domain ownership and IDOR integration tests
@@ -77,6 +77,12 @@ jobs:
         run: pnpm exec vitest run server/auth-session-integration.test.ts
       - name: Production OAuth routes against a separate synthetic issuer
         run: pnpm exec vitest run server/auth-http-integration.test.ts
+      - name: Durable AI admission, budgets, leases and recovery probes
+        run: pnpm exec vitest run server/ai-admission-integration.test.ts
+      - name: Authenticated AI HTTP with a separate synthetic provider
+        run: pnpm exec vitest run server/ai-http-integration.test.ts
+      - name: Legacy share concurrency and current revocation
+        run: pnpm exec vitest run server/legacy-share-integration.test.ts
       - name: Private monitoring and readiness loss recovery
         run: pnpm exec vitest run server/runtime-observability-integration.test.ts
       - name: Scan completion, publication, cleanup and quota lifecycle
@@ -119,3 +125,5 @@ jobs:
         env:
           SERS_SCANNER_INTEGRATION: "1"
         run: pnpm exec tsx --test tests/browser/evidence-mysql.mts
+      - name: Browser AI suggestions require confirmation and preserve manual work
+        run: pnpm exec tsx --test tests/browser/ai-safety.mts

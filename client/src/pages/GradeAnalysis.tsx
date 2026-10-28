@@ -9,6 +9,7 @@ import { useLocation } from "wouter";
 import { exportToPDF, printElement } from "@/lib/pdf-export";
 import { OfficialHeader } from "@/components/OfficialHeader";
 import { trpc } from "@/lib/trpc";
+import { aiFailureMessage } from "@/lib/ai-feedback";
 import { toast } from "sonner";
 
 interface Student {
@@ -27,7 +28,7 @@ export default function GradeAnalysis() {
   const [scanFileName, setScanFileName] = useState("");
   const [lastImportedIds, setLastImportedIds] = useState<string[]>([]);
   const [isDragActive, setIsDragActive] = useState(false);
-  const extractGradesMutation = (trpc.genAI as any).extractGradesFromImage.useMutation();
+  const extractGradesMutation = trpc.genAI.extractGradesFromImage.useMutation();
 
   const [subjectInfo, setSubjectInfo] = useState({
     subject: "",
@@ -124,8 +125,8 @@ export default function GradeAnalysis() {
 
   const processGradeSheet = async (file: File) => {
     if (!file) return;
-    if (!file.type.startsWith("image/")) {
-      toast.error("اختر صورة لكشف الدرجات بصيغة PNG أو JPG أو WEBP.");
+    if (!["image/png", "image/jpeg"].includes(file.type)) {
+      toast.error("اختر صورة لكشف الدرجات بصيغة PNG أو JPG.");
       return;
     }
     if (file.size > 5 * 1024 * 1024) {
@@ -159,7 +160,7 @@ export default function GradeAnalysis() {
       setScanNote(result.unreadableNote || `تمت إضافة ${imported.length} طالباً من الصورة. راجع النتائج قبل الاعتماد.`);
       toast.success(`تم استخراج درجات ${imported.length} طالباً. راجعها قبل الحفظ.`);
     } catch (error) {
-      const message = error instanceof Error ? error.message : "تعذر تحليل الصورة. تأكد من وضوح الأسماء والدرجات.";
+      const message = aiFailureMessage(error);
       setScanPhase("error");
       setLastImportedIds([]);
       setScanNote(message);

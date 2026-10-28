@@ -1,3 +1,4 @@
+import { ResourceLimitError } from "./bounded-work";
 import { hashProtectedOutputPassword } from "./output-password";
 import { nanoid } from "nanoid";
 import { TRPCError } from "@trpc/server";
@@ -227,6 +228,7 @@ export const domainRouter = router({
           if (!generated) throw forbidden("لا تملك صلاحية إنشاء PDF لهذه النسخة");
           return generated;
         } catch (error) {
+          if (error instanceof ResourceLimitError) throw new TRPCError({ code: error.statusCode === 413 ? "PAYLOAD_TOO_LARGE" : error.statusCode === 504 ? "TIMEOUT" : "SERVICE_UNAVAILABLE", message: "تعذر إكمال التصدير ضمن حدود الخدمة. حاول لاحقًا أو قلل حجم المحتوى." });
           if (error instanceof OutputArtifactUnavailableError) throw conflict(error.message);
           throw error;
         }

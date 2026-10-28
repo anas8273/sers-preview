@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { buildAssistantQuickQuestions } from "@/lib/ai-assistant-prompts";
 import { trpc } from "@/lib/trpc";
+import { aiFailureMessage } from "@/lib/ai-feedback";
 import { AlertCircle, Lightbulb, Loader2, MessageCircle, RefreshCw, Send, Sparkles, X } from "lucide-react";
 import { toast } from "sonner";
 
@@ -53,7 +54,6 @@ export function AIAssistantPanel({
       ...current,
       { id: `${Date.now()}-user`, role: "user", content: trimmedQuestion },
     ]);
-    setInput("");
     setErrorMessage(null);
     setFailedQuestion(null);
     setIsLoading(true);
@@ -72,12 +72,12 @@ export function AIAssistantPanel({
         ...current,
         { id: `${Date.now()}-assistant`, role: "assistant", content: response },
       ]);
-      onSuggestion?.(response);
+      setInput("");
     } catch (error) {
-      console.error("AI assistant request failed", error);
       setFailedQuestion(trimmedQuestion);
-      setErrorMessage("تعذر الحصول على اقتراح الآن. تأكد من الاتصال ثم أعد المحاولة.");
-      toast.error("تعذر الحصول على اقتراح الآن.");
+      setInput(trimmedQuestion);
+      setErrorMessage(aiFailureMessage(error));
+      toast.error(aiFailureMessage(error));
     } finally {
       setIsLoading(false);
     }
@@ -93,6 +93,7 @@ export function AIAssistantPanel({
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
+        <p className="text-xs text-muted-foreground">المحتوى مسودة للمراجعة، ولا يُعد إثباتًا لحضور أو نشاط أو إنجاز فعلي.</p>
         <div className="h-64 space-y-3 overflow-y-auto rounded-xl border border-teal-100 bg-background/80 p-3 dark:border-teal-900">
           {messages.length === 0 ? (
             <div className="flex h-full flex-col items-center justify-center text-center text-muted-foreground">
@@ -104,6 +105,7 @@ export function AIAssistantPanel({
               <div key={message.id} className={`flex ${message.role === "user" ? "justify-start" : "justify-end"}`}>
                 <div className={`max-w-[90%] whitespace-pre-wrap rounded-2xl px-3 py-2 text-sm ${message.role === "user" ? "bg-teal-600 text-white" : "bg-muted text-foreground"}`}>
                   {message.content}
+                  {message.role === "assistant" && onSuggestion && <Button type="button" size="sm" variant="outline" className="mt-2 block" onClick={() => onSuggestion(message.content)}>استخدام الاقتراح بعد المراجعة</Button>}
                 </div>
               </div>
             ))
@@ -122,6 +124,7 @@ export function AIAssistantPanel({
               }
             }}
             placeholder={placeholder}
+            aria-label="طلب المساعدة الذكية"
             disabled={isLoading}
             className="min-h-11 resize-none"
           />
