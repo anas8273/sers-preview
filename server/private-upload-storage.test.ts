@@ -40,6 +40,56 @@ function privateStore() {
 }
 
 describe("bounded private upload receipt contract", () => {
+  it("persists the derived digest before any provider write", async () => {
+    const { adapter } = privateStore();
+    const bytes = new Uint8Array([1, 2, 3]);
+    const beforeStore = vi.fn(async prepared => {
+      expect(prepared).toEqual({ bytes: 3, sha256: hash(bytes) });
+      expect(adapter.putPrivateIfAbsent).not.toHaveBeenCalled();
+    });
+    expect((await receivePrivateUpload(adapter, { key: "q/prepared", source: source(bytes), expectedBytes: 3, beforeStore })).status).toBe("confirmed");
+    expect(beforeStore).toHaveBeenCalledOnce();
+  });
+
+  it("does not write when durable preparation fails or loses its acknowledgement", async () => {
+    const { adapter } = privateStore();
+    const result = await receivePrivateUpload(adapter, { key: "q/db-failure", source: source(new Uint8Array([1])), expectedBytes: 1,
+      beforeStore: async () => { throw new Error("commit response lost"); },
+    });
+    expect(result).toEqual({ status: "unknown", reason: "preparation_unconfirmed" });
+    expect(adapter.putPrivateIfAbsent).not.toHaveBeenCalled();
+  });
+
+  it("bounds a stalled source and requests cancellation without waiting on return", async () => {
+    const { adapter } = privateStore();
+    const controller = new AbortController();
+    const close = vi.fn(() => new Promise<IteratorResult<Uint8Array>>(() => {}));
+    const stalled = { [Symbol.asyncIterator]: () => ({ next: () => new Promise<IteratorResult<Uint8Array>>(() => {}), return: close }) };
+    const pending = receivePrivateUpload(adapter, { key: "q/stalled", source: stalled, expectedBytes: 1, signal: controller.signal });
+    controller.abort();
+    expect((await pending).status).toBe("rejected");
+    expect(close).toHaveBeenCalledOnce();
+    expect(adapter.putPrivateIfAbsent).not.toHaveBeenCalled();
+  });
+
+  it("keeps a timed-out provider write unknown even if it finishes later", async () => {
+    const { adapter, objects } = privateStore();
+    const controller = new AbortController();
+    const put = adapter.putPrivateIfAbsent;
+    let started!: () => void;
+    const writeStarted = new Promise<void>(resolve => { started = resolve; });
+    let resume!: () => void;
+    const delayed = new Promise<void>(resolve => { resume = resolve; });
+    adapter.putPrivateIfAbsent = vi.fn(async args => { started(); await delayed; return put(args); });
+    const pending = receivePrivateUpload(adapter, { key: "q/late-write", source: source(new Uint8Array([1])), expectedBytes: 1, signal: controller.signal });
+    await writeStarted;
+    controller.abort();
+    expect((await pending).status).toBe("unknown");
+    resume();
+    await vi.waitFor(() => expect(objects.size).toBe(1));
+    expect(adapter.deletePrivateIfVersion).not.toHaveBeenCalled();
+  });
+
   it("preserves all original video bytes and derives the checksum server-side", async () => {
     const { adapter, objects } = privateStore();
     const bytes = Buffer.concat([Buffer.from("000000186674797069736f6d0000020069736f6d69736f32", "hex"), Buffer.from([0, 255, 13, 10, 1, 0, 128])]);

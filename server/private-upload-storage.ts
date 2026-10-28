@@ -41,15 +41,27 @@ export type PrivateUploadResult =
   | { status: "unknown"; reason: string }
   | { status: "conflict"; reason: string };
 
+/** Stop awaiting a stalled source/provider without treating a timed-out write as
+ * failed. The underlying provider may finish later; callers retain its charge. */
+export function withUploadAbort<T>(operation: Promise<T>, signal?: AbortSignal): Promise<T> {
+  if (!signal) return operation;
+  return new Promise<T>((resolve, reject) => {
+    const abort = () => reject(new Error("Upload operation aborted"));
+    signal.addEventListener("abort", abort, { once: true });
+    operation.then(resolve, reject).finally(() => signal.removeEventListener("abort", abort));
+    if (signal.aborted) { signal.removeEventListener("abort", abort); abort(); }
+  });
+}
+
 /** Standalone pre-integration receiver. Does NOT authorize, publish an Asset,
  * scan malware, mark an intent ready, release quota, retry, or delete objects.
- * The issued-only intent foundation MUST NOT call this until durable receiving/
- * reconciliation states exist. A confirmed receipt means private storage only.
- * Callers must impose a transport timeout/cancellation policy on the source.
+ * Durable callers commit a receiving lease first and persist the digest through
+ * beforeStore. A confirmed receipt means private storage only.
  */
 export async function receivePrivateUpload(
   adapter: PrivateUploadStorage,
-  input: { key: string; source: AsyncIterable<Uint8Array>; expectedBytes: number },
+  input: { key: string; source: AsyncIterable<Uint8Array>; expectedBytes: number;
+    signal?: AbortSignal; beforeStore?: (prepared: { bytes: number; sha256: string }) => Promise<void> },
 ): Promise<PrivateUploadResult> {
   const { key, expectedBytes } = input;
   if (typeof key !== "string" || !/^[A-Za-z0-9][A-Za-z0-9/_-]{0,255}$/.test(key) || key.includes("//") || key.endsWith("/")) {
@@ -66,8 +78,14 @@ export async function receivePrivateUpload(
   // allocating a second concatenation buffer. Copy before requesting next chunk.
   const bytes = Buffer.alloc(expectedBytes);
   let received = 0, chunks = 0;
+  const iterator = input.source[Symbol.asyncIterator]();
+  let sourceFinished = false;
   try {
-    for await (const chunk of input.source) {
+    while (true) {
+      if (input.signal?.aborted) throw new Error("Source aborted");
+      const next = await withUploadAbort(iterator.next(), input.signal);
+      if (next.done) { sourceFinished = true; break; }
+      const chunk = next.value;
       if (!(chunk instanceof Uint8Array) || ++chunks > 65536) return { status: "rejected", reason: "invalid_source" };
       if (chunk.byteLength > expectedBytes - received) return { status: "rejected", reason: "size_exceeded" };
       bytes.set(chunk, received);
@@ -75,16 +93,35 @@ export async function receivePrivateUpload(
     }
   } catch {
     return { status: "rejected", reason: "source_failed" };
+  } finally {
+    // return() can itself wait forever behind a stalled next(). Request cleanup
+    // without letting that untrusted producer hold the receiver open.
+    if (!sourceFinished && iterator.return) {
+      try {
+        const cleanupTimeout = AbortSignal.timeout(1_000);
+        await withUploadAbort(iterator.return(), input.signal ? AbortSignal.any([input.signal, cleanupTimeout]) : cleanupTimeout);
+      } catch { /* Cancellation or a broken producer must not block settlement. */ }
+    }
   }
   if (received !== expectedBytes) return { status: "rejected", reason: "size_mismatch" };
   const sha256 = createHash("sha256").update(bytes).digest("hex");
 
   try {
-    const outcome = await adapter.putPrivateIfAbsent({ key, bytes, sha256 });
+    if (input.signal?.aborted) throw new Error("Source aborted");
+    await input.beforeStore?.({ bytes: received, sha256 });
+    if (input.signal?.aborted) return { status: "unknown", reason: "prepared_upload_aborted" };
+  } catch {
+    // Preparation may have committed even when the DB acknowledgement was lost.
+    // Do not write storage, or claim this as a source rejection that releases quota.
+    return { status: "unknown", reason: "preparation_unconfirmed" };
+  }
+
+  try {
+    const outcome = await withUploadAbort(adapter.putPrivateIfAbsent({ key, bytes, sha256 }), input.signal);
     if (outcome.status === "unknown") return { status: "unknown", reason: "put_unconfirmed" };
     if (outcome.status !== "created" && outcome.status !== "exists") return { status: "unknown", reason: "invalid_put_result" };
     if (outcome.status === "created" && (typeof outcome.version !== "string" || !outcome.version || outcome.version.length > 1024)) return { status: "unknown", reason: "invalid_version" };
-    const head = await adapter.headPrivate(key, outcome.status === "created" ? outcome.version : undefined);
+    const head = await withUploadAbort(adapter.headPrivate(key, outcome.status === "created" ? outcome.version : undefined), input.signal);
     if (head.status !== "found") return { status: "unknown", reason: "object_unconfirmed" };
     if (head.private !== true || typeof head.version !== "string" || !head.version || head.version.length > 1024) return { status: "unknown", reason: "private_version_unconfirmed" };
     if (outcome.status === "created" && outcome.version !== head.version) return { status: "unknown", reason: "version_mismatch" };
