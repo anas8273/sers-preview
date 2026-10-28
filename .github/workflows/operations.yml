@@ -69,6 +69,8 @@ jobs:
           docker compose -f compose.staging.yml run --rm seed-demo verify-demo
       - name: Validate image contents, schema and configuration before release
         run: docker compose -f compose.staging.yml run --rm --no-deps app preflight | tee "$RUNNER_TEMP/preflight-result.json"
+      - name: Render actual PDF and visual Word in the non-root runtime
+        run: docker compose -f compose.staging.yml run --rm --no-deps -e GITHUB_ACTIONS=true -e SERS_OUTPUT_RUNTIME_PROBE=disposable-ci-only app verify-output-runtime | tee "$RUNNER_TEMP/output-runtime-result.json"
       - name: Verify production entrypoint readiness and explicit worker
         run: |
           docker compose -f compose.staging.yml up -d --wait --wait-timeout 240 app worker
@@ -96,6 +98,7 @@ jobs:
           if-no-files-found: ignore
           path: |
             ${{ runner.temp }}/preflight-result.json
+            ${{ runner.temp }}/output-runtime-result.json
             ${{ runner.temp }}/failure-result.json
             ${{ runner.temp }}/rollback-result.json
             ${{ runner.temp }}/restore-result.json
@@ -109,4 +112,4 @@ jobs:
         run: |
           docker compose -f compose.staging.yml down --volumes --remove-orphans
           git worktree remove --force "$RUNNER_TEMP/sers-previous" || true
-          rm -rf "$RUNNER_TEMP/sers-secrets" "$RUNNER_TEMP/sers-backups" "$RUNNER_TEMP/restore-result.json" "$RUNNER_TEMP/preflight-result.json" "$RUNNER_TEMP/failure-result.json" "$RUNNER_TEMP/rollback-result.json"
+          rm -rf "$RUNNER_TEMP/sers-secrets" "$RUNNER_TEMP/sers-backups" "$RUNNER_TEMP/restore-result.json" "$RUNNER_TEMP/preflight-result.json" "$RUNNER_TEMP/output-runtime-result.json" "$RUNNER_TEMP/failure-result.json" "$RUNNER_TEMP/rollback-result.json"
