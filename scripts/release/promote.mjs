@@ -42,7 +42,13 @@ export async function promote(directory, output, env = process.env) {
   const provenance = { format: 1, repo: context.repo, mergedMain: context.mainSha, sourceHead: candidate.sourceHead, sourceTree: candidate.sourceTree, testedMerge: candidate.testedMerge, prNumber: candidate.prNumber, image: { reference: published.reference, tag: tagged, imageId: candidate.appImageId, platform: candidate.platform }, archive: candidate.archive, artifact: evidence.artifact, gates: evidence.gates, dependencies: candidate.dependencies, publishedAt: new Date().toISOString(), runtimeIdentity: 'operator-configured', syntheticProof: true, realOAuthVerified: false, externalDeploymentVerified: false };
   await writeJson(path.join(destination, 'provenance.json'), provenance);
   const guide = await readFile(path.join(root, 'docs/operations/TESTED_RUNTIME_RELEASE.md'), 'utf8');
-  await writeFile(path.join(destination, 'RELEASE.md'), guide.replaceAll('(STAGING_RUNBOOK.md)', `(https://github.com/${context.repo}/blob/${context.mainSha}/docs/operations/STAGING_RUNBOOK.md)`), { mode: 0o600, flag: 'wx' });
+  const configuredGuide = await atStage('package', () => {
+    const marker = '<!-- SERS_RELEASE_REVISION -->';
+    if (guide.split(marker).length !== 2) throw new Error('Release guide must contain one revision marker');
+    return guide.replace(marker, '```bash\nexport SERS_BUILD_REVISION=' + candidate.testedMerge + '\n```')
+      .replaceAll('(STAGING_RUNBOOK.md)', `(https://github.com/${context.repo}/blob/${context.mainSha}/docs/operations/STAGING_RUNBOOK.md)`);
+  });
+  await writeFile(path.join(destination, 'RELEASE.md'), configuredGuide, { mode: 0o600, flag: 'wx' });
   await writePackageChecksums(destination);
   if (env.GITHUB_STEP_SUMMARY) await writeFile(env.GITHUB_STEP_SUMMARY, `### Tested SERS runtime published\n\nImage: \`${published.reference}\`\n\nSource: \`${candidate.sourceHead}\`; merged main: \`${context.mainSha}\`. All four latest CI workflow attempts and the exact portable image were verified. No image rebuild or host deployment occurred. Configure real SERS OAuth and the host before use.\n`, { flag: 'a' });
   return { published: true, image: published.reference, sourceHead: candidate.sourceHead, mergedMain: context.mainSha, deploymentPerformed: false };

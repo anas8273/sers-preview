@@ -19,6 +19,10 @@
 
 بعد توفير إعدادات SERS وأسراره على المضيف وفق [دليل التشغيل](STAGING_RUNBOOK.md)، استعمل ملفي Compose معًا في كل الأوامر:
 
+تتضمن نسخة `RELEASE.md` داخل الحزمة أمر ضبط `SERS_BUILD_REVISION` بالقيمة التي اختُبرت فعليًا. يلزم هذا المتغير لقراءة Compose الأساسي حتى مع إزالة البناء من الإعداد النهائي؛ لا تحتاج إلى نسخة git على المضيف.
+
+<!-- SERS_RELEASE_REVISION -->
+
 ```bash
 docker compose -f compose.staging.yml -f compose.release.yml config --quiet
 docker compose -f compose.staging.yml -f compose.release.yml pull
