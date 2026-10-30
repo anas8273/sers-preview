@@ -183,6 +183,69 @@ test("production auth browser journey with synthetic issuer: login, account, wor
       return (await fetch(url)).status;
     }, workId);
     assert([403, 404].includes(forbiddenReport));
+
+    // A failed autosave must survive a logout initiated in another live tab.
+    // The old account's readable UI locks immediately; a bounded ciphertext
+    // recovery screen keeps the tab open until the encrypted write succeeds.
+    await page.goto(`${harness.base}/account`); await visible(page, "معرّف حسابك:");
+    await click(page, "تسجيل الخروج"); await visible(page, "تسجيل الدخول");
+    harness.loginAs(authorization.openId);
+    await page.goto(reportUrl); await visible(page, "تسجيل الدخول");
+    await Promise.all([page.waitForNavigation(), page.click('a[href^="/api/oauth/start"]')]);
+    await page.waitForSelector("#issuer-sign-in");
+    await Promise.all([page.waitForNavigation({ waitUntil: "networkidle0" }), page.click("#issuer-sign-in")]);
+    await page.waitForSelector("textarea");
+    const logoutTab = await context.newPage(); await logoutTab.goto(`${harness.base}/account`);
+    await visible(logoutTab, "معرّف حسابك:");
+    await page.bringToFront();
+    await page.evaluate(() => {
+      Object.defineProperty(navigator, "onLine", { configurable: true, get: () => false });
+      window.dispatchEvent(new Event("offline"));
+      const original = Storage.prototype.setItem;
+      (window as any).__restoreSyntheticStorage = () => { Storage.prototype.setItem = original; };
+      Storage.prototype.setItem = function(name, value) {
+        if (name.startsWith("sers:vault:v1:")) throw new DOMException("Synthetic quota failure", "QuotaExceededError");
+        return original.call(this, name, value);
+      };
+    });
+    const failedDraft = `PRIVATE_QUOTA_FAILED_DRAFT_${harness.prefix}`;
+    await page.$eval("textarea", (element, text) => {
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(element, text);
+      element.dispatchEvent(new Event("input", { bubbles: true }));
+    }, failedDraft);
+    await page.waitForSelector('[data-private-storage-error="true"]');
+    await logoutTab.bringToFront(); await click(logoutTab, "تسجيل الخروج"); await visible(logoutTab, "تسجيل الدخول");
+    await page.bringToFront(); await page.waitForSelector('[data-private-recovery="blocked"]');
+    assert.equal(await page.$("textarea"), null);
+    assert.equal(await page.evaluate(text => document.body.innerText.includes(text), failedDraft), false);
+    assert.equal(await page.evaluate(text => JSON.stringify({ ...localStorage }).includes(text), failedDraft), false);
+    await visible(page, "قد تُفقد إذا أغلقته");
+    // A different account may sign in in the other tab while the old draft
+    // remains locked. It still cannot read that report or its local cache.
+    await Promise.all([logoutTab.waitForNavigation(), logoutTab.click('a[href^="/api/oauth/start"]')]);
+    await logoutTab.waitForSelector("#issuer-sign-in");
+    await Promise.all([logoutTab.waitForNavigation({ waitUntil: "networkidle0" }), logoutTab.click("#issuer-sign-in")]);
+    await visible(logoutTab, "معرّف حسابك:");
+    assert.equal((await decryptedRecords(logoutTab))[`sers:report-draft:${workId}`], undefined);
+    const recoveryForbiddenReport = await logoutTab.evaluate(async id => {
+      const url = `/api/trpc/domain.reportDraft.get?input=${encodeURIComponent(JSON.stringify({ json: { workItemId: id } }))}`;
+      return (await fetch(url)).status;
+    }, workId);
+    assert([403, 404].includes(recoveryForbiddenReport));
+    await click(logoutTab, "تسجيل الخروج"); await visible(logoutTab, "تسجيل الدخول");
+    await logoutTab.close();
+    await page.bringToFront();
+    await page.evaluate(() => { (window as any).__restoreSyntheticStorage(); });
+    await Promise.all([page.waitForNavigation(), click(page, "إعادة حفظ النسخة المشفّرة")]);
+    await visible(page, "تسجيل الدخول");
+    harness.loginAs(authorization.openId);
+    await Promise.all([page.waitForNavigation(), page.click('a[href^="/api/oauth/start"]')]);
+    await page.waitForSelector("#issuer-sign-in");
+    await Promise.all([page.waitForNavigation({ waitUntil: "networkidle0" }), page.click("#issuer-sign-in")]);
+    assert.equal(page.url(), reportUrl);
+    await page.waitForFunction(text => (document.querySelector("textarea") as HTMLTextAreaElement)?.value === text, {}, failedDraft);
+    await visible(page, "محفوظ في الخادم");
+    await page.reload(); await page.waitForFunction(text => (document.querySelector("textarea") as HTMLTextAreaElement)?.value === text, {}, failedDraft);
     await context.close();
   } finally { await browser?.close(); await harness.close(); }
 });

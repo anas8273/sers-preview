@@ -1,0 +1,49 @@
+name: SERS Tested Runtime Release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Only trusted main code can run a publisher. PR jobs never receive package writes.
+permissions: {}
+
+concurrency:
+  group: sers-runtime-publication
+  cancel-in-progress: false
+
+jobs:
+  promote-tested-image:
+    if: github.ref == 'refs/heads/main' && github.repository == 'anas8273/sers-preview'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      actions: read
+      packages: write
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+      - name: Verify merged source, latest CI attempts, artifact identity and archive digest
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node scripts/release/select-candidate.mjs "$RUNNER_TEMP/release-candidate"
+      - name: Publish the tested image without rebuilding and create pinned deployment files
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node scripts/release/promote.mjs "$RUNNER_TEMP/release-candidate" "$RUNNER_TEMP/sers-release"
+      - name: Preserve the release provenance and deployment package
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: sers-release-${{ github.sha }}
+          path: ${{ runner.temp }}/sers-release
+          if-no-files-found: error
+          retention-days: 30

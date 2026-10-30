@@ -67,13 +67,53 @@ function AuthenticatedWorkspace({ children, required }: { children: ReactNode; r
 
 export default function PrivateWorkspace({ children }: { children: ReactNode }) {
   const [path] = useLocation();
+  const queryClient = useQueryClient();
+  const [suspended, setSuspended] = useState<"saving" | "blocked" | null>(null);
+  const resetting = useRef(false);
+  const retryRecovery = async () => {
+    setSuspended("saving");
+    try {
+      await privateLocalStorage.retryEncryptedRecovery();
+      await clearPrivateQueryCache(queryClient);
+      window.location.reload();
+    } catch { setSuspended("blocked"); }
+  };
   useEffect(() => {
-    let reloading = false;
-    const reset = () => { if (reloading) return; reloading = true; document.documentElement.style.visibility = "hidden"; void privateLocalStorage.prepareLogout().catch(() => {}).finally(() => { privateLocalStorage.lock(); window.location.reload(); }); };
+    // Show only the neutral recovery screen after private children unmount.
+    if (suspended) document.documentElement.style.visibility = "";
+  }, [suspended]);
+  useEffect(() => {
+    const reset = () => {
+      if (resetting.current) return;
+      resetting.current = true;
+      document.documentElement.style.visibility = "hidden";
+      // This immediately invalidates the readable key and records. The old
+      // account can only contribute ciphertext to the bounded recovery buffer.
+      const preservation = privateLocalStorage.suspendForAuthChange();
+      setSuspended("saving");
+      void Promise.all([preservation, clearPrivateQueryCache(queryClient)])
+        .then(() => window.location.reload()).catch(() => setSuspended("blocked"));
+    };
     const off = onRemoteAuthChange(reset);
     const restore = (event: PageTransitionEvent) => { if (event.persisted) reset(); };
+    // Covers a session invalidation discovered by the auth query before a
+    // cross-tab broadcast arrives; lock() already sealed pending autosaves.
+    const recovery = () => { if (privateLocalStorage.hasEncryptedRecovery) reset(); };
+    const leaving = (event: BeforeUnloadEvent) => { if (privateLocalStorage.hasEncryptedRecovery) { event.preventDefault(); event.returnValue = ""; } };
     window.addEventListener("pageshow", restore);
-    return () => { off(); window.removeEventListener("pageshow", restore); };
-  }, []);
+    window.addEventListener("sers-private-storage-change", recovery);
+    window.addEventListener("beforeunload", leaving);
+    recovery();
+    return () => { off(); window.removeEventListener("pageshow", restore); window.removeEventListener("sers-private-storage-change", recovery); window.removeEventListener("beforeunload", leaving); };
+  }, [queryClient]);
+  if (suspended) return <main dir="rtl" data-private-recovery={suspended} className="min-h-screen flex flex-col items-center justify-center gap-4 bg-slate-50 p-8 text-center">
+    <h1 className="text-2xl font-bold">أُغلقت مساحة العمل بعد تغيّر الجلسة</h1>
+    {suspended === "saving" ? <p role="status">جارٍ حفظ التعديلات المشفّرة قبل متابعة الدخول...</p> : <>
+      <p role="alert" className="max-w-xl">لم يكتمل حفظ التعديلات على الجهاز. النسخة المشفّرة المتبقية مؤقتة في هذا التبويب؛ قد تُفقد إذا أغلقته أو أعدت تحميله قبل نجاح الحفظ.</p>
+      {privateLocalStorage.recoveryIncomplete && <p role="alert" className="max-w-xl text-red-800">تعذر الاحتفاظ ببعض التعديلات غير المحفوظة قبل قفل الجلسة. قد تُفقد هذه التعديلات؛ تبقى النسخة المحفوظة سابقًا إن وُجدت.</p>}
+      <button className="rounded-xl bg-teal-700 px-6 py-3 font-bold text-white" onClick={() => void retryRecovery()}>إعادة حفظ النسخة المشفّرة</button>
+      {privateLocalStorage.canAcknowledgeRecoveryLoss && <button className="underline text-red-800" onClick={() => { privateLocalStorage.acknowledgeRecoveryLoss(); window.location.reload(); }}>أفهم فقد التعديلات غير المحفوظة، متابعة الدخول</button>}
+    </>}
+  </main>;
   return <AuthenticatedWorkspace required={isPrivateWorkspacePath(path)}>{children}</AuthenticatedWorkspace>;
 }

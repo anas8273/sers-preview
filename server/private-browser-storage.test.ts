@@ -36,6 +36,49 @@ describe("private browser cache boundaries", () => {
     store.fail = false; await vault.retry(); await vault.prepareLogout(); vault.lock();
     await vault.unlock(alice); expect(vault.getItem("report")).toBe("UNSAVED");
   });
+  it("locks immediately on remote logout and preserves a failed autosave as ciphertext until retry", async () => {
+    const { store, vault } = create(); await vault.unlock(alice);
+    await vault.setItemDurably("report", "OLDER_SERVER_DRAFT");
+    store.fail = true; vault.setItem("report", "PRIVATE_UNSENT_DRAFT");
+    await expect(vault.flush()).rejects.toThrow();
+    const suspended = vault.suspendForAuthChange();
+    expect(vault.activeScope).toBeNull();
+    expect(() => vault.getItem("report")).toThrow();
+    await expect(suspended).rejects.toThrow();
+    expect(vault.hasEncryptedRecovery).toBe(true);
+    expect(vault.recoveryIncomplete).toBe(false);
+    expect(JSON.stringify(Array.from(store.data))).not.toContain("PRIVATE_UNSENT_DRAFT");
+    // A new identity cannot replace the pending recovery or expose the old key.
+    await expect(vault.unlock(bob)).rejects.toThrow();
+    expect(vault.activeScope).toBeNull();
+    store.fail = false; await vault.retryEncryptedRecovery();
+    expect(vault.activeScope).toBeNull(); expect(vault.hasEncryptedRecovery).toBe(false);
+    await vault.unlock(bob); expect(vault.getItem("report")).toBeNull();
+    await vault.unlock(alice); expect(vault.getItem("report")).toBe("PRIVATE_UNSENT_DRAFT");
+  });
+  it("retains an autosave still encrypting when a session is invalidated, without reopening readable state", async () => {
+    const { store, vault } = create(); await vault.unlock(alice);
+    vault.setItem("report", "PENDING_ENCRYPTION");
+    vault.lock();
+    expect(vault.activeScope).toBeNull(); expect(() => vault.getItem("report")).toThrow();
+    await vault.retryEncryptedRecovery();
+    expect(vault.activeScope).toBeNull();
+    expect(JSON.stringify(Array.from(store.data))).not.toContain("PENDING_ENCRYPTION");
+    await vault.unlock(alice); expect(vault.getItem("report")).toBe("PENDING_ENCRYPTION");
+  });
+  it("bounds recovery records and requires explicit acknowledgement when preservation was incomplete", async () => {
+    const { store, vault } = create(); await vault.unlock(alice); store.fail = true;
+    for (let i = 0; i < 65; i++) vault.setItem(`draft-${i}`, `PRIVATE_${i}`);
+    await expect(vault.flush()).rejects.toThrow();
+    await expect(vault.suspendForAuthChange()).rejects.toThrow();
+    expect(vault.recoveryIncomplete).toBe(true);
+    expect(() => vault.acknowledgeRecoveryLoss()).toThrow();
+    store.fail = false; await expect(vault.retryEncryptedRecovery()).rejects.toThrow();
+    expect(store.length).toBe(64); expect(vault.canAcknowledgeRecoveryLoss).toBe(true);
+    await expect(vault.unlock(bob)).rejects.toThrow();
+    vault.acknowledgeRecoveryLoss(); await vault.unlock(bob); expect(vault.length).toBe(0);
+    await vault.unlock(alice); expect(vault.length).toBe(64);
+  });
   it("does not publish failed evidence confirmation even to in-memory readers", async () => {
     const { store, vault } = create(); await vault.unlock(alice);
     await vault.setItemDurably("mapping", "before"); store.fail = true;

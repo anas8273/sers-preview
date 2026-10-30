@@ -6,7 +6,8 @@
       "repository-safety",
       "mysql-legacy",
       "mysql-domain-integration",
-      "compose-backup-restore"
+      "compose-backup-restore",
+      "candidate-portability"
     ]
   },
   "enforce_admins": true,

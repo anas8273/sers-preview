@@ -19,8 +19,11 @@ jobs:
     defaults:
       run:
         shell: bash
+    outputs:
+      candidate-artifact-id: ${{ steps.candidate-upload.outputs.artifact-id }}
     env:
       COMPOSE_PROJECT_NAME: sers-ci-${{ github.run_id }}-${{ github.run_attempt }}
+      SERS_IMAGE_TAG: ci-${{ github.run_id }}-${{ github.run_attempt }}
       SERS_DATABASE_NAME: sers_demo
       SERS_BUILD_REVISION: ${{ github.sha }}
       SERS_PREVIOUS_REVISION: ${{ github.event.pull_request.base.sha || github.sha }}
@@ -37,11 +40,11 @@ jobs:
     steps:
       - name: Set disposable private paths
         run: printf 'SERS_SECRETS_DIR=%s/sers-secrets\n' "$RUNNER_TEMP" >> "$GITHUB_ENV"
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0
       - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 22
           cache: pnpm
@@ -51,13 +54,17 @@ jobs:
         run: |
           node node_modules/typescript/bin/tsc -p scripts/operations/tsconfig.json
           node --import tsx --test scripts/operations/*.test.mts
+          node --test scripts/release/*.test.mjs
       - name: Create disposable secrets and validate Compose
         run: |
           node scripts/operations/init-secrets.mjs "$SERS_SECRETS_DIR"
           docker compose -f compose.staging.yml config --quiet
           docker compose -f compose.demo.yml config --quiet
       - name: Build non-root runtime with real parsers
-        run: docker compose -f compose.staging.yml build app
+        run: |
+          docker compose -f compose.staging.yml build app
+          image_id=$(docker image inspect "sers-staging:$SERS_IMAGE_TAG" --format '{{.Id}}')
+          printf 'SERS_TESTED_IMAGE_ID=%s\n' "$image_id" >> "$GITHUB_ENV"
       - name: Build the actual previous code artifact for the rollback decision
         run: |
           git worktree add --detach "$RUNNER_TEMP/sers-previous" "$SERS_PREVIOUS_REVISION"
@@ -92,9 +99,24 @@ jobs:
           node scripts/operations/restore-drill.mjs "$backup_dir" | tee "$RUNNER_TEMP/restore-result.json"
           node --input-type=module -e 'import fs from "node:fs";const r=JSON.parse(fs.readFileSync(process.env.RUNNER_TEMP+"/restore-result.json","utf8"));if(!r.passed||r.privateContentVerified.uploads<1||r.privateContentVerified.outputs<1||r.recoveryObservations.actualLostCommits!==null||r.recoveryObservations.fullServiceRtoMeasured!==false||!Object.values(r.recoveryObservations.checks).every(v=>v===true))process.exit(1)'
           node scripts/operations/verify-restore-isolation.mjs "$backup_dir"
+      - name: Export the exact exercised runtime with immutable provenance
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        run: node scripts/release/export-candidate.mjs "$RUNNER_TEMP/release-candidate"
+      - name: Preserve the tested image for verification and later main promotion
+        id: candidate-upload
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: sers-runtime-${{ github.event.pull_request.head.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/release-candidate/candidate.json
+            ${{ runner.temp }}/release-candidate/image.tar.gz
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 7
       - name: Preserve sanitized measurements only
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: operations-measurements-${{ github.run_id }}
           retention-days: 14
@@ -116,3 +138,27 @@ jobs:
           docker compose -f compose.staging.yml down --volumes --remove-orphans
           git worktree remove --force "$RUNNER_TEMP/sers-previous" || true
           rm -rf "$RUNNER_TEMP/sers-secrets" "$RUNNER_TEMP/sers-backups" "$RUNNER_TEMP/restore-result.json" "$RUNNER_TEMP/preflight-result.json" "$RUNNER_TEMP/output-runtime-result.json" "$RUNNER_TEMP/failure-result.json" "$RUNNER_TEMP/rollback-result.json"
+
+  candidate-portability:
+    needs: compose-backup-restore
+    if: needs.compose-backup-restore.outputs.candidate-artifact-id != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+      - name: Retrieve the exact candidate on a fresh runner
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          artifact-ids: ${{ needs.compose-backup-restore.outputs.candidate-artifact-id }}
+          path: ${{ runner.temp }}/release-candidate
+          merge-multiple: true
+      - name: Load and verify the image and build-free Compose without registry credentials
+        run: node scripts/release/verify-candidate-runtime.mjs "$RUNNER_TEMP/release-candidate" "$RUNNER_TEMP/release-portability"
