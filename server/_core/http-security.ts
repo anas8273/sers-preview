@@ -11,6 +11,7 @@ export function trustedProxyAddresses(value = process.env.SERS_TRUSTED_PROXY_IPS
 }
 export function registerHttpSecurity(app: Express, options: { proxies?: string; secure?: boolean; origin?: string } = {}) {
   const addresses = trustedProxyAddresses(options.proxies);
+  const canonicalOrigin = options.origin ? new URL(options.origin).origin : undefined;
   app.set("trust proxy", addresses.length ? addresses : false);
   app.disable("x-powered-by");
   app.use((req, res, next) => {
@@ -27,7 +28,7 @@ export function registerHttpSecurity(app: Express, options: { proxies?: string; 
     }
     // Browser mutation requests with a foreign origin are rejected before body
     // parsing. CLI clients without Origin still require normal authorization.
-    if (options.origin && !["GET", "HEAD", "OPTIONS"].includes(req.method) && req.headers.origin && req.headers.origin !== options.origin) {
+    if (canonicalOrigin && !["GET", "HEAD", "OPTIONS"].includes(req.method) && req.headers.origin && req.headers.origin !== canonicalOrigin) {
       res.status(403).json({ error: "Foreign origin is not permitted" }); return;
     }
     next();

@@ -4,7 +4,7 @@ import { registerHttpSecurity, trustedProxyAddresses } from "./_core/http-securi
 const servers: ReturnType<ReturnType<typeof express>["listen"]>[] = [];
 afterEach(async () => { for (const server of servers.splice(0)) { server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); } });
 async function start(proxies = "") {
-  const app = express(); registerHttpSecurity(app, { proxies, secure: true, origin: "https://sers.example" });
+  const app = express(); registerHttpSecurity(app, { proxies, secure: true, origin: "https://SERS.EXAMPLE/" });
   app.all("/api/probe", (req, res) => res.json({ ip: req.ip, protocol: req.protocol }));
   const server = app.listen(0, "127.0.0.1"); servers.push(server);
   await new Promise<void>(resolve => server.once("listening", resolve)); const address = server.address();
