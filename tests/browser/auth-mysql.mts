@@ -101,18 +101,21 @@ test("production auth browser journey with synthetic issuer: login, account, wor
     const reportUrl = `${harness.base}/work/${workId}/report`;
     await page.goto(reportUrl); await page.waitForSelector("textarea");
     const reportText = `PRIVATE_SERVER_REPORT_${harness.prefix}`;
+    const savedReportResponse = page.waitForResponse(response => response.url().includes("reportDraft.save"));
     await page.$eval("textarea", (element, text) => {
       Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(element, text);
       element.dispatchEvent(new Event("input", { bubbles: true }));
     }, reportText);
+    assert.equal((await savedReportResponse).status(), 200);
     await visible(page, "محفوظ في الخادم");
     await page.reload(); await page.waitForFunction(text => (document.querySelector("textarea") as HTMLTextAreaElement)?.value === text, {}, reportText);
     // Keep a second live tab open to prove remote logout clears displayed data.
     const otherTab = await context.newPage(); await otherTab.goto(reportUrl);
     await otherTab.waitForFunction(text => (document.querySelector("textarea") as HTMLTextAreaElement)?.value === text, {}, reportText);
+    await decryptedRecords(otherTab);
     // Create an offline backup through the editor while the authenticated page
     // is open, then restore the network before logout.
-    await page.evaluate(() => { Object.defineProperty(navigator, "onLine", { configurable: true, get: () => false }); window.dispatchEvent(new Event("offline")); });
+    await page.evaluate('Object.defineProperty(navigator, "onLine", { configurable: true, get() { return false; } }); window.dispatchEvent(new Event("offline"));');
     const draftText = `PRIVATE_UNSENT_DRAFT_${harness.prefix}`;
     await page.$eval("textarea", (element, text) => {
       Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(element, text);

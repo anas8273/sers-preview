@@ -238,3 +238,14 @@ node scripts/operations/check-public-staging.mjs
 TLS الفعلية وإعداد تسجيل SERS والمضيف وسياسة الاحتفاظ وحماية فرع main مسؤوليات
 تشغيلية يجب إثبات تنفيذها. فعّل حماية الفرع بفحوص CI المطلوبة؛ لا تعتمد على اللون
 الأخضر دون ربطه بنفس SHA المرشح.
+
+إعداد حماية جاهز للمراجعة في `deploy/github-main-protection.json`. يفرض PR وفحوص
+الوظائف الخمس الفعلية وأحدث قاعدة، ويمنع force-push والحذف ويطبقها على المسؤولين.
+لا يفرض مراجعًا إضافيًا على مستودع بمالك منفرد. لم يُطبّق تلقائيًا؛ يلزم حساب
+GitHub بصلاحية إدارة المستودع، ثم التحقق من استجابة GitHub وظهور الحماية:
+
+```bash
+gh api --method PUT repos/anas8273/sers-preview/branches/main/protection \
+  --input deploy/github-main-protection.json
+gh api repos/anas8273/sers-preview/branches/main/protection
+```

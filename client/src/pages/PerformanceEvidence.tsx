@@ -671,17 +671,12 @@ export default function PerformanceEvidence() {
     if (!selectedJob || step === "select") return;
     // لا نحفظ أثناء عملية الرفع لتجنب crash من حجم base64 الكبير
     if (isUploadingRef.current) return;
-    // تأخير الحفظ لتجنب الحفظ المتكرر السريع
-    const timer = setTimeout(() => {
-      if (!isUploadingRef.current && confirmingEvidence.current.size === 0) {
-        saveStateToStorage({
-          step, jobId: selectedJob.id, themeId: selectedTheme.id,
-          criteriaData, personalInfo, customCriteria,
-          currentCriterionIndex, activeTab, expandedSubEvidence,
-        });
-      }
-    }, 500);
-    return () => clearTimeout(timer);
+    // Queue encryption immediately; a delayed timer could be cancelled by
+    // navigation/logout before prepareLogout has a write to wait for.
+    if (confirmingEvidence.current.size === 0) {
+      saveStateToStorage({ step, jobId: selectedJob.id, themeId: selectedTheme.id,
+        criteriaData, personalInfo, customCriteria, currentCriterionIndex, activeTab, expandedSubEvidence });
+    }
   }, [step, selectedJob, selectedTheme, criteriaData, personalInfo, customCriteria, currentCriterionIndex, activeTab, expandedSubEvidence]);
 
   // ===== حفظ تلقائي عند إغلاق المتصفح أو الانتقال =====

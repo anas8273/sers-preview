@@ -42,6 +42,14 @@ describe("private browser cache boundaries", () => {
     store.fail = false; await vault.unlock(alice); expect(vault.getItem("mapping")).toBe("before");
     await vault.setItemDurably("mapping", "confirmed"); await vault.unlock(alice); expect(vault.getItem("mapping")).toBe("confirmed");
   });
+  it("does not let a queued durable commit overwrite a later edit", async () => {
+    const { vault } = create(); await vault.unlock(alice);
+    const outdated = vault.setItemDurably("report", "older");
+    vault.setItem("report", "newer");
+    await expect(outdated).rejects.toThrow(); await vault.flush();
+    expect(vault.getItem("report")).toBe("newer");
+    await vault.unlock(alice); expect(vault.getItem("report")).toBe("newer");
+  });
   it("binds encrypted files to account and record, randomizes IVs and rejects tampering", async () => {
     const { vault } = create(); await vault.unlock(alice);
     const first = await vault.seal({ content: "secret" }, "file:one"), second = await vault.seal({ content: "secret" }, "file:one");

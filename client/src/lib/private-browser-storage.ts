@@ -22,6 +22,8 @@ export class PrivateBrowserVault {
   private queue: Promise<void> = Promise.resolve();
   private failure = false;
   private durableWrites = 0;
+  private revisions = new Map<string, number>();
+  private serial = 0;
   constructor(private store: () => Store, private crypt: Crypto, private changed: () => void = () => {}) {}
 
   get activeScope() { return this.cryptoKey ? this.scope : null; }
@@ -76,30 +78,33 @@ export class PrivateBrowserVault {
       }
       this.changed();
     } catch {
-      this.lock();
+      if (generation === this.generation) this.lock();
       throw new Error("تعذر فتح النسخة المحلية بأمان. لم تُحذف بياناتك؛ أعد المحاولة أو استخدم نسخة الخادم.");
     }
   }
   lock() {
     this.generation++; this.cryptoKey = undefined; this.scope = ""; this.frozen = false;
-    this.records.clear(); this.dirty.clear(); this.failure = false; this.durableWrites = 0; this.queue = Promise.resolve(); this.changed();
+    this.records.clear(); this.dirty.clear(); this.revisions.clear(); this.failure = false; this.durableWrites = 0; this.queue = Promise.resolve(); this.changed();
   }
   getItem(name: string) { this.current(); return this.records.get(name) ?? null; }
   get length() { this.current(); return this.records.size; }
   key(index: number) { this.current(); return Array.from(this.records.keys())[index] ?? null; }
   private schedule(name: string, value: string | null) {
     const current = this.current();
+    const revision = ++this.serial; this.revisions.set(name, revision);
     this.dirty.set(name, value); this.changed();
     this.queue = this.queue.then(async () => {
       this.assertCurrent(current.generation);
+      if (this.revisions.get(name) !== revision) return;
       const key = `${PREFIX}${current.scope}:${await this.recordId(name)}`;
-      if (value === null) { this.assertCurrent(current.generation); this.store().removeItem(key); }
+      if (value === null) { this.assertCurrent(current.generation); if (this.revisions.get(name) !== revision) return; this.store().removeItem(key); }
       else {
         const sealed = await this.seal({ name, value }, key);
         this.assertCurrent(current.generation);
+        if (this.revisions.get(name) !== revision) return;
         this.store().setItem(key, JSON.stringify(sealed));
       }
-      if (this.dirty.get(name) === value) this.dirty.delete(name);
+      if (this.revisions.get(name) === revision) this.dirty.delete(name);
       if (!this.dirty.size) this.failure = false;
     }).catch(() => {
       if (this.generation === current.generation) this.failure = true;
@@ -123,12 +128,14 @@ export class PrivateBrowserVault {
     const current = this.current();
     if (this.frozen) throw new Error("انتظر اكتمال تسجيل الخروج");
     if (name.length > 1024 || bytes(value).length > 8 * 1024 * 1024) throw new Error("النسخة المحلية أكبر من الحد المسموح");
+    const revision = ++this.serial; this.revisions.set(name, revision);
     this.durableWrites++; this.changed();
     const operation = this.queue.then(async () => {
       this.assertCurrent(current.generation);
       const key = `${PREFIX}${current.scope}:${await this.recordId(name)}`;
       const sealed = await this.seal({ name, value }, key);
       this.assertCurrent(current.generation);
+      if (this.revisions.get(name) !== revision) throw new Error("تغيرت البيانات أثناء الحفظ؛ أعد المحاولة");
       this.store().setItem(key, JSON.stringify(sealed));
       this.records.set(name, value);
       this.dirty.delete(name);
