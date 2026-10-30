@@ -1,4 +1,6 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { clearPrivateQueryCache } from "@/lib/private-query-cache";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { getLoginUrl } from "@/const";
@@ -23,6 +25,8 @@ function StorageNotice() {
 
 function AuthenticatedWorkspace({ children, required }: { children: ReactNode; required: boolean }) {
   const { user, loading, error, refresh } = useAuth();
+  const queryClient = useQueryClient();
+  const previousUser = useRef<number | null | undefined>(undefined);
   const [ready, setReady] = useState<number | null>(null);
   const [storageError, setStorageError] = useState("");
   const [attempt, setAttempt] = useState(0);
@@ -30,8 +34,12 @@ function AuthenticatedWorkspace({ children, required }: { children: ReactNode; r
     let cancelled = false;
     const controller = new AbortController();
     setReady(null); setStorageError(""); privateLocalStorage.lock();
-    if (!user) return;
     void (async () => {
+      if (previousUser.current !== (user?.id ?? null)) {
+        previousUser.current = user?.id ?? null;
+        await clearPrivateQueryCache(queryClient);
+      }
+      if (cancelled || !user) return;
       // Fetch outside QueryCache: the raw key must not become cached app state.
       const response = await fetch("/api/trpc/auth.browserStorageKey", { credentials: "include", cache: "no-store", signal: controller.signal });
       if (!response.ok) throw new Error("تعذر فتح مساحة العمل؛ تحقق من الاتصال وسجّل الدخول مجددًا عند الحاجة.");
@@ -41,7 +49,7 @@ function AuthenticatedWorkspace({ children, required }: { children: ReactNode; r
       if (!cancelled) setReady(user.id);
     })().catch(error => { if (!cancelled) setStorageError(error instanceof Error ? error.message : "تعذر فتح مساحة العمل"); });
     return () => { cancelled = true; controller.abort(); privateLocalStorage.lock(); };
-  }, [user?.id, attempt]);
+  }, [user?.id, attempt, queryClient]);
   if (!required) return <>{children}</>;
   if (loading) return <div dir="rtl" className="p-10 text-center">جارٍ التحقق من الجلسة...</div>;
   if (error) return <div dir="rtl" className="p-10 text-center" role="alert">تعذر التحقق من الجلسة. <button onClick={() => void refresh()} className="underline">إعادة المحاولة</button></div>;

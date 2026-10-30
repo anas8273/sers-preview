@@ -17,7 +17,13 @@ assert.equal(process.env.DATABASE_URL, "mysql://root:root@127.0.0.1:3306/sers_te
 test("production auth browser journey with synthetic issuer: login, account, work, logout, report re-entry, account isolation and denied cookie replay", { timeout: 120_000 }, async () => {
   const harness = await startAuthHarness();
   let browser: Awaited<ReturnType<typeof puppeteer.launch>> | undefined;
-  const visible = (page: Page, text: string) => page.waitForFunction(value => document.body.innerText.includes(value), {}, text);
+  const visible = async (page: Page, text: string) => {
+    try { await page.waitForFunction(value => document.body.innerText.includes(value), { polling: "mutation" }, text); }
+    catch (error) {
+      console.error("Synthetic browser checkpoint", await page.evaluate(() => ({ path: location.pathname, body: document.body.innerText.slice(0, 1800) })));
+      throw error;
+    }
+  };
   const click = async (page: Page, text: string) => {
     await page.waitForFunction(value => Array.from(document.querySelectorAll("button")).some(button => button.textContent?.trim() === value && !button.disabled), {}, text);
     await page.evaluate(value => {
@@ -113,6 +119,7 @@ test("production auth browser journey with synthetic issuer: login, account, wor
     const otherTab = await context.newPage(); await otherTab.goto(reportUrl);
     await otherTab.waitForFunction(text => (document.querySelector("textarea") as HTMLTextAreaElement)?.value === text, {}, reportText);
     await decryptedRecords(otherTab);
+    await page.bringToFront();
     // Create an offline backup through the editor while the authenticated page
     // is open, then restore the network before logout.
     await page.evaluate('Object.defineProperty(navigator, "onLine", { configurable: true, get() { return false; } }); window.dispatchEvent(new Event("offline"));');
@@ -132,6 +139,7 @@ test("production auth browser journey with synthetic issuer: login, account, wor
     const logoutResponse = page.waitForResponse(response => response.url().includes("auth.logout"));
     await click(page, "تسجيل الخروج"); assert.equal((await logoutResponse).status(), 200);
     await visible(page, "تسجيل الدخول");
+    await otherTab.bringToFront();
     await visible(otherTab, "تسجيل الدخول");
     assert.equal(await otherTab.$("textarea"), null);
     await otherTab.close();

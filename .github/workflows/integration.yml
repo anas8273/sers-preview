@@ -114,16 +114,22 @@ jobs:
       - name: Existing template DB suite with isolated fixtures
         run: pnpm exec vitest run server/templates-themes.test.ts
       - name: Build browser application
+        id: browser-build
         run: pnpm build
       - name: Browser to real MySQL share creation and revocation
+        if: ${{ !cancelled() && steps.browser-build.outcome == 'success' }}
         run: pnpm exec tsx --test tests/browser/share-mysql.mts
       - name: Browser account invitations, academic years, work and suspension
+        if: ${{ !cancelled() && steps.browser-build.outcome == 'success' }}
         run: pnpm exec tsx --test tests/browser/account-mysql.mts
       - name: Browser OAuth, persisted session, work creation, logout and replay denial
+        if: ${{ !cancelled() && steps.browser-build.outcome == 'success' }}
         run: pnpm exec tsx --test tests/browser/auth-mysql.mts
       - name: Browser evidence upload, real scan and private Word download
+        if: ${{ !cancelled() && steps.browser-build.outcome == 'success' }}
         env:
           SERS_SCANNER_INTEGRATION: "1"
         run: pnpm exec tsx --test tests/browser/evidence-mysql.mts
       - name: Browser AI suggestions require confirmation and preserve manual work
+        if: ${{ !cancelled() && steps.browser-build.outcome == 'success' }}
         run: pnpm exec tsx --test tests/browser/ai-safety.mts

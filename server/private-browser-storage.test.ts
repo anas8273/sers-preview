@@ -1,3 +1,5 @@
+import { QueryClient } from "@tanstack/react-query";
+import { clearPrivateQueryCache } from "../client/src/lib/private-query-cache";
 import { webcrypto } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { PrivateBrowserVault } from "../client/src/lib/private-browser-storage";
@@ -73,4 +75,23 @@ describe("private browser cache boundaries", () => {
 describe("OAuth return paths", () => {
   it.each(["/account", "/work", "/work/123/report", "/reports", "/performance-evidence"])("keeps a permitted path %s", path => expect(safeAuthReturnPath(path)).toBe(path));
   it.each(["https://evil.invalid", "//evil.invalid", "/\\evil.invalid", "/api/oauth/start", "/work/123/report?token=secret", "/work/123/report#secret", "/%2f%2fevil", "/work/0", "/work/123\n", undefined, ["/account"]])("rejects unsafe/secret-bearing return input %s", path => expect(safeAuthReturnPath(path)).toBe("/"));
+});
+
+
+describe("private query cache on identity change", () => {
+  it("removes previous-account records and prevents a late request from restoring them", async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const identity = [["auth", "me"], { type: "query" }];
+    const report = [["domain", "reportDraft", "get"], { input: { workItemId: 1 }, type: "query" }];
+    client.setQueryData(identity, { id: 2 });
+    client.setQueryData([["account", "overview"]], { private: "FIRST_ACCOUNT" });
+    let finish!: (value: unknown) => void;
+    const request = client.fetchQuery({ queryKey: report, queryFn: () => new Promise(resolve => { finish = resolve; }) }).catch(() => {});
+    await clearPrivateQueryCache(client);
+    finish({ private: "LATE_FIRST_ACCOUNT" }); await request;
+    expect(client.getQueryData(identity)).toEqual({ id: 2 });
+    expect(client.getQueryData(report)).toBeUndefined();
+    expect(client.getQueryCache().getAll()).toHaveLength(1);
+    client.clear();
+  });
 });
