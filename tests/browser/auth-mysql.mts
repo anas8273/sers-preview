@@ -31,6 +31,16 @@ test("production auth browser journey with synthetic issuer: login, account, wor
       if (!button) throw new Error(`Unavailable button: ${value}`); button.click();
     }, text);
   };
+  const logout = async (page: Page) => {
+    // auth.me becomes null before useAuth replaces the document. Await that
+    // real navigation before using the briefly visible signed-out controls.
+    await Promise.all([
+      page.waitForNavigation({ waitUntil: "networkidle0" }),
+      click(page, "تسجيل الخروج"),
+    ]);
+    await page.waitForSelector('a[href^="/api/oauth/start"]');
+    await visible(page, "تسجيل الدخول");
+  };
   const fill = async (page: Page, selector: string, value: string) => {
     await page.waitForSelector(selector);
     await page.$eval(selector, (element, text) => {
@@ -137,9 +147,12 @@ test("production auth browser journey with synthetic issuer: login, account, wor
     await page.evaluate(() => { delete (navigator as any).onLine; });
     await page.goto(`${harness.base}/account`); await visible(page, "معرّف حسابك:");
     const logoutResponse = page.waitForResponse(response => response.url().includes("auth.logout"));
-    await click(page, "تسجيل الخروج"); assert.equal((await logoutResponse).status(), 200);
-    await visible(page, "تسجيل الدخول");
-    await otherTab.bringToFront();
+    const remoteLogoutNavigation = otherTab.waitForNavigation({ waitUntil: "networkidle0" });
+    await Promise.all([
+      remoteLogoutNavigation,
+      logout(page).then(() => otherTab.bringToFront()),
+    ]);
+    assert.equal((await logoutResponse).status(), 200);
     await visible(otherTab, "تسجيل الدخول");
     assert.equal(await otherTab.$("textarea"), null);
     await otherTab.close();
@@ -168,7 +181,7 @@ test("production auth browser journey with synthetic issuer: login, account, wor
     await page.waitForFunction(text => (document.querySelector("textarea") as HTMLTextAreaElement)?.value === text, {}, draftText);
     await visible(page, "محفوظ في الخادم");
     await page.reload(); await page.waitForFunction(text => (document.querySelector("textarea") as HTMLTextAreaElement)?.value === text, {}, draftText);
-    await page.goto(`${harness.base}/account`); await visible(page, "معرّف حسابك:"); await click(page, "تسجيل الخروج"); await visible(page, "تسجيل الدخول");
+    await page.goto(`${harness.base}/account`); await visible(page, "معرّف حسابك:"); await logout(page);
     // A different identity in the SAME browser cannot obtain the original key,
     // local records, or the protected server report.
     await page.goto(reportUrl); await visible(page, "تسجيل الدخول");
@@ -188,7 +201,7 @@ test("production auth browser journey with synthetic issuer: login, account, wor
     // The old account's readable UI locks immediately; a bounded ciphertext
     // recovery screen keeps the tab open until the encrypted write succeeds.
     await page.goto(`${harness.base}/account`); await visible(page, "معرّف حسابك:");
-    await click(page, "تسجيل الخروج"); await visible(page, "تسجيل الدخول");
+    await logout(page);
     harness.loginAs(authorization.openId);
     await page.goto(reportUrl); await visible(page, "تسجيل الدخول");
     await Promise.all([page.waitForNavigation(), page.click('a[href^="/api/oauth/start"]')]);
@@ -215,12 +228,14 @@ test("production auth browser journey with synthetic issuer: login, account, wor
       element.dispatchEvent(new Event("input", { bubbles: true }));
     }, failedDraft);
     await page.waitForSelector('[data-private-storage-error="true"]');
-    await logoutTab.bringToFront(); await click(logoutTab, "تسجيل الخروج"); await visible(logoutTab, "تسجيل الدخول");
+    console.info("Synthetic browser recovery: quota failure surfaced");
+    await logoutTab.bringToFront(); await logout(logoutTab);
     await page.bringToFront(); await page.waitForSelector('[data-private-recovery="blocked"]');
     assert.equal(await page.$("textarea"), null);
     assert.equal(await page.evaluate(text => document.body.innerText.includes(text), failedDraft), false);
     assert.equal(await page.evaluate(text => JSON.stringify({ ...localStorage }).includes(text), failedDraft), false);
     await visible(page, "قد تُفقد إذا أغلقته");
+    console.info("Synthetic browser recovery: locked without displayed or persisted plaintext");
     // A different account may sign in in the other tab while the old draft
     // remains locked. It still cannot read that report or its local cache.
     await Promise.all([logoutTab.waitForNavigation(), logoutTab.click('a[href^="/api/oauth/start"]')]);
@@ -233,7 +248,8 @@ test("production auth browser journey with synthetic issuer: login, account, wor
       return (await fetch(url)).status;
     }, workId);
     assert([403, 404].includes(recoveryForbiddenReport));
-    await click(logoutTab, "تسجيل الخروج"); await visible(logoutTab, "تسجيل الدخول");
+    console.info("Synthetic browser recovery: other account denied");
+    await logout(logoutTab);
     await logoutTab.close();
     await page.bringToFront();
     await page.evaluate(() => { (window as any).__restoreSyntheticStorage(); });
@@ -247,6 +263,7 @@ test("production auth browser journey with synthetic issuer: login, account, wor
     await page.waitForFunction(text => (document.querySelector("textarea") as HTMLTextAreaElement)?.value === text, {}, failedDraft);
     await visible(page, "محفوظ في الخادم");
     await page.reload(); await page.waitForFunction(text => (document.querySelector("textarea") as HTMLTextAreaElement)?.value === text, {}, failedDraft);
+    console.info("Synthetic browser recovery: same-account draft restored after reload");
     await context.close();
   } finally { await browser?.close(); await harness.close(); }
 });
