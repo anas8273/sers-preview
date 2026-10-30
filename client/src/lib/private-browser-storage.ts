@@ -4,6 +4,11 @@
 export type VaultEnvelope = { version: 1; iv: string; ciphertext: string };
 type Store = Pick<Storage, "getItem" | "setItem" | "removeItem" | "key" | "length">;
 const PREFIX = "sers:vault:v1:";
+// Recovery survives an authentication change only in this live tab. It never
+// retains a readable record or exports the old account's key.
+const MAX_RECOVERY_RECORDS = 64;
+const MAX_RECOVERY_PLAINTEXT_BYTES = 16 * 1024 * 1024;
+const MAX_RECOVERY_CIPHERTEXT_BYTES = 24 * 1024 * 1024;
 const bytes = (value: string) => new TextEncoder().encode(value);
 const b64 = (value: Uint8Array) => {
   let text = "";
@@ -24,11 +29,18 @@ export class PrivateBrowserVault {
   private durableWrites = 0;
   private revisions = new Map<string, number>();
   private serial = 0;
+  private recovery = new Map<string, string | null>();
+  private recoveryTask: Promise<void> = Promise.resolve();
+  private recoveryBusy = 0;
+  private recoveryLost = false;
   constructor(private store: () => Store, private crypt: Crypto, private changed: () => void = () => {}) {}
 
   get activeScope() { return this.cryptoKey ? this.scope : null; }
   get hasPendingWrites() { return this.dirty.size > 0 || this.durableWrites > 0; }
   get hasWriteError() { return this.failure; }
+  get hasEncryptedRecovery() { return this.recoveryBusy > 0 || this.recovery.size > 0 || this.recoveryLost; }
+  get recoveryIncomplete() { return this.recoveryLost; }
+  get canAcknowledgeRecoveryLoss() { return this.recoveryLost && this.recoveryBusy === 0 && this.recovery.size === 0; }
   private current() {
     if (!this.cryptoKey) throw new Error("سجّل الدخول لفتح بياناتك الخاصة");
     return { key: this.cryptoKey, scope: this.scope, generation: this.generation };
@@ -59,6 +71,10 @@ export class PrivateBrowserVault {
     this.lock();
     if (!/^[a-f0-9]{64}$/.test(input.key) || !/^[a-f0-9]{64}$/.test(input.scope)) throw new Error("Invalid private storage identity");
     const generation = this.generation;
+    // Never replace another account's failed autosave with a newly opened
+    // workspace. Recovery is persisted as ciphertext before any key is exposed.
+    await this.retryEncryptedRecovery();
+    if (generation !== this.generation) throw new Error("Private storage initialization cancelled");
     const keyBytes = Uint8Array.from(input.key.match(/../g)!, part => parseInt(part, 16));
     const key = await this.crypt.subtle.importKey("raw", keyBytes, "AES-GCM", false, ["encrypt", "decrypt"]);
     keyBytes.fill(0);
@@ -83,8 +99,54 @@ export class PrivateBrowserVault {
     }
   }
   lock() {
+    // Capture only autosave writes that have not committed. Failed explicit
+    // confirmations are deliberately not retried or published as accepted data.
+    const key = this.cryptoKey, scope = this.scope;
+    const pending: Array<[string, string | null]> = [];
+    let size = 0;
+    if (key) for (const entry of Array.from(this.dirty)) {
+      const entrySize = bytes(entry[0]).length + (entry[1] === null ? 0 : bytes(entry[1]).length);
+      if (pending.length >= MAX_RECOVERY_RECORDS || size + entrySize > MAX_RECOVERY_PLAINTEXT_BYTES) { this.recoveryLost = true; continue; }
+      pending.push(entry); size += entrySize;
+    }
     this.generation++; this.cryptoKey = undefined; this.scope = ""; this.frozen = false;
-    this.records.clear(); this.dirty.clear(); this.revisions.clear(); this.failure = false; this.durableWrites = 0; this.queue = Promise.resolve(); this.changed();
+    this.records.clear(); this.dirty.clear(); this.revisions.clear(); this.failure = false; this.durableWrites = 0; this.queue = Promise.resolve();
+    if (key && pending.length) {
+      this.recoveryBusy++;
+      this.recoveryTask = this.recoveryTask.then(async () => {
+        for (const [name, value] of pending) {
+          try {
+            const storageKey = `${PREFIX}${scope}:${await this.recordId(name)}`;
+            let encoded: string | null = null;
+            if (value !== null) {
+              const iv = this.crypt.getRandomValues(new Uint8Array(12));
+              const ciphertext = await this.crypt.subtle.encrypt({ name: "AES-GCM", iv, additionalData: bytes(`${scope}:${storageKey}`) }, key, bytes(JSON.stringify({ name, value })));
+              encoded = JSON.stringify({ version: 1, iv: b64(iv), ciphertext: b64(new Uint8Array(ciphertext)) });
+            }
+            const used = Array.from(this.recovery, ([id, record]) => id === storageKey ? 0 : id.length + (record?.length ?? 0)).reduce((sum, length) => sum + length, 0);
+            if ((!this.recovery.has(storageKey) && this.recovery.size >= MAX_RECOVERY_RECORDS) || used + storageKey.length + (encoded?.length ?? 0) > MAX_RECOVERY_CIPHERTEXT_BYTES) throw new Error("Recovery buffer limit");
+            this.recovery.set(storageKey, encoded);
+          } catch { this.recoveryLost = true; }
+        }
+      }).catch(() => { this.recoveryLost = true; }).finally(() => { pending.length = 0; this.recoveryBusy--; this.changed(); });
+    }
+    this.changed();
+  }
+  /** Lock readable state synchronously, then preserve only ciphertext. A failed
+   * write must leave the caller on a neutral recovery screen, not reload. */
+  async suspendForAuthChange() { this.lock(); await this.retryEncryptedRecovery(); }
+  async retryEncryptedRecovery() {
+    await this.recoveryTask;
+    for (const [name, record] of Array.from(this.recovery)) {
+      if (record === null) this.store().removeItem(name); else this.store().setItem(name, record);
+      this.recovery.delete(name);
+    }
+    this.changed();
+    if (this.recoveryLost) throw new Error("تعذر الاحتفاظ ببعض التعديلات غير المحفوظة قبل قفل الجلسة");
+  }
+  acknowledgeRecoveryLoss() {
+    if (!this.canAcknowledgeRecoveryLoss) throw new Error("احفظ النسخة المشفرة المتبقية أولًا");
+    this.recoveryLost = false; this.changed();
   }
   getItem(name: string) { this.current(); return this.records.get(name) ?? null; }
   get length() { this.current(); return this.records.size; }

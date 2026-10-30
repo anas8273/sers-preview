@@ -31,6 +31,35 @@ test("production auth browser journey with synthetic issuer: login, account, wor
       if (!button) throw new Error(`Unavailable button: ${value}`); button.click();
     }, text);
   };
+  const logout = async (page: Page) => {
+    // auth.me becomes null before useAuth replaces the document. Await that
+    // real navigation before using the briefly visible signed-out controls.
+    await Promise.all([
+      page.waitForNavigation({ waitUntil: "networkidle0" }),
+      click(page, "تسجيل الخروج"),
+    ]);
+    await page.waitForSelector('a[href^="/api/oauth/start"]');
+    await visible(page, "تسجيل الدخول");
+  };
+  const unexpectedDialogs: Array<{ tab: string; type: string; path: string }> = [];
+  const observeDialogs = (page: Page, tab: string) => {
+    page.on("dialog", dialog => {
+      const metadata = { tab, type: dialog.type(), path: new URL(page.url()).pathname };
+      unexpectedDialogs.push(metadata);
+      console.error("Synthetic browser dialog", metadata);
+      // Keep unsaved data protected if an unexpected beforeunload dialog opens.
+      void dialog.dismiss().catch(() => console.error("Synthetic browser dialog dismissal failed", { tab }));
+    });
+    if (tab === "account") {
+      page.on("request", request => {
+        if (request.isNavigationRequest() && request.frame() === page.mainFrame()) console.info("Synthetic browser navigation request", { path: new URL(request.url()).pathname });
+      });
+      page.on("response", response => {
+        const request = response.request();
+        if (request.isNavigationRequest() && request.frame() === page.mainFrame()) console.info("Synthetic browser navigation response", { path: new URL(response.url()).pathname, status: response.status() });
+      });
+    }
+  };
   const fill = async (page: Page, selector: string, value: string) => {
     await page.waitForSelector(selector);
     await page.$eval(selector, (element, text) => {
@@ -42,6 +71,7 @@ test("production auth browser journey with synthetic issuer: login, account, wor
   try {
     browser = await puppeteer.launch({ headless: true, args: ["--no-sandbox", "--disable-setuid-sandbox"] });
     const context = await browser.createBrowserContext(), page = await context.newPage(); page.setDefaultTimeout(20_000);
+    observeDialogs(page, "report");
     const seen: Array<{ url: string; referer?: string }> = [];
     await page.setRequestInterception(true);
     page.on("request", request => {
@@ -137,9 +167,12 @@ test("production auth browser journey with synthetic issuer: login, account, wor
     await page.evaluate(() => { delete (navigator as any).onLine; });
     await page.goto(`${harness.base}/account`); await visible(page, "معرّف حسابك:");
     const logoutResponse = page.waitForResponse(response => response.url().includes("auth.logout"));
-    await click(page, "تسجيل الخروج"); assert.equal((await logoutResponse).status(), 200);
-    await visible(page, "تسجيل الدخول");
-    await otherTab.bringToFront();
+    const remoteLogoutNavigation = otherTab.waitForNavigation({ waitUntil: "networkidle0" });
+    await Promise.all([
+      remoteLogoutNavigation,
+      logout(page).then(() => otherTab.bringToFront()),
+    ]);
+    assert.equal((await logoutResponse).status(), 200);
     await visible(otherTab, "تسجيل الدخول");
     assert.equal(await otherTab.$("textarea"), null);
     await otherTab.close();
@@ -168,7 +201,7 @@ test("production auth browser journey with synthetic issuer: login, account, wor
     await page.waitForFunction(text => (document.querySelector("textarea") as HTMLTextAreaElement)?.value === text, {}, draftText);
     await visible(page, "محفوظ في الخادم");
     await page.reload(); await page.waitForFunction(text => (document.querySelector("textarea") as HTMLTextAreaElement)?.value === text, {}, draftText);
-    await page.goto(`${harness.base}/account`); await visible(page, "معرّف حسابك:"); await click(page, "تسجيل الخروج"); await visible(page, "تسجيل الدخول");
+    await page.goto(`${harness.base}/account`); await visible(page, "معرّف حسابك:"); await logout(page);
     // A different identity in the SAME browser cannot obtain the original key,
     // local records, or the protected server report.
     await page.goto(reportUrl); await visible(page, "تسجيل الدخول");
@@ -183,6 +216,84 @@ test("production auth browser journey with synthetic issuer: login, account, wor
       return (await fetch(url)).status;
     }, workId);
     assert([403, 404].includes(forbiddenReport));
+
+    // A failed autosave must survive a logout initiated in another live tab.
+    // The old account's readable UI locks immediately; a bounded ciphertext
+    // recovery screen keeps the tab open until the encrypted write succeeds.
+    await page.goto(`${harness.base}/account`); await visible(page, "معرّف حسابك:");
+    await logout(page);
+    harness.loginAs(authorization.openId);
+    await page.goto(reportUrl); await visible(page, "تسجيل الدخول");
+    await Promise.all([page.waitForNavigation(), page.click('a[href^="/api/oauth/start"]')]);
+    await page.waitForSelector("#issuer-sign-in");
+    await Promise.all([page.waitForNavigation({ waitUntil: "networkidle0" }), page.click("#issuer-sign-in")]);
+    await page.waitForSelector("textarea");
+    const logoutTab = await context.newPage(); observeDialogs(logoutTab, "account");
+    await logoutTab.goto(`${harness.base}/account`);
+    await visible(logoutTab, "معرّف حسابك:");
+    await page.bringToFront();
+    // Raw page source avoids tsx's Node-side __name helper in nested callbacks.
+    await page.evaluate(`(() => {
+      Object.defineProperty(navigator, "onLine", { configurable: true, get() { return false; } });
+      window.dispatchEvent(new Event("offline"));
+      const original = Storage.prototype.setItem;
+      window.__restoreSyntheticStorage = () => { Storage.prototype.setItem = original; };
+      Storage.prototype.setItem = function(name, value) {
+        if (name.startsWith("sers:vault:v1:")) throw new DOMException("Synthetic quota failure", "QuotaExceededError");
+        return original.call(this, name, value);
+      };
+    })()`);
+    const failedDraft = `PRIVATE_QUOTA_FAILED_DRAFT_${harness.prefix}`;
+    await page.$eval("textarea", (element, text) => {
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(element, text);
+      element.dispatchEvent(new Event("input", { bubbles: true }));
+    }, failedDraft);
+    await page.waitForSelector('[data-private-storage-error="true"]');
+    console.info("Synthetic browser recovery: quota failure surfaced");
+    await logoutTab.bringToFront(); await logout(logoutTab);
+    await page.bringToFront(); await page.waitForSelector('[data-private-recovery="blocked"]');
+    assert.equal(await page.$("textarea"), null);
+    assert.equal(await page.evaluate(text => document.body.innerText.includes(text), failedDraft), false);
+    assert.equal(await page.evaluate(text => JSON.stringify({ ...localStorage }).includes(text), failedDraft), false);
+    await visible(page, "قد تُفقد إذا أغلقته");
+    console.info("Synthetic browser recovery: locked without displayed or persisted plaintext");
+    // A different account may sign in in the other tab while the old draft
+    // remains locked. It still cannot read that report or its local cache.
+    await logoutTab.bringToFront();
+    await logoutTab.waitForFunction(() => document.visibilityState === "visible");
+    await logoutTab.waitForSelector('a[href^="/api/oauth/start"]', { visible: true });
+    try {
+      await Promise.all([logoutTab.waitForNavigation(), logoutTab.click('a[href^="/api/oauth/start"]')]);
+    } catch (error) {
+      console.error("Synthetic browser recovery navigation failed", { path: new URL(logoutTab.url()).pathname });
+      throw error;
+    }
+    await logoutTab.waitForSelector("#issuer-sign-in");
+    await Promise.all([logoutTab.waitForNavigation({ waitUntil: "networkidle0" }), logoutTab.click("#issuer-sign-in")]);
+    await visible(logoutTab, "معرّف حسابك:");
+    assert.equal((await decryptedRecords(logoutTab))[`sers:report-draft:${workId}`], undefined);
+    const recoveryForbiddenReport = await logoutTab.evaluate(async id => {
+      const url = `/api/trpc/domain.reportDraft.get?input=${encodeURIComponent(JSON.stringify({ json: { workItemId: id } }))}`;
+      return (await fetch(url)).status;
+    }, workId);
+    assert([403, 404].includes(recoveryForbiddenReport));
+    console.info("Synthetic browser recovery: other account denied");
+    await logout(logoutTab);
+    await logoutTab.close();
+    await page.bringToFront();
+    await page.evaluate(() => { (window as any).__restoreSyntheticStorage(); });
+    await Promise.all([page.waitForNavigation(), click(page, "إعادة حفظ النسخة المشفّرة")]);
+    await visible(page, "تسجيل الدخول");
+    harness.loginAs(authorization.openId);
+    await Promise.all([page.waitForNavigation(), page.click('a[href^="/api/oauth/start"]')]);
+    await page.waitForSelector("#issuer-sign-in");
+    await Promise.all([page.waitForNavigation({ waitUntil: "networkidle0" }), page.click("#issuer-sign-in")]);
+    assert.equal(page.url(), reportUrl);
+    await page.waitForFunction(text => (document.querySelector("textarea") as HTMLTextAreaElement)?.value === text, {}, failedDraft);
+    await visible(page, "محفوظ في الخادم");
+    await page.reload(); await page.waitForFunction(text => (document.querySelector("textarea") as HTMLTextAreaElement)?.value === text, {}, failedDraft);
+    assert.deepEqual(unexpectedDialogs, [], "Unexpected browser dialog during auth recovery");
+    console.info("Synthetic browser recovery: same-account draft restored after reload");
     await context.close();
   } finally { await browser?.close(); await harness.close(); }
 });

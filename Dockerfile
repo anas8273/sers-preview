@@ -7,15 +7,15 @@ COPY package.json pnpm-lock.yaml .npmrc ./
 COPY patches ./patches
 RUN pnpm install --frozen-lockfile --ignore-scripts
 COPY . .
-ARG VITE_APP_ID
-ARG VITE_OAUTH_PORTAL_URL
 ARG SERS_BUILD_REVISION
-ENV VITE_APP_ID=$VITE_APP_ID VITE_OAUTH_PORTAL_URL=$VITE_OAUTH_PORTAL_URL
-RUN pnpm build && SERS_BUILD_REVISION=$SERS_BUILD_REVISION node scripts/operations/release-contract.mjs write
+RUN pnpm build \
+    && node scripts/release/candidate.mjs verify-static-identity dist/public \
+    && SERS_BUILD_REVISION=$SERS_BUILD_REVISION node scripts/operations/release-contract.mjs write
 
 FROM node:22-bookworm-slim AS runtime
 ARG SERS_BUILD_REVISION
-LABEL org.opencontainers.image.revision=$SERS_BUILD_REVISION
+LABEL org.opencontainers.image.revision=$SERS_BUILD_REVISION \
+    org.opencontainers.image.source="https://github.com/anas8273/sers-preview"
 WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates chromium fonts-noto-core fonts-noto-extra qpdf poppler-utils tini util-linux \
