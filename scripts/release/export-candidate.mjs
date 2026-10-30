@@ -14,6 +14,17 @@ const root = fileURLToPath(new URL('../../', import.meta.url));
 const exec = promisify(execFile);
 const sha = /^[a-f0-9]{40}$/;
 const imageIdPattern = /^sha256:[a-f0-9]{64}$/;
+const STAGES = new Set(['context', 'event-identity', 'source-checkout', 'source-clean', 'operation-proofs', 'destination', 'app-container', 'worker-container', 'app-image', 'mysql-image', 'clamav-image', 'image-archive', 'manifest-write']);
+export const producerFailureStage = error => STAGES.has(error?.producerStage) ? error.producerStage : 'context';
+async function atStage(stage, operation) {
+  if (!STAGES.has(stage)) throw new Error('Unknown producer verification stage');
+  try { return await operation(); }
+  catch (cause) {
+    const error = new Error('Candidate verification refused');
+    error.producerStage = STAGES.has(cause?.producerStage) ? cause.producerStage : stage;
+    throw error;
+  }
+}
 async function command(binary, args, options = {}) {
   try { return (await exec(binary, args, { cwd: root, timeout: 30_000, maxBuffer: 2 * 1024 ** 2, ...options })).stdout.trim(); }
   catch { throw new Error(`Candidate verification command failed: ${binary}`); }
@@ -26,17 +37,25 @@ async function json(file, maximum = 128 * 1024) {
   return JSON.parse(await readFile(file, 'utf8'));
 }
 export async function readProducerIdentity(env = process.env) {
+  const { event, repoID, pr } = await atStage('event-identity', async () => {
   if (env.GITHUB_ACTIONS !== 'true' || env.GITHUB_EVENT_NAME !== 'pull_request' || env.SERS_DATABASE_NAME !== 'sers_demo' || !sha.test(env.GITHUB_SHA || '') || env.SERS_BUILD_REVISION !== env.GITHUB_SHA || !imageIdPattern.test(env.SERS_TESTED_IMAGE_ID || '') || !path.isAbsolute(env.RUNNER_TEMP || '') || !path.isAbsolute(env.GITHUB_EVENT_PATH || '')) throw new Error('Candidate export requires an isolated pull-request operations run');
   const event = await json(env.GITHUB_EVENT_PATH, 2 * 1024 ** 2);
   const repoID = number(env.GITHUB_REPOSITORY_ID), pr = event.pull_request;
   if (!pr || pr.number !== event.number || !Number.isSafeInteger(pr.number) || pr.number < 1 || pr.base?.ref !== 'main' || !sha.test(pr.head?.sha || '') || !sha.test(pr.base?.sha || '') || [event.repository, pr.head?.repo, pr.base?.repo].some(repository => repository?.full_name !== env.GITHUB_REPOSITORY || repository?.id !== repoID)) throw new Error('Candidate must originate from the same repository pull request');
+  return { event, repoID, pr };
+  });
+  const { head, sourceTree, testedTree } = await atStage('source-checkout', async () => {
   const head = await command('git', ['rev-parse', 'HEAD']);
   const parents = (await command('git', ['show', '-s', '--format=%P', head])).split(' ');
   const sourceTree = await command('git', ['rev-parse', `${pr.head.sha}^{tree}`]);
   const testedTree = await command('git', ['rev-parse', `${head}^{tree}`]);
   if (head !== env.GITHUB_SHA || parents.length !== 2 || parents[0] !== pr.base.sha || parents[1] !== pr.head.sha || sourceTree !== testedTree) throw new Error('Candidate checkout does not match the tested pull-request merge');
+  return { head, sourceTree, testedTree };
+  });
+  await atStage('source-clean', async () => {
   await command('git', ['diff', '--exit-code']);
   await command('git', ['diff', '--cached', '--exit-code']);
+  });
   return { format: 1, repo: env.GITHUB_REPOSITORY, repoID, prNumber: pr.number, sourceHead: pr.head.sha, sourceTree, testedMerge: head, testedTree, runId: number(env.GITHUB_RUN_ID), runAttempt: number(env.GITHUB_RUN_ATTEMPT), appImageId: env.SERS_TESTED_IMAGE_ID, platform: 'linux/amd64', runtimeIdentity: 'operator-configured', syntheticProof: true };
 }
 
@@ -51,18 +70,27 @@ export async function assertOperationProofs(directory, identity) {
   if (restore.dataIntegrityPassed !== true || restore.dataCountsMatch !== true || restore.rowChecksumsMatch !== true || restore.archiveIntegrityVerified !== true || restore.productionDatabaseModified !== false || !(restore.privateContentVerified?.uploads >= 1) || !(restore.privateContentVerified?.outputs >= 1) || restore.recoveryObservations?.actualLostCommits !== null || restore.recoveryObservations?.fullServiceRtoMeasured !== false || restore.recoveryObservations?.checks?.isolatedRestoreWithinTarget !== true || restore.recoveryObservations?.checks?.backupFreshnessWithinTarget !== true) throw new Error('Candidate isolated restore proof is incomplete');
 }
 
+export function parseContainerInspection(container, info) {
+  if (typeof container !== 'string' || !/^[a-f0-9]{12,64}$/.test(container) || typeof info?.id !== 'string' || !/^[a-f0-9]{64}$/.test(info.id) || !info.id.startsWith(container) || typeof info.imageId !== 'string' || !imageIdPattern.test(info.imageId)) throw new Error('Invalid exercised service container identity');
+  return info.imageId;
+}
 async function exercisedImage(service) {
   const container = await compose(['ps', '--all', '--quiet', service]);
-  if (!/^[a-f0-9]{64}$/.test(container)) throw new Error('Expected one exercised service container');
-  const imageId = await command('docker', ['container', 'inspect', '--format', '{{.Image}}', container]);
-  if (!imageIdPattern.test(imageId)) throw new Error('Invalid exercised service image');
-  return imageId;
+  if (!/^[a-f0-9]{12,64}$/.test(container)) throw new Error('Expected one exercised service container');
+  const info = JSON.parse(await command('docker', ['container', 'inspect', '--format', '{"id":{{json .Id}},"imageId":{{json .Image}}}', container]));
+  return parseContainerInspection(container, info);
+}
+export function parseImageInspection(imageId, info) {
+  if (info.id !== imageId || info.os !== 'linux' || info.architecture !== 'amd64') throw new Error('Candidate image platform is not the tested linux/amd64 platform');
+  if (info.labels != null && (typeof info.labels !== 'object' || Array.isArray(info.labels))) throw new Error('Invalid image labels');
+  if (info.digests != null && (!Array.isArray(info.digests) || info.digests.some(value => typeof value !== 'string'))) throw new Error('Invalid image digests');
+  return { ...info, revision: info.labels?.['org.opencontainers.image.revision'], source: info.labels?.['org.opencontainers.image.source'], digests: info.digests ?? [] };
 }
 async function inspectImage(imageId) {
-  const format = '{"id":{{json .Id}},"os":{{json .Os}},"architecture":{{json .Architecture}},"revision":{{json (index .Config.Labels "org.opencontainers.image.revision")}},"source":{{json (index .Config.Labels "org.opencontainers.image.source")}},"digests":{{json .RepoDigests}}}';
-  const info = JSON.parse(await command('docker', ['image', 'inspect', '--format', format, imageId]));
-  if (info.id !== imageId || info.os !== 'linux' || info.architecture !== 'amd64') throw new Error('Candidate image platform is not the tested linux/amd64 platform');
-  return info;
+  // Dependency images need not have labels. Passing the whole nullable map to
+  // json avoids Go template `index` failing before JavaScript can validate it.
+  const format = '{"id":{{json .Id}},"os":{{json .Os}},"architecture":{{json .Architecture}},"labels":{{json .Config.Labels}},"digests":{{json .RepoDigests}}}';
+  return parseImageInspection(imageId, JSON.parse(await command('docker', ['image', 'inspect', '--format', format, imageId])));
 }
 async function dependency(service, repository) {
   const imageId = await exercisedImage(service), info = await inspectImage(imageId);
@@ -86,26 +114,36 @@ async function saveImage(imageId, file) {
 
 export async function exportCandidate(directory, env = process.env) {
   const identity = await readProducerIdentity(env);
-  await assertOperationProofs(env.RUNNER_TEMP, identity);
+  await atStage('operation-proofs', () => assertOperationProofs(env.RUNNER_TEMP, identity));
+  const destination = await atStage('destination', async () => {
   const destination = path.resolve(directory), parent = await lstat(path.dirname(destination));
   const relative = path.relative(path.resolve(env.RUNNER_TEMP), destination);
   if (!parent.isDirectory() || parent.isSymbolicLink() || !relative || relative.startsWith('..') || path.isAbsolute(relative) || path.dirname(destination) !== path.resolve(env.RUNNER_TEMP)) throw new Error('Candidate directory must be a fresh direct child of RUNNER_TEMP');
-  if (await exercisedImage('app') !== identity.appImageId || await exercisedImage('worker') !== identity.appImageId) throw new Error('Candidate image differs from the exercised app or worker');
+  return destination;
+  });
+  for (const service of ['app', 'worker']) await atStage(`${service}-container`, async () => {
+    if (await exercisedImage(service) !== identity.appImageId) throw new Error('Candidate image differs from the exercised service');
+  });
+  await atStage('app-image', async () => {
   const app = await inspectImage(identity.appImageId);
   if (app.revision !== identity.testedMerge || app.source !== `https://github.com/${identity.repo}`) throw new Error('Candidate image source labels do not match checkout');
-  const dependencies = { mysql: await dependency('mysql', 'mysql'), clamav: await dependency('clamav', 'clamav/clamav') };
-  await mkdir(destination, { mode: 0o700 });
+  });
+  const dependencies = { mysql: await atStage('mysql-image', () => dependency('mysql', 'mysql')), clamav: await atStage('clamav-image', () => dependency('clamav', 'clamav/clamav')) };
+  await atStage('destination', () => mkdir(destination, { mode: 0o700 }));
   try {
     const part = path.join(destination, `${IMAGE_FILE}.part`);
-    const archive = await saveImage(identity.appImageId, part);
+    const archive = await atStage('image-archive', () => saveImage(identity.appImageId, part));
+    const candidate = await atStage('manifest-write', async () => {
     const candidate = validateCandidate({ ...identity, archive, dependencies });
     await rename(part, path.join(destination, IMAGE_FILE));
     await writeFile(path.join(destination, CANDIDATE_FILE), JSON.stringify(candidate, null, 2) + '\n', { mode: 0o600, flag: 'wx' });
+    return candidate;
+    });
     return candidate;
   } catch (error) { await rm(destination, { recursive: true, force: true }); throw error; }
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   if (process.argv.length !== 3) throw new Error('Candidate export requires one destination directory');
-  exportCandidate(process.argv[2]).then(candidate => console.log(JSON.stringify({ candidateArtifact: candidateArtifactName(candidate), imageId: candidate.appImageId, sourceHead: candidate.sourceHead, syntheticProof: true, bytes: candidate.archive.bytes }))).catch(() => { console.error('Tested runtime candidate export refused'); process.exitCode = 1; });
+  exportCandidate(process.argv[2]).then(candidate => console.log(JSON.stringify({ candidateArtifact: candidateArtifactName(candidate), imageId: candidate.appImageId, sourceHead: candidate.sourceHead, syntheticProof: true, bytes: candidate.archive.bytes }))).catch(error => { console.error(`Tested runtime candidate export refused: ${producerFailureStage(error)}`); process.exitCode = 1; });
 }

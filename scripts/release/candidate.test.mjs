@@ -4,7 +4,7 @@ import { mkdtemp, mkdir, rm, symlink, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { MAX_ARCHIVE_BYTES, assertRuntimeIdentity, candidateArtifactName, validateCandidate } from './candidate.mjs';
-import { assertOperationProofs, readProducerIdentity } from './export-candidate.mjs';
+import { assertOperationProofs, readProducerIdentity, parseContainerInspection, parseImageInspection, producerFailureStage } from './export-candidate.mjs';
 
 const h = character => character.repeat(40), d = character => character.repeat(64);
 function fixture() {
@@ -41,8 +41,27 @@ test('candidate archive limits and exact field allowlists reject poisoned metada
   const c = fixture(); c.archive.bytes = MAX_ARCHIVE_BYTES; assert.equal(validateCandidate(c).archive.bytes, MAX_ARCHIVE_BYTES);
 });
 test('producer refuses non-CI and arbitrary workflow events before external commands', async () => {
-  await assert.rejects(readProducerIdentity({}), /isolated pull-request/);
-  await assert.rejects(readProducerIdentity({ GITHUB_ACTIONS: 'true', GITHUB_EVENT_NAME: 'workflow_dispatch' }), /isolated pull-request/);
+  for (const env of [{}, { GITHUB_ACTIONS: 'true', GITHUB_EVENT_NAME: 'workflow_dispatch' }]) await assert.rejects(readProducerIdentity(env), error => producerFailureStage(error) === 'event-identity' && error.message === 'Candidate verification refused');
+  assert.equal(producerFailureStage({ producerStage: 'raw-secret-value' }), 'context');
+});
+test('Docker dependency inspection accepts null labels while preserving immutable identity', () => {
+  const imageId = `sha256:${d('a')}`;
+  const info = { id: imageId, os: 'linux', architecture: 'amd64', labels: null, digests: [`mysql@sha256:${d('b')}`] };
+  const parsed = parseImageInspection(imageId, info);
+  assert.equal(parsed.revision, undefined);
+  assert.deepEqual(parsed.digests, info.digests);
+  assert.throws(() => parseImageInspection(`sha256:${d('c')}`, info));
+  assert.throws(() => parseImageInspection(imageId, { ...info, architecture: 'arm64' }));
+  assert.throws(() => parseImageInspection(imageId, { ...info, labels: 'invalid' }));
+  const labels = { 'org.opencontainers.image.revision': h('c'), 'org.opencontainers.image.source': 'https://github.com/anas8273/sers-preview' };
+  assert.equal(parseImageInspection(imageId, { ...info, labels }).revision, h('c'));
+});
+test('short Compose IDs are resolved to matching canonical IDs without permitting names or ambiguous input', () => {
+  const id = d('a'), imageId = `sha256:${d('b')}`;
+  assert.equal(parseContainerInspection(id, { id, imageId }), imageId);
+  assert.equal(parseContainerInspection(id.slice(0, 12), { id, imageId }), imageId);
+  for (const value of ['', 'app', `${id}\n${id}`, id.slice(0, 11), d('c')]) assert.throws(() => parseContainerInspection(value, { id, imageId }));
+  assert.throws(() => parseContainerInspection(id.slice(0, 12), { id: id.slice(0, 12), imageId }));
 });
 test('browser build rejects synthetic OAuth identity and symlinked output', async () => {
   const directory = await mkdtemp(path.join(os.tmpdir(), 'sers-static-identity-'));
