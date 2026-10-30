@@ -161,4 +161,31 @@ suite.sequential("production OAuth HTTP routes with real MySQL and a synthetic M
     expect(blocked.response.status).toBe(401);
     expect((await authRpc(harness.base, "auth.me", cookie)).data).toBeNull();
   });
+  it("binds a safe report return path to the consumed attempt, not callback query input", async () => {
+    const attempt = await harness.begin({}, "/work/123/report");
+    const url = new URL(attempt.callback); url.searchParams.set("returnTo", "https://attacker.invalid");
+    const result = await callback(url.href, attempt.cookie);
+    expect(result.status).toBe(302); expect(result.headers.get("location")).toBe("/work/123/report");
+    const unsafe = await harness.begin({}, "//attacker.invalid");
+    expect((await callback(unsafe.callback, unsafe.cookie)).headers.get("location")).toBe("/");
+  });
+
+  it("keeps browser keys private, stable across concurrent calls/relogin and isolated between accounts", async () => {
+    expect((await authRpc(harness.base, "auth.browserStorageKey")).response.status).toBe(401);
+    const first = await signedIn();
+    const keys = await Promise.all(Array.from({ length: 8 }, () => authRpc(harness.base, "auth.browserStorageKey", first.cookie)));
+    const key = keys[0].data;
+    expect(key.key).toMatch(/^[a-f0-9]{64}$/); expect(key.scope).toMatch(/^[a-f0-9]{64}$/);
+    for (const value of keys) {
+      expect(value.data).toEqual(key); expect(value.response.headers.get("cache-control")).toContain("no-store");
+    }
+    expect(JSON.stringify((await authRpc(harness.base, "auth.me", first.cookie)).data)).not.toContain(key.key);
+    await authRpc(harness.base, "auth.logout", first.cookie, undefined, "POST");
+    expect((await authRpc(harness.base, "auth.browserStorageKey", first.cookie)).response.status).toBe(401);
+    harness.loginAs(first.attempt.openId); const reentry = await signedIn();
+    expect((await authRpc(harness.base, "auth.browserStorageKey", reentry.cookie)).data).toEqual(key);
+    const other = await signedIn();
+    expect((await authRpc(harness.base, "auth.browserStorageKey", other.cookie)).data).not.toEqual(key);
+  });
+
 });

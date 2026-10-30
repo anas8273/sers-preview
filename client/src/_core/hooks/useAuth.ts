@@ -3,6 +3,7 @@ import { trpc } from "@/lib/trpc";
 import { TRPCClientError } from "@trpc/client";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo } from "react";
+import { privateLocalStorage, broadcastAuthChange } from "@/lib/private-browser-storage";
 
 type UseAuthOptions = {
   redirectOnUnauthenticated?: boolean;
@@ -17,12 +18,14 @@ export function useAuth(options?: UseAuthOptions) {
 
   const meQuery = trpc.auth.me.useQuery(undefined, {
     retry: false,
-    refetchOnWindowFocus: false,
+    refetchOnWindowFocus: true,
+    refetchInterval: 60_000,
   });
 
   const logoutMutation = trpc.auth.logout.useMutation();
 
   const logout = useCallback(async () => {
+    await privateLocalStorage.prepareLogout();
     try {
       await logoutMutation.mutateAsync();
     } catch (error: unknown) {
@@ -33,13 +36,18 @@ export function useAuth(options?: UseAuthOptions) {
         // The server has already rejected this session.
       } else {
         // Preserve the current UI on revocation failure so logout can be retried.
+        privateLocalStorage.cancelLogout();
         throw error;
       }
     }
     await queryClient.cancelQueries();
     queryClient.clear();
     utils.auth.me.setData(undefined, null);
+    privateLocalStorage.lock();
     try { localStorage.removeItem("manus-runtime-user-info"); } catch { /* Storage is optional. */ }
+    broadcastAuthChange();
+    // Drop component memory and prevent a late async response reopening it.
+    window.location.replace("/account");
   }, [logoutMutation, queryClient, utils]);
 
   const state = useMemo(() => {

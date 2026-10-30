@@ -43,6 +43,7 @@ export async function startAuthHarness() {
   const profileTokens: string[] = [];
   const codes = new Map<string, Authorization>(), tokens = new Map<string, Authorization>();
   let nextMode: IssuerMode = "success";
+  let nextIdentity: string | undefined;
   let db: Awaited<ReturnType<typeof import("../../server/db")["getDb"]>> | undefined;
   const close = async () => {
     for (const { server } of [appListening, issuerListening]) {
@@ -61,8 +62,8 @@ export async function startAuthHarness() {
       }
       const code = randomBytes(32).toString("base64url"), state = req.query.state;
       const callback = new URL(`${base}/api/oauth/callback`); callback.searchParams.set("code", code); callback.searchParams.set("state", state);
-      const authorization = { code, state, callback: callback.href, openId: `${prefix}-${authorizations.length}`, mode: nextMode };
-      nextMode = "success"; authorizations.push(authorization); codes.set(code, authorization);
+      const authorization = { code, state, callback: callback.href, openId: nextIdentity ?? `${prefix}-${authorizations.length}`, mode: nextMode };
+      nextMode = "success"; nextIdentity = undefined; authorizations.push(authorization); codes.set(code, authorization);
       res.set({ "Cache-Control": "no-store", "Referrer-Policy": "no-referrer" }).type("html").send(`<!doctype html><html><head><title>Synthetic identity provider</title></head><body><h1>Synthetic identity provider</h1><form action="${base}/api/oauth/callback" method="get"><input type="hidden" name="code" value="${code}"><input type="hidden" name="state" value="${state}"><button id="issuer-sign-in">Continue as synthetic test account</button></form></body></html>`);
     });
     issuer.post("/webdev.v1.WebDevAuthPublicService/ExchangeToken", (req, res) => {
@@ -91,13 +92,16 @@ export async function startAuthHarness() {
       import("../../server/_core/oauth"), import("../../server/root-router"), import("../../server/_core/context"), import("../../server/db"),
     ]);
     db = await database.getDb(); assert(db);
+    const { registerHttpSecurity } = await import("../../server/_core/http-security");
+    registerHttpSecurity(app, { proxies: "", origin: base });
     registerOAuthRoutes(app);
     app.use("/api/trpc", createExpressMiddleware({ router: appRouter, createContext }));
     app.use(express.static(resolve("dist/public"))); app.get("*", (_req, res) => res.sendFile(resolve("dist/public/index.html")));
     return { base, issuerBase, appId, prefix, db, authorizations, exchanged, profileTokens, close,
+      loginAs: (openId: string) => { assert(openId.startsWith(prefix)); nextIdentity = openId; },
       nextMode: (mode: IssuerMode) => { nextMode = mode; },
-      begin: async (headers: Record<string, string> = {}) => {
-        const response = await fetch(`${base}/api/oauth/start`, { redirect: "manual", headers });
+      begin: async (headers: Record<string, string> = {}, returnTo = "/") => {
+        const response = await fetch(`${base}/api/oauth/start?returnTo=${encodeURIComponent(returnTo)}`, { redirect: "manual", headers });
         assert.equal(response.status, 302);
         const location = response.headers.get("location"); assert(location);
         assert.equal(new URL(location).origin, issuerBase);

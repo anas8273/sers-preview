@@ -7,6 +7,7 @@ export const authOAuthAttempts = mysqlTable("auth_oauth_attempts", {
   browserHash: varchar("browserHash", { length: 64 }).notNull(),
   appId: varchar("appId", { length: 64 }).notNull(),
   redirectUri: varchar("redirectUri", { length: 512 }).notNull(),
+  returnTo: varchar("returnTo", { length: 128 }).default("/").notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   expiresAt: timestamp("expiresAt").notNull(),
   consumedAt: timestamp("consumedAt"),
@@ -27,3 +28,11 @@ export const authRateLimits = mysqlTable("auth_rate_limits", {
   count: int("count").notNull(),
   expiresAt: timestamp("expiresAt").notNull(),
 }, table => ({ expiry: index("auth_rate_limit_expiry").on(table.expiresAt) }));
+
+// Separate from public user profiles. A live authenticated session is required
+// to obtain this per-user key; it is never written to browser storage or logs.
+export const browserStorageKeys = mysqlTable("browser_storage_keys", {
+  userId: int("userId").primaryKey().references(() => users.id, { onDelete: "cascade" }),
+  keyHex: varchar("keyHex", { length: 64 }).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});

@@ -1,3 +1,4 @@
+import { privateLocalStorage as localStorage } from "@/lib/private-browser-storage";
 /**
  * ملف الإنجاز المهني التفاعلي - SERS
  * يتيح للمعلم بناء ملف إنجاز رقمي شامل مع:
@@ -460,7 +461,7 @@ export default function PortfolioBuilder() {
   const updateGoal = useCallback((index: number, value: string) => { updateData((prev) => ({ ...prev, goals: prev.goals.map((g, i) => i === index ? value : g) })); }, [updateData]);
   const removeGoal = useCallback((index: number) => { updateData((prev) => ({ ...prev, goals: prev.goals.filter((_, i) => i !== index) })); }, [updateData]);
 
-  const handleSave = useCallback(() => { savePortfolioToStorage(data); toast.success("تم حفظ ملف الإنجاز بنجاح"); }, [data]);
+  const handleSave = useCallback(async () => { try { savePortfolioToStorage(data); await localStorage.flush(); toast.success("تم حفظ ملف الإنجاز بنجاح"); } catch { toast.error("تعذر الحفظ على الجهاز. أبق الصفحة مفتوحة وأعد المحاولة."); } }, [data]);
 
   const handleAIGenerate = useCallback(async () => {
     if (!data.personalInfo.jobTitle) { toast.error("أدخل المسمى الوظيفي أولًا"); return; }

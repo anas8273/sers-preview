@@ -134,6 +134,13 @@
       "when": 1793170828398,
       "tag": "0018_ai_admission_safety",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "5",
+      "when": 1793395683253,
+      "tag": "0019_browser_privacy_and_return_path",
+      "breakpoints": true
     }
   ]
 }

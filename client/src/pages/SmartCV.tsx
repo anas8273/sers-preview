@@ -1,3 +1,4 @@
+import { privateLocalStorage as localStorage } from "@/lib/private-browser-storage";
 /**
  * السيرة الذاتية الذكية - SERS
  * إنشاء سيرة ذاتية احترافية للمعلم/الإداري
@@ -76,7 +77,7 @@ function loadCV(): CVData {
   try { const s = localStorage.getItem(STORAGE_KEY); if (s) return JSON.parse(s); } catch {}
   return { name: "", title: "", phone: "", email: "", city: "", summary: "", experience: [], education: [], skills: [], courses: [], achievements: [] };
 }
-function saveCV(data: CVData) { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); }
+function saveCV(data: CVData) { return localStorage.setItemDurably(STORAGE_KEY, JSON.stringify(data)); }
 function genId() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
 
 // ═══════════════════════════════════════════════════════════════
@@ -278,7 +279,7 @@ export default function SmartCV() {
   const updateAchievement = useCallback((i: number, v: string) => { setCvData((prev) => ({ ...prev, achievements: prev.achievements.map((a, idx) => idx === i ? v : a) })); }, []);
   const removeAchievement = useCallback((i: number) => { setCvData((prev) => ({ ...prev, achievements: prev.achievements.filter((_, idx) => idx !== i) })); }, []);
 
-  const handleSave = useCallback(() => { saveCV(cvData); toast.success("تم حفظ السيرة الذاتية بنجاح"); }, [cvData]);
+  const handleSave = useCallback(async () => { try { await saveCV(cvData); toast.success("تم حفظ السيرة الذاتية بنجاح"); } catch { toast.error("تعذر الحفظ على الجهاز. أبق الصفحة مفتوحة وأعد المحاولة."); } }, [cvData]);
 
   const handleAIFill = useCallback(async () => {
     if (!cvData.name && !cvData.title) { toast.error("أدخل الاسم والمسمى الوظيفي أولاً"); return; }

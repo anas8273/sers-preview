@@ -8,6 +8,7 @@ import ReportShareActions from "./components/ReportShareActions";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { lazy, Suspense } from "react";
 import BottomNav from "./components/BottomNav";
+import PrivateWorkspace from "./components/PrivateWorkspace";
 
 const Home = lazy(() => import("./pages/Home"));
 const PublicOutput = lazy(() => import("./pages/PublicOutput"));
@@ -106,8 +107,7 @@ function App() {
       <ThemeProvider defaultTheme="light">
         <TooltipProvider>
           <Toaster />
-          <Router />
-          <AppChrome />
+          <PrivateWorkspace><Router /><AppChrome /></PrivateWorkspace>
         </TooltipProvider>
       </ThemeProvider>
     </ErrorBoundary>

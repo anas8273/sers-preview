@@ -1,0 +1,49 @@
+# Install as an nginx http{} include on the Linux Docker host, after replacing
+# sers-staging.example.invalid and the certificate paths with your actual SERS
+# domain/certificate. Validate with nginx -t before reload. No school data here.
+server {
+    listen 80 default_server;
+    server_name _;
+    return 444;
+}
+server {
+    listen 80;
+    server_name sers-staging.example.invalid;
+    return 308 https://sers-staging.example.invalid$request_uri;
+}
+server {
+    listen 443 ssl default_server;
+    server_name _;
+    ssl_reject_handshake on;
+}
+server {
+    listen 443 ssl;
+    server_name sers-staging.example.invalid;
+    ssl_certificate /etc/letsencrypt/live/sers-staging.example.invalid/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/sers-staging.example.invalid/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    add_header Strict-Transport-Security "max-age=31536000" always;
+    # Request URLs can contain OAuth codes or private share tokens. Never log
+    # them with the default combined log. Application metrics use request IDs.
+    access_log off;
+    error_log /var/log/nginx/sers-error.log crit;
+    client_max_body_size 50m;
+    client_body_timeout 30s;
+    keepalive_timeout 30s;
+    location / {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Host sers-staging.example.invalid;
+        proxy_set_header X-Forwarded-Host sers-staging.example.invalid;
+        proxy_set_header X-Forwarded-Proto https;
+        # Replace client-supplied forwarding headers; do not append to them.
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header Connection "";
+        proxy_cache off;
+        proxy_buffering off;
+        proxy_request_buffering off;
+        proxy_read_timeout 150s;
+        proxy_send_timeout 150s;
+    }
+}

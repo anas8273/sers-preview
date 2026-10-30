@@ -1,3 +1,4 @@
+import { registerHttpSecurity } from "./http-security";
 import { withDocumentRenderBudget, RENDER_LIMITS } from "../render-limits";
 import { ResourceLimitError, requireActive } from "../bounded-work";
 import "dotenv/config";
@@ -120,7 +121,7 @@ async function startServer() {
   if (ENV.isProduction) getAuthConfig();
   const app = express();
   const server = createServer(app);
-  app.disable("x-powered-by");
+  registerHttpSecurity(app, { secure: ENV.isProduction, origin: ENV.appPublicOrigin });
   registerRuntimeObservability(app);
   registerEvidenceHttpRoutes(app, { authenticate: req => sdk.authenticateRequest(req) });
   registerPrivateOutputRoutes(app, req => sdk.authenticateRequest(req));

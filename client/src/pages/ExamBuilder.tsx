@@ -1,3 +1,4 @@
+import { privateLocalStorage as localStorage } from "@/lib/private-browser-storage";
 /**
  * منصة الاختبارات - SERS
  * إنشاء اختبارات متنوعة مع:
@@ -63,7 +64,7 @@ const QUESTION_TYPES: { id: QuestionType; label: string; icon: React.ComponentTy
 
 const STORAGE_KEY = "sers-exams";
 function loadExams(): SavedExam[] { try { const s = localStorage.getItem(STORAGE_KEY); if (s) return JSON.parse(s); } catch {} return []; }
-function saveExamsToStorage(exams: SavedExam[]) { localStorage.setItem(STORAGE_KEY, JSON.stringify(exams)); }
+function saveExamsToStorage(exams: SavedExam[]) { return localStorage.setItemDurably(STORAGE_KEY, JSON.stringify(exams)); }
 function genId() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
 
 // ═══════════════════════════════════════════════════════════════
@@ -304,23 +305,27 @@ export default function ExamBuilder() {
     });
   }, []);
 
-  const handleSave = useCallback(() => {
+  const handleSave = useCallback(async () => {
     const now = Date.now();
+    try {
     const examTitle = title || `اختبار ${subject}`;
     if (currentExam) {
       const updated = exams.map((e) => e.id === currentExam.id ? { ...e, title: examTitle, subject, grade, semester, duration, themeId: selectedTheme.id, fontFamily: selectedFont, questions, createdAt: now } : e);
-      setExams(updated); saveExamsToStorage(updated);
+      await saveExamsToStorage(updated); setExams(updated);
       setCurrentExam({ ...currentExam, title: examTitle, subject, grade, semester, duration, themeId: selectedTheme.id, fontFamily: selectedFont, questions, createdAt: now });
       toast.success("تم تحديث الاختبار بنجاح");
     } else {
       const newExam: SavedExam = { id: genId(), title: examTitle, subject, grade, semester, duration, themeId: selectedTheme.id, fontFamily: selectedFont, questions, createdAt: now };
-      const updated = [newExam, ...exams]; setExams(updated); saveExamsToStorage(updated);
+      const updated = [newExam, ...exams]; await saveExamsToStorage(updated); setExams(updated);
       setCurrentExam(newExam); toast.success("تم حفظ الاختبار بنجاح");
     }
+    } catch { toast.error("تعذر الحفظ على الجهاز. أبق الصفحة مفتوحة وأعد المحاولة."); }
   }, [currentExam, exams, title, subject, grade, semester, duration, selectedTheme, selectedFont, questions]);
 
-  const handleDelete = useCallback((id: string) => {
-    const updated = exams.filter((e) => e.id !== id); setExams(updated); saveExamsToStorage(updated); toast.success("تم حذف الاختبار");
+  const handleDelete = useCallback(async (id: string) => {
+    try {
+    const updated = exams.filter((e) => e.id !== id); await saveExamsToStorage(updated); setExams(updated); toast.success("تم حذف الاختبار");
+    } catch { toast.error("تعذر حفظ الحذف على الجهاز."); }
   }, [exams]);
 
   const handleAIGenerate = useCallback(async () => {
