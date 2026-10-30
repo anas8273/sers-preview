@@ -41,6 +41,25 @@ test("production auth browser journey with synthetic issuer: login, account, wor
     await page.waitForSelector('a[href^="/api/oauth/start"]');
     await visible(page, "تسجيل الدخول");
   };
+  const unexpectedDialogs: Array<{ tab: string; type: string; path: string }> = [];
+  const observeDialogs = (page: Page, tab: string) => {
+    page.on("dialog", dialog => {
+      const metadata = { tab, type: dialog.type(), path: new URL(page.url()).pathname };
+      unexpectedDialogs.push(metadata);
+      console.error("Synthetic browser dialog", metadata);
+      // Keep unsaved data protected if an unexpected beforeunload dialog opens.
+      void dialog.dismiss().catch(() => console.error("Synthetic browser dialog dismissal failed", { tab }));
+    });
+    if (tab === "account") {
+      page.on("request", request => {
+        if (request.isNavigationRequest() && request.frame() === page.mainFrame()) console.info("Synthetic browser navigation request", { path: new URL(request.url()).pathname });
+      });
+      page.on("response", response => {
+        const request = response.request();
+        if (request.isNavigationRequest() && request.frame() === page.mainFrame()) console.info("Synthetic browser navigation response", { path: new URL(response.url()).pathname, status: response.status() });
+      });
+    }
+  };
   const fill = async (page: Page, selector: string, value: string) => {
     await page.waitForSelector(selector);
     await page.$eval(selector, (element, text) => {
@@ -52,6 +71,7 @@ test("production auth browser journey with synthetic issuer: login, account, wor
   try {
     browser = await puppeteer.launch({ headless: true, args: ["--no-sandbox", "--disable-setuid-sandbox"] });
     const context = await browser.createBrowserContext(), page = await context.newPage(); page.setDefaultTimeout(20_000);
+    observeDialogs(page, "report");
     const seen: Array<{ url: string; referer?: string }> = [];
     await page.setRequestInterception(true);
     page.on("request", request => {
@@ -208,7 +228,8 @@ test("production auth browser journey with synthetic issuer: login, account, wor
     await page.waitForSelector("#issuer-sign-in");
     await Promise.all([page.waitForNavigation({ waitUntil: "networkidle0" }), page.click("#issuer-sign-in")]);
     await page.waitForSelector("textarea");
-    const logoutTab = await context.newPage(); await logoutTab.goto(`${harness.base}/account`);
+    const logoutTab = await context.newPage(); observeDialogs(logoutTab, "account");
+    await logoutTab.goto(`${harness.base}/account`);
     await visible(logoutTab, "معرّف حسابك:");
     await page.bringToFront();
     // Raw page source avoids tsx's Node-side __name helper in nested callbacks.
@@ -238,7 +259,15 @@ test("production auth browser journey with synthetic issuer: login, account, wor
     console.info("Synthetic browser recovery: locked without displayed or persisted plaintext");
     // A different account may sign in in the other tab while the old draft
     // remains locked. It still cannot read that report or its local cache.
-    await Promise.all([logoutTab.waitForNavigation(), logoutTab.click('a[href^="/api/oauth/start"]')]);
+    await logoutTab.bringToFront();
+    await logoutTab.waitForFunction(() => document.visibilityState === "visible");
+    await logoutTab.waitForSelector('a[href^="/api/oauth/start"]', { visible: true });
+    try {
+      await Promise.all([logoutTab.waitForNavigation(), logoutTab.click('a[href^="/api/oauth/start"]')]);
+    } catch (error) {
+      console.error("Synthetic browser recovery navigation failed", { path: new URL(logoutTab.url()).pathname });
+      throw error;
+    }
     await logoutTab.waitForSelector("#issuer-sign-in");
     await Promise.all([logoutTab.waitForNavigation({ waitUntil: "networkidle0" }), logoutTab.click("#issuer-sign-in")]);
     await visible(logoutTab, "معرّف حسابك:");
@@ -263,6 +292,7 @@ test("production auth browser journey with synthetic issuer: login, account, wor
     await page.waitForFunction(text => (document.querySelector("textarea") as HTMLTextAreaElement)?.value === text, {}, failedDraft);
     await visible(page, "محفوظ في الخادم");
     await page.reload(); await page.waitForFunction(text => (document.querySelector("textarea") as HTMLTextAreaElement)?.value === text, {}, failedDraft);
+    assert.deepEqual(unexpectedDialogs, [], "Unexpected browser dialog during auth recovery");
     console.info("Synthetic browser recovery: same-account draft restored after reload");
     await context.close();
   } finally { await browser?.close(); await harness.close(); }
