@@ -15,6 +15,7 @@ import { createHash, timingSafeEqual } from "node:crypto";
 import { hashProtectedOutputPassword, verifyProtectedOutputPassword } from "./output-password";
 import { createPublicOutputRateLimiter } from "./public-output-rate-limit";
 import { TRPCError } from "@trpc/server";
+import { browserStorageKeyForUser } from "./browser-storage-key";
 import {
   createPortfolio, updatePortfolio, getPortfoliosByUser, getPortfolioById, deletePortfolio,
   getAllPortfolios, reviewPortfolio,
@@ -82,6 +83,11 @@ export const appRouter = router({
   system: systemRouter,
   auth: router({
     me: publicProcedure.query(opts => opts.ctx.user),
+    browserStorageKey: protectedProcedure.query(async ({ ctx }) => {
+      ctx.res.setHeader("Cache-Control", "private, no-store");
+      ctx.res.setHeader("Vary", "Cookie");
+      return browserStorageKeyForUser(ctx.user.id);
+    }),
     logout: publicProcedure.mutation(async ({ ctx }) => {
       try { await sdk.revokeSessionForRequest(ctx.req); }
       catch (error) {

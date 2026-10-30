@@ -1,119 +1,68 @@
-/**
- * IndexedDB helper for storing large files (images, PDFs, etc.)
- * Solves the localStorage size limit issue on mobile browsers
- */
+import { privateLocalStorage as vault, type VaultEnvelope } from "@/lib/private-browser-storage";
 
-const DB_NAME = "sers_evidence_db";
-const DB_VERSION = 1;
+// Never assign the unowned legacy database to the next account using a device.
+const DB_NAME = "sers_private_evidence_v1";
 const FILE_STORE = "evidence_files";
+type EncryptedFile = { id: string; scope: string; envelope: VaultEnvelope };
+export interface StoredFile { id: string; data: string; fileName: string; fileType: string; timestamp: number }
 
+function identity(id = "") {
+  const scope = vault.activeScope;
+  if (!scope) throw new Error("سجّل الدخول لفتح ملفاتك الخاصة");
+  if (id.length > 256) throw new Error("Invalid local file id");
+  return { scope, id: `${scope}:${id}` };
+}
 function openDB(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, DB_VERSION);
-    request.onerror = () => reject(request.error);
+    const request = indexedDB.open(DB_NAME, 1);
+    request.onerror = () => reject(new Error("Local file storage unavailable"));
+    request.onblocked = () => reject(new Error("Local file storage blocked"));
     request.onsuccess = () => resolve(request.result);
-    request.onupgradeneeded = (event) => {
-      const db = (event.target as IDBOpenDBRequest).result;
-      if (!db.objectStoreNames.contains(FILE_STORE)) {
-        db.createObjectStore(FILE_STORE, { keyPath: "id" });
-      }
-    };
+    request.onupgradeneeded = () => request.result.createObjectStore(FILE_STORE, { keyPath: "id" });
   });
 }
-
-export interface StoredFile {
-  id: string;
-  data: string; // base64 data URL
-  fileName: string;
-  fileType: string;
-  timestamp: number;
-}
-
-/** Save a file to IndexedDB */
-export async function saveFileToIDB(file: StoredFile): Promise<void> {
+async function transaction<T>(scope: string, mode: IDBTransactionMode, operation: (store: IDBObjectStore) => IDBRequest<T>): Promise<T> {
   const db = await openDB();
   return new Promise((resolve, reject) => {
-    let finished = false;
-    const finish = (error?: unknown) => {
-      if (finished) return;
-      finished = true;
-      db.close();
-      if (error) reject(new Error("Local file storage unavailable")); else resolve();
-    };
+    let result: T;
+    const fail = () => { db.close(); reject(new Error("Local file transaction failed")); };
     try {
-      const tx = db.transaction(FILE_STORE, "readwrite");
-      tx.oncomplete = () => finish();
-      tx.onabort = () => finish(tx.error ?? new Error("Local transaction aborted"));
-      tx.onerror = () => finish(tx.error ?? new Error("Local transaction failed"));
-      tx.objectStore(FILE_STORE).put(file).onerror = event => finish((event.target as IDBRequest).error ?? new Error("Local file write failed"));
-    } catch (error) { finish(error); }
+      if (vault.activeScope !== scope) throw new Error("Account changed");
+      const tx = db.transaction(FILE_STORE, mode);
+      const request = operation(tx.objectStore(FILE_STORE));
+      request.onsuccess = () => { result = request.result; };
+      tx.onabort = fail; tx.onerror = fail;
+      tx.oncomplete = () => {
+        db.close();
+        if (vault.activeScope !== scope) reject(new Error("Account changed")); else resolve(result);
+      };
+    } catch { fail(); }
   });
 }
-
-/** Get a file from IndexedDB */
+export async function saveFileToIDB(file: StoredFile): Promise<void> {
+  const target = identity(file.id);
+  if (file.data.length > 24 * 1024 * 1024) throw new Error("Local file exceeds size limit");
+  const envelope = await vault.seal(file, `file:${target.id}`);
+  await transaction(target.scope, "readwrite", store => store.put({ ...target, envelope } satisfies EncryptedFile));
+}
 export async function getFileFromIDB(id: string): Promise<StoredFile | null> {
-  try {
-    const db = await openDB();
-    return new Promise((resolve, reject) => {
-      const tx = db.transaction(FILE_STORE, "readonly");
-      const store = tx.objectStore(FILE_STORE);
-      const request = store.get(id);
-      request.onsuccess = () => resolve(request.result || null);
-      request.onerror = () => reject(request.error);
-      tx.oncomplete = () => db.close();
-    });
-  } catch (err) {
-    console.error("IndexedDB get error:", err);
-    return null;
-  }
+  const target = identity(id);
+  const row: EncryptedFile | undefined = await transaction(target.scope, "readonly", store => store.get(target.id));
+  if (!row) return null;
+  if (row.scope !== target.scope || row.id !== target.id) throw new Error("Invalid local file scope");
+  const file = await vault.open<StoredFile>(row.envelope, `file:${target.id}`);
+  if (file.id !== id) throw new Error("Invalid local file binding");
+  return file;
 }
-
-/** Delete a file from IndexedDB */
 export async function deleteFileFromIDB(id: string): Promise<void> {
-  try {
-    const db = await openDB();
-    return new Promise((resolve, reject) => {
-      const tx = db.transaction(FILE_STORE, "readwrite");
-      const store = tx.objectStore(FILE_STORE);
-      const request = store.delete(id);
-      request.onsuccess = () => resolve();
-      request.onerror = () => reject(request.error);
-      tx.oncomplete = () => db.close();
-    });
-  } catch (err) {
-    console.error("IndexedDB delete error:", err);
-  }
+  const target = identity(id);
+  await transaction(target.scope, "readwrite", store => store.delete(target.id));
 }
-
-/** Get all files from IndexedDB */
 export async function getAllFilesFromIDB(): Promise<StoredFile[]> {
-  try {
-    const db = await openDB();
-    return new Promise((resolve, reject) => {
-      const tx = db.transaction(FILE_STORE, "readonly");
-      const store = tx.objectStore(FILE_STORE);
-      const request = store.getAll();
-      request.onsuccess = () => resolve(request.result || []);
-      request.onerror = () => reject(request.error);
-      tx.oncomplete = () => db.close();
-    });
-  } catch (err) {
-    console.error("IndexedDB getAll error:", err);
-    return [];
-  }
-}
-
-/** Clear old files (older than 24 hours) */
-export async function cleanOldFiles(): Promise<void> {
-  try {
-    const files = await getAllFilesFromIDB();
-    const cutoff = Date.now() - 86400000; // 24 hours
-    for (const file of files) {
-      if (file.timestamp < cutoff) {
-        await deleteFileFromIDB(file.id);
-      }
-    }
-  } catch (err) {
-    console.error("IndexedDB cleanup error:", err);
-  }
+  const { scope } = identity();
+  const rows: EncryptedFile[] = await transaction(scope, "readonly", store => store.getAll(IDBKeyRange.bound(`${scope}:`, `${scope}:\uffff`)));
+  return Promise.all(rows.map(async row => {
+    if (row.scope !== scope) throw new Error("Invalid local file scope");
+    return vault.open<StoredFile>(row.envelope, `file:${row.id}`);
+  }));
 }

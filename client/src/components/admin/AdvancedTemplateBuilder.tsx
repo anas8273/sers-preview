@@ -1,3 +1,4 @@
+import { privateLocalStorage as localStorage } from "@/lib/private-browser-storage";
 /**
  * AdvancedTemplateBuilder — محرر قوالب مرئي متقدم (No-Code Builder)
  * ✅ WYSIWYG Canvas مع سحب/تغيير حجم حر

@@ -1,3 +1,4 @@
+import { privateLocalStorage as localStorage } from "@/lib/private-browser-storage";
 /**
  * useOfflineSync - وضع عدم الاتصال بالإنترنت مع مزامنة تلقائية
  * يحفظ الشواهد محلياً عند عدم وجود اتصال ويزامنها عند عودة الاتصال
@@ -16,7 +17,7 @@ interface PendingAction {
 const OFFLINE_QUEUE_KEY = "sers_offline_queue";
 const OFFLINE_DATA_KEY = "sers_offline_data";
 
-export function useOfflineSync() {
+export function useOfflineSync(syncAction?: (action: PendingAction) => Promise<void>) {
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [pendingActions, setPendingActions] = useState<PendingAction[]>([]);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -27,7 +28,7 @@ export function useOfflineSync() {
     const handleOnline = () => {
       setIsOnline(true);
       toast.success("تم استعادة الاتصال بالإنترنت", {
-        description: "جاري مزامنة البيانات المعلقة...",
+        description: "النسخة المحلية محفوظة؛ ارفع الملفات عبر مكتبة الشواهد لحفظها على الخادم.",
         duration: 3000,
       });
     };
@@ -35,7 +36,7 @@ export function useOfflineSync() {
     const handleOffline = () => {
       setIsOnline(false);
       toast.warning("لا يوجد اتصال بالإنترنت", {
-        description: "سيتم حفظ التغييرات محلياً ومزامنتها عند عودة الاتصال",
+        description: "التغييرات محلية على هذا الجهاز؛ لا تعني مزامنتها مع الخادم",
         duration: 5000,
       });
     };
@@ -99,7 +100,7 @@ export function useOfflineSync() {
 
   // مزامنة الإجراءات المعلقة
   const syncPendingActions = useCallback(async () => {
-    if (syncInProgressRef.current || !navigator.onLine) return;
+    if (!syncAction || syncInProgressRef.current || !navigator.onLine) return;
     syncInProgressRef.current = true;
     setIsSyncing(true);
 
@@ -115,8 +116,7 @@ export function useOfflineSync() {
 
     for (const action of unsynced) {
       try {
-        // محاولة مزامنة كل إجراء
-        // هنا يمكن استدعاء API الفعلي
+        await syncAction(action);
         const idx = updatedActions.findIndex((a) => a.id === action.id);
         if (idx !== -1) {
           updatedActions[idx] = { ...updatedActions[idx], synced: true };
@@ -139,17 +139,17 @@ export function useOfflineSync() {
 
     setIsSyncing(false);
     syncInProgressRef.current = false;
-  }, [pendingActions, savePendingActions]);
+  }, [pendingActions, savePendingActions, syncAction]);
 
   // مزامنة تلقائية عند عودة الاتصال
   useEffect(() => {
-    if (isOnline && pendingActions.some((a) => !a.synced)) {
+    if (syncAction && isOnline && pendingActions.some((a) => !a.synced)) {
       const timer = setTimeout(() => {
         syncPendingActions();
       }, 2000); // انتظار 2 ثانية للتأكد من استقرار الاتصال
       return () => clearTimeout(timer);
     }
-  }, [isOnline, pendingActions, syncPendingActions]);
+  }, [isOnline, pendingActions, syncPendingActions, syncAction]);
 
   // حفظ بيانات محلية للعمل بدون اتصال
   const saveOfflineData = useCallback((key: string, data: unknown) => {

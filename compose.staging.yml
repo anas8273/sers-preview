@@ -30,6 +30,7 @@ x-app: &app
     OAUTH_SERVER_URL: ${OAUTH_SERVER_URL:?Set the staging OAuth server URL}
     VITE_OAUTH_PORTAL_URL: ${VITE_OAUTH_PORTAL_URL:?Set the staging OAuth portal URL}
     OWNER_OPEN_ID: ${OWNER_OPEN_ID:-}
+    SERS_TRUSTED_PROXY_IPS: ${SERS_TRUSTED_PROXY_IPS:-}
     SERS_UPLOADS_ENABLED: ${SERS_UPLOADS_ENABLED:-1}
     SERS_PRIVATE_STORAGE_DIR: /var/lib/sers/evidence
     SERS_CLAMAV_HOST: clamav

@@ -1,5 +1,6 @@
 /** Production OAuth/session/context code against a synthetic loopback issuer.
  * This proves the application's protocol and persistence, not external Manus login. */
+import { decryptedRecords } from "./private-storage-helpers.mts";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { eq } from "drizzle-orm";
@@ -13,7 +14,7 @@ assert.equal(process.env.GITHUB_ACTIONS, "true");
 assert.equal(process.env.SERS_INTEGRATION, "1");
 assert.equal(process.env.DATABASE_URL, "mysql://root:root@127.0.0.1:3306/sers_test");
 
-test("production auth browser journey with synthetic issuer: login, account, work, logout and denied cookie replay", { timeout: 120_000 }, async () => {
+test("production auth browser journey with synthetic issuer: login, account, work, logout, report re-entry, account isolation and denied cookie replay", { timeout: 120_000 }, async () => {
   const harness = await startAuthHarness();
   let browser: Awaited<ReturnType<typeof puppeteer.launch>> | undefined;
   const visible = (page: Page, text: string) => page.waitForFunction(value => document.body.innerText.includes(value), {}, text);
@@ -45,7 +46,7 @@ test("production auth browser journey with synthetic issuer: login, account, wor
     });
     assert.equal((await authRpc(harness.base, "account.overview")).response.status, 401);
     await page.goto(`${harness.base}/account`); await visible(page, "تسجيل الدخول");
-    await Promise.all([page.waitForNavigation(), page.click('a[href="/api/oauth/start"]')]);
+    await Promise.all([page.waitForNavigation(), page.click('a[href^="/api/oauth/start"]')]);
     await page.waitForSelector("#issuer-sign-in");
     assert.equal(new URL(page.url()).origin, harness.issuerBase);
     const authorization = harness.authorizations.at(-1); assert(authorization);
@@ -56,7 +57,7 @@ test("production auth browser journey with synthetic issuer: login, account, wor
     const callback = await callbackResponse;
     assert.equal(callback.status(), 302); assert.equal(callback.headers()["referrer-policy"], "no-referrer");
     assert.match(callback.headers()["cache-control"], /no-store/);
-    assert.equal(page.url(), `${harness.base}/`);
+    assert.equal(page.url(), `${harness.base}/account`);
     assert.equal(await page.evaluate(() => location.search), "");
     assert.equal(await page.evaluate(() => document.referrer), "");
     assert.equal(seen.filter(request => request.url.includes(authorization.code)).length, 1);
@@ -97,10 +98,40 @@ test("production auth browser journey with synthetic issuer: login, account, wor
     assert.equal(work.ownerUserId, user.id); assert.equal(work.academicYearId, year.id); assert.equal(work.title, title);
     await page.goto(`${harness.base}/work`); await visible(page, title); await page.reload(); await visible(page, title);
 
+    const reportUrl = `${harness.base}/work/${workId}/report`;
+    await page.goto(reportUrl); await page.waitForSelector("textarea");
+    const reportText = `PRIVATE_SERVER_REPORT_${harness.prefix}`;
+    await page.$eval("textarea", (element, text) => {
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(element, text);
+      element.dispatchEvent(new Event("input", { bubbles: true }));
+    }, reportText);
+    await visible(page, "محفوظ في الخادم");
+    await page.reload(); await page.waitForFunction(text => (document.querySelector("textarea") as HTMLTextAreaElement)?.value === text, {}, reportText);
+    // Keep a second live tab open to prove remote logout clears displayed data.
+    const otherTab = await context.newPage(); await otherTab.goto(reportUrl);
+    await otherTab.waitForFunction(text => (document.querySelector("textarea") as HTMLTextAreaElement)?.value === text, {}, reportText);
+    // Create an offline backup through the editor while the authenticated page
+    // is open, then restore the network before logout.
+    await page.evaluate(() => { Object.defineProperty(navigator, "onLine", { configurable: true, get: () => false }); window.dispatchEvent(new Event("offline")); });
+    const draftText = `PRIVATE_UNSENT_DRAFT_${harness.prefix}`;
+    await page.$eval("textarea", (element, text) => {
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(element, text);
+      element.dispatchEvent(new Event("input", { bubbles: true }));
+    }, draftText);
+    await visible(page, "غير متصل بالخادم");
+    const persistedDraft = await decryptedRecords(page);
+    assert(persistedDraft[`sers:report-draft:${workId}`]?.includes(draftText));
+    const rawCache = await page.evaluate(() => JSON.stringify({ ...localStorage }));
+    assert(!rawCache.includes(draftText)); assert(!rawCache.includes(reportText));
+    // No online event: keep the encrypted unsent draft for re-entry recovery.
+    await page.evaluate(() => { delete (navigator as any).onLine; });
     await page.goto(`${harness.base}/account`); await visible(page, "معرّف حسابك:");
     const logoutResponse = page.waitForResponse(response => response.url().includes("auth.logout"));
     await click(page, "تسجيل الخروج"); assert.equal((await logoutResponse).status(), 200);
     await visible(page, "تسجيل الدخول");
+    await visible(otherTab, "تسجيل الدخول");
+    assert.equal(await otherTab.$("textarea"), null);
+    await otherTab.close();
     assert.equal(await page.evaluate(value => document.body.innerText.includes(value), schoolName), false);
     const [revoked] = await harness.db.select().from(authSessions).where(eq(authSessions.idHash, sessions[0].idHash));
     assert(revoked.revokedAt instanceof Date);
@@ -115,6 +146,32 @@ test("production auth browser journey with synthetic issuer: login, account, wor
     const replayPage = await replayContext.newPage(); await replayPage.goto(`${harness.base}/account`);
     await visible(replayPage, "تسجيل الدخول");
     assert.equal(await replayPage.evaluate(value => document.body.innerText.includes(value), schoolName), false);
-    await replayContext.close(); await context.close();
+    await replayContext.close();
+    // Same identity returns to the exact report URL and decrypts its own draft.
+    harness.loginAs(authorization.openId);
+    await page.goto(reportUrl); await visible(page, "تسجيل الدخول");
+    await Promise.all([page.waitForNavigation(), page.click('a[href^="/api/oauth/start"]')]);
+    await page.waitForSelector("#issuer-sign-in");
+    await Promise.all([page.waitForNavigation({ waitUntil: "networkidle0" }), page.click("#issuer-sign-in")]);
+    assert.equal(page.url(), reportUrl);
+    await page.waitForFunction(text => (document.querySelector("textarea") as HTMLTextAreaElement)?.value === text, {}, draftText);
+    await visible(page, "محفوظ في الخادم");
+    await page.reload(); await page.waitForFunction(text => (document.querySelector("textarea") as HTMLTextAreaElement)?.value === text, {}, draftText);
+    await page.goto(`${harness.base}/account`); await visible(page, "معرّف حسابك:"); await click(page, "تسجيل الخروج"); await visible(page, "تسجيل الدخول");
+    // A different identity in the SAME browser cannot obtain the original key,
+    // local records, or the protected server report.
+    await page.goto(reportUrl); await visible(page, "تسجيل الدخول");
+    await Promise.all([page.waitForNavigation(), page.click('a[href^="/api/oauth/start"]')]);
+    await page.waitForSelector("#issuer-sign-in");
+    await Promise.all([page.waitForNavigation({ waitUntil: "networkidle0" }), page.click("#issuer-sign-in")]);
+    assert.equal((await decryptedRecords(page))[`sers:report-draft:${workId}`], undefined);
+    assert.equal(await page.$("textarea"), null);
+    assert.equal(await page.evaluate(text => document.body.innerText.includes(text), draftText), false);
+    const forbiddenReport = await page.evaluate(async id => {
+      const url = `/api/trpc/domain.reportDraft.get?input=${encodeURIComponent(JSON.stringify({ json: { workItemId: id } }))}`;
+      return (await fetch(url)).status;
+    }, workId);
+    assert([403, 404].includes(forbiddenReport));
+    await context.close();
   } finally { await browser?.close(); await harness.close(); }
 });

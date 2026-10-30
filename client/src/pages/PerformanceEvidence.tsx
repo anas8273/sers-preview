@@ -1,3 +1,4 @@
+import { privateLocalStorage as localStorage } from "@/lib/private-browser-storage";
 import React from 'react';
 /**
  * شواهد الأداء الوظيفي - SERS
@@ -378,7 +379,7 @@ const STORAGE_AUTOSAVE_KEY = "sers_perf_autosave";
 const OFFLINE_DRAFT_KEY = "performance-evidence-draft";
 
 // ===== حفظ واستعادة الـ state من localStorage (يبقى حتى بعد إغلاق المتصفح) =====
-function saveStateToStorage(data: {
+function serializeState(data: {
   step: string; jobId: string; themeId: string;
   criteriaData: Record<string, CriterionData>; personalInfo: any;
   customCriteria: Criterion[]; currentCriterionIndex: number;
@@ -402,16 +403,18 @@ function saveStateToStorage(data: {
         }),
       };
     }
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...data, criteriaData: cleanCriteria, timestamp: Date.now() }));
-    return true;
-  } catch {
-    // localStorage ممتلئ - حاول حذف البيانات القديمة
-    try {
-      localStorage.removeItem(STORAGE_AUTOSAVE_KEY);
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...data, timestamp: Date.now() }));
-      return true;
-    } catch { return false; }
-  }
+    return JSON.stringify({ ...data, criteriaData: cleanCriteria, timestamp: Date.now() });
+  } catch { throw new Error("تعذر تجهيز النسخة المحلية"); }
+}
+
+function saveStateToStorage(data: Parameters<typeof serializeState>[0]) {
+  try { localStorage.setItem(STORAGE_KEY, serializeState(data)); return true; }
+  catch { return false; }
+}
+
+async function saveStateDurably(data: Parameters<typeof serializeState>[0]) {
+  try { await localStorage.setItemDurably(STORAGE_KEY, serializeState(data)); return true; }
+  catch { return false; }
 }
 
 function loadStateFromStorage(): any | null {
@@ -670,7 +673,7 @@ export default function PerformanceEvidence() {
     if (isUploadingRef.current) return;
     // تأخير الحفظ لتجنب الحفظ المتكرر السريع
     const timer = setTimeout(() => {
-      if (!isUploadingRef.current) {
+      if (!isUploadingRef.current && confirmingEvidence.current.size === 0) {
         saveStateToStorage({
           step, jobId: selectedJob.id, themeId: selectedTheme.id,
           criteriaData, personalInfo, customCriteria,
@@ -684,7 +687,7 @@ export default function PerformanceEvidence() {
   // ===== حفظ تلقائي عند إغلاق المتصفح أو الانتقال =====
   useEffect(() => {
     const handleBeforeUnload = () => {
-      if (!selectedJob || step === "select") return;
+      if (!selectedJob || step === "select" || confirmingEvidence.current.size > 0) return;
       try {
         saveStateToStorage({
           step, jobId: selectedJob.id, themeId: selectedTheme.id,
@@ -696,7 +699,7 @@ export default function PerformanceEvidence() {
     window.addEventListener("beforeunload", handleBeforeUnload);
     // حفظ عند visibilitychange (عندما ينتقل المستخدم لتطبيق آخر على الجوال)
     const handleVisibilityChange = () => {
-      if (document.visibilityState === "hidden" && selectedJob && step !== "select") {
+      if (document.visibilityState === "hidden" && selectedJob && step !== "select" && confirmingEvidence.current.size === 0) {
         try {
           saveStateToStorage({
             step, jobId: selectedJob.id, themeId: selectedTheme.id,
@@ -1209,7 +1212,7 @@ export default function PerformanceEvidence() {
       }]));
       next[criterionId] = { ...next[criterionId], evidences: [...next[criterionId].evidences, confirmedEvidence] };
       // Keep a retryable pending entry if the local mapping cannot be persisted.
-      const saved = !!selectedJob && saveStateToStorage({ step, jobId: selectedJob.id, themeId: selectedTheme.id, criteriaData: next, personalInfo, customCriteria, currentCriterionIndex, activeTab, expandedSubEvidence });
+      const saved = !!selectedJob && await saveStateDurably({ step, jobId: selectedJob.id, themeId: selectedTheme.id, criteriaData: next, personalInfo, customCriteria, currentCriterionIndex, activeTab, expandedSubEvidence });
       if (!saved) {
         toast.warning("تعذر حفظ التصنيف على الجهاز؛ بقي الملف في قائمة المراجعة ولم يُضف إلى البنود. أعد الاعتماد بعد إتاحة مساحة.");
         return;
@@ -1509,15 +1512,7 @@ export default function PerformanceEvidence() {
 
   const saveReport = async () => {
     if (!selectedJob) return;
-    if (!isAuthenticated) {
-      // حفظ محلي كاحتياطي للمستخدمين غير المسجلين
-      const data = { step, personalInfo, criteriaData, jobId: selectedJob.id, themeId: selectedTheme.id, customCriteria, currentCriterionIndex, activeTab, expandedSubEvidence, timestamp: Date.now() };
-      localStorage.setItem(`sers_perf_${personalInfo.name || "draft"}`, JSON.stringify(data));
-      saveStateToStorage(data);
-      saveOfflineData(OFFLINE_DRAFT_KEY, data);
-      toast.success("تم حفظ البيانات محلياً! سجل دخولك لحفظها في السحابة.");
-      return;
-    }
+    if (!isAuthenticated) { toast.error("سجّل الدخول لحفظ بياناتك الخاصة"); return; }
     setIsSaving(true);
     try {
       const savedId = await portfolio.savePortfolio({
@@ -1533,9 +1528,10 @@ export default function PerformanceEvidence() {
         toast.success("تم حفظ البيانات في السحابة بنجاح!");
       } else {
         const fallback = { step, personalInfo, criteriaData, jobId: selectedJob.id, themeId: selectedTheme.id, customCriteria, currentCriterionIndex, activeTab, expandedSubEvidence, timestamp: Date.now() };
-        saveStateToStorage(fallback);
-        saveOfflineData(OFFLINE_DRAFT_KEY, fallback);
-        toast.warning("تعذر الحفظ السحابي؛ احتُفظ بنسخة محلية آمنة لاستعادتها لاحقاً.");
+        if (await saveStateDurably(fallback)) {
+          saveOfflineData(OFFLINE_DRAFT_KEY, fallback);
+          toast.warning("تعذر الحفظ السحابي؛ احتُفظ بنسخة محلية آمنة لاستعادتها لاحقاً.");
+        } else { toast.error("تعذر الحفظ محليًا وفي الخادم. أبق الصفحة مفتوحة وأعد المحاولة."); }
       }
     } catch {
       const fallback = { step, personalInfo, criteriaData, jobId: selectedJob.id, themeId: selectedTheme.id, customCriteria, currentCriterionIndex, activeTab, expandedSubEvidence, timestamp: Date.now() };

@@ -4,6 +4,7 @@ import { constants } from 'node:fs';
 import mysql from 'mysql2/promise';
 import { tsImport } from 'tsx/esm/api';
 import { verifyReleaseContract, assertSupportedSchema } from './release-contract.mjs';
+const { trustedProxyAddresses } = await tsImport('../../server/_core/http-security.ts', import.meta.url);
 const { getAuthConfig } = await tsImport('../../server/_core/env.ts', import.meta.url);
 
 export function validateReleaseConfiguration(env) {
@@ -14,6 +15,7 @@ export function validateReleaseConfiguration(env) {
   if (env.NODE_ENV === 'production') {
     // Use the exact server validator, including secret diversity, app identity,
     // provider URL rules and callback bounds. A separate approximation can drift.
+    trustedProxyAddresses(env.SERS_TRUSTED_PROXY_IPS ?? '');
     getAuthConfig({ appId: env.VITE_APP_ID ?? '', cookieSecret: env.JWT_SECRET ?? '', appPublicOrigin: env.APP_PUBLIC_ORIGIN ?? '', oAuthServerUrl: env.OAUTH_SERVER_URL ?? '', oAuthPortalUrl: env.OAUTH_PORTAL_URL ?? env.VITE_OAUTH_PORTAL_URL ?? '', isProduction: true });
     if (env.SERS_DEMO_MODE) throw new Error('Invalid production identity configuration');
   }

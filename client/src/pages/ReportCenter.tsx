@@ -1,3 +1,4 @@
+import { privateLocalStorage as localStorage } from "@/lib/private-browser-storage";
 /**
  * مركز التقارير الشامل - SERS
  * يتيح إنشاء تقارير متنوعة مع:
@@ -161,7 +162,7 @@ function loadReports(): SavedReport[] {
   try { const s = localStorage.getItem(STORAGE_KEY); if (s) return JSON.parse(s); } catch {} return [];
 }
 function saveReportsToStorage(reports: SavedReport[]) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(reports));
+  return localStorage.setItemDurably(STORAGE_KEY, JSON.stringify(reports));
 }
 function generateId() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
 
@@ -424,7 +425,7 @@ export default function ReportCenter() {
     }
   }, [isAuthenticated, uploadAttachmentMutation]);
 
-  const handleSave = useCallback(() => {
+  const handleSave = useCallback(async () => {
     if (!selectedTemplate) return;
     const missing = selectedTemplate.fields.filter((field) => field.required && !formData[field.id]?.trim());
     if (missing.length) {
@@ -434,12 +435,13 @@ export default function ReportCenter() {
     const title = formData.title || formData.subject || formData.teacherName || formData.school || formData.deptName || selectedTemplate.title;
     const now = Date.now();
 
+    try {
     if (currentReport) {
       const updated = savedReports.map((r) =>
         r.id === currentReport.id ? { ...r, title, data: formData, themeId: selectedTheme.id, fontFamily: selectedFont, attachments, updatedAt: now } : r
       );
+      await saveReportsToStorage(updated);
       setSavedReports(updated);
-      saveReportsToStorage(updated);
       setCurrentReport({ ...currentReport, title, data: formData, themeId: selectedTheme.id, fontFamily: selectedFont, attachments, updatedAt: now });
       toast.success("تم تحديث التقرير بنجاح");
     } else {
@@ -448,18 +450,21 @@ export default function ReportCenter() {
         themeId: selectedTheme.id, fontFamily: selectedFont, attachments, createdAt: now, updatedAt: now,
       };
       const updated = [newReport, ...savedReports];
+      await saveReportsToStorage(updated);
       setSavedReports(updated);
-      saveReportsToStorage(updated);
       setCurrentReport(newReport);
       toast.success("تم حفظ التقرير بنجاح");
     }
+    } catch { toast.error("تعذر حفظ التقرير على الجهاز. أبق الصفحة مفتوحة وأعد المحاولة."); }
   }, [selectedTemplate, formData, currentReport, savedReports, selectedTheme, selectedFont, attachments]);
 
-  const handleDelete = useCallback((id: string) => {
+  const handleDelete = useCallback(async (id: string) => {
     const updated = savedReports.filter((r) => r.id !== id);
-    setSavedReports(updated);
-    saveReportsToStorage(updated);
-    toast.success("تم حذف التقرير");
+    try {
+      await saveReportsToStorage(updated);
+      setSavedReports(updated);
+      toast.success("تم حذف التقرير");
+    } catch { toast.error("تعذر حفظ الحذف. لم يتغير التقرير المحفوظ."); }
   }, [savedReports]);
 
   const handleAIFill = useCallback(async () => {

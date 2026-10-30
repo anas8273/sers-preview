@@ -10,8 +10,8 @@ describe("PerformanceEvidence offline recovery", () => {
     expect(source).toContain("const saved = loadStateFromStorage() ?? (");
   });
 
-  it("keeps a recoverable local snapshot for guest and failed cloud saves", () => {
-    expect(source).toContain("saveOfflineData(OFFLINE_DRAFT_KEY, data)");
+  it("keeps an authenticated recoverable snapshot after a failed cloud save", () => {
+    expect(source).toContain("await saveStateDurably(fallback)");
     expect(source).toContain("saveOfflineData(OFFLINE_DRAFT_KEY, fallback)");
     expect(source).toContain("احتُفظ بنسخة محلية آمنة لاستعادتها لاحقاً");
   });

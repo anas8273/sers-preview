@@ -6,6 +6,7 @@ import { AuthRateLimitError, authCredential, consumeOAuthAttempt, createOAuthAtt
 import { getOAuthAttemptCookieOptions, getSessionCookieOptions, OAUTH_ATTEMPT_COOKIE } from "./cookies";
 import { AUTH_SESSION_TTL_MS, getAuthConfig, OAUTH_ATTEMPT_TTL_MS } from "./env";
 import { sdk } from "./sdk";
+import { safeAuthReturnPath } from "../../shared/auth-return-path";
 
 function cookie(req: Request, name: string) {
   try { return parseCookieHeader(req.headers.cookie ?? "")[name]; } catch { return undefined; }
@@ -20,7 +21,7 @@ export function registerOAuthRoutes(app: Express) {
       const previous = cookie(req, OAUTH_ATTEMPT_COOKIE);
       const browser = validAuthCredential(previous) ? previous : authCredential();
       const state = authCredential();
-      await createOAuthAttempt({ state, browser, address: req.ip ?? req.socket.remoteAddress ?? "unknown", appId: config.appId, redirectUri: config.redirectUri, secret: config.secret });
+      await createOAuthAttempt({ state, browser, address: req.ip ?? req.socket.remoteAddress ?? "unknown", appId: config.appId, redirectUri: config.redirectUri, secret: config.secret, returnTo: safeAuthReturnPath(req.query.returnTo) });
       const authorize = new URL(`${config.portalUrl.replace(/\/$/, "")}/app-auth`);
       authorize.searchParams.set("appId", config.appId);
       authorize.searchParams.set("redirectUri", config.redirectUri);
@@ -45,7 +46,8 @@ export function registerOAuthRoutes(app: Express) {
     }
     try {
       const config = getAuthConfig();
-      if (!await consumeOAuthAttempt({ state, browser, appId: config.appId, redirectUri: config.redirectUri })) {
+      const attempt = await consumeOAuthAttempt({ state, browser, appId: config.appId, redirectUri: config.redirectUri });
+      if (!attempt) {
         res.status(400).json({ error: "Invalid or expired sign-in attempt" }); return;
       }
       res.clearCookie(OAUTH_ATTEMPT_COOKIE, getOAuthAttemptCookieOptions());
@@ -54,7 +56,7 @@ export function registerOAuthRoutes(app: Express) {
       await db.upsertUser({ openId: user.openId, name: user.name || null, email: user.email ?? null, loginMethod: user.loginMethod ?? user.platform ?? null, lastSignedIn: new Date() });
       const session = await sdk.createSessionToken(user.openId, { name: user.name || "" });
       res.cookie(COOKIE_NAME, session, { ...getSessionCookieOptions(), maxAge: AUTH_SESSION_TTL_MS });
-      res.redirect(302, "/");
+      res.redirect(302, attempt.returnTo);
     } catch {
       // Provider exceptions can contain codes, access tokens and request headers.
       console.warn("[Auth] Sign-in callback unavailable");

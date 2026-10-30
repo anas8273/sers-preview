@@ -4,6 +4,7 @@ import { authOAuthAttempts, authRateLimits, authSessions } from "../drizzle/auth
 import { users } from "../drizzle/schema";
 import { getDb } from "./db";
 import { OAUTH_ATTEMPT_TTL_MS } from "./_core/env";
+import { safeAuthReturnPath } from "../shared/auth-return-path";
 
 export const authCredential = () => randomBytes(32).toString("base64url");
 export const validAuthCredential = (value: unknown): value is string => typeof value === "string" && /^[A-Za-z0-9_-]{43}$/.test(value);
@@ -13,7 +14,7 @@ export class AuthRateLimitError extends Error { constructor() { super("Too many 
 async function database() { const db = await getDb(); if (!db) throw new Error("Authentication database unavailable"); return db; }
 function affectedRows(value: unknown) { const result = Array.isArray(value) ? value[0] : value; return result && typeof result === "object" && "affectedRows" in result ? Number(result.affectedRows) : 0; }
 
-export async function createOAuthAttempt(input: { state: string; browser: string; address: string; appId: string; redirectUri: string; secret: string }) {
+export async function createOAuthAttempt(input: { state: string; browser: string; address: string; appId: string; redirectUri: string; secret: string; returnTo?: string }) {
   if (!validAuthCredential(input.state) || !validAuthCredential(input.browser)) throw new Error("Invalid authentication attempt");
   const db = await database();
   const now = new Date(Math.floor(Date.now() / 1000) * 1000);
@@ -29,7 +30,7 @@ export async function createOAuthAttempt(input: { state: string; browser: string
       if (!expired && row.count >= limit.max) throw new AuthRateLimitError();
       await tx.update(authRateLimits).set({ count: expired ? 1 : row.count + 1, ...(expired ? { windowStartedAt: now, expiresAt } : {}) }).where(eq(authRateLimits.keyHash, limit.keyHash));
     }
-    await tx.insert(authOAuthAttempts).values({ stateHash: hashAuthCredential(input.state), browserHash: hashAuthCredential(input.browser), appId: input.appId, redirectUri: input.redirectUri, expiresAt });
+    await tx.insert(authOAuthAttempts).values({ stateHash: hashAuthCredential(input.state), browserHash: hashAuthCredential(input.browser), appId: input.appId, redirectUri: input.redirectUri, returnTo: safeAuthReturnPath(input.returnTo), expiresAt });
   });
   // Bounded opportunistic expiry cleanup contains abandoned attempts and rate rows.
   await db.delete(authOAuthAttempts).where(lt(authOAuthAttempts.expiresAt, now)).limit(100);
@@ -42,10 +43,14 @@ export async function createOAuthAttempt(input: { state: string; browser: string
 export async function consumeOAuthAttempt(input: { state: string; browser: string; appId: string; redirectUri: string }) {
   if (!validAuthCredential(input.state) || !validAuthCredential(input.browser)) return false;
   const db = await database();
-  return affectedRows(await db.update(authOAuthAttempts).set({ consumedAt: sql`CURRENT_TIMESTAMP` }).where(and(
+  const consumed = affectedRows(await db.update(authOAuthAttempts).set({ consumedAt: sql`CURRENT_TIMESTAMP` }).where(and(
     eq(authOAuthAttempts.stateHash, hashAuthCredential(input.state)), eq(authOAuthAttempts.browserHash, hashAuthCredential(input.browser)),
     eq(authOAuthAttempts.appId, input.appId), eq(authOAuthAttempts.redirectUri, input.redirectUri), isNull(authOAuthAttempts.consumedAt), gt(authOAuthAttempts.expiresAt, sql`CURRENT_TIMESTAMP`),
   ))) === 1;
+  if (!consumed) return false;
+  const [attempt] = await db.select({ returnTo: authOAuthAttempts.returnTo }).from(authOAuthAttempts)
+    .where(eq(authOAuthAttempts.stateHash, hashAuthCredential(input.state))).limit(1);
+  return { returnTo: safeAuthReturnPath(attempt?.returnTo) };
 }
 
 export async function createAuthSession(input: { id: string; userId: number; appId: string; expiresAt: Date }) {

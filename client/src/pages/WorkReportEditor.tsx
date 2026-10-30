@@ -1,3 +1,4 @@
+import { privateLocalStorage as localStorage } from "@/lib/private-browser-storage";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
@@ -63,7 +64,7 @@ function backupKey(workId: number) {
 function parseBackup(workId: number): LocalBackup | undefined {
   if (typeof window === "undefined") return undefined;
   try {
-    const raw = window.localStorage.getItem(backupKey(workId));
+    const raw = localStorage.getItem(backupKey(workId));
     if (!raw) return undefined;
     const parsed = JSON.parse(raw) as Partial<LocalBackup>;
     if (!Number.isInteger(parsed.baseRevision) || typeof parsed.updatedAt !== "string") return undefined;
@@ -89,7 +90,7 @@ const saveStateText: Record<SaveState, string> = {
   dirty: "تغييرات غير محفوظة",
   saving: "جارٍ الحفظ...",
   saved: "محفوظ في الخادم",
-  offline: "محفوظ محليًا حتى عودة الاتصال",
+  offline: "غير متصل بالخادم",
   conflict: "يوجد تعارض مع نسخة أحدث",
   error: "تعذر الحفظ",
 };
@@ -162,7 +163,7 @@ export default function WorkReportEditor() {
   useEffect(() => {
     if (!initializedRef.current || typeof window === "undefined") return;
     if (saveState === "saved" || saveState === "idle") {
-      window.localStorage.removeItem(backupKey(workId));
+      localStorage.removeItem(backupKey(workId));
       return;
     }
     const backup: LocalBackup = {
@@ -175,7 +176,7 @@ export default function WorkReportEditor() {
       evidenceAssetIds,
     };
     try {
-      window.localStorage.setItem(backupKey(workId), JSON.stringify(backup));
+      localStorage.setItem(backupKey(workId), JSON.stringify(backup));
     } catch {
       // The server remains the source of truth; inability to persist a browser backup is non-fatal.
     }
@@ -208,7 +209,7 @@ export default function WorkReportEditor() {
       setRevision(saved.revision);
       setLastSavedAt(saved.updatedAt);
       setSaveState("saved");
-      if (typeof window !== "undefined") window.localStorage.removeItem(backupKey(workId));
+      if (typeof window !== "undefined") localStorage.removeItem(backupKey(workId));
       return saved.revision;
     } catch (error) {
       const code = (error as { data?: { code?: string } })?.data?.code;
@@ -241,7 +242,7 @@ export default function WorkReportEditor() {
   const reloadFromServer = useCallback(async () => {
     const result = await reportQuery.refetch();
     if (result.data) {
-      if (typeof window !== "undefined") window.localStorage.removeItem(backupKey(workId));
+      if (typeof window !== "undefined") localStorage.removeItem(backupKey(workId));
       applyServerDraft(result.data, false);
     }
   }, [applyServerDraft, reportQuery, workId]);

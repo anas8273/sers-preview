@@ -1,3 +1,4 @@
+import { decryptedRecords, decryptedFile } from "./private-storage-helpers.mts";
 /** Real browser + production OAuth/AI routes + disposable MySQL. The separate
  * provider is synthetic; proposed classifications are never execution proof. */
 import assert from "node:assert/strict";
@@ -27,26 +28,15 @@ async function clickButton(page: Page, text: string, selector = "body") {
   }, { text, selector });
 }
 async function storedState(page: Page, userId: number) {
-  return page.evaluate(id => {
-    const stored = JSON.parse(localStorage.getItem("sers_perf_state") ?? "{}");
-    const pending = JSON.parse(localStorage.getItem(`sers_pending_evidence_v2_${id}_teacher`) ?? "[]");
-    const learning = JSON.parse(localStorage.getItem(`sers_learning_log_v2_${id}_teacher`) ?? "[]");
+  const records = await decryptedRecords(page);
+  const stored = JSON.parse(records.sers_perf_state ?? "{}");
+  const pending = JSON.parse(records[`sers_pending_evidence_v2_${userId}_teacher`] ?? "[]");
+  const learning = JSON.parse(records[`sers_learning_log_v2_${userId}_teacher`] ?? "[]");
     const associations = Object.entries(stored.criteriaData ?? {}).flatMap(([criterionId, value]) =>
       ((value as { evidences?: Array<{ id: string; fileName: string; subEvidenceId: string }> }).evidences ?? []).map(evidence => ({ criterionId, id: evidence.id, fileName: evidence.fileName, subEvidenceId: evidence.subEvidenceId })));
     return { pending, learning, associations };
-  }, userId);
 }
-async function localFile(page: Page, fileName: string) {
-  return page.evaluate(name => new Promise<{ id: string; data: string; fileName: string } | undefined>((resolve, reject) => {
-    const request = indexedDB.open("sers_evidence_db", 1);
-    request.onerror = () => reject(new Error("Cannot inspect fixture file persistence"));
-    request.onsuccess = () => {
-      const db = request.result, transaction = db.transaction("evidence_files", "readonly"), rows = transaction.objectStore("evidence_files").getAll();
-      rows.onsuccess = () => resolve(rows.result.find((row: { fileName: string }) => row.fileName === name));
-      rows.onerror = () => reject(new Error("Cannot read fixture files")); transaction.oncomplete = () => db.close();
-    };
-  }), fileName);
-}
+const localFile = decryptedFile;
 async function chooseDestination(page: Page, article: string, optionIndex: number) {
   const criterion = `${article} select[id^="criterion-"]`, sub = `${article} select[id^="sub-"]`;
   const criterionId = await page.$eval(criterion, (element, index) => (element as HTMLSelectElement).options[index].value, optionIndex);
@@ -78,7 +68,7 @@ test("AI suggestions require explicit user confirmation; low confidence, rejecti
       else void request.abort();
     });
     await page.goto(`${harness.base}/account`); await visible(page, "تسجيل الدخول");
-    await Promise.all([page.waitForNavigation(), page.click('a[href="/api/oauth/start"]')]);
+    await Promise.all([page.waitForNavigation(), page.click('a[href^="/api/oauth/start"]')]);
     await page.waitForSelector("#issuer-sign-in");
     await Promise.all([page.waitForNavigation({ waitUntil: "networkidle0" }), page.click("#issuer-sign-in")]);
     const me = await page.evaluate(async () => {
@@ -180,11 +170,14 @@ test("AI suggestions require explicit user confirmation; low confidence, rejecti
     await upload(names[4]); await visible(page, "اقتراح غير معتمد.");
     await page.waitForFunction(selector => Array.from(document.querySelectorAll(`${selector} select`)).every(element => Boolean((element as HTMLSelectElement).value)), {}, article(names[4]));
     const initialDestination = await chooseDestination(page, article(names[4]), 1);
-    await page.evaluate(() => {
+    await page.evaluate(async () => {
+      const { scope } = (await (await fetch("/api/trpc/auth.browserStorageKey")).json()).result.data.json;
+      const digest = Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode("sers_perf_state"))), v => v.toString(16).padStart(2, "0")).join("");
+      const encryptedKey = `sers:vault:v1:${scope}:${digest}`;
       const original = Storage.prototype.setItem;
       (window as unknown as { __sersRestoreDraft?: () => void }).__sersRestoreDraft = () => { Storage.prototype.setItem = original; };
       Storage.prototype.setItem = function (key, value) {
-        if (this === localStorage && key === "sers_perf_state") throw new DOMException("Synthetic draft storage denial", "QuotaExceededError");
+        if (this === localStorage && key === encryptedKey) throw new DOMException("Synthetic draft storage denial", "QuotaExceededError");
         return original.call(this, key, value);
       };
     });

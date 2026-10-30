@@ -1,3 +1,4 @@
+import { privateLocalStorage as localStorage } from "@/lib/private-browser-storage";
 /**
  * صانع الإذاعة المدرسية - SERS
  * إنشاء برنامج إذاعة مدرسية متكامل مع:
@@ -89,7 +90,7 @@ const RADIO_THEMES = [
 
 const STORAGE_KEY = "sers-radio-programs";
 function loadPrograms(): SavedRadio[] { try { const s = localStorage.getItem(STORAGE_KEY); if (s) return JSON.parse(s); } catch {} return []; }
-function saveProgramsToStorage(programs: SavedRadio[]) { localStorage.setItem(STORAGE_KEY, JSON.stringify(programs)); }
+function saveProgramsToStorage(programs: SavedRadio[]) { return localStorage.setItemDurably(STORAGE_KEY, JSON.stringify(programs)); }
 function generateId() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
 
 // ═══════════════════════════════════════════════════════════════
@@ -261,32 +262,36 @@ export default function SchoolRadio() {
     });
   }, []);
 
-  const handleSave = useCallback(() => {
+  const handleSave = useCallback(async () => {
+    try {
     const now = Date.now();
     if (currentProgram) {
       const updated = programs.map((p) =>
         p.id === currentProgram.id ? { ...p, title, date, theme: radioTheme, themeId: selectedTheme.id, fontFamily: selectedFont, segments, createdAt: now } : p
       );
+      await saveProgramsToStorage(updated);
       setPrograms(updated);
-      saveProgramsToStorage(updated);
       setCurrentProgram({ ...currentProgram, title, date, theme: radioTheme, themeId: selectedTheme.id, fontFamily: selectedFont, segments, createdAt: now });
       toast.success("تم تحديث البرنامج بنجاح");
     } else {
       const newProg: SavedRadio = { id: generateId(), title, date, theme: radioTheme, themeId: selectedTheme.id, fontFamily: selectedFont, segments, createdAt: now };
       const updated = [newProg, ...programs];
+      await saveProgramsToStorage(updated);
       setPrograms(updated);
-      saveProgramsToStorage(updated);
       setCurrentProgram(newProg);
       toast.success("تم حفظ البرنامج بنجاح");
     }
     if (readiness.score < 100) toast.info(`حُفظ البرنامج كمسودة. أكمل ${readiness.checks.filter((check) => !check.complete).length} عناصر قبل التصدير.`);
+    } catch { toast.error("تعذر الحفظ على الجهاز. أبق الصفحة مفتوحة وأعد المحاولة."); }
   }, [currentProgram, programs, title, date, radioTheme, selectedTheme, selectedFont, segments, readiness]);
 
-  const handleDelete = useCallback((id: string) => {
+  const handleDelete = useCallback(async (id: string) => {
+    try {
     const updated = programs.filter((p) => p.id !== id);
+    await saveProgramsToStorage(updated);
     setPrograms(updated);
-    saveProgramsToStorage(updated);
     toast.success("تم حذف البرنامج");
+    } catch { toast.error("تعذر حفظ الحذف على الجهاز."); }
   }, [programs]);
 
   const handleAIFill = useCallback(async () => {
