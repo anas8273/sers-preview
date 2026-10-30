@@ -27,6 +27,7 @@ function AuthenticatedWorkspace({ children, required }: { children: ReactNode; r
   const { user, loading, error, refresh } = useAuth();
   const queryClient = useQueryClient();
   const previousUser = useRef<number | null | undefined>(undefined);
+  const [cacheEpoch, setCacheEpoch] = useState(0);
   const [ready, setReady] = useState<number | null>(null);
   const [storageError, setStorageError] = useState("");
   const [attempt, setAttempt] = useState(0);
@@ -35,11 +36,16 @@ function AuthenticatedWorkspace({ children, required }: { children: ReactNode; r
     const controller = new AbortController();
     setReady(null); setStorageError(""); privateLocalStorage.lock();
     void (async () => {
-      if (previousUser.current !== (user?.id ?? null)) {
-        previousUser.current = user?.id ?? null;
+      // Do not cancel public queries during the first anonymous/auth lookup.
+      // Only a previously established account can leave private query data.
+      if (typeof previousUser.current === "number" && previousUser.current !== user?.id) {
         await clearPrivateQueryCache(queryClient);
+        if (cancelled) return;
+        setCacheEpoch(epoch => epoch + 1);
       }
-      if (cancelled || !user) return;
+      if (cancelled) return;
+      previousUser.current = user?.id ?? null;
+      if (!user) return;
       // Fetch outside QueryCache: the raw key must not become cached app state.
       const response = await fetch("/api/trpc/auth.browserStorageKey", { credentials: "include", cache: "no-store", signal: controller.signal });
       if (!response.ok) throw new Error("تعذر فتح مساحة العمل؛ تحقق من الاتصال وسجّل الدخول مجددًا عند الحاجة.");
@@ -50,7 +56,8 @@ function AuthenticatedWorkspace({ children, required }: { children: ReactNode; r
     })().catch(error => { if (!cancelled) setStorageError(error instanceof Error ? error.message : "تعذر فتح مساحة العمل"); });
     return () => { cancelled = true; controller.abort(); privateLocalStorage.lock(); };
   }, [user?.id, attempt, queryClient]);
-  if (!required) return <>{children}</>;
+  if (typeof previousUser.current === "number" && previousUser.current !== user?.id) return <div dir="rtl" className="p-10 text-center">جارٍ تبديل الحساب...</div>;
+  if (!required) return <div key={cacheEpoch}>{children}</div>;
   if (loading) return <div dir="rtl" className="p-10 text-center">جارٍ التحقق من الجلسة...</div>;
   if (error) return <div dir="rtl" className="p-10 text-center" role="alert">تعذر التحقق من الجلسة. <button onClick={() => void refresh()} className="underline">إعادة المحاولة</button></div>;
   if (!user) return <main dir="rtl" className="min-h-screen bg-slate-50 flex flex-col items-center justify-center gap-4 p-8"><h1 className="text-2xl font-bold">مساحة عملك الخاصة</h1><p>سجّل الدخول للوصول إلى تقاريرك وشواهدك.</p><a href={getLoginUrl()} className="rounded-xl bg-teal-700 px-6 py-3 text-white font-bold">تسجيل الدخول</a></main>;
