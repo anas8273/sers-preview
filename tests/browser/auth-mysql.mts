@@ -198,16 +198,17 @@ test("production auth browser journey with synthetic issuer: login, account, wor
     const logoutTab = await context.newPage(); await logoutTab.goto(`${harness.base}/account`);
     await visible(logoutTab, "معرّف حسابك:");
     await page.bringToFront();
-    await page.evaluate(() => {
-      Object.defineProperty(navigator, "onLine", { configurable: true, get: () => false });
+    // Raw page source avoids tsx's Node-side __name helper in nested callbacks.
+    await page.evaluate(`(() => {
+      Object.defineProperty(navigator, "onLine", { configurable: true, get() { return false; } });
       window.dispatchEvent(new Event("offline"));
       const original = Storage.prototype.setItem;
-      (window as any).__restoreSyntheticStorage = () => { Storage.prototype.setItem = original; };
+      window.__restoreSyntheticStorage = () => { Storage.prototype.setItem = original; };
       Storage.prototype.setItem = function(name, value) {
         if (name.startsWith("sers:vault:v1:")) throw new DOMException("Synthetic quota failure", "QuotaExceededError");
         return original.call(this, name, value);
       };
-    });
+    })()`);
     const failedDraft = `PRIVATE_QUOTA_FAILED_DRAFT_${harness.prefix}`;
     await page.$eval("textarea", (element, text) => {
       Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(element, text);
