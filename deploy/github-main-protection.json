@@ -1,13 +1,14 @@
 {
   "required_status_checks": {
     "strict": true,
-    "contexts": [
-      "quality",
-      "repository-safety",
-      "mysql-legacy",
-      "mysql-domain-integration",
-      "compose-backup-restore",
-      "candidate-portability"
+    "contexts": [],
+    "checks": [
+      { "context": "quality", "app_id": 15368 },
+      { "context": "repository-safety", "app_id": 15368 },
+      { "context": "mysql-legacy", "app_id": 15368 },
+      { "context": "mysql-domain-integration", "app_id": 15368 },
+      { "context": "compose-backup-restore", "app_id": 15368 },
+      { "context": "candidate-portability", "app_id": 15368 }
     ]
   },
   "enforce_admins": true,

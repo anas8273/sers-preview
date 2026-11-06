@@ -22,7 +22,14 @@ function fixture() {
   const pr = { number: 37, merged: true, merged_at: '2026-10-31T00:00:00Z', draft: false, state: 'closed', merge_commit_sha: main, base: { ref: 'main', sha: base, repo }, head: { sha: source, repo } };
   const runs = WORKFLOWS.map((workflow, index) => ({ id: 4001 + index, workflow_id: workflow.id, path: workflow.path, event: 'pull_request', head_sha: source, repository: repo, head_repository: repo, run_attempt: 1, status: 'completed', conclusion: 'success', pull_requests: [{ number: 37, head: { sha: source, repo }, base: { sha: base, ref: 'main', repo } }] }));
   const artifact = { id: 1234, name: `sers-runtime-${source}-4004-1`, expired: false, size_in_bytes: 2048, digest: 'sha256:' + '6'.repeat(64), workflow_run: { id: 4004, repository_id: REPOSITORY_ID, head_repository_id: REPOSITORY_ID, head_sha: source } };
-  const state = { pr, mainRef: main, mainTree: tree, mainParents: [{ sha: base }, { sha: source }], sourceTree: tree, mergeParents: [{ sha: base }, { sha: source }], runs, artifact, extraRuns: [], associatedAncestors: [] };
+  const jobsByAttempt = new Map();
+  for (const [index, run] of runs.entries()) {
+    jobsByAttempt.set(`${run.id}/attempts/1`, WORKFLOWS[index].jobs.map((name, offset) => ({
+      name, id: run.id * 10 + offset, run_id: run.id, run_attempt: 1,
+      head_sha: source, status: 'completed', conclusion: 'success',
+    })));
+  }
+  const state = { pr, mainRef: main, mainTree: tree, mainParents: [{ sha: base }, { sha: source }], sourceTree: tree, mergeParents: [{ sha: base }, { sha: source }], runs, jobsByAttempt, artifact, extraRuns: [], associatedAncestors: [] };
   const api = async route => {
     const url = new URL('https://api.github.com' + route), endpoint = url.pathname.replace(`/repos/${REPOSITORY}`, '');
     let result;
@@ -34,6 +41,11 @@ function fixture() {
     else if (endpoint === '/pulls/37') result = state.pr;
     else if (/^\/actions\/workflows\/\d+\/runs$/.test(endpoint)) { const id = Number(endpoint.split('/')[3]); const all = [...state.runs, ...state.extraRuns].filter(run => run.workflow_id === id); result = { total_count: all.length, workflow_runs: all }; }
     else if (/^\/actions\/runs\/\d+$/.test(endpoint)) result = [...state.runs, ...state.extraRuns].find(run => run.id === Number(endpoint.split('/')[3]));
+    else if (endpoint.endsWith('/jobs')) {
+      const key = endpoint.slice('/actions/runs/'.length, -'/jobs'.length);
+      const jobs = state.jobsByAttempt.get(key) ?? [];
+      result = { total_count: jobs.length, jobs };
+    }
     else if (endpoint === '/actions/runs/4004/artifacts') result = { total_count: 1, artifacts: [state.artifact] };
     else throw new Error('Unexpected fixture API route ' + endpoint);
     return structuredClone(result);
@@ -49,6 +61,11 @@ test('publisher accepts only trusted main context, a merged same-repository sour
   const { api } = fixture();
   const evidence = await selectEvidence(api, context);
   assert.equal(evidence.gates.length, 4);
+  const verifiedChecks = evidence.gates.flatMap(gate => gate.jobs.map(job => ({ context: job.name, app_id: 15368 })));
+  const policy = JSON.parse(await readFile(path.join(root, 'deploy/github-main-protection.json'), 'utf8'));
+  assert.equal(verifiedChecks.length, 6);
+  assert.deepEqual(verifiedChecks.sort((a, b) => a.context.localeCompare(b.context)),
+    policy.required_status_checks.checks.sort((a, b) => a.context.localeCompare(b.context)));
   assert.equal(evidence.producer.runId, 4004);
   await verifyCandidateEvidence(candidate(), evidence, api);
 });
@@ -86,7 +103,37 @@ test('older green runs and stale artifacts cannot bypass a failed, pending or ne
   }
   const { state, api } = fixture();
   state.runs[3].run_attempt = 2;
+  const firstAttemptJobs = state.jobsByAttempt.get('4004/attempts/1');
+  state.jobsByAttempt.set('4004/attempts/2', firstAttemptJobs.map(job => ({ ...job, id: job.id + 100, run_attempt: 2 })));
   await assert.rejects(selectEvidence(api, context), /unique runtime candidate/);
+});
+
+test('green workflows cannot mask a missing, duplicate, unsuccessful or unrelated job', async () => {
+  const { api, state } = fixture();
+  const [producer, portability] = state.jobsByAttempt.get('4004/attempts/1');
+  for (const change of [
+    { conclusion: 'skipped' }, { conclusion: 'neutral' }, { conclusion: 'failure' },
+    { conclusion: 'cancelled' }, { conclusion: null }, { status: 'in_progress' },
+    { run_attempt: 2 }, { run_id: 4444 }, { head_sha: main }, { id: 0 },
+  ]) {
+    state.jobsByAttempt.set('4004/attempts/1', [producer, { ...portability, ...change }]);
+    await assert.rejects(selectEvidence(api, context), /candidate-portability/);
+  }
+  for (const jobs of [[producer], [producer, portability, { ...portability, id: 9999 }]]) {
+    state.jobsByAttempt.set('4004/attempts/1', jobs);
+    await assert.rejects(selectEvidence(api, context), /Missing or ambiguous required job: candidate-portability/);
+  }
+});
+
+test('partial reruns cannot inherit successes from a previous attempt', async () => {
+  const { state, api } = fixture();
+  state.runs[0].run_attempt = 2;
+  const jobs = state.jobsByAttempt.get('4001/attempts/1').map(job => ({ ...job, id: job.id + 100, run_attempt: 2 }));
+  state.jobsByAttempt.set('4001/attempts/2', [jobs[0]]);
+  await assert.rejects(selectEvidence(api, context), /repository-safety/);
+  state.jobsByAttempt.set('4001/attempts/2', jobs);
+  const evidence = await selectEvidence(api, context);
+  assert.deepEqual(evidence.gates[0].jobs, jobs.map(job => ({ name: job.name, jobId: job.id })));
 });
 
 test('artifact identity requires a digest, exact repository/head, unexpired data and the selected run', async () => {
