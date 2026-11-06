@@ -141,13 +141,22 @@ jobs:
 
   candidate-portability:
     needs: compose-backup-restore
-    if: needs.compose-backup-restore.outputs.candidate-artifact-id != ''
+    if: ${{ always() && github.event_name == 'pull_request' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     defaults:
       run:
         shell: bash
     steps:
+      - name: Require a successful producer and its candidate artifact
+        env:
+          PRODUCER_RESULT: ${{ needs.compose-backup-restore.result }}
+          CANDIDATE_ARTIFACT_ID: ${{ needs.compose-backup-restore.outputs.candidate-artifact-id }}
+        run: |
+          if [[ "$PRODUCER_RESULT" != success || ! "$CANDIDATE_ARTIFACT_ID" =~ ^[1-9][0-9]*$ ]]; then
+            echo "::error::Release PRs require a tested candidate from a branch in this repository."
+            exit 1
+          fi
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false

@@ -8,10 +8,10 @@ import path from 'node:path';
 export const REPOSITORY = 'anas8273/sers-preview';
 export const REPOSITORY_ID = 1182003064;
 export const WORKFLOWS = Object.freeze([
-  { id: 356759996, path: '.github/workflows/ci.yml' },
-  { id: 357137371, path: '.github/workflows/integration.yml' },
-  { id: 379201327, path: '.github/workflows/mysql-legacy.yml' },
-  { id: 399003176, path: '.github/workflows/operations.yml' },
+  { id: 356759996, path: '.github/workflows/ci.yml', jobs: ['quality', 'repository-safety'] },
+  { id: 357137371, path: '.github/workflows/integration.yml', jobs: ['mysql-domain-integration'] },
+  { id: 379201327, path: '.github/workflows/mysql-legacy.yml', jobs: ['mysql-legacy'] },
+  { id: 399003176, path: '.github/workflows/operations.yml', jobs: ['compose-backup-restore', 'candidate-portability'] },
 ]);
 export const MAX_ARTIFACT_BYTES = 3 * 1024 ** 3 + 1024 ** 2;
 export const SHA = /^[a-f0-9]{40}$/;
@@ -62,6 +62,22 @@ async function list(api, route, key) {
 }
 
 function sameRepository(value) { return value?.id === REPOSITORY_ID && value?.full_name === REPOSITORY; }
+
+async function verifyRequiredJobs(api, prefix, workflow, run) {
+  const route = `${prefix}/actions/runs/${run.id}/attempts/${run.run_attempt}/jobs`;
+  const jobs = await list(api, route, 'jobs');
+  return workflow.jobs.map(name => {
+    const matches = jobs.filter(job => job.name === name);
+    if (matches.length !== 1) throw new Error(`Missing or ambiguous required job: ${name}`);
+    const [job] = matches;
+    if (!positiveInteger(job.id) || job.run_id !== run.id || job.run_attempt !== run.run_attempt ||
+        job.head_sha !== run.head_sha || job.status !== 'completed' || job.conclusion !== 'success') {
+      throw new Error(`Required job lacks successful evidence for the selected attempt: ${name}`);
+    }
+    return { name, jobId: job.id };
+  });
+}
+
 export async function selectEvidence(api, context) {
   if (context.repo !== REPOSITORY || context.repoID !== REPOSITORY_ID || !SHA.test(context.mainSha ?? '')) throw new Error('Unexpected promotion context');
   const prefix = `/repos/${REPOSITORY}`;
@@ -90,7 +106,8 @@ export async function selectEvidence(api, context) {
     const run = await api(`${prefix}/actions/runs/${newest.id}`);
     const linked = run.pull_requests?.filter(item => item.number === pr.number && item.head?.sha === pr.head.sha && item.head?.repo?.id === REPOSITORY_ID && item.base?.repo?.id === REPOSITORY_ID && item.base?.ref === 'main' && item.base?.sha === baseSha);
     if (run.id !== newest.id || run.workflow_id !== workflow.id || run.path !== workflow.path || run.event !== 'pull_request' || run.head_sha !== pr.head.sha || !sameRepository(run.repository) || !sameRepository(run.head_repository) || !positiveInteger(run.run_attempt) || run.status !== 'completed' || run.conclusion !== 'success' || !Array.isArray(run.pull_requests) || (run.pull_requests.length > 0 && linked.length !== 1)) throw new Error('The latest required workflow attempt is not a successful same-repository proof');
-    gates.push({ workflowId: workflow.id, path: workflow.path, runId: run.id, runAttempt: run.run_attempt });
+    const jobs = await verifyRequiredJobs(api, prefix, workflow, run);
+    gates.push({ workflowId: workflow.id, path: workflow.path, runId: run.id, runAttempt: run.run_attempt, jobs });
     if (workflow.path === '.github/workflows/operations.yml') producer = { ...gates.at(-1), baseSha };
   }
   if (!producer) throw new Error('No operations producer was verified');
