@@ -20,6 +20,7 @@ import { createWorkItemForUser } from '../../server/domain-db';
 import { getReportDraftForUser } from '../../server/work-report-draft-db';
 import { createAcademicYearForUser } from '../../server/account-db';
 import { registerPrivateOutputRoutes } from '../../server/output-artifact-storage';
+import { closeBrowser } from '../../server/pdf-renderer';
 import { decryptedRecords } from './private-storage-helpers.mts';
 
 // Refuse to touch an arbitrary database, even if someone supplies SERS_INTEGRATION.
@@ -215,6 +216,7 @@ test('reports retain the latest overlapping edit through reload, review, PDF, ed
   } finally {
     firstSave.resolve(); secondSave.resolve();
     await browser?.close();
+    await closeBrowser();
     if (server) { server.closeAllConnections(); await new Promise<void>(resolve => server!.close(() => resolve())); }
     await rm(root, { recursive: true, force: true });
     // The entire synthetic service DB is discarded by Actions; close the pool to exit cleanly.

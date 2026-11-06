@@ -63,11 +63,6 @@ function sameContent(a: ReportDraftContent, b: ReportDraftContent) {
     && a.evidenceAssetIds.every((id, index) => id === b.evidenceAssetIds[index]);
 }
 
-function preserveBackup(workId: number, session: ReportDraftSession, baseRevision: number) {
-  const backup: LocalBackup = { ...session.content, baseRevision, updatedAt: new Date().toISOString() };
-  localStorage.setItem(backupKey(workId), JSON.stringify(backup));
-}
-
 function backupKey(workId: number) {
   return `sers:report-draft:${workId}`;
 }
@@ -127,6 +122,7 @@ function ReportEditor({ workId }: { workId: number }) {
   const [draft, setDraft] = useState(emptyDraft);
   const { templateId, themeId, fontFamily, fields, evidenceAssetIds } = draft;
   const [saveState, setSaveState] = useState<SaveState>("idle");
+  const [backupError, setBackupError] = useState(false);
   const [lastSavedAt, setLastSavedAt] = useState<string | undefined>();
   const [versionReason, setVersionReason] = useState("");
   const [createdVersion, setCreatedVersion] = useState<{ id: number; versionNumber: number; revision: number } | undefined>();
@@ -157,6 +153,21 @@ function ReportEditor({ workId }: { workId: number }) {
     sessionRef.current === session && scope.current === localStorage.activeScope, []);
   useLayoutEffect(() => () => { sessionRef.current = null; }, []);
 
+  const updateBackup = useCallback((pending?: { content: ReportDraftContent; baseRevision: number }) => {
+    try {
+      if (pending) {
+        const backup: LocalBackup = { ...pending.content, baseRevision: pending.baseRevision, updatedAt: new Date().toISOString() };
+        localStorage.setItem(backupKey(workId), JSON.stringify(backup));
+      } else {
+        localStorage.removeItem(backupKey(workId));
+      }
+      setBackupError(false);
+    } catch {
+      // A device storage error must not interrupt saving to the server.
+      setBackupError(true);
+    }
+  }, [workId]);
+
   const applyServerDraft = useCallback((data: NonNullable<typeof reportQuery.data>, recover: boolean) => {
     const confirmed = contentOf(data.draft);
     const backup = recover ? parseBackup(workId) : undefined;
@@ -169,13 +180,13 @@ function ReportEditor({ workId }: { workId: number }) {
     versionPending.current = false;
     setCreatingVersion(false);
     conflict.current = Boolean(unsaved && unsaved.baseRevision !== session.revision);
-    if (backup && !unsaved) localStorage.removeItem(backupKey(workId));
+    if (backup && !unsaved) updateBackup();
     setDraft(session.content);
     setRevision(session.revision);
     setLastSavedAt(data.draft.updatedAt);
     setCreatedVersion(undefined);
     setSaveState(conflict.current ? "conflict" : session.dirty ? (navigator.onLine ? "dirty" : "offline") : "saved");
-  }, [workId]);
+  }, [workId, updateBackup]);
 
   useEffect(() => {
     if (reportQuery.data && reportQuery.isSuccess && !reportQuery.isFetching && !sessionRef.current) {
@@ -190,7 +201,7 @@ function ReportEditor({ workId }: { workId: number }) {
     setCreatedVersion(undefined);
     // During a conflict the backup must keep its original revision until the
     // user chooses to discard it. Editing it must never unlock an overwrite.
-    preserveBackup(workId, session, backupRevision.current);
+    updateBackup({ content: session.content, baseRevision: backupRevision.current });
     if (!conflict.current) setSaveState(navigator.onLine ? "dirty" : "offline");
   };
 
@@ -209,9 +220,9 @@ function ReportEditor({ workId }: { workId: number }) {
         setRevision(receipt.revision);
         setLastSavedAt(receipt.updatedAt);
         if (session.dirty) {
-          preserveBackup(workId, session, receipt.revision);
+          updateBackup({ content: session.content, baseRevision: receipt.revision });
         } else {
-          localStorage.removeItem(backupKey(workId));
+          updateBackup();
           setSaveState("saved");
         }
       });
@@ -221,7 +232,7 @@ function ReportEditor({ workId }: { workId: number }) {
         setSaveState(conflict.current ? "conflict" : navigator.onLine ? "error" : "offline");
       }
     }
-  }, [isCurrent, workId, writeDraft]);
+  }, [isCurrent, workId, writeDraft, updateBackup]);
 
   useEffect(() => {
     if (saveState !== "dirty") return;
@@ -244,7 +255,7 @@ function ReportEditor({ workId }: { workId: number }) {
     const session = sessionRef.current;
     const result = await reportQuery.refetch();
     if (session && isCurrent(session) && result.isSuccess) {
-      localStorage.removeItem(backupKey(workId));
+      updateBackup();
       applyServerDraft(result.data, false);
     }
   };
@@ -359,6 +370,10 @@ function ReportEditor({ workId }: { workId: number }) {
             </div>
           )}
 
+          {backupError && (
+            <p role="alert" className="mt-4 text-sm text-amber-800">تعذّر تحديث نسخة الاسترداد على هذا الجهاز. أبقِ التقرير مفتوحًا حتى يكتمل الحفظ في الخادم.</p>
+          )}
+
           {saveState === "conflict" && (
             <div className="mt-5 flex flex-col gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-start gap-2"><AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" /><p>تختلف مراجعة الخادم عن مسودتك. يمكنك نسخ نصك قبل استبداله بنسخة الخادم.</p></div>
@@ -444,7 +459,7 @@ function ReportEditor({ workId }: { workId: number }) {
                   <h2 className="mt-1 text-lg font-bold text-slate-950">حفظ نسخة للمراجعة أو الإخراج</h2>
                   <p className="mt-2 text-xs leading-6 text-slate-500">ينشئ النظام نسخة من المسودة المحفوظة في الخادم والشواهد المرتبطة، لا من الصفحة المعروضة في المتصفح.</p>
                   <textarea value={versionReason} onChange={event => setVersionReason(event.target.value)} rows={2} maxLength={255} placeholder="سبب إنشاء النسخة، مثل: جاهزة للمراجعة" className="mt-4 w-full resize-none rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-teal-400 focus:ring-2 focus:ring-teal-100" />
-                  <button onClick={() => void handleCreateVersion()} disabled={creatingVersion || saveState === "conflict" || saveState === "offline" || saveState === "idle" || (saveState === "saved" && revision === 0)} className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-50">
+                  <button onClick={() => void handleCreateVersion()} disabled={creatingVersion || saveState === "conflict" || saveState === "offline" || (saveState === "saved" && revision === 0)} className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-50">
                     {creatingVersion ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileCheck2 className="h-4 w-4" />} إنشاء نسخة ثابتة
                   </button>
                   {createVersionMutation.error && <p className="mt-3 text-xs text-red-600">{createVersionMutation.error.message}</p>}
