@@ -347,7 +347,7 @@ function ReportPreview({
 export default function ReportCenter() {
   const [, navigate] = useLocation();
   const { isAuthenticated } = useAuth();
-  const [view, setView] = useState<"templates" | "editor" | "preview" | "saved">("templates");
+  const [view, setView] = useState<"templates" | "editor" | "preview" | "saved">("saved");
   const [selectedTemplate, setSelectedTemplate] = useState<ReportTemplate | null>(null);
   const [currentReport, setCurrentReport] = useState<SavedReport | null>(null);
   const [formData, setFormData] = useState<Record<string, string>>({});
@@ -538,9 +538,9 @@ export default function ReportCenter() {
       {/* Header */}
       <div className="w-full bg-gradient-to-l from-teal-700 via-teal-600 to-emerald-500">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6">
-          <button type="button" onClick={() => navigate("/")} className="flex items-center gap-2 text-white/70 hover:text-white mb-3 transition-colors">
+          <button type="button" onClick={() => navigate("/reports")} className="flex items-center gap-2 text-white/70 hover:text-white mb-3 transition-colors">
             <ChevronLeft className="w-4 h-4" />
-            <span className="text-sm">العودة للرئيسية</span>
+            <span className="text-sm">العودة إلى التقارير</span>
           </button>
           <div className="flex items-center gap-4">
             <div className="w-14 h-14 rounded-2xl bg-white/15 backdrop-blur-sm flex items-center justify-center">
@@ -548,9 +548,9 @@ export default function ReportCenter() {
             </div>
             <div>
               <h1 className="text-2xl md:text-3xl font-black text-white" style={{ fontFamily: "'Tajawal', sans-serif" }}>
-                مركز التقارير
+                تقارير هذا الجهاز
               </h1>
-              <p className="text-white/80 text-sm mt-1">إنشاء وإدارة التقارير التعليمية والإدارية مع دعم الذكاء الاصطناعي</p>
+              <p className="text-white/80 text-sm mt-1">التقارير التي حفظتها بهذا الحساب في هذا المتصفح.</p>
             </div>
           </div>
           <div className="flex items-center gap-2 mt-4 flex-wrap">
@@ -582,7 +582,7 @@ export default function ReportCenter() {
                 {REPORT_TEMPLATES.map((template) => {
                   const Icon = template.icon;
                   return (
-                    <button key={template.id}
+                    <button key={template.id} aria-label={template.title}
                       onClick={() => startNewReport(template)} className="bg-white rounded-xl border border-gray-100 p-5 text-right transition-all group">
                       <div className="w-12 h-12 rounded-xl flex items-center justify-center mb-3" style={{ backgroundColor: template.color + "12" }}>
                         <Icon className="w-6 h-6" style={{ color: template.color }} />
@@ -652,11 +652,12 @@ export default function ReportCenter() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {selectedTemplate.fields.map((field) => (
                     <div key={field.id} className={field.type === "textarea" ? "md:col-span-2" : ""}>
-                      <label className="block text-xs font-medium text-gray-600 mb-1.5">
+                      <label htmlFor={`report-field-${field.id}`} className="block text-xs font-medium text-gray-600 mb-1.5">
                         {field.label} {field.required && <span className="text-red-500">*</span>}
                       </label>
                       {field.type === "textarea" ? (
                         <textarea
+                          id={`report-field-${field.id}`}
                           value={formData[field.id] || ""}
                           onChange={(e) => setFormData({ ...formData, [field.id]: e.target.value })}
                           placeholder={field.placeholder}
@@ -666,6 +667,7 @@ export default function ReportCenter() {
                         />
                       ) : field.type === "select" ? (
                         <select
+                          id={`report-field-${field.id}`}
                           value={formData[field.id] || ""}
                           onChange={(e) => setFormData({ ...formData, [field.id]: e.target.value })}
                           className="w-full px-3 py-2.5 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 bg-white"
@@ -676,6 +678,7 @@ export default function ReportCenter() {
                       ) : (
                         <input
                           type={field.type === "number" ? "number" : "text"}
+                          id={`report-field-${field.id}`}
                           value={formData[field.id] || ""}
                           onChange={(e) => setFormData({ ...formData, [field.id]: e.target.value })}
                           placeholder={field.placeholder}
@@ -798,7 +801,7 @@ export default function ReportCenter() {
                     const theme = THEMES.find((t) => t.id === report.themeId);
                     return (
                       <div key={report.id}
-                        className="bg-white rounded-xl border border-gray-100 p-4 flex items-center justify-between group">
+                        className="bg-white rounded-xl border border-gray-100 p-4 flex flex-wrap items-center justify-between gap-3">
                         <div className="flex items-center gap-4">
                           <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ backgroundColor: color + "12" }}>
                             <Icon className="w-5 h-5" style={{ color }} />
@@ -821,7 +824,7 @@ export default function ReportCenter() {
                             </p>
                           </div>
                         </div>
-                        <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <div className="flex items-center gap-2">
                           <Button onClick={() => editReport(report)} variant="outline" size="sm" className="gap-1">
                             <Edit3 className="w-3 h-3" /> تعديل
                           </Button>

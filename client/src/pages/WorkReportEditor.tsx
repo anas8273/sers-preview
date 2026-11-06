@@ -1,5 +1,6 @@
 import { privateLocalStorage as localStorage } from "@/lib/private-browser-storage";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ReportDraftSession, type ReportDraftContent } from "@/lib/report-draft-session";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
   ArrowRight,
@@ -47,15 +48,25 @@ const fontOptions = ["Cairo", "Tajawal", "Noto Kufi Arabic"];
 
 type SaveState = "idle" | "dirty" | "saving" | "saved" | "offline" | "conflict" | "error";
 
-type LocalBackup = {
-  baseRevision: number;
-  updatedAt: string;
-  templateId: string;
-  themeId: string;
-  fontFamily: string;
-  fields: Record<string, string>;
-  evidenceAssetIds: number[];
-};
+type LocalBackup = ReportDraftContent & { baseRevision: number; updatedAt: string };
+const emptyDraft: ReportDraftContent = { templateId: "custom", themeId: "classic", fontFamily: "Cairo", fields: {}, evidenceAssetIds: [] };
+
+function contentOf({ templateId, themeId, fontFamily, fields, evidenceAssetIds }: ReportDraftContent): ReportDraftContent {
+  return { templateId, themeId, fontFamily, fields, evidenceAssetIds };
+}
+
+function sameContent(a: ReportDraftContent, b: ReportDraftContent) {
+  return a.templateId === b.templateId && a.themeId === b.themeId && a.fontFamily === b.fontFamily
+    && Object.keys(a.fields).length === Object.keys(b.fields).length
+    && Object.entries(a.fields).every(([key, value]) => b.fields[key] === value)
+    && a.evidenceAssetIds.length === b.evidenceAssetIds.length
+    && a.evidenceAssetIds.every((id, index) => id === b.evidenceAssetIds[index]);
+}
+
+function preserveBackup(workId: number, session: ReportDraftSession, baseRevision: number) {
+  const backup: LocalBackup = { ...session.content, baseRevision, updatedAt: new Date().toISOString() };
+  localStorage.setItem(backupKey(workId), JSON.stringify(backup));
+}
 
 function backupKey(workId: number) {
   return `sers:report-draft:${workId}`;
@@ -96,33 +107,39 @@ const saveStateText: Record<SaveState, string> = {
 };
 
 export default function WorkReportEditor() {
-  const [location, setLocation] = useLocation();
   const [, params] = useRoute<{ id: string }>("/work/:id/report");
   const workId = Number(params?.id);
-  const validWorkId = Number.isInteger(workId) && workId > 0;
-  const initializedRef = useRef(false);
-  const saveInFlightRef = useRef(false);
+  if (!Number.isInteger(workId) || workId <= 0) {
+    return <div className="min-h-screen bg-[#F8FAFC] p-8 text-sm text-red-700" dir="rtl">معرّف العمل غير صالح.</div>;
+  }
+  return <ReportEditor key={workId} workId={workId} />;
+}
 
+function ReportEditor({ workId }: { workId: number }) {
+  const [location, setLocation] = useLocation();
+  const sessionRef = useRef<ReportDraftSession | null>(null);
+  const scope = useRef(localStorage.activeScope);
+  const conflict = useRef(false);
+  const backupRevision = useRef(0);
+  const versionPending = useRef(false);
+  const [creatingVersion, setCreatingVersion] = useState(false);
   const [revision, setRevision] = useState(0);
-  const [templateId, setTemplateId] = useState("custom");
-  const [themeId, setThemeId] = useState("classic");
-  const [fontFamily, setFontFamily] = useState("Cairo");
-  const [fields, setFields] = useState<Record<string, string>>({});
-  const [evidenceAssetIds, setEvidenceAssetIds] = useState<number[]>([]);
+  const [draft, setDraft] = useState(emptyDraft);
+  const { templateId, themeId, fontFamily, fields, evidenceAssetIds } = draft;
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [lastSavedAt, setLastSavedAt] = useState<string | undefined>();
   const [versionReason, setVersionReason] = useState("");
-  const [createdVersion, setCreatedVersion] = useState<{ id: number; versionNumber: number } | undefined>();
+  const [createdVersion, setCreatedVersion] = useState<{ id: number; versionNumber: number; revision: number } | undefined>();
   const [selectedReviewerId, setSelectedReviewerId] = useState<number | undefined>();
 
   const utils = trpc.useUtils();
   const reportQuery = trpc.domain.reportDraft.get.useQuery(
     { workItemId: workId },
-    { enabled: validWorkId, retry: false, refetchOnWindowFocus: false },
+    { retry: false, refetchOnWindowFocus: false, refetchOnMount: "always" },
   );
   const workQuery = trpc.domain.work.get.useQuery(
     { id: workId },
-    { enabled: validWorkId, retry: false, refetchOnWindowFocus: false },
+    { retry: false, refetchOnWindowFocus: false },
   );
   const organizationId = workQuery.data?.ownerType === "organization"
     ? workQuery.data.ownerOrganizationId ?? undefined
@@ -132,135 +149,124 @@ export default function WorkReportEditor() {
     { enabled: Boolean(organizationId), retry: false },
   );
 
-  const saveMutation = trpc.domain.reportDraft.save.useMutation();
+  const { mutateAsync: writeDraft } = trpc.domain.reportDraft.save.useMutation();
   const createVersionMutation = trpc.domain.reportDraft.createVersion.useMutation();
   const requestReviewMutation = trpc.domain.review.request.useMutation();
 
-  const applyServerDraft = useCallback((data: NonNullable<typeof reportQuery.data>, allowLocalBackup: boolean) => {
-    const serverDraft = data.draft;
-    const backup = allowLocalBackup ? parseBackup(workId) : undefined;
-    const serverUpdatedAt = Date.parse(serverDraft.updatedAt || "") || 0;
-    const backupUpdatedAt = backup ? Date.parse(backup.updatedAt) || 0 : 0;
-    const canRestoreBackup = backup
-      && backup.baseRevision === serverDraft.revision
-      && backupUpdatedAt > serverUpdatedAt;
+  const isCurrent = useCallback((session: ReportDraftSession) =>
+    sessionRef.current === session && scope.current === localStorage.activeScope, []);
+  useLayoutEffect(() => () => { sessionRef.current = null; }, []);
 
-    setRevision(serverDraft.revision);
-    setTemplateId(canRestoreBackup ? backup.templateId : serverDraft.templateId);
-    setThemeId(canRestoreBackup ? backup.themeId : serverDraft.themeId);
-    setFontFamily(canRestoreBackup ? backup.fontFamily : serverDraft.fontFamily);
-    setFields(canRestoreBackup ? backup.fields : serverDraft.fields);
-    setEvidenceAssetIds(canRestoreBackup ? backup.evidenceAssetIds : serverDraft.evidenceAssetIds);
-    setLastSavedAt(serverDraft.updatedAt);
-    setSaveState(canRestoreBackup ? "dirty" : "saved");
-    initializedRef.current = true;
-  }, [reportQuery.data, workId]);
+  const applyServerDraft = useCallback((data: NonNullable<typeof reportQuery.data>, recover: boolean) => {
+    const confirmed = contentOf(data.draft);
+    const backup = recover ? parseBackup(workId) : undefined;
+    const unsaved = backup && !sameContent(confirmed, backup) ? backup : undefined;
+    const session = new ReportDraftSession(data.draft.revision, confirmed, unsaved && contentOf(unsaved));
+    sessionRef.current = session;
+    // An earlier save may have landed while this page was closed. Keep the
+    // local edits visible for reconciliation instead of replaying a stale base.
+    backupRevision.current = unsaved?.baseRevision ?? session.revision;
+    versionPending.current = false;
+    setCreatingVersion(false);
+    conflict.current = Boolean(unsaved && unsaved.baseRevision !== session.revision);
+    if (backup && !unsaved) localStorage.removeItem(backupKey(workId));
+    setDraft(session.content);
+    setRevision(session.revision);
+    setLastSavedAt(data.draft.updatedAt);
+    setCreatedVersion(undefined);
+    setSaveState(conflict.current ? "conflict" : session.dirty ? (navigator.onLine ? "dirty" : "offline") : "saved");
+  }, [workId]);
 
   useEffect(() => {
-    if (reportQuery.data && !initializedRef.current) applyServerDraft(reportQuery.data, true);
-  }, [applyServerDraft, reportQuery.data]);
-
-  useEffect(() => {
-    if (!initializedRef.current || typeof window === "undefined") return;
-    if (saveState === "saved" || saveState === "idle") {
-      localStorage.removeItem(backupKey(workId));
-      return;
+    if (reportQuery.data && reportQuery.isSuccess && !reportQuery.isFetching && !sessionRef.current) {
+      applyServerDraft(reportQuery.data, true);
     }
-    const backup: LocalBackup = {
-      baseRevision: revision,
-      updatedAt: new Date().toISOString(),
-      templateId,
-      themeId,
-      fontFamily,
-      fields,
-      evidenceAssetIds,
-    };
-    try {
-      localStorage.setItem(backupKey(workId), JSON.stringify(backup));
-    } catch {
-      // The server remains the source of truth; inability to persist a browser backup is non-fatal.
-    }
-  }, [evidenceAssetIds, fields, fontFamily, revision, saveState, templateId, themeId, workId]);
+  }, [applyServerDraft, reportQuery.data, reportQuery.isFetching, reportQuery.isSuccess]);
 
-  const markDirty = useCallback(() => {
-    if (!initializedRef.current) return;
-    setSaveState(typeof navigator !== "undefined" && !navigator.onLine ? "offline" : "dirty");
-  }, []);
+  const editDraft = (changes: Partial<ReportDraftContent> | ((current: ReportDraftContent) => Partial<ReportDraftContent>)) => {
+    const session = sessionRef.current;
+    if (!session || !isCurrent(session)) return;
+    setDraft(session.edit(typeof changes === "function" ? changes(session.content) : changes));
+    setCreatedVersion(undefined);
+    // During a conflict the backup must keep its original revision until the
+    // user chooses to discard it. Editing it must never unlock an overwrite.
+    preserveBackup(workId, session, backupRevision.current);
+    if (!conflict.current) setSaveState(navigator.onLine ? "dirty" : "offline");
+  };
 
   const saveDraft = useCallback(async (): Promise<number | undefined> => {
-    if (!initializedRef.current || saveInFlightRef.current) return undefined;
-    if (typeof navigator !== "undefined" && !navigator.onLine) {
-      setSaveState("offline");
-      return undefined;
-    }
-
-    saveInFlightRef.current = true;
-    setSaveState("saving");
+    const session = sessionRef.current;
+    if (!session || !isCurrent(session) || conflict.current) return;
+    if (!navigator.onLine) { setSaveState("offline"); return; }
     try {
-      const saved = await saveMutation.mutateAsync({
-        workItemId: workId,
-        expectedRevision: revision,
-        templateId,
-        themeId,
-        fontFamily,
-        fields,
-        evidenceAssetIds,
+      return await session.flush(async (content, expectedRevision) => {
+        if (!isCurrent(session) || !navigator.onLine) throw new Error("Report session unavailable");
+        setSaveState("saving");
+        return writeDraft({ workItemId: workId, expectedRevision, ...content });
+      }, receipt => {
+        if (!isCurrent(session)) return;
+        backupRevision.current = receipt.revision;
+        setRevision(receipt.revision);
+        setLastSavedAt(receipt.updatedAt);
+        if (session.dirty) {
+          preserveBackup(workId, session, receipt.revision);
+        } else {
+          localStorage.removeItem(backupKey(workId));
+          setSaveState("saved");
+        }
       });
-      setRevision(saved.revision);
-      setLastSavedAt(saved.updatedAt);
-      setSaveState("saved");
-      if (typeof window !== "undefined") localStorage.removeItem(backupKey(workId));
-      return saved.revision;
     } catch (error) {
-      const code = (error as { data?: { code?: string } })?.data?.code;
-      setSaveState(code === "CONFLICT" ? "conflict" : "error");
-      return undefined;
-    } finally {
-      saveInFlightRef.current = false;
+      if (isCurrent(session)) {
+        conflict.current = (error as { data?: { code?: string } })?.data?.code === "CONFLICT";
+        setSaveState(conflict.current ? "conflict" : navigator.onLine ? "error" : "offline");
+      }
     }
-  }, [evidenceAssetIds, fields, fontFamily, revision, saveMutation, templateId, themeId, workId]);
+  }, [isCurrent, workId, writeDraft]);
 
   useEffect(() => {
     if (saveState !== "dirty") return;
     const timer = window.setTimeout(() => void saveDraft(), 1400);
     return () => window.clearTimeout(timer);
-  }, [saveDraft, saveState]);
+  }, [draft, saveDraft, saveState]);
 
   useEffect(() => {
-    const handleOnline = () => {
-      if (saveState === "offline" || saveState === "dirty" || saveState === "error") void saveDraft();
-    };
-    const handleOffline = () => setSaveState(current => current === "saved" ? current : "offline");
-    window.addEventListener("online", handleOnline);
-    window.addEventListener("offline", handleOffline);
+    const online = () => { if (sessionRef.current?.dirty && !conflict.current) void saveDraft(); };
+    const offline = () => { if (sessionRef.current?.dirty && !conflict.current) setSaveState("offline"); };
+    window.addEventListener("online", online);
+    window.addEventListener("offline", offline);
     return () => {
-      window.removeEventListener("online", handleOnline);
-      window.removeEventListener("offline", handleOffline);
+      window.removeEventListener("online", online);
+      window.removeEventListener("offline", offline);
     };
-  }, [saveDraft, saveState]);
+  }, [saveDraft]);
 
-  const reloadFromServer = useCallback(async () => {
+  const reloadFromServer = async () => {
+    const session = sessionRef.current;
     const result = await reportQuery.refetch();
-    if (result.data) {
-      if (typeof window !== "undefined") localStorage.removeItem(backupKey(workId));
+    if (session && isCurrent(session) && result.isSuccess) {
+      localStorage.removeItem(backupKey(workId));
       applyServerDraft(result.data, false);
     }
-  }, [applyServerDraft, reportQuery, workId]);
+  };
 
   const handleCreateVersion = async () => {
-    let currentRevision = revision;
-    if (saveState !== "saved") {
-      const savedRevision = await saveDraft();
-      if (!savedRevision) return;
-      currentRevision = savedRevision;
-    }
+    const session = sessionRef.current;
+    if (!session || versionPending.current || conflict.current || !navigator.onLine) return;
+    versionPending.current = true;
+    setCreatingVersion(true);
     try {
+      const currentRevision = await saveDraft();
+      if (!currentRevision || !isCurrent(session) || session.dirty) return;
+      const submitted = session.content;
       const version = await createVersionMutation.mutateAsync({
         workItemId: workId,
         expectedRevision: currentRevision,
         reason: versionReason.trim() || undefined,
       });
-      setCreatedVersion({ id: version.id, versionNumber: version.versionNumber });
+      if (!isCurrent(session)) return;
+      if (session.content === submitted) {
+        setCreatedVersion({ id: version.id, versionNumber: version.versionNumber, revision: currentRevision });
+      }
       setVersionReason("");
       await Promise.all([
         utils.domain.work.get.invalidate({ id: workId }),
@@ -268,8 +274,15 @@ export default function WorkReportEditor() {
         utils.reviewSupport.versions.invalidate({ workItemId: workId }),
       ]);
     } catch (error) {
-      const code = (error as { data?: { code?: string } })?.data?.code;
-      if (code === "CONFLICT") setSaveState("conflict");
+      if (isCurrent(session) && (error as { data?: { code?: string } })?.data?.code === "CONFLICT") {
+        conflict.current = true;
+        setSaveState("conflict");
+      }
+    } finally {
+      if (isCurrent(session)) {
+        versionPending.current = false;
+        setCreatingVersion(false);
+      }
     }
   };
 
@@ -293,10 +306,6 @@ export default function WorkReportEditor() {
     [evidenceAssetIds, linkedAssets],
   );
   const filledFields = fieldDefinitions.filter(field => fields[field.key]?.trim());
-
-  if (!validWorkId) {
-    return <div className="min-h-screen bg-[#F8FAFC] p-8 text-sm text-red-700" dir="rtl">معرّف العمل غير صالح.</div>;
-  }
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] pb-20 lg:pb-0" dir="rtl">
@@ -334,13 +343,13 @@ export default function WorkReportEditor() {
                         : <Cloud className="h-4 w-4" />}
                 {saveStateText[saveState]}
               </div>
-              <button onClick={() => void saveDraft()} disabled={saveState === "saving" || saveState === "saved"} className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-50">
+              <button onClick={() => void saveDraft()} disabled={saveState === "saving" || saveState === "saved" || saveState === "conflict" || saveState === "idle"} className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-50">
                 {saveState === "saving" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} حفظ الآن
               </button>
             </div>
           </div>
 
-          {(reportQuery.isLoading || workQuery.isLoading) && (
+          {(workQuery.isLoading || (saveState === "idle" && !reportQuery.error && !workQuery.error)) && (
             <div className="mt-8 flex items-center justify-center rounded-2xl border border-slate-200 bg-white py-20 text-sm text-slate-500"><Loader2 className="ml-2 h-4 w-4 animate-spin" />جاري تحميل بيانات التقرير...</div>
           )}
 
@@ -352,28 +361,28 @@ export default function WorkReportEditor() {
 
           {saveState === "conflict" && (
             <div className="mt-5 flex flex-col gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex items-start gap-2"><AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" /><p>توجد نسخة أحدث محفوظة من جلسة أخرى. أبقينا تعديلاتك محليًا ولم نستبدل بيانات الخادم.</p></div>
-              <button onClick={() => void reloadFromServer()} className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-amber-900 px-4 py-2 text-xs font-bold text-white"><RefreshCw className="h-4 w-4" />تحميل نسخة الخادم</button>
+              <div className="flex items-start gap-2"><AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" /><p>تختلف مراجعة الخادم عن مسودتك. يمكنك نسخ نصك قبل استبداله بنسخة الخادم.</p></div>
+              <button onClick={() => void reloadFromServer()} className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-amber-900 px-4 py-2 text-xs font-bold text-white"><RefreshCw className="h-4 w-4" />استبدال المسودة بنسخة الخادم</button>
             </div>
           )}
 
-          {reportQuery.data && workQuery.data && (
+          {saveState !== "idle" && reportQuery.data && workQuery.data && (
             <div className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(420px,0.78fr)]">
               <div className="space-y-6">
                 <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
                   <div className="grid gap-4 md:grid-cols-3">
                     <label className="text-xs font-bold text-slate-700">نوع التقرير
-                      <select value={templateId} onChange={event => { setTemplateId(event.target.value); markDirty(); }} className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-normal">
+                      <select value={templateId} onChange={event => editDraft({ templateId: event.target.value })} className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-normal">
                         {templateOptions.map(option => <option key={option.id} value={option.id}>{option.label}</option>)}
                       </select>
                     </label>
                     <label className="text-xs font-bold text-slate-700">الطابع البصري
-                      <select value={themeId} onChange={event => { setThemeId(event.target.value); markDirty(); }} className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-normal">
+                      <select value={themeId} onChange={event => editDraft({ themeId: event.target.value })} className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-normal">
                         {themeOptions.map(option => <option key={option.id} value={option.id}>{option.label}</option>)}
                       </select>
                     </label>
                     <label className="text-xs font-bold text-slate-700">الخط
-                      <select value={fontFamily} onChange={event => { setFontFamily(event.target.value); markDirty(); }} className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-normal">
+                      <select value={fontFamily} onChange={event => editDraft({ fontFamily: event.target.value })} className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-normal">
                         {fontOptions.map(option => <option key={option} value={option}>{option}</option>)}
                       </select>
                     </label>
@@ -391,10 +400,7 @@ export default function WorkReportEditor() {
                       <label key={field.key} className="block text-xs font-bold text-slate-700">{field.label}
                         <textarea
                           value={fields[field.key] ?? ""}
-                          onChange={event => {
-                            setFields(current => ({ ...current, [field.key]: event.target.value }));
-                            markDirty();
-                          }}
+                          onChange={event => editDraft(current => ({ fields: { ...current.fields, [field.key]: event.target.value } }))}
                           rows={field.rows}
                           maxLength={20_000}
                           placeholder={field.placeholder}
@@ -421,10 +427,8 @@ export default function WorkReportEditor() {
                             <input
                               type="checkbox"
                               checked={checked}
-                              onChange={() => {
-                                setEvidenceAssetIds(current => checked ? current.filter(id => id !== asset.id) : [...current, asset.id]);
-                                markDirty();
-                              }}
+                              onChange={() => editDraft(current => ({ evidenceAssetIds: current.evidenceAssetIds.includes(asset.id)
+                                ? current.evidenceAssetIds.filter(id => id !== asset.id) : [...current.evidenceAssetIds, asset.id] }))}
                               className="mt-1 h-4 w-4 accent-teal-600"
                             />
                             <span className="min-w-0"><span className="block truncate text-sm font-bold text-slate-900">{asset.title}</span><span className="mt-1 block text-[11px] text-slate-500">{asset.kind} · {asset.role}</span></span>
@@ -440,16 +444,16 @@ export default function WorkReportEditor() {
                   <h2 className="mt-1 text-lg font-bold text-slate-950">حفظ نسخة للمراجعة أو الإخراج</h2>
                   <p className="mt-2 text-xs leading-6 text-slate-500">ينشئ النظام نسخة من المسودة المحفوظة في الخادم والشواهد المرتبطة، لا من الصفحة المعروضة في المتصفح.</p>
                   <textarea value={versionReason} onChange={event => setVersionReason(event.target.value)} rows={2} maxLength={255} placeholder="سبب إنشاء النسخة، مثل: جاهزة للمراجعة" className="mt-4 w-full resize-none rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-teal-400 focus:ring-2 focus:ring-teal-100" />
-                  <button onClick={() => void handleCreateVersion()} disabled={createVersionMutation.isPending || saveState === "conflict" || saveState === "offline"} className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-50">
-                    {createVersionMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileCheck2 className="h-4 w-4" />} إنشاء نسخة ثابتة
+                  <button onClick={() => void handleCreateVersion()} disabled={creatingVersion || saveState === "conflict" || saveState === "offline" || saveState === "idle" || (saveState === "saved" && revision === 0)} className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-50">
+                    {creatingVersion ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileCheck2 className="h-4 w-4" />} إنشاء نسخة ثابتة
                   </button>
                   {createVersionMutation.error && <p className="mt-3 text-xs text-red-600">{createVersionMutation.error.message}</p>}
-                  {createdVersion && <p className="mt-3 rounded-xl bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700">تم إنشاء النسخة {createdVersion.versionNumber} من مراجعة التقرير {revision}.</p>}
+                  {createdVersion && <p className="mt-3 rounded-xl bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700">تم إنشاء النسخة {createdVersion.versionNumber} من مراجعة التقرير {createdVersion.revision}.</p>}
 
                   {createdVersion && organizationId && (
                     <div className="mt-5 border-t border-slate-100 pt-5">
                       <label className="block text-xs font-bold text-slate-700">المراجع
-                        <select value={selectedReviewerId ?? ""} onChange={event => setSelectedReviewerId(Number(event.target.value) || undefined)} className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-normal">
+                        <select aria-label="مراجع التقرير" value={selectedReviewerId ?? ""} onChange={event => setSelectedReviewerId(Number(event.target.value) || undefined)} className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-normal">
                           <option value="">اختر مراجعًا من المدرسة</option>
                           {(reviewersQuery.data ?? []).map(reviewer => <option key={reviewer.userId} value={reviewer.userId}>{reviewer.name || `مستخدم ${reviewer.userId}`} — {reviewer.role}</option>)}
                         </select>
@@ -497,7 +501,7 @@ export default function WorkReportEditor() {
                     </article>
                   </div>
                 </section>
-                <p className="mt-3 text-center text-[11px] leading-5 text-slate-500">سيتم لاحقًا توليد PDF وWord من WorkVersion نفسها، وليس من DOM هذه المعاينة.</p>
+                <p className="mt-3 text-center text-[11px] leading-5 text-slate-500">يستخدم تصدير PDF وWord آخر نسخة ثابتة أنشأتها.</p>
                 {lastSavedAt && <p className="mt-1 text-center text-[10px] text-slate-400">آخر حفظ خادمي: {new Date(lastSavedAt).toLocaleString("ar-SA")}</p>}
               </aside>
             </div>

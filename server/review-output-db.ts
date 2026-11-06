@@ -12,6 +12,7 @@ import {
 import { users } from "../drizzle/schema";
 import { assertWorkAccess } from "./domain-db";
 import { getDb } from "./db";
+import { projectReportSnapshot } from "./public-output-service";
 
 type MembershipRow = typeof memberships.$inferSelect;
 type Database = NonNullable<Awaited<ReturnType<typeof getDb>>>;
@@ -218,7 +219,7 @@ export async function getReviewForUser(userId: number, reviewId: number) {
   const work = await assertWorkAccess(userId, row.work.id, "read");
   if (!work) return undefined;
   const comments = await db.select().from(reviewComments).where(eq(reviewComments.reviewId, reviewId)).orderBy(reviewComments.createdAt);
-  return { ...row.review, versionNumber: row.version.versionNumber, workId: row.work.id, workTitle: row.work.title, comments };
+  return { ...row.review, versionNumber: row.version.versionNumber, workId: row.work.id, workTitle: row.work.title, comments, report: projectReportSnapshot(row.version.snapshot) };
 }
 
 export async function listReviewsForUser(userId: number) {
