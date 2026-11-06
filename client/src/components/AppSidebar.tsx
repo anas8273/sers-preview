@@ -16,7 +16,7 @@ const iconMap = {
 interface AppSidebarProps { currentPath?: string; }
 
 const legacyLinks = [
-  { label: "مركز التقارير القديم", path: "/reports" },
+  { label: "تقارير هذا الجهاز", path: "/reports/legacy" },
   { label: "ملف الإنجاز القديم", path: "/portfolio" },
   { label: "الشهادات", path: "/certificates" },
   { label: "تحليل النتائج", path: "/grade-analysis" },

@@ -130,6 +130,25 @@ export default function ReviewsHub() {
                     <span className={`self-start rounded-full px-3 py-1.5 text-[11px] font-bold ${statusClass[reviewQuery.data.status]}`}>{statusLabel[reviewQuery.data.status]}</span>
                   </div>
 
+                  {reviewQuery.data.report && (
+                    <section aria-label="محتوى النسخة المرسلة" className="mt-5 space-y-4 border-t border-slate-100 pt-5">
+                      <h3 className="font-bold text-slate-900">محتوى النسخة المرسلة</h3>
+                      {reviewQuery.data.report.fields.map(field => (
+                        <div key={field.key}>
+                          <h4 className="text-xs font-bold text-slate-600">{field.label}</h4>
+                          <p className="mt-1 whitespace-pre-wrap break-words text-sm leading-7">{field.value}</p>
+                        </div>
+                      ))}
+                      {reviewQuery.data.report.evidence.length > 0 && (
+                        <div><h4 className="text-xs font-bold text-slate-600">الشواهد المختارة</h4>
+                          <ul className="mt-1 list-inside list-disc text-sm leading-7">{reviewQuery.data.report.evidence.map((asset, index) => (
+                            <li key={index}>{asset.title}{asset.caption && <span> — {asset.caption}</span>}</li>
+                          ))}</ul>
+                        </div>
+                      )}
+                    </section>
+                  )}
+
                   <div className="mt-5 border-t border-slate-100 pt-5">
                     <h3 className="text-sm font-bold text-slate-900">التعليقات</h3>
                     <div className="mt-3 space-y-2">

@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { ArrowLeft, Building2, FileText, FolderKanban, Loader2, Plus, UserRound, X } from "lucide-react";
 import AppSidebar from "@/components/AppSidebar";
 import { trpc } from "@/lib/trpc";
-import { useLocation } from "wouter";
+import { Link, useLocation } from "wouter";
 
 const statusLabel = {
   draft: "مسودة",
@@ -11,7 +11,7 @@ const statusLabel = {
   archived: "مؤرشف",
 } as const;
 
-export default function WorkHub() {
+export default function WorkHub({ reportsOnly = false }: { reportsOnly?: boolean }) {
   const [location, setLocation] = useLocation();
   const [showCreate, setShowCreate] = useState(false);
   const [title, setTitle] = useState("");
@@ -25,6 +25,7 @@ export default function WorkHub() {
 
   const utils = trpc.useUtils();
   const workQuery = trpc.domain.work.list.useQuery(yearFilter === "unassigned" ? { unassigned: true } : yearFilter ? { academicYearId: Number(yearFilter), academicTermId: termFilter } : undefined, { retry: false });
+  const works = reportsOnly ? workQuery.data?.filter(work => work.type === "report") : workQuery.data;
   const yearsQuery = trpc.account.academicYears.useQuery(undefined, { retry: false });
   const organizationsQuery = trpc.domain.organization.listMine.useQuery(undefined, { retry: false });
   const createWork = trpc.domain.work.create.useMutation({
@@ -37,7 +38,7 @@ export default function WorkHub() {
       setAcademicTermId(undefined);
       setShowCreate(false);
       await utils.domain.work.list.invalidate();
-      if (created?.id) setLocation(`/work/${created.id}`);
+      if (created?.id) setLocation(reportsOnly ? `/work/${created.id}/report` : `/work/${created.id}`);
     },
   });
 
@@ -49,7 +50,7 @@ export default function WorkHub() {
 
   const submit = () => {
     if (!canSubmit || createWork.isPending) return;
-    createWork.mutate({ title: title.trim(), type, ownerType, organizationId, academicYearId, academicTermId });
+    createWork.mutate({ title: title.trim(), type: reportsOnly ? "report" : type, ownerType, organizationId, academicYearId, academicTermId });
   };
 
   return (
@@ -60,11 +61,13 @@ export default function WorkHub() {
           <header className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
             <div>
               <p className="text-xs font-bold text-teal-700">مساحة العمل</p>
-              <h1 className="mt-1 text-2xl font-black text-slate-950 sm:text-3xl" style={{ fontFamily: "'Tajawal', sans-serif" }}>أعمالي</h1>
-              <p className="mt-2 max-w-2xl text-sm leading-7 text-slate-500">التقارير وملفات الإنجاز لها نموذج عمل واحد، مع ملكية واضحة ونسخ محفوظة وشواهد قابلة لإعادة الاستخدام.</p>
+              <h1 className="mt-1 text-2xl font-black text-slate-950 sm:text-3xl" style={{ fontFamily: "'Tajawal', sans-serif" }}>{reportsOnly ? "التقارير" : "أعمالي"}</h1>
+              {reportsOnly ? (
+                <Link href="/reports/legacy" className="mt-3 inline-flex items-center gap-1 text-sm font-bold text-teal-700 underline underline-offset-4">التقارير السابقة على هذا الجهاز <ArrowLeft className="h-4 w-4" /></Link>
+              ) : <p className="mt-2 max-w-2xl text-sm leading-7 text-slate-500">التقارير وملفات الإنجاز لها نموذج عمل واحد، مع ملكية واضحة ونسخ محفوظة وشواهد قابلة لإعادة الاستخدام.</p>}
             </div>
             <button onClick={() => setShowCreate(true)} className="inline-flex items-center justify-center gap-2 rounded-xl bg-teal-600 px-4 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-teal-700">
-              <Plus className="h-4 w-4" /> إنشاء عمل
+              <Plus className="h-4 w-4" /> {reportsOnly ? "إنشاء تقرير" : "إنشاء عمل"}
             </button>
           </header>
 
@@ -90,18 +93,18 @@ export default function WorkHub() {
             </div>
           )}
 
-          {workQuery.data && workQuery.data.length === 0 && (
+          {works && works.length === 0 && (
             <section className="mt-8 rounded-2xl border border-dashed border-slate-200 bg-white px-6 py-16 text-center">
               <FolderKanban className="mx-auto h-9 w-9 text-slate-300" />
-              <h2 className="mt-4 text-base font-bold text-slate-900">{yearFilter ? "لا توجد أعمال في هذا الاختيار" : "لا توجد أعمال بعد"}</h2>
-              <p className="mx-auto mt-2 max-w-lg text-sm leading-7 text-slate-500">أنشئ أول تقرير أو ملف إنجاز. الشواهد التي تضيفها إلى المكتبة ستبقى أصولًا مستقلة يمكن ربطها بأكثر من عمل.</p>
-              <button onClick={() => setShowCreate(true)} className="mt-5 inline-flex items-center gap-2 rounded-xl bg-teal-600 px-4 py-2.5 text-sm font-bold text-white"><Plus className="h-4 w-4" />إنشاء أول عمل</button>
+              <h2 className="mt-4 text-base font-bold text-slate-900">{reportsOnly ? "لا توجد تقارير في هذا الاختيار" : yearFilter ? "لا توجد أعمال في هذا الاختيار" : "لا توجد أعمال بعد"}</h2>
+              {!reportsOnly && <p className="mx-auto mt-2 max-w-lg text-sm leading-7 text-slate-500">أنشئ أول تقرير أو ملف إنجاز. الشواهد التي تضيفها إلى المكتبة ستبقى أصولًا مستقلة يمكن ربطها بأكثر من عمل.</p>}
+              <button onClick={() => setShowCreate(true)} className="mt-5 inline-flex items-center gap-2 rounded-xl bg-teal-600 px-4 py-2.5 text-sm font-bold text-white"><Plus className="h-4 w-4" />{reportsOnly ? "إنشاء تقرير جديد" : "إنشاء أول عمل"}</button>
             </section>
           )}
 
-          {workQuery.data && workQuery.data.length > 0 && (
+          {works && works.length > 0 && (
             <section className="mt-8 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-              {workQuery.data.map(work => {
+              {works.map(work => {
                 const Icon = work.type === "report" ? FileText : FolderKanban;
                 return (
                   <article key={work.id} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:border-teal-200 hover:shadow-md">
@@ -121,8 +124,8 @@ export default function WorkHub() {
                       {work.ownerType === "personal" ? <UserRound className="h-3.5 w-3.5" /> : <Building2 className="h-3.5 w-3.5" />}
                       {work.ownerType === "personal" ? "ملكية شخصية" : "ملكية مدرسية"}
                     </div>
-                    <button onClick={() => setLocation(`/work/${work.id}`)} className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 px-3 py-2.5 text-xs font-bold text-slate-700 hover:border-teal-200 hover:bg-teal-50 hover:text-teal-800">
-                      فتح العمل وإدارة الشواهد <ArrowLeft className="h-3.5 w-3.5" />
+                    <button onClick={() => setLocation(reportsOnly ? `/work/${work.id}/report` : `/work/${work.id}`)} className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 px-3 py-2.5 text-xs font-bold text-slate-700 hover:border-teal-200 hover:bg-teal-50 hover:text-teal-800">
+                      {reportsOnly ? "فتح التقرير" : "فتح العمل وإدارة الشواهد"} <ArrowLeft className="h-3.5 w-3.5" />
                     </button>
                   </article>
                 );
@@ -136,17 +139,17 @@ export default function WorkHub() {
         <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/40 p-4 backdrop-blur-sm" onMouseDown={event => event.target === event.currentTarget && setShowCreate(false)}>
           <div className="w-full max-w-lg rounded-2xl bg-white p-5 shadow-2xl" dir="rtl">
             <div className="flex items-start justify-between gap-4">
-              <div><h2 className="text-lg font-bold text-slate-950">إنشاء عمل</h2><p className="mt-1 text-xs leading-6 text-slate-500">اختر نوع العمل وملكيته. يمكن إضافة الشواهد لاحقًا دون نسخها.</p></div>
+              <div><h2 className="text-lg font-bold text-slate-950">{reportsOnly ? "إنشاء تقرير" : "إنشاء عمل"}</h2>{!reportsOnly && <p className="mt-1 text-xs leading-6 text-slate-500">اختر نوع العمل وملكيته. يمكن إضافة الشواهد لاحقًا دون نسخها.</p>}</div>
               <button onClick={() => setShowCreate(false)} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100" aria-label="إغلاق"><X className="h-4 w-4" /></button>
             </div>
 
-            <label className="mt-5 block text-xs font-bold text-slate-700">اسم العمل</label>
-            <input aria-label="اسم العمل الجديد" value={title} onChange={event => setTitle(event.target.value)} maxLength={255} placeholder="مثال: تقرير برنامج الانضباط" className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-teal-400 focus:ring-2 focus:ring-teal-100" />
+            <label className="mt-5 block text-xs font-bold text-slate-700">{reportsOnly ? "اسم التقرير" : "اسم العمل"}</label>
+            <input aria-label={reportsOnly ? "اسم التقرير الجديد" : "اسم العمل الجديد"} value={title} onChange={event => setTitle(event.target.value)} maxLength={255} placeholder="مثال: تقرير برنامج الانضباط" className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-teal-400 focus:ring-2 focus:ring-teal-100" />
 
-            <div className="mt-4 grid grid-cols-2 gap-2">
+            {!reportsOnly && <div className="mt-4 grid grid-cols-2 gap-2">
               <button onClick={() => setType("report")} className={`rounded-xl border p-3 text-right ${type === "report" ? "border-teal-300 bg-teal-50" : "border-slate-200"}`}><FileText className="mb-2 h-4 w-4 text-teal-700" /><span className="block text-xs font-bold text-slate-800">تقرير</span></button>
               <button onClick={() => setType("portfolio")} className={`rounded-xl border p-3 text-right ${type === "portfolio" ? "border-teal-300 bg-teal-50" : "border-slate-200"}`}><FolderKanban className="mb-2 h-4 w-4 text-teal-700" /><span className="block text-xs font-bold text-slate-800">ملف إنجاز</span></button>
-            </div>
+            </div>}
 
             <label className="mt-4 block text-xs font-bold text-slate-700">الملكية</label>
             <div className="mt-2 grid grid-cols-2 gap-2">

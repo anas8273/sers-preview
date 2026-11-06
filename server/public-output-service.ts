@@ -64,11 +64,11 @@ const TEMPLATE_LABELS: Record<string, string> = {
   "visit-report": "تقرير زيارة",
 };
 
-function normalizeReportSnapshot(value: unknown) {
-  if (!value || typeof value !== "object") throw new PublicOutputNotFoundError();
+export function projectReportSnapshot(value: unknown) {
+  if (!value || typeof value !== "object") return undefined;
   const snapshot = value as ReportSnapshot;
   if (snapshot.kind !== "report" || !snapshot.work || !snapshot.reportDraft) {
-    throw new PublicOutputNotFoundError();
+    return undefined;
   }
 
   const rawFields = snapshot.reportDraft.fields && typeof snapshot.reportDraft.fields === "object"
@@ -86,7 +86,7 @@ function normalizeReportSnapshot(value: unknown) {
       : [],
   );
   const evidence = (Array.isArray(snapshot.assets) ? snapshot.assets : [])
-    .filter(asset => typeof asset.id === "number" && selectedIds.has(asset.id))
+    .filter(asset => asset && typeof asset.id === "number" && selectedIds.has(asset.id))
     .map(asset => ({
       title: typeof asset.title === "string" && asset.title.trim() ? asset.title.trim() : "شاهد",
       kind: typeof asset.kind === "string" ? asset.kind : "asset",
@@ -147,7 +147,8 @@ export async function resolvePublicOutput(token: string, password?: string) {
     }
   }
 
-  const report = normalizeReportSnapshot(row.version.snapshot);
+  const report = projectReportSnapshot(row.version.snapshot);
+  if (!report) throw new PublicOutputNotFoundError();
   return {
     type: row.output.type,
     visibility: row.output.visibility,

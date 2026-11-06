@@ -24,10 +24,10 @@ type ActionCard = {
 
 const quickActions: ActionCard[] = [
   {
-    title: "إنشاء عمل",
-    description: "ابدأ تقريرًا أو ملف إنجاز من مساحة عمل موحدة.",
-    path: "/work",
-    icon: BriefcaseBusiness,
+    title: "التقارير",
+    description: "افتح تقاريرك أو أنشئ تقريرًا جديدًا.",
+    path: "/reports",
+    icon: FileText,
     accent: "bg-teal-50 text-teal-700",
   },
   {
@@ -108,7 +108,7 @@ export default function Home() {
               {quickActions.map((action) => {
                 const Icon = action.icon;
                 return (
-                  <button key={action.path} onClick={() => navigate(action.path)} className="group rounded-2xl border border-slate-200 bg-white p-5 text-right transition hover:-translate-y-0.5 hover:border-teal-200 hover:shadow-md">
+                  <button key={action.path} aria-label={action.title} onClick={() => navigate(action.path)} className="group rounded-2xl border border-slate-200 bg-white p-5 text-right transition hover:-translate-y-0.5 hover:border-teal-200 hover:shadow-md">
                     <div className={`mb-4 flex h-11 w-11 items-center justify-center rounded-xl ${action.accent}`}>
                       <Icon className="h-5 w-5" />
                     </div>

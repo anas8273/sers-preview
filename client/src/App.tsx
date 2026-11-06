@@ -57,7 +57,7 @@ function Router() {
         <Route path={"/"} component={Home} />
         <Route path={"/work/:id/report"} component={WorkReportEditor} />
         <Route path={"/work/:id"} component={WorkDetail} />
-        <Route path={"/work"} component={WorkHub} />
+        <Route path={"/work"}><WorkHub /></Route>
         <Route path={"/evidence"} component={EvidenceLibrary} />
         <Route path={"/reviews"} component={ReviewsHub} />
         <Route path={"/notifications"} component={NotificationsHub} />
@@ -76,7 +76,8 @@ function Router() {
         <Route path={"/shared-template/:token"} component={SharedTemplate} />
         <Route path={"/store"} component={Store} />
         <Route path={"/portfolio"} component={PortfolioBuilder} />
-        <Route path={"/reports"} component={ReportCenter} />
+        <Route path={"/reports"}><WorkHub reportsOnly /></Route>
+        <Route path={"/reports/legacy"} component={ReportCenter} />
         <Route path={"/school-radio"} component={SchoolRadio} />
         <Route path={"/smart-cv"} component={SmartCV} />
         <Route path={"/exams"} component={ExamBuilder} />
