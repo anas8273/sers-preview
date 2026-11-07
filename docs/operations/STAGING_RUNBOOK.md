@@ -12,17 +12,22 @@
 
 ## بيئة staging بتسجيل دخول OAuth الفعلي
 
-نفّذ من جذر المستودع. المعرّفات والعناوين التالية يجب أن تكون تخص تطبيق OAuth المسجل لديك؛ ليست بيانات دخول جاهزة.
+لتجهيز مضيف القبول، استخدم [حزمة الإصدار المختبرة](TESTED_RUNTIME_RELEASE.md). جهّز إعدادات OAuth والأسرار من جذر نسخة أدوات التشغيل:
 
 ```bash
 export SERS_SECRETS_DIR=/var/tmp/sers-staging-secrets
 node scripts/operations/init-secrets.mjs "$SERS_SECRETS_DIR"
 export SERS_DATABASE_NAME=sers_staging
-export SERS_BUILD_REVISION="$(git rev-parse HEAD)"
 export APP_PUBLIC_ORIGIN='https://YOUR_STAGING_HOST'
 export VITE_APP_ID='YOUR_REGISTERED_STAGING_APP_ID'
 export VITE_OAUTH_PORTAL_URL='https://YOUR_OAUTH_PORTAL'
 export OAUTH_SERVER_URL='https://YOUR_OAUTH_SERVER'
+```
+
+على مضيف القبول، اضبط `SERS_BUILD_REVISION` بالقيمة المحددة في `RELEASE.md` داخل الحزمة، ثم اتبع أوامر التشغيل باستخدام ملفي Compose المرفقين. لاختبار بناء محلي من الشيفرة، استخدم الأوامر التالية من جذر المستودع:
+
+```bash
+export SERS_BUILD_REVISION="$(git rev-parse HEAD)"
 docker compose -f compose.staging.yml config --quiet
 docker compose -f compose.staging.yml build app
 docker compose -f compose.staging.yml up -d --wait --wait-timeout 600 mysql clamav
@@ -101,6 +106,8 @@ export SERS_DATABASE_NAME=sers_demo
 ```
 
 في staging اترك `SERS_COMPOSE_MODE` غير مضبوط واستخدم `sers_staging`. إذا عيّنت `COMPOSE_PROJECT_NAME`، يجب إبقاؤه نفسه لأوامر النسخ والاستعادة. الأوامر ترفض أسماء قواعد أخرى.
+
+إذا بدأت الخدمات بحزمة إصدار GHCR، اضبط `SERS_RELEASE_DIR` على المسار المطلق لمجلد الحزمة المتحقق منها، مع إبقاء `SERS_BUILD_REVISION` ومتغيرات المضيف كما كانت عند التشغيل. تستعمل أداتا النسخ والاستعادة الملفين `compose.staging.yml` و`compose.release.yml` من ذلك المجلد بالترتيب. أضف الملفين نفسيهما لأوامر `stop` و`start` اليدوية أدناه. في العرض الاصطناعي أو البناء المحلي اترك `SERS_RELEASE_DIR` غير مضبوط.
 
 يجب إيقاف **كل** كاتب: التطبيق والعامل وأي مهمة أو اتصال إداري يعدل القاعدة/الملفات. لقطة SQL وحدها لا تزامن ملفات الشواهد. مثال staging:
 
@@ -234,18 +241,13 @@ node scripts/operations/check-public-staging.mjs
    أرفق فحص الجاهزية ونتيجة الاستعادة من المضيف نفسه قبل اعتماد بيانات فعلية.
 
 اختبارات CI تستخدم مصدر هوية اصطناعيًا منفصلًا. تغطي العودة للتقرير وإعادة الدخول
-وعزل الحسابات وإلغاء الجلسة، ولا تمنح موافقة تشغيل بيانات مدارس حقيقية. تظل شهادة
-TLS الفعلية وإعداد تسجيل SERS والمضيف وسياسة الاحتفاظ وحماية فرع main مسؤوليات
-تشغيلية يجب إثبات تنفيذها. فعّل حماية الفرع بفحوص CI المطلوبة؛ لا تعتمد على اللون
-الأخضر دون ربطه بنفس SHA المرشح.
+وعزل الحسابات وإلغاء الجلسة. يتطلب تشغيل بيانات مدارس حقيقية إثبات إعداد تسجيل SERS
+وشهادة TLS والجاهزية على المضيف واعتماد سياسة الاحتفاظ. اربط نتائج CI بنفس SHA المرشح.
 
-إعداد حماية جاهز للمراجعة في `deploy/github-main-protection.json`. يفرض PR وفحوص
-الوظائف الخمس الفعلية وأحدث قاعدة، ويمنع force-push والحذف ويطبقها على المسؤولين.
-لا يفرض مراجعًا إضافيًا على مستودع بمالك منفرد. لم يُطبّق تلقائيًا؛ يلزم حساب
-GitHub بصلاحية إدارة المستودع، ثم التحقق من استجابة GitHub وظهور الحماية:
+السياسة المرجعية في `deploy/github-main-protection.json` تشترط PR ونجاح المهام
+الست على قاعدة محدثة، وتمنع force-push والحذف وتطبق القيود على المسؤولين.
+يمكن لمسؤول المستودع التحقق من السياسة الحالية ومقارنتها بالملف:
 
 ```bash
-gh api --method PUT repos/anas8273/sers-preview/branches/main/protection \
-  --input deploy/github-main-protection.json
 gh api repos/anas8273/sers-preview/branches/main/protection
 ```

@@ -23,6 +23,25 @@ test('operations refuse production/ambiguous database identity and malformed res
   assert.equal(restoreName(`sers_restore_${'ab'.repeat(12)}`), `sers_restore_${'ab'.repeat(12)}`);
 });
 
+test('operations use the staged release pair without changing local and demo Compose selection', async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'sers release '));
+  try {
+    await writeFile(path.join(directory, 'docker'), '#!/bin/sh\nwhile IFS= read -r line; do :; done\nprintf "%s\\n" "$@"\n', { mode: 0o700 });
+    const program = `import { compose } from './scripts/operations/ops-common.mjs';
+      console.log(await compose(['ps']));`;
+    const inspect = (release: string, mode = '') => command(process.execPath, ['--input-type=module', '-e', program], {
+      env: { PATH: directory, SERS_RELEASE_DIR: release, SERS_COMPOSE_MODE: mode },
+    });
+    assert.deepEqual((await inspect(directory)).trim().split('\n'), [
+      'compose', '-f', path.join(directory, 'compose.staging.yml'), '-f', path.join(directory, 'compose.release.yml'), 'ps',
+    ]);
+    assert.match((await inspect('')).trimEnd(), /\/compose\.staging\.yml\nps$/);
+    assert.match((await inspect('', 'demo')).trimEnd(), /\/compose\.demo\.yml\nps$/);
+    await assert.rejects(inspect('relative/package'));
+    await assert.rejects(inspect(directory, 'demo'));
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
 test('runtime reads bounded secrets, encodes database credentials and does not mutate inputs', async () => {
   const directory = await mkdtemp(path.join(tmpdir(), 'sers-ops-secret-'));
   try {

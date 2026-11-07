@@ -8,7 +8,7 @@
 2. بعد نجاح الاختبارات يقارن معرّف الصورة بصورتي حاويتي التطبيق والعامل اللتين اختُبرتا. يصدر `image.tar.gz` و`candidate.json` فقط؛ لا يصدر أسرار الحاويات أو قاعدة البيانات أو مجلد الشواهد.
 3. تربط بيانات المرشح الصورة بمستودع المصدر، وطلب السحب، والتزام المصدر وشجرته، ودمج الاختبار وشجرته، ورقم تشغيل CI ومحاولته. تسجل أيضًا بصمة الأرشيف وصور MySQL وClamAV التي استُخدمت فعلًا.
 4. تحمل مهمة مستقلة الأرشيف على مشغّل جديد، وتتحقق من الصورة وعقد الإصدار وإعداد Compose دون بناء جديد أو بيانات نشر.
-5. بعد الدمج، يعمل الناشر من شيفرة `main` فقط. يرفض مصدرًا غير مدمج، أو تغيّر `main`، أو اختلاف الشجرة، أو عدم نجاح آخر محاولة لأي من بوابات CI الأربع، أو اختلاف هوية الأرشيف وبصمته. لا يشغّل سكربتًا مأخوذًا من الأرشيف.
+5. بعد الدمج، يعمل الناشر من شيفرة `main` فقط. يرفض مصدرًا غير مدمج، أو تغيّر `main`، أو اختلاف الشجرة، أو عدم نجاح أي من المهام الست في آخر محاولات مسارات CI الأربعة، أو اختلاف هوية الأرشيف وبصمته. لا يشغّل سكربتًا مأخوذًا من الأرشيف.
 6. ينشر الصورة المختبرة وينتج حزمة نشر تربط كل صورة ببصمة ثابتة. لا ينشئ وسم `latest` ولا يشغل أي خدمة خارج GitHub Actions.
 
 صلاحية `packages: write` موجودة في مهمة الناشر على `main` فقط. اختبارات طلبات السحب لا تملك صلاحية نشر الحزم. يجب أن يكون المرشح من فرع في المستودع نفسه؛ لا يُرقّى أثر صادر عن fork.
@@ -17,7 +17,7 @@
 
 تظهر حزمة `sers-release-<main SHA>` في تشغيل **SERS Tested Runtime Release**. تتضمن Compose الأساسي من النسخة المدمجة، وملف `compose.release.yml` الذي يثبت الصور ويزيل خيارات البناء، وبيانات التتبع والتحقق. صورة التطبيق هي Linux/amd64؛ يلزم مضيف يدعم هذه المعمارية وDocker Compose 2.24.4 أو أحدث.
 
-بعد توفير إعدادات SERS وأسراره على المضيف وفق [دليل التشغيل](STAGING_RUNBOOK.md)، استعمل ملفي Compose معًا في كل الأوامر:
+بعد توفير إعدادات SERS وأسراره على المضيف وفق [دليل التشغيل](STAGING_RUNBOOK.md)، تحقّق من الحزمة من داخل مجلدها باستخدام `sha256sum --check --strict SHA256SUMS`. استعمل ملفي Compose معًا في كل الأوامر:
 
 تتضمن نسخة `RELEASE.md` داخل الحزمة أمر ضبط `SERS_BUILD_REVISION` بالقيمة التي اختُبرت فعليًا. يلزم هذا المتغير لقراءة Compose الأساسي حتى مع إزالة البناء من الإعداد النهائي؛ لا تحتاج إلى نسخة git على المضيف.
 
@@ -26,13 +26,15 @@
 ```bash
 docker compose -f compose.staging.yml -f compose.release.yml config --quiet
 docker compose -f compose.staging.yml -f compose.release.yml pull
-docker compose -f compose.staging.yml -f compose.release.yml up -d --wait mysql clamav
+docker compose -f compose.staging.yml -f compose.release.yml up -d --wait --wait-timeout 600 mysql clamav
 docker compose -f compose.staging.yml -f compose.release.yml run --rm migrate
 docker compose -f compose.staging.yml -f compose.release.yml run --rm app preflight
-docker compose -f compose.staging.yml -f compose.release.yml up -d --no-build --wait app worker
+docker compose -f compose.staging.yml -f compose.release.yml up -d --no-build --wait --wait-timeout 240 app worker
 ```
 
 لا تعدّل بصمات الصور يدويًا لتجاوز رفض مرشح، ولا تشغّل seed-demo على بيانات حقيقية. الوصول إلى حزمة GHCR يتبع صلاحيات حساب GitHub؛ المسار لا يغيّر رؤية الحزمة إلى عامة. عند الحاجة إلى اعتماد للسحب، يضبط على المضيف بحد القراءة ولا يرسل في المحادثة.
+
+قبل تجربة النسخ والاستعادة من مستودع أدوات التشغيل، اضبط `SERS_RELEASE_DIR` على المسار المطلق لهذا المجلد حتى تستخدم الأدوات نفس الملفين والبصمات. اتبع خطوات إيقاف الكتابة والاستعادة المعزولة في [دليل التشغيل](STAGING_RUNBOOK.md).
 
 ## الحدود التشغيلية
 
