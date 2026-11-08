@@ -8,6 +8,7 @@ vi.mock('puppeteer', () => ({
       newPage: vi.fn().mockResolvedValue({
         setViewport: vi.fn(),
         setContent: vi.fn(),
+        waitForNetworkIdle: vi.fn(),
         evaluate: vi.fn().mockResolvedValue(1),
         screenshot: vi.fn().mockResolvedValue(Buffer.from('fake-png')),
         close: vi.fn(),
