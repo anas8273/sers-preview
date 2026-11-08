@@ -18,6 +18,13 @@ import {
 import { useLocation, useRoute } from "wouter";
 import AppSidebar from "@/components/AppSidebar";
 import { trpc } from "@/lib/trpc";
+import {
+  REPORT_FONT_FAMILIES, REPORT_IDENTITY_FIELDS, REPORT_IDENTITY_TEXT_LIMIT, REPORT_MINISTRY_LOGO_ALT,
+  REPORT_SCHOOL_LOGO_ALT, REPORT_SCHOOL_LOGO_MAX_BASE64, REPORT_SCHOOL_LOGO_MAX_DIMENSION,
+  reportFontFamily, reportInstitution,
+} from "@shared/report-appearance";
+import ministryLogoUrl from "@shared/report-assets/ministry-logo.png";
+import "./work-report-fonts.css";
 
 const fieldDefinitions = [
   { key: "summary", label: "ملخص التقرير", placeholder: "اكتب ملخصًا موجزًا للعمل أو البرنامج المنفذ...", rows: 4 },
@@ -44,8 +51,6 @@ const themeOptions = [
   { id: "minimal", label: "بسيط حديث" },
 ];
 
-const fontOptions = ["Cairo", "Tajawal", "Noto Kufi Arabic"];
-
 type SaveState = "idle" | "dirty" | "saving" | "saved" | "offline" | "conflict" | "error";
 
 type LocalBackup = ReportDraftContent & { baseRevision: number; updatedAt: string };
@@ -65,6 +70,28 @@ function sameContent(a: ReportDraftContent, b: ReportDraftContent) {
 
 function backupKey(workId: number) {
   return `sers:report-draft:${workId}`;
+}
+
+async function prepareSchoolLogo(file: File) {
+  if (file.type !== "image/png" || file.size > 2 * 1024 * 1024) throw new Error("Choose a PNG up to 2 MiB");
+  const header = new DataView(await file.slice(0, 24).arrayBuffer());
+  if (header.byteLength !== 24 || header.getUint32(0) !== 0x89504e47 || header.getUint32(4) !== 0x0d0a1a0a || header.getUint32(12) !== 0x49484452
+    || header.getUint32(16) > 4096 || header.getUint32(20) > 4096) throw new Error("Unsupported PNG");
+  const image = await createImageBitmap(file);
+  try {
+    const canvas = document.createElement("canvas");
+    const context = canvas.getContext("2d");
+    if (!context) throw new Error("Image processing is unavailable");
+    for (const max of [REPORT_SCHOOL_LOGO_MAX_DIMENSION, 224, 160]) {
+      const scale = Math.min(1, max / Math.max(image.width, image.height));
+      canvas.width = Math.max(1, Math.round(image.width * scale));
+      canvas.height = Math.max(1, Math.round(image.height * scale));
+      context.drawImage(image, 0, 0, canvas.width, canvas.height);
+      const base64 = canvas.toDataURL("image/png").slice("data:image/png;base64,".length);
+      if (base64 && base64.length <= REPORT_SCHOOL_LOGO_MAX_BASE64) return base64;
+    }
+    throw new Error("School logo exceeds the report limit");
+  } finally { image.close(); }
 }
 
 function parseBackup(workId: number): LocalBackup | undefined {
@@ -121,6 +148,12 @@ function ReportEditor({ workId }: { workId: number }) {
   const [revision, setRevision] = useState(0);
   const [draft, setDraft] = useState(emptyDraft);
   const { templateId, themeId, fontFamily, fields, evidenceAssetIds } = draft;
+  const institution = reportInstitution(fields);
+  const selectedFont = reportFontFamily(fontFamily);
+  const logoRequest = useRef(0);
+  const logoPending = useRef(false);
+  const [processingLogo, setProcessingLogo] = useState(false);
+  const [logoError, setLogoError] = useState(false);
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [backupError, setBackupError] = useState(false);
   const [lastSavedAt, setLastSavedAt] = useState<string | undefined>();
@@ -169,6 +202,10 @@ function ReportEditor({ workId }: { workId: number }) {
   }, [workId]);
 
   const applyServerDraft = useCallback((data: NonNullable<typeof reportQuery.data>, recover: boolean) => {
+    logoRequest.current++;
+    logoPending.current = false;
+    setProcessingLogo(false);
+    setLogoError(false);
     const confirmed = contentOf(data.draft);
     const backup = recover ? parseBackup(workId) : undefined;
     const unsaved = backup && !sameContent(confirmed, backup) ? backup : undefined;
@@ -203,6 +240,30 @@ function ReportEditor({ workId }: { workId: number }) {
     // user chooses to discard it. Editing it must never unlock an overwrite.
     updateBackup({ content: session.content, baseRevision: backupRevision.current });
     if (!conflict.current) setSaveState(navigator.onLine ? "dirty" : "offline");
+  };
+
+  const editIdentity = (key: string, value: string) => editDraft(current => ({
+    fields: { ...current.fields, reportIdentityVersion: "1", [key]: value },
+  }));
+
+  const changeSchoolLogo = async (file: File) => {
+    const session = sessionRef.current;
+    if (!session || !isCurrent(session) || versionPending.current) return;
+    const request = ++logoRequest.current;
+    logoPending.current = true;
+    setProcessingLogo(true);
+    setLogoError(false);
+    try {
+      const logo = await prepareSchoolLogo(file);
+      if (isCurrent(session) && request === logoRequest.current) editIdentity("schoolLogoPng", logo);
+    } catch {
+      if (isCurrent(session) && request === logoRequest.current) setLogoError(true);
+    } finally {
+      if (isCurrent(session) && request === logoRequest.current) {
+        logoPending.current = false;
+        setProcessingLogo(false);
+      }
+    }
   };
 
   const saveDraft = useCallback(async (): Promise<number | undefined> => {
@@ -262,7 +323,7 @@ function ReportEditor({ workId }: { workId: number }) {
 
   const handleCreateVersion = async () => {
     const session = sessionRef.current;
-    if (!session || versionPending.current || conflict.current || !navigator.onLine) return;
+    if (!session || versionPending.current || logoPending.current || conflict.current || !navigator.onLine) return;
     versionPending.current = true;
     setCreatingVersion(true);
     try {
@@ -397,12 +458,37 @@ function ReportEditor({ workId }: { workId: number }) {
                       </select>
                     </label>
                     <label className="text-xs font-bold text-slate-700">الخط
-                      <select value={fontFamily} onChange={event => editDraft({ fontFamily: event.target.value })} className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-normal">
-                        {fontOptions.map(option => <option key={option} value={option}>{option}</option>)}
+                      <select value={selectedFont} onChange={event => editDraft({ fontFamily: event.target.value })} className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-normal">
+                        {selectedFont === "Arial" && <option value="Arial">Arial</option>}
+                        {REPORT_FONT_FAMILIES.map(option => <option key={option} value={option}>{option}</option>)}
                       </select>
                     </label>
                   </div>
                   <p className="mt-4 text-xs leading-6 text-slate-500">المحتوى محفوظ كبيانات مستقلة عن القالب؛ تغيير الشكل لا يحذف النصوص أو الشواهد.</p>
+                </section>
+
+                <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+                  <h2 className="text-lg font-bold text-slate-950">هوية التقرير والتوقيع</h2>
+                  <div className="mt-4 grid gap-4 md:grid-cols-3">
+                    {REPORT_IDENTITY_FIELDS.map(({ key, label }) => (
+                      <label key={key} className="text-xs font-bold text-slate-700">{label}
+                        <input name={key} value={fields[key] ?? ""} maxLength={REPORT_IDENTITY_TEXT_LIMIT} onChange={event => editIdentity(key, event.target.value)} className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm font-normal" />
+                      </label>
+                    ))}
+                  </div>
+                  <div className="mt-4 flex flex-wrap items-center gap-4 text-xs text-slate-700">
+                    <label className="flex items-center gap-2"><input name="ministryLogo" type="checkbox" checked={institution.ministryLogo} onChange={event => editIdentity("ministryLogo", event.target.checked ? "yes" : "")} /> إظهار شعار وزارة التعليم</label>
+                    <label className="flex flex-wrap items-center gap-2">شعار المدرسة (PNG)
+                      <input name="schoolLogoPng" type="file" accept="image/png" disabled={creatingVersion} onChange={event => {
+                        const file = event.currentTarget.files?.[0];
+                        event.currentTarget.value = "";
+                        if (file) void changeSchoolLogo(file);
+                      }} />
+                    </label>
+                    {institution.schoolLogo && <button type="button" disabled={creatingVersion || processingLogo} className="text-red-700" onClick={() => { setLogoError(false); editIdentity("schoolLogoPng", ""); }}>إزالة شعار المدرسة</button>}
+                  </div>
+                  {processingLogo && <p role="status" className="mt-3 text-xs text-slate-600">جارٍ تجهيز شعار المدرسة...</p>}
+                  {logoError && <p role="alert" className="mt-3 text-xs text-red-700">تعذّرت قراءة شعار المدرسة. اختر ملف PNG صالحًا حتى 2 ميغابايت.</p>}
                 </section>
 
                 <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
@@ -459,7 +545,7 @@ function ReportEditor({ workId }: { workId: number }) {
                   <h2 className="mt-1 text-lg font-bold text-slate-950">حفظ نسخة للمراجعة أو الإخراج</h2>
                   <p className="mt-2 text-xs leading-6 text-slate-500">ينشئ النظام نسخة من المسودة المحفوظة في الخادم والشواهد المرتبطة، لا من الصفحة المعروضة في المتصفح.</p>
                   <textarea value={versionReason} onChange={event => setVersionReason(event.target.value)} rows={2} maxLength={255} placeholder="سبب إنشاء النسخة، مثل: جاهزة للمراجعة" className="mt-4 w-full resize-none rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-teal-400 focus:ring-2 focus:ring-teal-100" />
-                  <button onClick={() => void handleCreateVersion()} disabled={creatingVersion || saveState === "conflict" || saveState === "offline" || (saveState === "saved" && revision === 0)} className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-50">
+                  <button onClick={() => void handleCreateVersion()} disabled={creatingVersion || processingLogo || saveState === "conflict" || saveState === "offline" || (saveState === "saved" && revision === 0)} className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-50">
                     {creatingVersion ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileCheck2 className="h-4 w-4" />} إنشاء نسخة ثابتة
                   </button>
                   {createVersionMutation.error && <p className="mt-3 text-xs text-red-600">{createVersionMutation.error.message}</p>}
@@ -489,8 +575,13 @@ function ReportEditor({ workId }: { workId: number }) {
                     <span className="text-[10px] font-bold text-slate-500">ليست مخرجًا معتمدًا</span>
                   </div>
                   <div className="bg-slate-100 p-4 sm:p-6">
-                    <article className={`mx-auto min-h-[720px] max-w-[620px] bg-white p-7 shadow-sm sm:p-10 ${themeId === "formal" ? "border-t-8 border-teal-700" : themeId === "minimal" ? "border border-slate-200" : "border-t-8 border-slate-800"}`} style={{ fontFamily }}>
+                    <article className={`mx-auto min-h-[720px] max-w-[620px] bg-white p-7 shadow-sm sm:p-10 ${themeId === "formal" ? "border-t-8 border-teal-700" : themeId === "minimal" ? "border border-slate-200" : "border-t-8 border-slate-800"}`} style={{ fontFamily: selectedFont === "Arial" ? "Arial, sans-serif" : `'SERS ${selectedFont}', sans-serif` }}>
                       <div className="border-b border-slate-200 pb-5 text-center">
+                        {(institution.ministryLogo || institution.schoolLogo) && <div className="mb-4 flex items-center justify-center gap-6">
+                          {institution.ministryLogo && <img className="h-16 max-w-[40%] object-contain" src={ministryLogoUrl} alt={REPORT_MINISTRY_LOGO_ALT} />}
+                          {institution.schoolLogo && <img className="h-16 max-w-[40%] object-contain" src={`data:image/png;base64,${institution.schoolLogo}`} alt={REPORT_SCHOOL_LOGO_ALT} />}
+                        </div>}
+                        {institution.schoolName && <p className="mb-2 break-words text-sm font-bold text-slate-800">{institution.schoolName}</p>}
                         <p className="text-xs font-bold text-teal-700">SERS</p>
                         <h2 className="mt-2 text-xl font-black text-slate-950">{workQuery.data.title}</h2>
                         <p className="mt-2 text-xs text-slate-500">{templateOptions.find(option => option.id === templateId)?.label}</p>
@@ -512,6 +603,11 @@ function ReportEditor({ workId }: { workId: number }) {
                             </div>
                           </section>
                         )}
+                        {institution.visible && <div className="grid grid-cols-2 gap-4 border-t border-slate-200 pt-5 text-center">
+                          {institution.signers.map(({ label, name }) => <div key={label} className="min-w-0 break-words">
+                            <p className="text-xs font-bold">{label}</p><p className="mt-2 text-sm">{name}</p><div className="mx-auto mt-5 w-3/4 border-b border-slate-400" />
+                          </div>)}
+                        </div>}
                       </div>
                     </article>
                   </div>

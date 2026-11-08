@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import {
   AlignmentType, BorderStyle, Document, Footer, Header, HeadingLevel, ImageRun,
   Packer, PageNumber, Paragraph, ShadingType, Table, TableCell, TableLayoutType,
@@ -5,7 +6,9 @@ import {
 } from "docx";
 import JSZip from "jszip";
 import QRCode from "qrcode";
+import { reportFontFamily, reportInstitution, type ReportFontFamily } from "../shared/report-appearance";
 import { sanitizeInlinePng } from "./work-version-inline-image";
+import { reportFontAssets, reportInstitutionLogos } from "./work-version-report-assets";
 
 export class ReportDocxValidationError extends Error {}
 type AssetSnapshot = {
@@ -37,13 +40,41 @@ function normalize(value: unknown) {
   return snapshot;
 }
 
+async function embedReportFonts(zip: JSZip, family: ReportFontFamily) {
+  const fonts = reportFontAssets(family);
+  if (!fonts) return;
+  const part = "word/fontTable.xml", relationships = "word/_rels/fontTable.xml.rels";
+  const fontTable = await zip.file(part)!.async("string"), rels = await zip.file(relationships)!.async("string");
+  if (!fontTable.endsWith("/>") || !rels.endsWith("/>") || fontTable.includes("<w:font ") || rels.includes("<Relationship ")) throw new Error("Unexpected generated font table");
+  const entries = Object.entries(fonts).map(([weight, source], index) => {
+    const id = `rId${index + 1}`, target = `fonts/report-${weight}.odttf`;
+    const guid = createHash("sha256").update(source).digest().subarray(0, 16);
+    guid[6] = (guid[6] & 0x0f) | 0x40;
+    guid[8] = (guid[8] & 0x3f) | 0x80;
+    const hex = guid.toString("hex").toUpperCase();
+    const key = `{${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}}`;
+    const bytes = Buffer.from(source), mask = Buffer.from(hex, "hex").reverse();
+    for (let i = 0; i < 32; i++) bytes[i] ^= mask[i % 16];
+    zip.file(`word/${target}`, bytes);
+    return {
+      reference: `<w:embed${weight === "regular" ? "Regular" : "Bold"} r:id="${id}" w:fontKey="${key}"/>`,
+      relationship: `<Relationship Id="${id}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/font" Target="${target}"/>`,
+    };
+  });
+  zip.file(part, `${fontTable.slice(0, -2)}><w:font w:name="${family}">${entries.map(entry => entry.reference).join("")}</w:font></w:fonts>`);
+  zip.file(relationships, `${rels.slice(0, -2)}>${entries.map(entry => entry.relationship).join("")}</Relationships>`);
+  const settings = await zip.file("word/settings.xml")!.async("string");
+  zip.file("word/settings.xml", settings.replace("<w:evenAndOddHeaders", "<w:embedTrueTypeFonts/><w:evenAndOddHeaders"));
+}
+
 /** All text comes from the immutable snapshot. No HTML evaluation, external
  * relationship, file URL or storage key is fetched or copied into the document. */
 export async function renderReportWorkVersionDocx(value: unknown, versionNumber: number) {
   if (!Number.isSafeInteger(versionNumber) || versionNumber < 1) throw new ReportDocxValidationError("Invalid version number");
   const snapshot = normalize(value), draft = snapshot.reportDraft!;
   const title = text(snapshot.work!.title, 255) || "تقرير";
-  const font = ["Cairo", "Tajawal", "Arial"].includes(draft.fontFamily || "") ? draft.fontFamily! : "Arial";
+  const font = reportFontFamily(draft.fontFamily, "Arial");
+  const institution = reportInstitution(draft.fields);
   const captured = snapshot.capturedAt || draft.updatedAt;
   const timestamp = captured && Number.isFinite(Date.parse(captured)) ? new Date(captured) : new Date("2000-01-01T00:00:00Z");
   const dateLabel = new Intl.DateTimeFormat("ar-SA", { calendar: "gregory", year: "numeric", month: "long", day: "numeric", timeZone: "UTC" }).format(timestamp);
@@ -68,6 +99,15 @@ export async function renderReportWorkVersionDocx(value: unknown, versionNumber:
     paragraph(`نسخة ${versionNumber}`, { alignment: AlignmentType.CENTER }),
     paragraph(dateLabel, { alignment: AlignmentType.CENTER }),
   ];
+  const logos = (() => {
+    try { return reportInstitutionLogos(institution); } catch { throw new ReportDocxValidationError("Invalid report logo"); }
+  })();
+  if (institution.schoolName) contents.unshift(paragraph(institution.schoolName, { alignment: AlignmentType.CENTER, children: runs(institution.schoolName, { bold: true, size: 26 }) }));
+  if (logos.length) contents.unshift(new Paragraph({ alignment: AlignmentType.CENTER, spacing: { before: 500, after: 300 }, children: logos.slice().reverse().flatMap((logo, index) => {
+    const scale = Math.min(115 / logo.width, 76 / logo.height);
+    const image = new ImageRun({ type: "png", data: logo.bytes, transformation: { width: Math.max(1, Math.round(logo.width * scale)), height: Math.max(1, Math.round(logo.height * scale)) }, altText: { name: `report-logo-${index}`, title: logo.alt } });
+    return index ? [new TextRun({ text: "        ", font }), image] : [image];
+  }) }));
   const yearLabel = text(snapshot.academicContext?.yearLabel, 100);
   const termLabel = text(snapshot.academicContext?.termLabel, 100);
   if (yearLabel) contents.push(paragraph(`العام الدراسي ${yearLabel}`, { alignment: AlignmentType.CENTER }));
@@ -110,6 +150,19 @@ export async function renderReportWorkVersionDocx(value: unknown, versionNumber:
         new Paragraph({ alignment: AlignmentType.CENTER, children: [new ImageRun({ type: "png", data: preview.bytes, transformation: { width: Math.round(preview.width * scale), height: Math.round(preview.height * scale) }, altText: { name: `evidence-${images}`, title: text(asset.title, 255) || "صورة الشاهد", description: text(asset.caption, 1000) } })] }));
     }
   }
+  if (institution.visible) {
+    const cells = institution.signers.map(({ label, name }) => new TableCell({
+      width: { size: 4500, type: WidthType.DXA },
+      margins: { top: 140, bottom: 100, left: 200, right: 200 },
+      children: [
+        paragraph(label, { alignment: AlignmentType.CENTER, children: runs(label, { bold: true }), keepNext: true }),
+        paragraph(name || " ", { alignment: AlignmentType.CENTER, keepNext: true }),
+        paragraph(" ", { alignment: AlignmentType.CENTER, indent: { left: 550, right: 550 }, border: { bottom: { style: BorderStyle.SINGLE, color: "94A3B8", size: 4 } } }),
+      ],
+    }));
+    const borders = Object.fromEntries(["top", "bottom", "left", "right", "insideHorizontal", "insideVertical"].map(key => [key, { style: BorderStyle.NONE }]));
+    contents.push(new Table({ rows: [new TableRow({ children: cells, cantSplit: true })], visuallyRightToLeft: true, width: { size: 9000, type: WidthType.DXA }, columnWidths: [4500, 4500], layout: TableLayoutType.FIXED, borders }));
+  }
   if (snapshot.shareReference) {
     const reference = snapshot.shareReference;
     let url: URL;
@@ -132,6 +185,7 @@ export async function renderReportWorkVersionDocx(value: unknown, versionNumber:
   // prevents concurrent retries from writing byte-distinct copies of one version.
   const packed = await Packer.toBuffer(doc);
   const zip = await JSZip.loadAsync(packed);
+  await embedReportFonts(zip, font);
   const corePath = "docProps/core.xml";
   const core = await zip.file(corePath)!.async("string");
   zip.file(corePath, core.replace(/(<dcterms:(?:created|modified)[^>]*>)[^<]*(<\/dcterms:(?:created|modified)>)/g, `$1${timestamp.toISOString()}$2`));

@@ -45,6 +45,27 @@ describe("editable immutable WorkVersion DOCX", () => {
     expect(await renderReportWorkVersionDocx(value, 2)).not.toEqual(first);
   });
 
+  it("embeds both chosen Arabic font weights and native institutional identity from a frozen snapshot", async () => {
+    const base = snapshot(), schoolLogo = await QRCode.toBuffer("synthetic school logo", { width: 100 });
+    const value = { ...base, reportDraft: { ...base.reportDraft, fontFamily: "Noto Kufi Arabic", fields: {
+      ...base.reportDraft.fields, reportIdentityVersion: "1", ministryLogo: "yes", schoolLogoPng: schoolLogo.toString("base64"),
+      schoolName: "مدرسة التجربة", reportPreparer: "مريم", schoolPrincipal: "خالد",
+    } } };
+    const bytes = await renderReportWorkVersionDocx(value, 1);
+    const { zip, document } = await unpack(bytes);
+    const fontTable = await zip.file("word/fontTable.xml")!.async("string");
+    expect(fontTable).toContain('<w:font w:name="Noto Kufi Arabic">');
+    expect(fontTable).toContain("<w:embedRegular ");
+    expect(fontTable).toContain("<w:embedBold ");
+    expect(document).toContain('w:cs="Noto Kufi Arabic"');
+    expect(document).toContain("<w:rtl/>");
+    for (const word of ["مدرسة التجربة", "معد التقرير", "مدير المدرسة", "مريم", "خالد"]) expect(document).toContain(word);
+    expect(document.match(/<w:drawing>/g)).toHaveLength(2);
+    expect(zip.file("word/fonts/report-regular.odttf")).toBeTruthy();
+    expect(zip.file("word/fonts/report-bold.odttf")).toBeTruthy();
+    expect(await renderReportWorkVersionDocx(value, 1)).toEqual(bytes);
+  });
+
   it("treats markup and source fields as plain text without making network requests", async () => {
     const fetch = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("No network allowed"));
     try {
