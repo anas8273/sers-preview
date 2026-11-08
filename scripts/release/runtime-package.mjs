@@ -5,7 +5,7 @@ import { lstat, readdir, readFile, writeFile, mkdtemp, rm } from 'node:fs/promis
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { CANDIDATE_FILE, IMAGE_FILE, MAX_MANIFEST_BYTES, MAX_ARCHIVE_BYTES, validateCandidate } from './candidate.mjs';
+import { CANDIDATE_FILE, IMAGE_FILE, MAX_MANIFEST_BYTES, MAX_ARCHIVE_BYTES, validateCandidate, validateRuntimeImages } from './candidate.mjs';
 import { REPOSITORY, REPOSITORY_ID, boundedJson, newPrivateDirectory, writeJson } from './github-evidence.mjs';
 
 export const root = fileURLToPath(new URL('../../', import.meta.url));
@@ -73,11 +73,11 @@ export async function loadCandidateImage(directory, candidate, run = command) {
 }
 
 export function composeOverride(candidate, appReference) {
-  validateCandidate(candidate);
-  if (appReference !== candidate.appImageId && !new RegExp(`^${registry.replaceAll('.', '\\.')}@sha256:[a-f0-9]{64}$`).test(appReference)) throw new Error('Release application reference must be immutable');
+  const { appImageId, dependencies } = validateRuntimeImages(candidate);
+  if (appReference !== appImageId && !new RegExp(`^${registry.replaceAll('.', '\\.')}@sha256:[a-f0-9]{64}$`).test(appReference)) throw new Error('Release application reference must be immutable');
   const lines = ['# This override must be used after the matching compose.staging.yml.', '# Requires Docker Compose 2.24.4 or newer. No service may rebuild the image.', 'services:'];
   for (const service of APP_SERVICES) lines.push(`  ${service}:`, `    image: ${appReference}`, '    platform: linux/amd64', '    build: !reset null');
-  for (const service of ['mysql', 'clamav']) lines.push(`  ${service}:`, `    image: ${candidate.dependencies[service].ref}`, '    platform: linux/amd64');
+  for (const service of ['mysql', 'clamav']) lines.push(`  ${service}:`, `    image: ${dependencies[service].ref}`, '    platform: linux/amd64');
   return lines.join('\n') + '\n';
 }
 

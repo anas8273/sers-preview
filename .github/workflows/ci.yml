@@ -46,8 +46,7 @@ jobs:
           pnpm exec vitest run \
             --exclude server/performance-evidence.test.ts \
             --exclude server/templates-themes.test.ts \
-            --exclude server/copy-templates-barcode.test.ts \
-            --exclude server/image-proxy.test.ts
+            --exclude server/copy-templates-barcode.test.ts
       - name: Production build
         run: pnpm build
       - name: Public output browser integration (HTTP fixtures)
@@ -70,7 +69,6 @@ jobs:
           - server/performance-evidence.test.ts (requires DATABASE_URL)
           - server/templates-themes.test.ts (requires DATABASE_URL)
           - server/copy-templates-barcode.test.ts (depends on template DB state)
-          - server/image-proxy.test.ts (requires a running app server on localhost:3000)
           These tests remain in the repository and must run in the staging/integration gate.
           EOF
 

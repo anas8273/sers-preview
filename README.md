@@ -114,8 +114,7 @@ pnpm check
 pnpm exec vitest run \
   --exclude server/performance-evidence.test.ts \
   --exclude server/templates-themes.test.ts \
-  --exclude server/copy-templates-barcode.test.ts \
-  --exclude server/image-proxy.test.ts
+  --exclude server/copy-templates-barcode.test.ts
 pnpm build
 pnpm exec tsx --test tests/browser/public-output.mts
 ```

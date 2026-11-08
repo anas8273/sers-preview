@@ -91,9 +91,12 @@ jobs:
         run: node scripts/operations/failure-drill.mjs | tee "$RUNNER_TEMP/failure-result.json"
       - name: Exercise previous-image schema compatibility without reverting data
         run: node scripts/operations/rollback-drill.mjs | tee "$RUNNER_TEMP/rollback-result.json"
-      - name: Quiesce writers, back up, and restore into a disposable database
+      - name: Back up and restore using the build-free release Compose files
         run: |
-          docker compose -f compose.staging.yml stop app worker
+          release_dir="$RUNNER_TEMP/recovery-release"
+          node scripts/release/export-candidate.mjs --recovery-compose "$release_dir"
+          export SERS_RELEASE_DIR="$release_dir"
+          docker compose -f "$release_dir/compose.staging.yml" -f "$release_dir/compose.release.yml" stop app worker
           node scripts/operations/backup.mjs "$RUNNER_TEMP/sers-backups"
           backup_dir=$(find "$RUNNER_TEMP/sers-backups" -mindepth 1 -maxdepth 1 -type d)
           node scripts/operations/restore-drill.mjs "$backup_dir" | tee "$RUNNER_TEMP/restore-result.json"
@@ -137,7 +140,7 @@ jobs:
         run: |
           docker compose -f compose.staging.yml down --volumes --remove-orphans
           git worktree remove --force "$RUNNER_TEMP/sers-previous" || true
-          rm -rf "$RUNNER_TEMP/sers-secrets" "$RUNNER_TEMP/sers-backups" "$RUNNER_TEMP/restore-result.json" "$RUNNER_TEMP/preflight-result.json" "$RUNNER_TEMP/output-runtime-result.json" "$RUNNER_TEMP/failure-result.json" "$RUNNER_TEMP/rollback-result.json"
+          rm -rf "$RUNNER_TEMP/sers-secrets" "$RUNNER_TEMP/sers-backups" "$RUNNER_TEMP/recovery-release" "$RUNNER_TEMP/restore-result.json" "$RUNNER_TEMP/preflight-result.json" "$RUNNER_TEMP/output-runtime-result.json" "$RUNNER_TEMP/failure-result.json" "$RUNNER_TEMP/rollback-result.json"
 
   candidate-portability:
     needs: compose-backup-restore

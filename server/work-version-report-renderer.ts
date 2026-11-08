@@ -69,7 +69,7 @@ export function renderReportWorkVersionHtml(snapshotValue: unknown, versionNumbe
   const selectedIds = new Set((Array.isArray(draft.evidenceAssetIds) ? draft.evidenceAssetIds : []).filter((id): id is number => Number.isSafeInteger(id) && Number(id) > 0));
   const selected = (snapshot.assets ?? []).filter(asset => asset && typeof asset.id === "number" && selectedIds.has(asset.id));
   if (selected.length) {
-    sections.push(`<section class="report-section"><h2>الشواهد المستخدمة</h2><table><thead><tr><th>الشاهد</th><th>الوصف</th></tr></thead><tbody>${selected.map((asset, index) => `<tr><td>${index + 1}. ${escapeHtml(text(asset.title, 255) || "شاهد")}</td><td>${escapeHtml(text(asset.caption, 4000)) || "—"}</td></tr>`).join("")}</tbody></table></section>`);
+    sections.push(`<section class="report-section report-page-start"><h2>الشواهد المستخدمة</h2><table><thead><tr><th>الشاهد</th><th>الوصف</th></tr></thead><tbody>${selected.map((asset, index) => `<tr><td>${index + 1}. ${escapeHtml(text(asset.title, 255) || "شاهد")}</td><td>${escapeHtml(text(asset.caption, 4000)) || "—"}</td></tr>`).join("")}</tbody></table></section>`);
     const images: string[] = [];
     for (const asset of selected) {
       if (!asset.preview) continue;
@@ -77,7 +77,7 @@ export function renderReportWorkVersionHtml(snapshotValue: unknown, versionNumbe
       const preview = sanitizeInlinePng(asset.preview.dataBase64);
       images.push(`<figure><figcaption>${escapeHtml(text(asset.title, 255) || "صورة الشاهد")}</figcaption><img src="data:image/png;base64,${preview.bytes.toString("base64")}" width="${preview.width}" height="${preview.height}" alt="${escapeHtml(text(asset.title, 255))}"/></figure>`);
     }
-    if (images.length) sections.push(`<section class="report-section report-previews"><h2>صور الشواهد</h2>${images.join("")}</section>`);
+    if (images.length) sections.push(`<section class="report-section report-page-start report-previews"><h2>صور الشواهد</h2>${images.join("")}</section>`);
   }
   if (snapshot.shareReference) {
     const reference = snapshot.shareReference;
@@ -85,7 +85,7 @@ export function renderReportWorkVersionHtml(snapshotValue: unknown, versionNumbe
     try { url = new URL(text(reference.url, 512)); } catch { throw new Error("Invalid report share reference"); }
     if (url.protocol !== "https:" || url.username || url.password || url.search || url.hash || !/^\/output\/[A-Za-z0-9_-]{20,128}$/.test(url.pathname)) throw new Error("Invalid report share reference");
     const code = qrcode(0, "M"); code.addData(url.href, "Byte"); code.make();
-    sections.push(`<section class="report-section report-share"><h2>${escapeHtml(text(reference.label, 255) || "رابط النسخة المشتركة")}</h2><div class="report-qr">${code.createSvgTag({ cellSize: 4, margin: 16, scalable: true })}</div><p dir="ltr">${escapeHtml(url.href)}</p></section>`);
+    sections.push(`<section class="report-section report-page-start report-share"><h2>${escapeHtml(text(reference.label, 255) || "رابط النسخة المشتركة")}</h2><div class="report-qr">${code.createSvgTag({ cellSize: 4, margin: 16, scalable: true })}</div><p dir="ltr">${escapeHtml(url.href)}</p></section>`);
   }
   return `<style>
     @page { size: A4; margin: 18mm 16mm; @top-right { content: "SERS"; font: 9pt Arial; color: #64748b; } @bottom-center { content: "نسخة ${versionNumber} · " counter(page); font: 9pt Arial; color: #64748b; } }
@@ -96,7 +96,8 @@ export function renderReportWorkVersionHtml(snapshotValue: unknown, versionNumbe
     .work-version-document h2 { font-size: 18pt; line-height: 1.5; margin: 0 0 8mm; }
     .work-version-document p { margin: 0 0 5mm; orphans: 3; widows: 3; }
     .report-cover { min-height: 250mm; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
-    .report-section { break-before: page; }
+    .report-cover + .report-section, .report-page-start { break-before: page; }
+    .report-section + .report-section:not(.report-page-start) { margin-top: 8mm; }
     .work-version-document table { width: 100%; table-layout: fixed; border-collapse: collapse; font-size: 11pt; }
     .work-version-document thead { display: table-header-group; }
     .work-version-document th, .work-version-document td { border: 1px solid #d9d9d9; padding: 3mm; vertical-align: middle; text-align: right; }

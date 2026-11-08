@@ -9,6 +9,9 @@ import { promisify } from 'node:util';
 import { createGzip } from 'node:zlib';
 import { fileURLToPath } from 'node:url';
 import { CANDIDATE_FILE, IMAGE_FILE, MAX_ARCHIVE_BYTES, MAX_IMAGE_TAR_BYTES, candidateArtifactName, validateCandidate } from './candidate.mjs';
+import { createComposePackage, validateComposeConfig } from './runtime-package.mjs';
+import { assertDisposableCi } from '../operations/disposable-ci.mjs';
+import { compose as operationsCompose } from '../operations/ops-common.mjs';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const exec = promisify(execFile);
@@ -98,6 +101,20 @@ async function dependency(service, repository) {
   if (refs.length !== 1) throw new Error('Exercised dependency has no unique immutable registry reference');
   return { imageId, ref: refs[0] };
 }
+async function exercisedDependencies() {
+  return { mysql: await atStage('mysql-image', () => dependency('mysql', 'mysql')), clamav: await atStage('clamav-image', () => dependency('clamav', 'clamav/clamav')) };
+}
+async function prepareRecoveryCompose(directory) {
+  await assertDisposableCi();
+  const appImageId = process.env.SERS_TESTED_IMAGE_ID;
+  for (const service of ['app', 'worker']) {
+    if (await exercisedImage(service) !== appImageId) throw new Error('Recovery image differs from the exercised service');
+  }
+  const runtime = { appImageId, dependencies: await exercisedDependencies() };
+  process.env.SERS_RELEASE_DIR = await createComposePackage(directory, runtime, appImageId);
+  const config = await operationsCompose(['--profile', '*', 'config', '--format', 'json']);
+  validateComposeConfig(JSON.parse(config), runtime, appImageId);
+}
 async function saveImage(imageId, file) {
   const child = spawn('docker', ['image', 'save', imageId], { cwd: root, stdio: ['ignore', 'pipe', 'ignore'] });
   const completion = new Promise((resolve, reject) => { child.once('error', reject); child.once('close', code => code === 0 ? resolve() : reject(new Error('Image export failed'))); });
@@ -128,7 +145,7 @@ export async function exportCandidate(directory, env = process.env) {
   const app = await inspectImage(identity.appImageId);
   if (app.revision !== identity.testedMerge || app.source !== `https://github.com/${identity.repo}`) throw new Error('Candidate image source labels do not match checkout');
   });
-  const dependencies = { mysql: await atStage('mysql-image', () => dependency('mysql', 'mysql')), clamav: await atStage('clamav-image', () => dependency('clamav', 'clamav/clamav')) };
+  const dependencies = await exercisedDependencies();
   await atStage('destination', () => mkdir(destination, { mode: 0o700 }));
   try {
     const part = path.join(destination, `${IMAGE_FILE}.part`);
@@ -144,6 +161,10 @@ export async function exportCandidate(directory, env = process.env) {
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  if (process.argv.length !== 3) throw new Error('Candidate export requires one destination directory');
-  exportCandidate(process.argv[2]).then(candidate => console.log(JSON.stringify({ candidateArtifact: candidateArtifactName(candidate), imageId: candidate.appImageId, sourceHead: candidate.sourceHead, syntheticProof: true, bytes: candidate.archive.bytes }))).catch(error => { console.error(`Tested runtime candidate export refused: ${producerFailureStage(error)}`); process.exitCode = 1; });
+  if (process.argv.length === 4 && process.argv[2] === '--recovery-compose') {
+    prepareRecoveryCompose(process.argv[3]).catch(error => { console.error(`Disposable recovery Compose refused: ${error.message}`); process.exitCode = 1; });
+  } else {
+    if (process.argv.length !== 3) throw new Error('Candidate export requires one destination directory');
+    exportCandidate(process.argv[2]).then(candidate => console.log(JSON.stringify({ candidateArtifact: candidateArtifactName(candidate), imageId: candidate.appImageId, sourceHead: candidate.sourceHead, syntheticProof: true, bytes: candidate.archive.bytes }))).catch(error => { console.error(`Tested runtime candidate export refused: ${producerFailureStage(error)}`); process.exitCode = 1; });
+  }
 }
