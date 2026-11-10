@@ -113,3 +113,14 @@ test('producer requires independent successful output, recovery, rollback and re
     await assert.rejects(assertOperationProofs(directory, fixture()));
   } finally { await rm(directory, { recursive: true, force: true }); }
 });
+
+test('recovery diagnostics expose only allowlisted dependency verification stages', () => {
+  for (const service of ['mysql', 'clamav']) {
+    for (const step of ['container-inspection', 'image-inspection', 'immutable-reference']) {
+      const producerStage = `${service}-${step}`;
+      assert.equal(producerFailureStage({ producerStage, message: 'private raw command output' }), producerStage);
+    }
+  }
+  assert.equal(producerFailureStage({ producerStage: 'private raw command output' }), 'context');
+  assert.equal(producerFailureStage(new Error('private raw command output')), 'context');
+});

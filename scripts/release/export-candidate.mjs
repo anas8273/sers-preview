@@ -17,7 +17,7 @@ const root = fileURLToPath(new URL('../../', import.meta.url));
 const exec = promisify(execFile);
 const sha = /^[a-f0-9]{40}$/;
 const imageIdPattern = /^sha256:[a-f0-9]{64}$/;
-const STAGES = new Set(['context', 'event-identity', 'source-checkout', 'source-clean', 'operation-proofs', 'destination', 'app-container', 'worker-container', 'app-image', 'mysql-image', 'clamav-image', 'image-archive', 'manifest-write']);
+const STAGES = new Set(['context', 'event-identity', 'source-checkout', 'source-clean', 'operation-proofs', 'destination', 'app-container', 'worker-container', 'app-image', 'mysql-image', 'clamav-image', 'image-archive', 'manifest-write', 'mysql-container-inspection', 'mysql-image-inspection', 'mysql-immutable-reference', 'clamav-container-inspection', 'clamav-image-inspection', 'clamav-immutable-reference']);
 export const producerFailureStage = error => STAGES.has(error?.producerStage) ? error.producerStage : 'context';
 async function atStage(stage, operation) {
   if (!STAGES.has(stage)) throw new Error('Unknown producer verification stage');
@@ -96,10 +96,13 @@ async function inspectImage(imageId) {
   return parseImageInspection(imageId, JSON.parse(await command('docker', ['image', 'inspect', '--format', format, imageId])));
 }
 async function dependency(service, repository) {
-  const imageId = await exercisedImage(service), info = await inspectImage(imageId);
+  const imageId = await atStage(`${service}-container-inspection`, () => exercisedImage(service));
+  const info = await atStage(`${service}-image-inspection`, () => inspectImage(imageId));
+  return atStage(`${service}-immutable-reference`, async () => {
   const refs = [...new Set((info.digests ?? []).map(ref => ref.replace(/^docker\.io\/(?:library\/)?/, '')).filter(ref => ref.startsWith(`${repository}@sha256:`)))];
   if (refs.length !== 1) throw new Error('Exercised dependency has no unique immutable registry reference');
   return { imageId, ref: refs[0] };
+  });
 }
 async function exercisedDependencies() {
   return { mysql: await atStage('mysql-image', () => dependency('mysql', 'mysql')), clamav: await atStage('clamav-image', () => dependency('clamav', 'clamav/clamav')) };
@@ -162,7 +165,7 @@ export async function exportCandidate(directory, env = process.env) {
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   if (process.argv.length === 4 && process.argv[2] === '--recovery-compose') {
-    prepareRecoveryCompose(process.argv[3]).catch(error => { console.error(`Disposable recovery Compose refused: ${error.message}`); process.exitCode = 1; });
+    prepareRecoveryCompose(process.argv[3]).catch(error => { console.error(`Disposable recovery Compose refused: ${producerFailureStage(error)}`); process.exitCode = 1; });
   } else {
     if (process.argv.length !== 3) throw new Error('Candidate export requires one destination directory');
     exportCandidate(process.argv[2]).then(candidate => console.log(JSON.stringify({ candidateArtifact: candidateArtifactName(candidate), imageId: candidate.appImageId, sourceHead: candidate.sourceHead, syntheticProof: true, bytes: candidate.archive.bytes }))).catch(error => { console.error(`Tested runtime candidate export refused: ${producerFailureStage(error)}`); process.exitCode = 1; });
