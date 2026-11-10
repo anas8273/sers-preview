@@ -17,7 +17,7 @@ const root = fileURLToPath(new URL('../../', import.meta.url));
 const exec = promisify(execFile);
 const sha = /^[a-f0-9]{40}$/;
 const imageIdPattern = /^sha256:[a-f0-9]{64}$/;
-const STAGES = new Set(['context', 'event-identity', 'source-checkout', 'source-clean', 'operation-proofs', 'destination', 'app-container', 'worker-container', 'app-image', 'mysql-image', 'clamav-image', 'image-archive', 'manifest-write', 'mysql-container-inspection', 'mysql-image-inspection', 'mysql-immutable-reference', 'clamav-container-inspection', 'clamav-image-inspection', 'clamav-immutable-reference']);
+const STAGES = new Set(['context', 'event-identity', 'source-checkout', 'source-clean', 'operation-proofs', 'destination', 'app-container', 'worker-container', 'app-image', 'mysql-image', 'clamav-image', 'image-archive', 'manifest-write', 'image-inspect-command', 'image-inspect-json', 'image-identity', 'image-platform', 'image-labels', 'image-digests', 'mysql-container-inspection', 'mysql-image-inspection', 'mysql-immutable-reference', 'clamav-container-inspection', 'clamav-image-inspection', 'clamav-immutable-reference']);
 export const producerFailureStage = error => STAGES.has(error?.producerStage) ? error.producerStage : 'context';
 async function atStage(stage, operation) {
   if (!STAGES.has(stage)) throw new Error('Unknown producer verification stage');
@@ -83,17 +83,21 @@ async function exercisedImage(service) {
   const info = JSON.parse(await command('docker', ['container', 'inspect', '--format', '{"id":{{json .Id}},"imageId":{{json .Image}}}', container]));
   return parseContainerInspection(container, info);
 }
+function imageRefusal(producerStage) { const error = new Error('Candidate image inspection refused'); error.producerStage = producerStage; throw error; }
 export function parseImageInspection(imageId, info) {
-  if (info.id !== imageId || info.os !== 'linux' || info.architecture !== 'amd64') throw new Error('Candidate image platform is not the tested linux/amd64 platform');
-  if (info.labels != null && (typeof info.labels !== 'object' || Array.isArray(info.labels))) throw new Error('Invalid image labels');
-  if (info.digests != null && (!Array.isArray(info.digests) || info.digests.some(value => typeof value !== 'string'))) throw new Error('Invalid image digests');
+  if (info.id !== imageId) imageRefusal('image-identity');
+  if (info.os !== 'linux' || info.architecture !== 'amd64') imageRefusal('image-platform');
+  if (info.labels != null && (typeof info.labels !== 'object' || Array.isArray(info.labels))) imageRefusal('image-labels');
+  if (info.digests != null && (!Array.isArray(info.digests) || info.digests.some(value => typeof value !== 'string'))) imageRefusal('image-digests');
   return { ...info, revision: info.labels?.['org.opencontainers.image.revision'], source: info.labels?.['org.opencontainers.image.source'], digests: info.digests ?? [] };
 }
 async function inspectImage(imageId) {
   // Dependency images need not have labels. Passing the whole nullable map to
   // json avoids Go template `index` failing before JavaScript can validate it.
   const format = '{"id":{{json .Id}},"os":{{json .Os}},"architecture":{{json .Architecture}},"labels":{{json .Config.Labels}},"digests":{{json .RepoDigests}}}';
-  return parseImageInspection(imageId, JSON.parse(await command('docker', ['image', 'inspect', '--format', format, imageId])));
+  const output = await atStage('image-inspect-command', () => command('docker', ['image', 'inspect', '--format', format, imageId]));
+  const info = await atStage('image-inspect-json', async () => JSON.parse(output));
+  return parseImageInspection(imageId, info);
 }
 async function dependency(service, repository) {
   const imageId = await atStage(`${service}-container-inspection`, () => exercisedImage(service));
