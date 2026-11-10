@@ -113,3 +113,25 @@ test('producer requires independent successful output, recovery, rollback and re
     await assert.rejects(assertOperationProofs(directory, fixture()));
   } finally { await rm(directory, { recursive: true, force: true }); }
 });
+
+test('recovery diagnostics expose only allowlisted dependency verification stages', () => {
+  for (const service of ['mysql', 'clamav']) {
+    for (const step of ['container-inspection', 'image-inspection', 'immutable-reference']) {
+      const producerStage = `${service}-${step}`;
+      assert.equal(producerFailureStage({ producerStage, message: 'private raw command output' }), producerStage);
+    }
+  }
+  assert.equal(producerFailureStage({ producerStage: 'private raw command output' }), 'context');
+  assert.equal(producerFailureStage(new Error('private raw command output')), 'context');
+});
+
+test('image inspection failures retain sanitized reason codes', () => {
+  const imageId = 'sha256:' + 'a'.repeat(64);
+  const info = { id: imageId, os: 'linux', architecture: 'amd64', labels: null, digests: [] };
+  for (const [change, stage] of [
+    [{ id: 'sha256:' + 'b'.repeat(64) }, 'image-identity'],
+    [{ architecture: 'arm64' }, 'image-platform'],
+    [{ labels: 'private value' }, 'image-labels'],
+    [{ digests: ['safe', 42] }, 'image-digests'],
+  ]) assert.throws(() => parseImageInspection(imageId, { ...info, ...change }), error => producerFailureStage(error) === stage && !error.message.includes('private value'));
+});

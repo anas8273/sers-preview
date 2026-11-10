@@ -9,12 +9,15 @@ import { promisify } from 'node:util';
 import { createGzip } from 'node:zlib';
 import { fileURLToPath } from 'node:url';
 import { CANDIDATE_FILE, IMAGE_FILE, MAX_ARCHIVE_BYTES, MAX_IMAGE_TAR_BYTES, candidateArtifactName, validateCandidate } from './candidate.mjs';
+import { createComposePackage, validateComposeConfig } from './runtime-package.mjs';
+import { assertDisposableCi } from '../operations/disposable-ci.mjs';
+import { compose as operationsCompose } from '../operations/ops-common.mjs';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const exec = promisify(execFile);
 const sha = /^[a-f0-9]{40}$/;
 const imageIdPattern = /^sha256:[a-f0-9]{64}$/;
-const STAGES = new Set(['context', 'event-identity', 'source-checkout', 'source-clean', 'operation-proofs', 'destination', 'app-container', 'worker-container', 'app-image', 'mysql-image', 'clamav-image', 'image-archive', 'manifest-write']);
+const STAGES = new Set(['context', 'event-identity', 'source-checkout', 'source-clean', 'operation-proofs', 'destination', 'app-container', 'worker-container', 'app-image', 'mysql-image', 'clamav-image', 'image-archive', 'manifest-write', 'image-inspect-command', 'image-inspect-json', 'image-identity', 'image-platform', 'image-labels', 'image-digests', 'mysql-container-inspection', 'mysql-image-inspection', 'mysql-immutable-reference', 'clamav-container-inspection', 'clamav-image-inspection', 'clamav-immutable-reference']);
 export const producerFailureStage = error => STAGES.has(error?.producerStage) ? error.producerStage : 'context';
 async function atStage(stage, operation) {
   if (!STAGES.has(stage)) throw new Error('Unknown producer verification stage');
@@ -80,23 +83,44 @@ async function exercisedImage(service) {
   const info = JSON.parse(await command('docker', ['container', 'inspect', '--format', '{"id":{{json .Id}},"imageId":{{json .Image}}}', container]));
   return parseContainerInspection(container, info);
 }
+function imageRefusal(producerStage) { const error = new Error('Candidate image inspection refused'); error.producerStage = producerStage; throw error; }
 export function parseImageInspection(imageId, info) {
-  if (info.id !== imageId || info.os !== 'linux' || info.architecture !== 'amd64') throw new Error('Candidate image platform is not the tested linux/amd64 platform');
-  if (info.labels != null && (typeof info.labels !== 'object' || Array.isArray(info.labels))) throw new Error('Invalid image labels');
-  if (info.digests != null && (!Array.isArray(info.digests) || info.digests.some(value => typeof value !== 'string'))) throw new Error('Invalid image digests');
+  if (info.id !== imageId) imageRefusal('image-identity');
+  if (info.os !== 'linux' || info.architecture !== 'amd64') imageRefusal('image-platform');
+  if (info.labels != null && (typeof info.labels !== 'object' || Array.isArray(info.labels))) imageRefusal('image-labels');
+  if (info.digests != null && (!Array.isArray(info.digests) || info.digests.some(value => typeof value !== 'string'))) imageRefusal('image-digests');
   return { ...info, revision: info.labels?.['org.opencontainers.image.revision'], source: info.labels?.['org.opencontainers.image.source'], digests: info.digests ?? [] };
 }
 async function inspectImage(imageId) {
   // Dependency images need not have labels. Passing the whole nullable map to
   // json avoids Go template `index` failing before JavaScript can validate it.
   const format = '{"id":{{json .Id}},"os":{{json .Os}},"architecture":{{json .Architecture}},"labels":{{json .Config.Labels}},"digests":{{json .RepoDigests}}}';
-  return parseImageInspection(imageId, JSON.parse(await command('docker', ['image', 'inspect', '--format', format, imageId])));
+  const output = await atStage('image-inspect-command', () => command('docker', ['image', 'inspect', '--format', format, imageId]));
+  const info = await atStage('image-inspect-json', async () => JSON.parse(output));
+  return parseImageInspection(imageId, info);
 }
 async function dependency(service, repository) {
-  const imageId = await exercisedImage(service), info = await inspectImage(imageId);
+  const imageId = await atStage(`${service}-container-inspection`, () => exercisedImage(service));
+  const info = await atStage(`${service}-image-inspection`, () => inspectImage(imageId));
+  return atStage(`${service}-immutable-reference`, async () => {
   const refs = [...new Set((info.digests ?? []).map(ref => ref.replace(/^docker\.io\/(?:library\/)?/, '')).filter(ref => ref.startsWith(`${repository}@sha256:`)))];
   if (refs.length !== 1) throw new Error('Exercised dependency has no unique immutable registry reference');
   return { imageId, ref: refs[0] };
+  });
+}
+async function exercisedDependencies() {
+  return { mysql: await atStage('mysql-image', () => dependency('mysql', 'mysql')), clamav: await atStage('clamav-image', () => dependency('clamav', 'clamav/clamav')) };
+}
+async function prepareRecoveryCompose(directory) {
+  await assertDisposableCi();
+  const appImageId = process.env.SERS_TESTED_IMAGE_ID;
+  for (const service of ['app', 'worker']) {
+    if (await exercisedImage(service) !== appImageId) throw new Error('Recovery image differs from the exercised service');
+  }
+  const runtime = { appImageId, dependencies: await exercisedDependencies() };
+  process.env.SERS_RELEASE_DIR = await createComposePackage(directory, runtime, appImageId);
+  const config = await operationsCompose(['--profile', '*', 'config', '--format', 'json']);
+  validateComposeConfig(JSON.parse(config), runtime, appImageId);
 }
 async function saveImage(imageId, file) {
   const child = spawn('docker', ['image', 'save', imageId], { cwd: root, stdio: ['ignore', 'pipe', 'ignore'] });
@@ -128,7 +152,7 @@ export async function exportCandidate(directory, env = process.env) {
   const app = await inspectImage(identity.appImageId);
   if (app.revision !== identity.testedMerge || app.source !== `https://github.com/${identity.repo}`) throw new Error('Candidate image source labels do not match checkout');
   });
-  const dependencies = { mysql: await atStage('mysql-image', () => dependency('mysql', 'mysql')), clamav: await atStage('clamav-image', () => dependency('clamav', 'clamav/clamav')) };
+  const dependencies = await exercisedDependencies();
   await atStage('destination', () => mkdir(destination, { mode: 0o700 }));
   try {
     const part = path.join(destination, `${IMAGE_FILE}.part`);
@@ -144,6 +168,10 @@ export async function exportCandidate(directory, env = process.env) {
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  if (process.argv.length !== 3) throw new Error('Candidate export requires one destination directory');
-  exportCandidate(process.argv[2]).then(candidate => console.log(JSON.stringify({ candidateArtifact: candidateArtifactName(candidate), imageId: candidate.appImageId, sourceHead: candidate.sourceHead, syntheticProof: true, bytes: candidate.archive.bytes }))).catch(error => { console.error(`Tested runtime candidate export refused: ${producerFailureStage(error)}`); process.exitCode = 1; });
+  if (process.argv.length === 4 && process.argv[2] === '--recovery-compose') {
+    prepareRecoveryCompose(process.argv[3]).catch(error => { console.error(`Disposable recovery Compose refused: ${producerFailureStage(error)}`); process.exitCode = 1; });
+  } else {
+    if (process.argv.length !== 3) throw new Error('Candidate export requires one destination directory');
+    exportCandidate(process.argv[2]).then(candidate => console.log(JSON.stringify({ candidateArtifact: candidateArtifactName(candidate), imageId: candidate.appImageId, sourceHead: candidate.sourceHead, syntheticProof: true, bytes: candidate.archive.bytes }))).catch(error => { console.error(`Tested runtime candidate export refused: ${producerFailureStage(error)}`); process.exitCode = 1; });
+  }
 }

@@ -39,21 +39,28 @@ jobs:
       - name: Install document acceptance tools and Arabic fonts
         run: |
           sudo apt-get update
-          sudo apt-get install -y poppler-utils fonts-noto-core
+          sudo apt-get install -y poppler-utils fonts-noto-core libreoffice-writer
       - name: Hermetic test suite
         shell: bash
         run: |
           pnpm exec vitest run \
             --exclude server/performance-evidence.test.ts \
             --exclude server/templates-themes.test.ts \
-            --exclude server/copy-templates-barcode.test.ts \
-            --exclude server/image-proxy.test.ts
+            --exclude server/copy-templates-barcode.test.ts
       - name: Production build
         run: pnpm build
       - name: Public output browser integration (HTTP fixtures)
         run: pnpm exec tsx --test tests/browser/public-output.mts
+      - name: Report editor mobile, recovery and evidence dialog browser integration
+        run: pnpm exec tsx --test tests/browser/report-editor.mts
       - name: Immutable Arabic PDF and Word pagination and digital QR acceptance
         run: node --import tsx scripts/verify-work-version-outputs.ts qa-artifacts/work-version-outputs
+      - name: Arabic report identity with all bundled fonts
+        run: node --import tsx scripts/verify-report-identity.ts qa-artifacts/work-version-outputs/identity
+      - name: Academic-year numeral direction in rendered reports
+        run: node --import tsx scripts/verify-report-numerals.ts qa-artifacts/work-version-outputs/numerals
+      - name: Word long-title cover visual pagination
+        run: node --import tsx scripts/verify-word-cover.ts qa-artifacts/work-version-outputs/identity/noto-kufi-arabic.docx qa-artifacts/work-version-outputs/word-cover
       - name: Preserve synthetic document verification artifacts
         if: always()
         uses: actions/upload-artifact@v4
@@ -70,7 +77,6 @@ jobs:
           - server/performance-evidence.test.ts (requires DATABASE_URL)
           - server/templates-themes.test.ts (requires DATABASE_URL)
           - server/copy-templates-barcode.test.ts (depends on template DB state)
-          - server/image-proxy.test.ts (requires a running app server on localhost:3000)
           These tests remain in the repository and must run in the staging/integration gate.
           EOF
 

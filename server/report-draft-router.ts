@@ -1,6 +1,8 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
+import { REPORT_IDENTITY_FIELDS, REPORT_IDENTITY_TEXT_LIMIT, REPORT_SCHOOL_LOGO_MAX_BASE64 } from "../shared/report-appearance";
 import { protectedProcedure, router } from "./_core/trpc";
+import { sanitizeReportSchoolLogo } from "./work-version-report-assets";
 import {
   createReportDraftVersionForUser,
   getReportDraftForUser,
@@ -15,8 +17,15 @@ const conflict = (message: string) => new TRPCError({ code: "CONFLICT", message 
 
 const reportFieldsSchema = z.record(
   z.string().trim().min(1).max(128),
-  z.string().max(20_000),
-).refine(value => Object.keys(value).length <= 100, "عدد حقول التقرير أكبر من الحد المسموح");
+  z.string().max(REPORT_SCHOOL_LOGO_MAX_BASE64),
+).refine(value => Object.keys(value).length <= 100, "عدد حقول التقرير أكبر من الحد المسموح")
+  .refine(fields => Object.entries(fields).every(([key, value]) => {
+    if (fields.reportIdentityVersion === "1") {
+      if (key === "schoolLogoPng") return true;
+      if (REPORT_IDENTITY_FIELDS.some(field => field.key === key)) return value.length <= REPORT_IDENTITY_TEXT_LIMIT;
+    }
+    return value.length <= 20_000;
+  }), "أحد حقول التقرير أطول من الحد المسموح");
 
 export const reportDraftRouter = router({
   get: protectedProcedure
@@ -43,8 +52,16 @@ export const reportDraftRouter = router({
       evidenceAssetIds: z.array(z.number().int().positive()).max(100).default([]),
     }))
     .mutation(async ({ ctx, input }) => {
+      const fields = { ...input.fields };
+      if (fields.reportIdentityVersion === "1" && fields.schoolLogoPng) {
+        try {
+          fields.schoolLogoPng = sanitizeReportSchoolLogo(fields.schoolLogoPng).bytes.toString("base64");
+        } catch {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "تعذّر حفظ شعار المدرسة. اختر صورة PNG صالحة ضمن الحجم المسموح." });
+        }
+      }
       try {
-        return await saveReportDraftForUser(ctx.user.id, input);
+        return await saveReportDraftForUser(ctx.user.id, { ...input, fields });
       } catch (error) {
         if (error instanceof ReportDraftAccessError) throw forbidden(error.message);
         if (error instanceof ReportDraftConflictError) {

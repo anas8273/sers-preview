@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import QRCode from "qrcode";
 import { renderReportWorkVersionHtml } from "./work-version-report-renderer";
 
 const snapshot = {
@@ -51,6 +52,22 @@ describe("immutable report version renderer", () => {
     expect(html).toContain("شاهد &lt;حقيقي&gt;");
     expect(html).toContain("وصف موثق");
     expect(html).not.toContain("شاهد غير مستخدم");
+  });
+
+  it("renders optional frozen identity and the selected bundled Arabic font", async () => {
+    const logo = await QRCode.toBuffer("synthetic school logo", { width: 100 });
+    const fields = { ...snapshot.reportDraft.fields, reportIdentityVersion: "1", ministryLogo: "yes",
+      schoolLogoPng: logo.toString("base64"), schoolName: "مدرسة <التجربة>", reportPreparer: "مريم", schoolPrincipal: "خالد" };
+    const report = { ...snapshot, reportDraft: { ...snapshot.reportDraft, fontFamily: "Noto Kufi Arabic", fields } };
+    const html = renderReportWorkVersionHtml(report, 3);
+    expect(html).toContain("font-family: 'SERS Noto Kufi Arabic'");
+    expect(html.match(/url\(data:font\/ttf;base64,/g)).toHaveLength(2);
+    expect(html).toContain('alt="شعار وزارة التعليم"');
+    expect(html).toContain('alt="شعار المدرسة"');
+    expect(html).toContain("مدرسة &lt;التجربة&gt;");
+    expect(html).toContain("<strong>معد التقرير</strong><p>مريم</p>");
+    expect(html).toContain("<strong>مدير المدرسة</strong><p>خالد</p>");
+    expect(() => renderReportWorkVersionHtml({ ...report, reportDraft: { ...report.reportDraft, fields: { ...fields, schoolLogoPng: "https://internal.example/logo.png" } } }, 3)).toThrow(/PNG/);
   });
 
   it("rejects snapshots that are not authoritative report versions", () => {

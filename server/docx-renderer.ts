@@ -808,7 +808,9 @@ export async function renderHtmlToDocx(htmlContent: string): Promise<Buffer> {
 <body>${htmlContent}</body>
 </html>`;
 
-    await page.setContent(fullHtml, { waitUntil: ["networkidle0", "domcontentloaded"], timeout: 60000 });
+    const contentDeadline = performance.now() + 60_000;
+    await page.setContent(fullHtml, { waitUntil: "domcontentloaded", timeout: 60_000 });
+    await page.waitForNetworkIdle({ timeout: Math.max(1, contentDeadline - performance.now()) });
     await page.evaluate(() => document.fonts.ready);
     await new Promise(resolve => setTimeout(resolve, 2000));
 

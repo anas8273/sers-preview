@@ -28,8 +28,10 @@ for (const [index, asset] of stress.assets.entries()) {
   markers.push(marker);
   asset.caption = `${asset.caption.repeat(index === 0 ? 12 : 1)} ${marker}`;
 }
+stress.reportDraft.fields.audience += " B09AUDIENCE";
+stress.reportDraft.fields.implementation = `B09IMPLEMENTATION\n${stress.reportDraft.fields.implementation}`;
 stress.reportDraft.fields.recommendations += "\nB09FINALFIELD";
-markers.push("B09FINALFIELD");
+markers.push("B09AUDIENCE", "B09IMPLEMENTATION", "B09FINALFIELD");
 const manifest: Record<string, unknown> = {
   fixture: "synthetic immutable Arabic WorkVersion", version: 7,
   scope: "Digital QR decoding, native document text/table checks, rendered PDF text retention and page bounds. No physical-camera or Microsoft Word application test is claimed.",
@@ -68,6 +70,10 @@ try {
     await writeFile(resolve(directory, `${name}-bounds.xhtml`), bbox);
     const pages = Array.from(bbox.matchAll(/<page width="([\d.]+)" height="([\d.]+)">([\s\S]*?)<\/page>/g));
     assert.ok(pages.length > 1, `${name}: expected a multipage PDF`);
+    if (name === "long-rtl") {
+      assert.ok(pages.some(page => page[3].includes("B09AUDIENCE") && page[3].includes("B09IMPLEMENTATION")),
+        "A short report section should share a PDF page with the start of the next section");
+    }
     let words = 0, lines = 0;
     for (const [pageIndex, page] of pages.entries()) {
       const width = Number(page[1]), height = Number(page[2]);

@@ -8,17 +8,18 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import express from "express";
 import puppeteer from "puppeteer";
+import QRCode from "qrcode";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { and, eq, sql } from "drizzle-orm";
 import { getDb } from "../../server/db";
 import { users } from "../../drizzle/schema";
-import { assets, outputs, workAssetLinks } from "../../drizzle/domain-core";
+import { assets, outputs, workAssetLinks, workVersions } from "../../drizzle/domain-core";
 import { uploadIntents } from "../../drizzle/upload-intents";
 import { appRouter } from "../../server/root-router";
 import { registerEvidenceHttpRoutes } from "../../server/evidence-http-routes";
 import { registerPrivateOutputRoutes } from "../../server/output-artifact-storage";
 import { createWorkItemForUser, linkAssetToWorkForUser } from "../../server/domain-db";
-import { saveReportDraftForUser, createReportDraftVersionForUser } from "../../server/work-report-draft-db";
+import { saveReportDraftForUser } from "../../server/work-report-draft-db";
 
 assert.equal(process.env.GITHUB_ACTIONS, "true");
 assert.equal(process.env.SERS_INTEGRATION, "1");
@@ -94,9 +95,25 @@ test("browser uploads, scans, links and downloads evidence and editable Word fro
 
     const work = await createWorkItemForUser(ownerId, { title: "تقرير رحلة الشاهد والـWord", type: "report" }); assert(work);
     assert(await linkAssetToWorkForUser(ownerId, { workItemId: work.id, assetId: asset.id, role: "evidence" }));
-    const draft = await saveReportDraftForUser(ownerId, { workItemId: work.id, expectedRevision: 0, templateId: "program-report", themeId: "formal", fontFamily: "Cairo", fields: { summary: "IMMUTABLE_WORD_ARABIC_REPORT تقرير عربي قابل للتعديل" }, evidenceAssetIds: [asset.id] });
-    const version = await createReportDraftVersionForUser(ownerId, { workItemId: work.id, expectedRevision: draft.revision, reason: "اختبار" });
+    await saveReportDraftForUser(ownerId, { workItemId: work.id, expectedRevision: 0, templateId: "program-report", themeId: "formal", fontFamily: "Noto Kufi Arabic", fields: { summary: "IMMUTABLE_WORD_ARABIC_REPORT تقرير عربي قابل للتعديل" }, evidenceAssetIds: [asset.id] });
     await page.goto(`${base}/work/${work.id}/report`);
+    await page.waitForSelector('input[name="schoolName"]');
+    await page.locator('input[name="schoolName"]').fill("مدرسة الاختبار");
+    await page.locator('input[name="reportPreparer"]').fill("مريم التجريبية");
+    await page.locator('input[name="schoolPrincipal"]').fill("خالد التجريبي");
+    await page.click('input[name="ministryLogo"]');
+    const logoFile = join(root, "school-logo.png");
+    await writeFile(logoFile, await QRCode.toBuffer("SERS_SYNTHETIC_SCHOOL_LOGO", { width: 100 }));
+    const logoInput = await page.$('input[name="schoolLogoPng"]'); assert(logoInput);
+    await (logoInput as import("puppeteer").ElementHandle<HTMLInputElement>).uploadFile(logoFile);
+    await page.waitForSelector('article img[alt="شعار المدرسة"]');
+    await click("إنشاء نسخة ثابتة");
+    await page.waitForFunction(() => document.body.innerText.includes("تم إنشاء النسخة 1"));
+    const [version] = await db.select().from(workVersions).where(eq(workVersions.workItemId, work.id));
+    const frozenFields = (version.snapshot as { reportDraft: { fields: Record<string, string> } }).reportDraft.fields;
+    assert.equal(frozenFields.reportPreparer, "مريم التجريبية");
+    assert.equal(frozenFields.schoolPrincipal, "خالد التجريبي");
+    assert(frozenFields.schoolLogoPng);
     await page.click('[aria-controls="report-pdf-actions"]');
     await page.waitForSelector('#report-pdf-actions');
     await click("Word قابل للتعديل");
@@ -110,6 +127,9 @@ test("browser uploads, scans, links and downloads evidence and editable Word fro
     const archive = await JSZip.loadAsync(Buffer.from(docx.bytes));
     const xml = await archive.file("word/document.xml")!.async("string");
     assert.match(xml, /IMMUTABLE_WORD_ARABIC_REPORT/); assert.match(xml, /<w:bidi/);
+    assert.match(xml, /معد التقرير/); assert.match(xml, /مدير المدرسة/);
+    assert.match(xml, /w:cs="Noto Kufi Arabic"/);
+    assert(archive.file("word/fonts/report-regular.odttf"));
     assert.equal((await fetch(`${base}/api/work-outputs/${output.id}/download`)).status, 401);
     assert.equal((await fetch(`${base}/api/work-outputs/${output.id}/download`, { headers: { Cookie: `sers_evidence_test=${outsiderSession}` } })).status, 404);
     // Revocation blocks a previously issued authenticated URL immediately.

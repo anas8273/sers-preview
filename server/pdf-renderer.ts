@@ -181,9 +181,16 @@ async function renderPdf(
     requireActive(signal);
     await configureSafePage(page);
     await page.setViewport({ width: 794, height: 1123, deviceScaleFactor: 3 });
+    const contentDeadline = performance.now() + 30_000;
     await page.setContent(wrapWithFonts(htmlContent), {
-      waitUntil: ["domcontentloaded", "networkidle2"],
+      waitUntil: "domcontentloaded",
       timeout: 30_000,
+      signal,
+    });
+    await page.waitForNetworkIdle({
+      concurrency: 2,
+      timeout: Math.max(1, contentDeadline - performance.now()),
+      signal,
     });
     await page.evaluate(async () => {
       await document.fonts.ready;

@@ -52,7 +52,17 @@ export async function command(binary, args, options = {}) {
   finally { clearTimeout(timer); }
   return output;
 }
-export const compose = (args, options) => command('docker', ['compose', '-f', path.join(repoRoot, process.env.SERS_COMPOSE_MODE === 'demo' ? 'compose.demo.yml' : 'compose.staging.yml'), ...args], options);
+export function compose(args, options) {
+  const releaseDirectory = process.env.SERS_RELEASE_DIR;
+  const demo = process.env.SERS_COMPOSE_MODE === 'demo';
+  if (releaseDirectory && (!path.isAbsolute(releaseDirectory) || demo)) {
+    throw new Error('SERS_RELEASE_DIR must be an absolute release package directory for staging');
+  }
+  const files = releaseDirectory
+    ? ['-f', path.join(releaseDirectory, 'compose.staging.yml'), '-f', path.join(releaseDirectory, 'compose.release.yml')]
+    : ['-f', path.join(repoRoot, demo ? 'compose.demo.yml' : 'compose.staging.yml')];
+  return command('docker', ['compose', ...files, ...args], options);
+}
 const mysqlCommand = 'MYSQL_PWD="$(cat /run/secrets/mysql_root_password)" exec mysql -uroot --batch --raw --skip-column-names';
 export function sql(query, database) {
   return compose(['exec', '-T', 'mysql', 'sh', '-c', mysqlCommand + (database ? ` --database=${identifier(database).slice(1, -1)}` : '')], { input: query + '\n' });

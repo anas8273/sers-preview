@@ -18,6 +18,13 @@ import {
 import { useLocation, useRoute } from "wouter";
 import AppSidebar from "@/components/AppSidebar";
 import { trpc } from "@/lib/trpc";
+import {
+  REPORT_FONT_FAMILIES, REPORT_IDENTITY_FIELDS, REPORT_IDENTITY_TEXT_LIMIT, REPORT_MINISTRY_LOGO_ALT,
+  REPORT_SCHOOL_LOGO_ALT, REPORT_SCHOOL_LOGO_MAX_BASE64, REPORT_SCHOOL_LOGO_MAX_DIMENSION,
+  reportFontFamily, reportInstitution,
+} from "@shared/report-appearance";
+import ministryLogoUrl from "@shared/report-assets/ministry-logo.png";
+import "./work-report-fonts.css";
 
 const fieldDefinitions = [
   { key: "summary", label: "ملخص التقرير", placeholder: "اكتب ملخصًا موجزًا للعمل أو البرنامج المنفذ...", rows: 4 },
@@ -43,8 +50,7 @@ const themeOptions = [
   { id: "formal", label: "مؤسسي هادئ" },
   { id: "minimal", label: "بسيط حديث" },
 ];
-
-const fontOptions = ["Cairo", "Tajawal", "Noto Kufi Arabic"];
+const evidenceKindLabels = { file: "ملف", link: "رابط", text: "نص" };
 
 type SaveState = "idle" | "dirty" | "saving" | "saved" | "offline" | "conflict" | "error";
 
@@ -65,6 +71,28 @@ function sameContent(a: ReportDraftContent, b: ReportDraftContent) {
 
 function backupKey(workId: number) {
   return `sers:report-draft:${workId}`;
+}
+
+async function prepareSchoolLogo(file: File) {
+  if (file.type !== "image/png" || file.size > 2 * 1024 * 1024) throw new Error("Choose a PNG up to 2 MiB");
+  const header = new DataView(await file.slice(0, 24).arrayBuffer());
+  if (header.byteLength !== 24 || header.getUint32(0) !== 0x89504e47 || header.getUint32(4) !== 0x0d0a1a0a || header.getUint32(12) !== 0x49484452
+    || header.getUint32(16) > 4096 || header.getUint32(20) > 4096) throw new Error("Unsupported PNG");
+  const image = await createImageBitmap(file);
+  try {
+    const canvas = document.createElement("canvas");
+    const context = canvas.getContext("2d");
+    if (!context) throw new Error("Image processing is unavailable");
+    for (const max of [REPORT_SCHOOL_LOGO_MAX_DIMENSION, 224, 160]) {
+      const scale = Math.min(1, max / Math.max(image.width, image.height));
+      canvas.width = Math.max(1, Math.round(image.width * scale));
+      canvas.height = Math.max(1, Math.round(image.height * scale));
+      context.drawImage(image, 0, 0, canvas.width, canvas.height);
+      const base64 = canvas.toDataURL("image/png").slice("data:image/png;base64,".length);
+      if (base64 && base64.length <= REPORT_SCHOOL_LOGO_MAX_BASE64) return base64;
+    }
+    throw new Error("School logo exceeds the report limit");
+  } finally { image.close(); }
 }
 
 function parseBackup(workId: number): LocalBackup | undefined {
@@ -121,6 +149,12 @@ function ReportEditor({ workId }: { workId: number }) {
   const [revision, setRevision] = useState(0);
   const [draft, setDraft] = useState(emptyDraft);
   const { templateId, themeId, fontFamily, fields, evidenceAssetIds } = draft;
+  const institution = reportInstitution(fields);
+  const selectedFont = reportFontFamily(fontFamily);
+  const logoRequest = useRef(0);
+  const logoPending = useRef(false);
+  const [processingLogo, setProcessingLogo] = useState(false);
+  const [logoError, setLogoError] = useState(false);
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [backupError, setBackupError] = useState(false);
   const [lastSavedAt, setLastSavedAt] = useState<string | undefined>();
@@ -169,6 +203,10 @@ function ReportEditor({ workId }: { workId: number }) {
   }, [workId]);
 
   const applyServerDraft = useCallback((data: NonNullable<typeof reportQuery.data>, recover: boolean) => {
+    logoRequest.current++;
+    logoPending.current = false;
+    setProcessingLogo(false);
+    setLogoError(false);
     const confirmed = contentOf(data.draft);
     const backup = recover ? parseBackup(workId) : undefined;
     const unsaved = backup && !sameContent(confirmed, backup) ? backup : undefined;
@@ -203,6 +241,30 @@ function ReportEditor({ workId }: { workId: number }) {
     // user chooses to discard it. Editing it must never unlock an overwrite.
     updateBackup({ content: session.content, baseRevision: backupRevision.current });
     if (!conflict.current) setSaveState(navigator.onLine ? "dirty" : "offline");
+  };
+
+  const editIdentity = (key: string, value: string) => editDraft(current => ({
+    fields: { ...current.fields, reportIdentityVersion: "1", [key]: value },
+  }));
+
+  const changeSchoolLogo = async (file: File) => {
+    const session = sessionRef.current;
+    if (!session || !isCurrent(session) || versionPending.current) return;
+    const request = ++logoRequest.current;
+    logoPending.current = true;
+    setProcessingLogo(true);
+    setLogoError(false);
+    try {
+      const logo = await prepareSchoolLogo(file);
+      if (isCurrent(session) && request === logoRequest.current) editIdentity("schoolLogoPng", logo);
+    } catch {
+      if (isCurrent(session) && request === logoRequest.current) setLogoError(true);
+    } finally {
+      if (isCurrent(session) && request === logoRequest.current) {
+        logoPending.current = false;
+        setProcessingLogo(false);
+      }
+    }
   };
 
   const saveDraft = useCallback(async (): Promise<number | undefined> => {
@@ -262,7 +324,7 @@ function ReportEditor({ workId }: { workId: number }) {
 
   const handleCreateVersion = async () => {
     const session = sessionRef.current;
-    if (!session || versionPending.current || conflict.current || !navigator.onLine) return;
+    if (!session || versionPending.current || logoPending.current || conflict.current || !navigator.onLine) return;
     versionPending.current = true;
     setCreatingVersion(true);
     try {
@@ -325,14 +387,14 @@ function ReportEditor({ workId }: { workId: number }) {
         <div className="mx-auto max-w-[1500px] px-4 py-6 sm:px-6 sm:py-8">
           <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
             <div>
-              <button onClick={() => setLocation(`/work/${workId}`)} className="inline-flex items-center gap-2 text-sm font-bold text-slate-600 hover:text-teal-700">
+              <button onClick={() => setLocation(`/work/${workId}`)} className="mr-12 inline-flex items-center gap-2 text-sm font-bold text-slate-600 hover:text-teal-700 lg:mr-0">
                 <ArrowRight className="h-4 w-4" /> العودة إلى العمل
               </button>
-              <div className="mt-3 flex items-center gap-3">
-                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-teal-50 text-teal-700"><FileText className="h-5 w-5" /></div>
-                <div>
+              <div className="mt-3 flex min-w-0 items-center gap-3">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-teal-50 text-teal-700"><FileText className="h-5 w-5" /></div>
+                <div className="min-w-0">
                   <p className="text-xs font-bold text-teal-700">محرر التقرير المرتبط بالعمل</p>
-                  <h1 className="text-xl font-black text-slate-950 sm:text-2xl" style={{ fontFamily: "'Tajawal', sans-serif" }}>
+                  <h1 className="text-xl font-black text-slate-950 [overflow-wrap:anywhere] sm:text-2xl" style={{ fontFamily: "'Tajawal', sans-serif" }}>
                     {reportQuery.data?.work.title || workQuery.data?.title || "جاري تحميل التقرير..."}
                   </h1>
                 </div>
@@ -340,7 +402,7 @@ function ReportEditor({ workId }: { workId: number }) {
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
-              <div className={`inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-xs font-bold ${
+              <div role="status" aria-live="polite" aria-atomic="true" className={`inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-xs font-bold ${
                 saveState === "saved" ? "border-emerald-200 bg-emerald-50 text-emerald-700"
                   : saveState === "conflict" ? "border-amber-200 bg-amber-50 text-amber-800"
                     : saveState === "error" ? "border-red-200 bg-red-50 text-red-700"
@@ -361,12 +423,13 @@ function ReportEditor({ workId }: { workId: number }) {
           </div>
 
           {(workQuery.isLoading || (saveState === "idle" && !reportQuery.error && !workQuery.error)) && (
-            <div className="mt-8 flex items-center justify-center rounded-2xl border border-slate-200 bg-white py-20 text-sm text-slate-500"><Loader2 className="ml-2 h-4 w-4 animate-spin" />جاري تحميل بيانات التقرير...</div>
+            <div role="status" className="mt-8 flex items-center justify-center rounded-2xl border border-slate-200 bg-white py-20 text-sm text-slate-500"><Loader2 className="ml-2 h-4 w-4 animate-spin" />جاري تحميل بيانات التقرير...</div>
           )}
 
           {(reportQuery.error || workQuery.error) && (
-            <div className="mt-8 rounded-2xl border border-red-200 bg-red-50 p-5 text-sm text-red-700">
-              {reportQuery.error?.message || workQuery.error?.message}
+            <div role="alert" className="mt-8 rounded-2xl border border-red-200 bg-red-50 p-5 text-sm text-red-700">
+              <p>{reportQuery.error?.message || workQuery.error?.message}</p>
+              <button type="button" disabled={reportQuery.isFetching || workQuery.isFetching} onClick={() => void Promise.all([reportQuery.refetch(), workQuery.refetch()])} className="mt-3 inline-flex items-center gap-2 rounded-lg border border-red-300 bg-white px-3 py-2 font-bold disabled:opacity-50"><RefreshCw className="h-4 w-4" />إعادة تحميل التقرير</button>
             </div>
           )}
 
@@ -397,12 +460,40 @@ function ReportEditor({ workId }: { workId: number }) {
                       </select>
                     </label>
                     <label className="text-xs font-bold text-slate-700">الخط
-                      <select value={fontFamily} onChange={event => editDraft({ fontFamily: event.target.value })} className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-normal">
-                        {fontOptions.map(option => <option key={option} value={option}>{option}</option>)}
+                      <select value={selectedFont} onChange={event => editDraft({ fontFamily: event.target.value })} className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-normal">
+                        {selectedFont === "Arial" && <option value="Arial">Arial</option>}
+                        {REPORT_FONT_FAMILIES.map(option => <option key={option} value={option}>{option}</option>)}
                       </select>
                     </label>
                   </div>
                   <p className="mt-4 text-xs leading-6 text-slate-500">المحتوى محفوظ كبيانات مستقلة عن القالب؛ تغيير الشكل لا يحذف النصوص أو الشواهد.</p>
+                </section>
+
+                <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+                  <h2 className="text-lg font-bold text-slate-950">هوية التقرير والتوقيع</h2>
+                  <div className="mt-4 grid gap-4 md:grid-cols-3">
+                    {REPORT_IDENTITY_FIELDS.map(({ key, label }) => (
+                      <label key={key} className="text-xs font-bold text-slate-700">{label}
+                        <input name={key} value={fields[key] ?? ""} maxLength={REPORT_IDENTITY_TEXT_LIMIT} onChange={event => editIdentity(key, event.target.value)} className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm font-normal" />
+                      </label>
+                    ))}
+                  </div>
+                  <div className="mt-4 flex flex-wrap items-center gap-4 text-xs text-slate-700">
+                    <label className="flex items-center gap-2"><input name="ministryLogo" type="checkbox" checked={institution.ministryLogo} onChange={event => editIdentity("ministryLogo", event.target.checked ? "yes" : "")} /> إظهار شعار وزارة التعليم</label>
+                    <label className="relative inline-flex cursor-pointer items-center rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 font-bold focus-within:outline-none focus-within:ring-2 focus-within:ring-teal-500 focus-within:ring-offset-2">
+                      اختيار شعار المدرسة
+                      <input name="schoolLogoPng" type="file" accept="image/png" aria-label="اختيار شعار المدرسة" aria-describedby="school-logo-help" className="sr-only" disabled={creatingVersion} onChange={event => {
+                        const file = event.currentTarget.files?.[0];
+                        event.currentTarget.value = "";
+                        if (file) void changeSchoolLogo(file);
+                      }} />
+                    </label>
+                    {institution.schoolLogo && <button type="button" disabled={creatingVersion || processingLogo} className="text-red-700" onClick={() => { setLogoError(false); editIdentity("schoolLogoPng", ""); }}>إزالة شعار المدرسة</button>}
+                  </div>
+                  <p id="school-logo-help" className="mt-2 text-xs leading-6 text-slate-500">شعار المدرسة: صورة PNG حتى ٢ ميغابايت، تُحفظ مع مسودة التقرير.</p>
+                  {institution.schoolLogo && !processingLogo && <p role="status" className="mt-2 text-xs text-teal-700">أُضيف شعار المدرسة إلى المسودة.</p>}
+                  {processingLogo && <p role="status" className="mt-3 text-xs text-slate-600">جارٍ تجهيز شعار المدرسة...</p>}
+                  {logoError && <p role="alert" className="mt-3 text-xs text-red-700">تعذّرت قراءة شعار المدرسة. اختر ملف PNG صالحًا حتى 2 ميغابايت.</p>}
                 </section>
 
                 <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
@@ -446,7 +537,7 @@ function ReportEditor({ workId }: { workId: number }) {
                                 ? current.evidenceAssetIds.filter(id => id !== asset.id) : [...current.evidenceAssetIds, asset.id] }))}
                               className="mt-1 h-4 w-4 accent-teal-600"
                             />
-                            <span className="min-w-0"><span className="block truncate text-sm font-bold text-slate-900">{asset.title}</span><span className="mt-1 block text-[11px] text-slate-500">{asset.kind} · {asset.role}</span></span>
+                            <span className="min-w-0"><span className="block truncate text-sm font-bold text-slate-900">{asset.title}</span><span className="mt-1 block text-[11px] text-slate-500">{evidenceKindLabels[asset.kind]} · شاهد مرتبط</span></span>
                           </label>
                         );
                       })}
@@ -459,7 +550,7 @@ function ReportEditor({ workId }: { workId: number }) {
                   <h2 className="mt-1 text-lg font-bold text-slate-950">حفظ نسخة للمراجعة أو الإخراج</h2>
                   <p className="mt-2 text-xs leading-6 text-slate-500">ينشئ النظام نسخة من المسودة المحفوظة في الخادم والشواهد المرتبطة، لا من الصفحة المعروضة في المتصفح.</p>
                   <textarea value={versionReason} onChange={event => setVersionReason(event.target.value)} rows={2} maxLength={255} placeholder="سبب إنشاء النسخة، مثل: جاهزة للمراجعة" className="mt-4 w-full resize-none rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-teal-400 focus:ring-2 focus:ring-teal-100" />
-                  <button onClick={() => void handleCreateVersion()} disabled={creatingVersion || saveState === "conflict" || saveState === "offline" || (saveState === "saved" && revision === 0)} className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-50">
+                  <button onClick={() => void handleCreateVersion()} disabled={creatingVersion || processingLogo || saveState === "conflict" || saveState === "offline" || (saveState === "saved" && revision === 0)} className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-50">
                     {creatingVersion ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileCheck2 className="h-4 w-4" />} إنشاء نسخة ثابتة
                   </button>
                   {createVersionMutation.error && <p className="mt-3 text-xs text-red-600">{createVersionMutation.error.message}</p>}
@@ -473,10 +564,13 @@ function ReportEditor({ workId }: { workId: number }) {
                           {(reviewersQuery.data ?? []).map(reviewer => <option key={reviewer.userId} value={reviewer.userId}>{reviewer.name || `مستخدم ${reviewer.userId}`} — {reviewer.role}</option>)}
                         </select>
                       </label>
-                      <button onClick={() => void handleRequestReview()} disabled={!selectedReviewerId || requestReviewMutation.isPending} className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-teal-600 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50">
+                      {reviewersQuery.isLoading && <p role="status" className="mt-2 text-xs text-slate-500">جارٍ تحميل المراجعين...</p>}
+                      {reviewersQuery.error && <div role="alert" className="mt-2 text-xs text-red-700"><p>تعذر تحميل المراجعين.</p><button type="button" onClick={() => void reviewersQuery.refetch()} className="mt-1 underline">إعادة تحميل المراجعين</button></div>}
+                      {reviewersQuery.isSuccess && reviewersQuery.data.length === 0 && <p className="mt-2 text-xs leading-6 text-slate-600">لا يوجد مراجع مؤهل في المدرسة حاليًا. أضف عضوية بدور مراجع قبل الإرسال.</p>}
+                      <button onClick={() => void handleRequestReview().catch(() => undefined)} disabled={!selectedReviewerId || requestReviewMutation.isPending} className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-teal-600 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50">
                         {requestReviewMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />} إرسال النسخة للمراجعة
                       </button>
-                      {requestReviewMutation.error && <p className="mt-3 text-xs text-red-600">{requestReviewMutation.error.message}</p>}
+                      {requestReviewMutation.error && <p role="alert" className="mt-3 text-xs text-red-600">{requestReviewMutation.error.message}</p>}
                     </div>
                   )}
                 </section>
@@ -489,8 +583,13 @@ function ReportEditor({ workId }: { workId: number }) {
                     <span className="text-[10px] font-bold text-slate-500">ليست مخرجًا معتمدًا</span>
                   </div>
                   <div className="bg-slate-100 p-4 sm:p-6">
-                    <article className={`mx-auto min-h-[720px] max-w-[620px] bg-white p-7 shadow-sm sm:p-10 ${themeId === "formal" ? "border-t-8 border-teal-700" : themeId === "minimal" ? "border border-slate-200" : "border-t-8 border-slate-800"}`} style={{ fontFamily }}>
+                    <article className={`mx-auto min-h-[720px] max-w-[620px] bg-white p-5 shadow-sm [overflow-wrap:anywhere] sm:p-10 ${themeId === "formal" ? "border-t-8 border-teal-700" : themeId === "minimal" ? "border border-slate-200" : "border-t-8 border-slate-800"}`} style={{ fontFamily: selectedFont === "Arial" ? "Arial, sans-serif" : `'SERS ${selectedFont}', sans-serif` }}>
                       <div className="border-b border-slate-200 pb-5 text-center">
+                        {(institution.ministryLogo || institution.schoolLogo) && <div className="mb-4 flex items-center justify-center gap-6">
+                          {institution.ministryLogo && <img className="h-16 max-w-[40%] object-contain" src={ministryLogoUrl} alt={REPORT_MINISTRY_LOGO_ALT} />}
+                          {institution.schoolLogo && <img className="h-16 max-w-[40%] object-contain" src={`data:image/png;base64,${institution.schoolLogo}`} alt={REPORT_SCHOOL_LOGO_ALT} />}
+                        </div>}
+                        {institution.schoolName && <p className="mb-2 break-words text-sm font-bold text-slate-800">{institution.schoolName}</p>}
                         <p className="text-xs font-bold text-teal-700">SERS</p>
                         <h2 className="mt-2 text-xl font-black text-slate-950">{workQuery.data.title}</h2>
                         <p className="mt-2 text-xs text-slate-500">{templateOptions.find(option => option.id === templateId)?.label}</p>
@@ -508,10 +607,15 @@ function ReportEditor({ workId }: { workId: number }) {
                           <section>
                             <h3 className="text-sm font-black text-slate-900">الشواهد المرفقة</h3>
                             <div className="mt-3 space-y-2">
-                              {selectedEvidence.map(asset => <div key={asset.id} className="rounded-lg border border-slate-200 px-3 py-2 text-xs text-slate-700">{asset.title} · {asset.kind}</div>)}
+                              {selectedEvidence.map(asset => <div key={asset.id} className="rounded-lg border border-slate-200 px-3 py-2 text-xs text-slate-700">{asset.title} · {evidenceKindLabels[asset.kind]}</div>)}
                             </div>
                           </section>
                         )}
+                        {institution.visible && <div className="grid grid-cols-2 gap-4 border-t border-slate-200 pt-5 text-center">
+                          {institution.signers.map(({ label, name }) => <div key={label} className="min-w-0 break-words">
+                            <p className="text-xs font-bold">{label}</p><p className="mt-2 text-sm">{name}</p><div className="mx-auto mt-5 w-3/4 border-b border-slate-400" />
+                          </div>)}
+                        </div>}
                       </div>
                     </article>
                   </div>

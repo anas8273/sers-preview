@@ -21,7 +21,7 @@ function chunk(type: string, data: Buffer) {
 /** A deliberately small, bounded inline preview format. Parse and reconstruct a
  * static 8-bit RGBA PNG, discarding metadata/extra chunks; never dereference URLs.
  * This does not authorize an original Asset or replace its malware scan. */
-export function sanitizeInlinePng(base64: string) {
+export function sanitizeInlinePng(base64: string, maximumDimension = 1600) {
   if (base64.length > 1_400_000 || !/^[A-Za-z0-9+/]*={0,2}$/.test(base64)) throw new Error("Invalid inline PNG");
   const input = Buffer.from(base64, "base64");
   if (input.toString("base64") !== base64 || input.length > 1024 * 1024 || !input.subarray(0, 8).equals(signature)) throw new Error("Invalid inline PNG");
@@ -47,7 +47,7 @@ export function sanitizeInlinePng(base64: string) {
   }
   if (!header || !ended) throw new Error("Incomplete inline PNG");
   const width = header.readUInt32BE(0), height = header.readUInt32BE(4);
-  if (!width || !height || width > 1600 || height > 1600 || width * height > 1_000_000 || header[8] !== 8 || header[9] !== 6 || header[10] || header[11] || header[12]) throw new Error("Unsupported inline PNG dimensions or encoding");
+  if (!width || !height || width > maximumDimension || height > maximumDimension || width * height > 1_000_000 || header[8] !== 8 || header[9] !== 6 || header[10] || header[11] || header[12]) throw new Error("Unsupported inline PNG dimensions or encoding");
   const stride = width * 4 + 1, expected = stride * height;
   const pixels = inflateSync(Buffer.concat(compressed), { maxOutputLength: expected });
   if (pixels.length !== expected) throw new Error("Invalid inline PNG pixels");
