@@ -50,11 +50,17 @@ function ReportShareSession({ workId }: { workId: number }) {
   const [shareUrl, setShareUrl] = useState("");
   const [qrDataUrl, setQrDataUrl] = useState<string | undefined>();
   const [copied, setCopied] = useState(false);
+  const [copyError, setCopyError] = useState(false);
 
   const versionsQuery = trpc.reviewSupport.versions.useQuery(
     { workItemId: workId },
     { retry: false, refetchOnWindowFocus: false },
   );
+  const workQuery = trpc.domain.work.get.useQuery(
+    { id: workId },
+    { enabled: open, retry: false, refetchOnWindowFocus: false },
+  );
+  const personalWork = workQuery.data?.ownerType === "personal";
   const createMutation = trpc.shareOutput.create.useMutation();
   const revokeMutation = trpc.domain.output.revoke.useMutation();
 
@@ -69,6 +75,8 @@ function ReportShareSession({ workId }: { workId: number }) {
 
   useEffect(() => {
     let cancelled = false;
+    setCopied(false);
+    setCopyError(false);
     setQrDataUrl(undefined);
     if (!created?.token || typeof window === "undefined") {
       setShareUrl("");
@@ -99,7 +107,7 @@ function ReportShareSession({ workId }: { workId: number }) {
   }, [selectedVersionId]);
 
   const createShare = async () => {
-    if (!selectedVersionId) return;
+    if (!selectedVersionId || personalWork || !workQuery.isSuccess) return;
     const expiry = expiryOptions.find(option => option.value === expiryPreset);
     const result = await createMutation.mutateAsync({
       workVersionId: selectedVersionId,
@@ -114,9 +122,12 @@ function ReportShareSession({ workId }: { workId: number }) {
 
   const copyShareUrl = async () => {
     if (!shareUrl) return;
-    await navigator.clipboard.writeText(shareUrl);
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 1800);
+    setCopyError(false);
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1800);
+    } catch { setCopyError(true); }
   };
 
   const revokeShare = async () => {
@@ -130,7 +141,7 @@ function ReportShareSession({ workId }: { workId: number }) {
   return (
     <div className="fixed bottom-40 left-4 z-50 lg:bottom-20 lg:left-6" dir="rtl">
       {open && (
-        <section id="report-share-actions" className="mb-3 w-[min(92vw,410px)] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl" aria-label="مشاركة نسخة التقرير">
+        <section id="report-share-actions" className="mb-3 max-h-[calc(100dvh-15rem)] w-[min(92vw,410px)] overflow-y-auto overscroll-contain rounded-2xl border border-slate-200 bg-white shadow-2xl lg:max-h-[calc(100dvh-10rem)]" aria-label="مشاركة نسخة التقرير">
           <header className="flex items-start justify-between gap-3 border-b border-slate-100 bg-teal-800 px-4 py-4 text-white">
             <div className="flex items-start gap-3">
               <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/10"><Share2 className="h-5 w-5" /></span>
@@ -148,9 +159,13 @@ function ReportShareSession({ workId }: { workId: number }) {
             </label>
 
             {versionsQuery.isLoading && <div className="flex items-center justify-center py-4 text-xs text-slate-500"><Loader2 className="ml-2 h-4 w-4 animate-spin" />جاري تحميل النسخ...</div>}
-            {!versionsQuery.isLoading && versions.length === 0 && <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs leading-6 text-amber-900">أنشئ نسخة ثابتة وأرسلها للمراجعة أولًا.</div>}
+            {!versionsQuery.isLoading && !versionsQuery.error && !personalWork && versions.length === 0 && <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs leading-6 text-amber-900">أنشئ نسخة ثابتة وأرسلها للمراجعة أولًا.</div>}
+            {workQuery.isLoading && <p role="status" className="text-xs text-slate-500">جارٍ التحقق من نوع ملكية العمل...</p>}
+            {workQuery.error && <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-3 text-xs leading-6 text-red-700"><p>تعذر التحقق من بيانات العمل.</p><button type="button" onClick={() => void workQuery.refetch()} className="font-bold underline">إعادة المحاولة</button></div>}
+            {versionsQuery.error && <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-3 text-xs leading-6 text-red-700"><p>تعذر تحميل النسخ.</p><button type="button" onClick={() => void versionsQuery.refetch()} className="font-bold underline">إعادة تحميل النسخ</button></div>}
+            {personalWork && <p role="note" className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs leading-6 text-amber-900">التقارير الشخصية تدعم تنزيل PDF وWord بشكل خاص. المشاركة برابط أو QR متاحة حاليًا للنسخ المدرسية المعتمدة فقط.</p>}
 
-            {!created && selectedVersionId && (
+            {!created && selectedVersionId && workQuery.isSuccess && !personalWork && (
               <>
                 <div className="grid grid-cols-2 gap-2">
                   <button type="button" onClick={() => setType("link")} className={`inline-flex items-center justify-center gap-2 rounded-xl border px-3 py-2.5 text-xs font-bold ${type === "link" ? "border-teal-500 bg-teal-50 text-teal-800" : "border-slate-200 text-slate-600"}`}><Link2 className="h-4 w-4" /> رابط</button>
@@ -185,12 +200,13 @@ function ReportShareSession({ workId }: { workId: number }) {
             {created && shareUrl && (
               <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
                 <div className="flex items-start gap-2 text-emerald-800"><ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" /><div><p className="text-xs font-black">تم إنشاء مخرج {created.visibility === "protected" ? "محمي" : "عام"}</p><p className="mt-1 text-[10px] leading-5">يمكن إلغاؤه من هنا، ويطبق الخادم الانتهاء والإلغاء عند كل عرض.</p></div></div>
-                <div className="mt-3 rounded-xl bg-white p-3 text-left font-mono text-[10px] leading-5 text-slate-600" dir="ltr">{shareUrl}</div>
+                <div className="mt-3 break-all rounded-xl bg-white p-3 text-left font-mono text-[10px] leading-5 text-slate-600" dir="ltr">{shareUrl}</div>
                 {qrDataUrl && <div className="mt-3 flex justify-center rounded-xl bg-white p-4"><img src={qrDataUrl} alt="QR للمخرج الموثق" className="h-48 w-48" /></div>}
                 <div className="mt-3 grid gap-2 sm:grid-cols-2">
                   <button type="button" onClick={() => void copyShareUrl()} className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-700 px-3 py-2.5 text-xs font-bold text-white hover:bg-emerald-800">{copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}{copied ? "تم النسخ" : "نسخ الرابط"}</button>
                   <a href={shareUrl} target="_blank" rel="noreferrer" className="inline-flex items-center justify-center gap-2 rounded-xl border border-emerald-300 bg-white px-3 py-2.5 text-xs font-bold text-emerald-800"><Link2 className="h-4 w-4" /> فتح للاختبار</a>
                 </div>
+                {copyError && <p role="alert" className="mt-2 text-xs leading-6 text-red-700">تعذّر نسخ الرابط تلقائيًا. يمكنك تحديد الرابط أعلاه ونسخه يدويًا.</p>}
                 <button type="button" onClick={() => void revokeShare().catch(() => undefined)} disabled={revokeMutation.isPending} className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-red-200 bg-white px-3 py-2.5 text-xs font-bold text-red-700 hover:bg-red-50 disabled:opacity-50">{revokeMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />} إلغاء المخرج</button>
                 {revokeMutation.error && <p className="mt-2 text-xs text-red-600">{revokeMutation.error.message}</p>}
               </div>

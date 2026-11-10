@@ -62,8 +62,9 @@ export function renderReportWorkVersionHtml(snapshotValue: unknown, versionNumbe
   const institution = reportInstitution(draft.fields);
   const logos = reportInstitutionLogos(institution).map(logo => `<img src="data:image/png;base64,${logo.bytes.toString("base64")}" width="${logo.width}" height="${logo.height}" alt="${logo.alt}"/>`).join("");
   const date = escapeHtml(formatSnapshotDate(snapshot.capturedAt || draft.updatedAt));
-  // Numeric ranges need their own LTR isolate inside an otherwise Arabic label.
-  const year = escapeHtml(text(snapshot.academicContext?.yearLabel, 100)).replace(/[0-9٠-٩]+(?:[-–—/][0-9٠-٩]+)+/g, range => `<bdi dir="ltr">${range}</bdi>`);
+  // Arabic-Indic digits have bidi class AN: an LTR isolate alone still reverses
+  // the two sides of a range. Override only the numeric range, never Arabic text.
+  const year = escapeHtml(text(snapshot.academicContext?.yearLabel, 100)).replace(/[0-9٠-٩۰-۹]+(?:[-–—/][0-9٠-٩۰-۹]+)+/g, range => `<bdo dir="ltr">${range}</bdo>`);
   const term = escapeHtml(text(snapshot.academicContext?.termLabel, 100));
   let totalText = 0;
   const sections = FIELD_DEFINITIONS.flatMap(([key, label]) => {

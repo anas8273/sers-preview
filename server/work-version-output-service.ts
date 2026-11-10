@@ -11,8 +11,8 @@ import { getConfiguredPrivateStorage } from "./upload-runtime";
 import { withDocumentRenderBudget, RENDER_LIMITS } from "./render-limits";
 import { requireActive } from "./bounded-work";
 
-export const REPORT_PDF_RENDERER_VERSION = 4;
-export const REPORT_DOCX_RENDERER_VERSION = 2;
+export const REPORT_PDF_RENDERER_VERSION = 5;
+export const REPORT_DOCX_RENDERER_VERSION = 3;
 const DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 type ArtifactType = "pdf" | "docx";
 type StorageDependencies = { putStorage: typeof storagePut; getStorage: typeof storageGet };

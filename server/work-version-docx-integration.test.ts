@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import JSZip from "jszip";
@@ -85,6 +85,24 @@ suite("immutable editable WorkVersion DOCX on disposable MySQL", () => {
     expect((await db.select().from(outputs).where(eq(outputs.workVersionId, frozen.id))).map(row => row.type).sort()).toEqual(["docx", "pdf"]);
     await expect(getPrivateDocxDownloadForUser(owner, pdf.outputId, storage)).rejects.toThrow(/Private artifact/);
     await expect(getPrivatePdfDownloadForUser(owner, a!.outputId, storage)).rejects.toThrow(/Private artifact/);
+  });
+
+  it.each([1, 2])("preserves DOCX r%i downloads and revocation through the r3 renderer upgrade", async oldRevision => {
+    const { work, frozen } = await version();
+    const hash = createHash("sha256").update(`synthetic DOCX r${oldRevision}`).digest("hex");
+    const old = (await createOutputForUser(owner, {
+      workVersionId: frozen.id, type: "docx", visibility: "private",
+      token: `artifact:v${frozen.id}:docx:r${oldRevision}`,
+      storageKey: `outputs/work-${work.id}/version-${frozen.id}/${hash}.docx`,
+    }))!;
+    expect(await getPrivateDocxDownloadForUser(owner, old.id, storage)).toMatchObject({ rendererVersion: oldRevision, contentHash: hash });
+    const current = (await generatePrivateDocxForWorkVersion(owner, frozen.id, dependencies))!;
+    expect(current).toMatchObject({ rendererVersion: 3, reused: false });
+    expect(current.outputId).not.toBe(old.id);
+    expect(await getPrivateDocxDownloadForUser(owner, old.id, storage)).toMatchObject({ rendererVersion: oldRevision });
+    await revokeOutputForUser(owner, old.id);
+    await expect(getPrivateDocxDownloadForUser(owner, current.outputId, storage)).rejects.toThrow(/revoked/);
+    await expect(generatePrivateDocxForWorkVersion(owner, frozen.id, dependencies)).rejects.toThrow(/revoked/);
   });
 
   it("does not render for outsiders and blocks revoked, expired and deleted work downloads", async () => {

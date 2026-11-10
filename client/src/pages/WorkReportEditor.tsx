@@ -50,6 +50,7 @@ const themeOptions = [
   { id: "formal", label: "مؤسسي هادئ" },
   { id: "minimal", label: "بسيط حديث" },
 ];
+const evidenceKindLabels = { file: "ملف", link: "رابط", text: "نص" };
 
 type SaveState = "idle" | "dirty" | "saving" | "saved" | "offline" | "conflict" | "error";
 
@@ -386,14 +387,14 @@ function ReportEditor({ workId }: { workId: number }) {
         <div className="mx-auto max-w-[1500px] px-4 py-6 sm:px-6 sm:py-8">
           <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
             <div>
-              <button onClick={() => setLocation(`/work/${workId}`)} className="inline-flex items-center gap-2 text-sm font-bold text-slate-600 hover:text-teal-700">
+              <button onClick={() => setLocation(`/work/${workId}`)} className="mr-12 inline-flex items-center gap-2 text-sm font-bold text-slate-600 hover:text-teal-700 lg:mr-0">
                 <ArrowRight className="h-4 w-4" /> العودة إلى العمل
               </button>
-              <div className="mt-3 flex items-center gap-3">
-                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-teal-50 text-teal-700"><FileText className="h-5 w-5" /></div>
-                <div>
+              <div className="mt-3 flex min-w-0 items-center gap-3">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-teal-50 text-teal-700"><FileText className="h-5 w-5" /></div>
+                <div className="min-w-0">
                   <p className="text-xs font-bold text-teal-700">محرر التقرير المرتبط بالعمل</p>
-                  <h1 className="text-xl font-black text-slate-950 sm:text-2xl" style={{ fontFamily: "'Tajawal', sans-serif" }}>
+                  <h1 className="text-xl font-black text-slate-950 [overflow-wrap:anywhere] sm:text-2xl" style={{ fontFamily: "'Tajawal', sans-serif" }}>
                     {reportQuery.data?.work.title || workQuery.data?.title || "جاري تحميل التقرير..."}
                   </h1>
                 </div>
@@ -401,7 +402,7 @@ function ReportEditor({ workId }: { workId: number }) {
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
-              <div className={`inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-xs font-bold ${
+              <div role="status" aria-live="polite" aria-atomic="true" className={`inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-xs font-bold ${
                 saveState === "saved" ? "border-emerald-200 bg-emerald-50 text-emerald-700"
                   : saveState === "conflict" ? "border-amber-200 bg-amber-50 text-amber-800"
                     : saveState === "error" ? "border-red-200 bg-red-50 text-red-700"
@@ -422,12 +423,13 @@ function ReportEditor({ workId }: { workId: number }) {
           </div>
 
           {(workQuery.isLoading || (saveState === "idle" && !reportQuery.error && !workQuery.error)) && (
-            <div className="mt-8 flex items-center justify-center rounded-2xl border border-slate-200 bg-white py-20 text-sm text-slate-500"><Loader2 className="ml-2 h-4 w-4 animate-spin" />جاري تحميل بيانات التقرير...</div>
+            <div role="status" className="mt-8 flex items-center justify-center rounded-2xl border border-slate-200 bg-white py-20 text-sm text-slate-500"><Loader2 className="ml-2 h-4 w-4 animate-spin" />جاري تحميل بيانات التقرير...</div>
           )}
 
           {(reportQuery.error || workQuery.error) && (
-            <div className="mt-8 rounded-2xl border border-red-200 bg-red-50 p-5 text-sm text-red-700">
-              {reportQuery.error?.message || workQuery.error?.message}
+            <div role="alert" className="mt-8 rounded-2xl border border-red-200 bg-red-50 p-5 text-sm text-red-700">
+              <p>{reportQuery.error?.message || workQuery.error?.message}</p>
+              <button type="button" disabled={reportQuery.isFetching || workQuery.isFetching} onClick={() => void Promise.all([reportQuery.refetch(), workQuery.refetch()])} className="mt-3 inline-flex items-center gap-2 rounded-lg border border-red-300 bg-white px-3 py-2 font-bold disabled:opacity-50"><RefreshCw className="h-4 w-4" />إعادة تحميل التقرير</button>
             </div>
           )}
 
@@ -478,8 +480,9 @@ function ReportEditor({ workId }: { workId: number }) {
                   </div>
                   <div className="mt-4 flex flex-wrap items-center gap-4 text-xs text-slate-700">
                     <label className="flex items-center gap-2"><input name="ministryLogo" type="checkbox" checked={institution.ministryLogo} onChange={event => editIdentity("ministryLogo", event.target.checked ? "yes" : "")} /> إظهار شعار وزارة التعليم</label>
-                    <label className="flex flex-wrap items-center gap-2">شعار المدرسة (PNG)
-                      <input name="schoolLogoPng" type="file" accept="image/png" disabled={creatingVersion} onChange={event => {
+                    <label className="relative inline-flex cursor-pointer items-center rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 font-bold focus-within:outline-none focus-within:ring-2 focus-within:ring-teal-500 focus-within:ring-offset-2">
+                      اختيار شعار المدرسة
+                      <input name="schoolLogoPng" type="file" accept="image/png" aria-label="اختيار شعار المدرسة" aria-describedby="school-logo-help" className="sr-only" disabled={creatingVersion} onChange={event => {
                         const file = event.currentTarget.files?.[0];
                         event.currentTarget.value = "";
                         if (file) void changeSchoolLogo(file);
@@ -487,6 +490,8 @@ function ReportEditor({ workId }: { workId: number }) {
                     </label>
                     {institution.schoolLogo && <button type="button" disabled={creatingVersion || processingLogo} className="text-red-700" onClick={() => { setLogoError(false); editIdentity("schoolLogoPng", ""); }}>إزالة شعار المدرسة</button>}
                   </div>
+                  <p id="school-logo-help" className="mt-2 text-xs leading-6 text-slate-500">شعار المدرسة: صورة PNG حتى ٢ ميغابايت، تُحفظ مع مسودة التقرير.</p>
+                  {institution.schoolLogo && !processingLogo && <p role="status" className="mt-2 text-xs text-teal-700">أُضيف شعار المدرسة إلى المسودة.</p>}
                   {processingLogo && <p role="status" className="mt-3 text-xs text-slate-600">جارٍ تجهيز شعار المدرسة...</p>}
                   {logoError && <p role="alert" className="mt-3 text-xs text-red-700">تعذّرت قراءة شعار المدرسة. اختر ملف PNG صالحًا حتى 2 ميغابايت.</p>}
                 </section>
@@ -532,7 +537,7 @@ function ReportEditor({ workId }: { workId: number }) {
                                 ? current.evidenceAssetIds.filter(id => id !== asset.id) : [...current.evidenceAssetIds, asset.id] }))}
                               className="mt-1 h-4 w-4 accent-teal-600"
                             />
-                            <span className="min-w-0"><span className="block truncate text-sm font-bold text-slate-900">{asset.title}</span><span className="mt-1 block text-[11px] text-slate-500">{asset.kind} · {asset.role}</span></span>
+                            <span className="min-w-0"><span className="block truncate text-sm font-bold text-slate-900">{asset.title}</span><span className="mt-1 block text-[11px] text-slate-500">{evidenceKindLabels[asset.kind]} · شاهد مرتبط</span></span>
                           </label>
                         );
                       })}
@@ -559,10 +564,13 @@ function ReportEditor({ workId }: { workId: number }) {
                           {(reviewersQuery.data ?? []).map(reviewer => <option key={reviewer.userId} value={reviewer.userId}>{reviewer.name || `مستخدم ${reviewer.userId}`} — {reviewer.role}</option>)}
                         </select>
                       </label>
-                      <button onClick={() => void handleRequestReview()} disabled={!selectedReviewerId || requestReviewMutation.isPending} className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-teal-600 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50">
+                      {reviewersQuery.isLoading && <p role="status" className="mt-2 text-xs text-slate-500">جارٍ تحميل المراجعين...</p>}
+                      {reviewersQuery.error && <div role="alert" className="mt-2 text-xs text-red-700"><p>تعذر تحميل المراجعين.</p><button type="button" onClick={() => void reviewersQuery.refetch()} className="mt-1 underline">إعادة تحميل المراجعين</button></div>}
+                      {reviewersQuery.isSuccess && reviewersQuery.data.length === 0 && <p className="mt-2 text-xs leading-6 text-slate-600">لا يوجد مراجع مؤهل في المدرسة حاليًا. أضف عضوية بدور مراجع قبل الإرسال.</p>}
+                      <button onClick={() => void handleRequestReview().catch(() => undefined)} disabled={!selectedReviewerId || requestReviewMutation.isPending} className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-teal-600 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50">
                         {requestReviewMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />} إرسال النسخة للمراجعة
                       </button>
-                      {requestReviewMutation.error && <p className="mt-3 text-xs text-red-600">{requestReviewMutation.error.message}</p>}
+                      {requestReviewMutation.error && <p role="alert" className="mt-3 text-xs text-red-600">{requestReviewMutation.error.message}</p>}
                     </div>
                   )}
                 </section>
@@ -575,7 +583,7 @@ function ReportEditor({ workId }: { workId: number }) {
                     <span className="text-[10px] font-bold text-slate-500">ليست مخرجًا معتمدًا</span>
                   </div>
                   <div className="bg-slate-100 p-4 sm:p-6">
-                    <article className={`mx-auto min-h-[720px] max-w-[620px] bg-white p-7 shadow-sm sm:p-10 ${themeId === "formal" ? "border-t-8 border-teal-700" : themeId === "minimal" ? "border border-slate-200" : "border-t-8 border-slate-800"}`} style={{ fontFamily: selectedFont === "Arial" ? "Arial, sans-serif" : `'SERS ${selectedFont}', sans-serif` }}>
+                    <article className={`mx-auto min-h-[720px] max-w-[620px] bg-white p-5 shadow-sm [overflow-wrap:anywhere] sm:p-10 ${themeId === "formal" ? "border-t-8 border-teal-700" : themeId === "minimal" ? "border border-slate-200" : "border-t-8 border-slate-800"}`} style={{ fontFamily: selectedFont === "Arial" ? "Arial, sans-serif" : `'SERS ${selectedFont}', sans-serif` }}>
                       <div className="border-b border-slate-200 pb-5 text-center">
                         {(institution.ministryLogo || institution.schoolLogo) && <div className="mb-4 flex items-center justify-center gap-6">
                           {institution.ministryLogo && <img className="h-16 max-w-[40%] object-contain" src={ministryLogoUrl} alt={REPORT_MINISTRY_LOGO_ALT} />}
@@ -599,7 +607,7 @@ function ReportEditor({ workId }: { workId: number }) {
                           <section>
                             <h3 className="text-sm font-black text-slate-900">الشواهد المرفقة</h3>
                             <div className="mt-3 space-y-2">
-                              {selectedEvidence.map(asset => <div key={asset.id} className="rounded-lg border border-slate-200 px-3 py-2 text-xs text-slate-700">{asset.title} · {asset.kind}</div>)}
+                              {selectedEvidence.map(asset => <div key={asset.id} className="rounded-lg border border-slate-200 px-3 py-2 text-xs text-slate-700">{asset.title} · {evidenceKindLabels[asset.kind]}</div>)}
                             </div>
                           </section>
                         )}

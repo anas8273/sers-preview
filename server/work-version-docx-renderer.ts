@@ -73,16 +73,30 @@ export async function renderReportWorkVersionDocx(value: unknown, versionNumber:
   if (!Number.isSafeInteger(versionNumber) || versionNumber < 1) throw new ReportDocxValidationError("Invalid version number");
   const snapshot = normalize(value), draft = snapshot.reportDraft!;
   const title = text(snapshot.work!.title, 255) || "تقرير";
+  // A running header is a locator, not a second copy of the cover. Repeating a
+  // 255-character title can consume several lines on every page in Word.
+  const headerTitle = Array.from(title.replace(/\s+/g, " "));
+  const headerPrefix = headerTitle.slice(0, 63).join("").trimEnd();
+  const headerBreak = headerPrefix.lastIndexOf(" ");
+  const runningTitle = headerTitle.length > 64
+    ? `${headerBreak >= 40 ? headerPrefix.slice(0, headerBreak) : headerPrefix}…`
+    : headerTitle.join("");
   const font = reportFontFamily(draft.fontFamily, "Arial");
   const institution = reportInstitution(draft.fields);
+  const compactCover = title.length > 120 || institution.schoolName.length > 80;
+  const coverTitleSize = title.length > 180 ? 34 : title.length > 120 ? 38 : 44;
   const captured = snapshot.capturedAt || draft.updatedAt;
   const timestamp = captured && Number.isFinite(Date.parse(captured)) ? new Date(captured) : new Date("2000-01-01T00:00:00Z");
   const dateLabel = new Intl.DateTimeFormat("ar-SA", { calendar: "gregory", year: "numeric", month: "long", day: "numeric", timeZone: "UTC" }).format(timestamp);
+  const numericRange = /^[0-9٠-٩۰-۹]+(?:[-–—/][0-9٠-٩۰-۹]+)+$/;
   const runs = (value: string, options: { bold?: boolean; color?: string; size?: number } = {}) =>
-    value.split(/([A-Za-z0-9]+(?:[ \t]*[A-Za-z0-9.,:%/–—_-]+)*)/g).filter(Boolean).map(part => new TextRun({
-      text: /^[0-9][0-9.,:%/–—_-]+$/.test(part) ? `\u200e${part}\u200e` : part, font, size: options.size ?? 24, sizeComplexScript: options.size ?? 24,
+    value.split(/([0-9٠-٩۰-۹]+(?:[-–—/][0-9٠-٩۰-۹]+)+|[A-Za-z0-9]+(?:[ \t]*[A-Za-z0-9.,:%/–—_-]+)*)/g).filter(Boolean).map(part => new TextRun({
+      // Explicit LTR direction alone does not preserve AN-class Arabic digits
+      // across separators. Apply an override to numeric-only ranges, with a
+      // closing PDF control so it cannot affect the surrounding Arabic text.
+      text: numericRange.test(part) ? `\u202d${part}\u202c` : /^[0-9][0-9.,:%/–—_-]+$/.test(part) ? `\u200e${part}\u200e` : part, font, size: options.size ?? 24, sizeComplexScript: options.size ?? 24,
       // Native runs keep Latin identifiers and numeric ranges in their own order.
-      rightToLeft: !/^[A-Za-z0-9]/.test(part), language: { value: "ar-SA", bidirectional: "ar-SA" },
+      rightToLeft: !numericRange.test(part) && !/^[A-Za-z0-9]/.test(part), language: { value: "ar-SA", bidirectional: "ar-SA" },
       bold: options.bold, boldComplexScript: options.bold, color: options.color ?? "263445",
     }));
   const paragraph = (value: string, options: IParagraphOptions = {}) => new Paragraph({
@@ -94,8 +108,9 @@ export async function renderReportWorkVersionDocx(value: unknown, versionNumber:
     spacing: { before: 260, after: 180 }, children: runs(value, { bold: true, size: 32, color: "000000" }),
   });
   const contents: (Paragraph | Table)[] = [
-    paragraph("SERS", { alignment: AlignmentType.CENTER, spacing: { before: 900, after: 360 }, children: runs("SERS", { bold: true, color: "000000", size: 28 }) }),
-    paragraph(title, { heading: HeadingLevel.TITLE, alignment: AlignmentType.CENTER, spacing: { after: 400 }, children: runs(title, { bold: true, size: 44, color: "000000" }) }),
+    paragraph("SERS", { alignment: AlignmentType.CENTER, spacing: { before: compactCover ? 300 : 900, after: compactCover ? 200 : 360, line: 280 }, children: runs("SERS", { bold: true, color: "000000", size: 28 }) }),
+    paragraph(title, { heading: HeadingLevel.TITLE, alignment: AlignmentType.CENTER, keepNext: true, keepLines: true,
+      spacing: { after: compactCover ? 240 : 400, line: compactCover ? 280 : 320 }, children: runs(title, { bold: true, size: coverTitleSize, color: "000000" }) }),
     paragraph(`نسخة ${versionNumber}`, { alignment: AlignmentType.CENTER }),
     paragraph(dateLabel, { alignment: AlignmentType.CENTER }),
   ];
@@ -176,7 +191,7 @@ export async function renderReportWorkVersionDocx(value: unknown, versionNumber:
   const doc = new Document({ creator: "SERS", lastModifiedBy: "SERS", title, subject: `نسخة التقرير ${versionNumber}`, revision: versionNumber,
     styles: { default: { document: { run: { font, size: 24, sizeComplexScript: 24, language: { value: "ar-SA", bidirectional: "ar-SA" } }, paragraph: { alignment: AlignmentType.START, spacing: { after: 140, line: 360 } } } } },
     sections: [{ properties: { page: { size: { width: 11906, height: 16838 }, margin: { top: 1100, bottom: 1100, left: 1453, right: 1453, header: 500, footer: 500 } } },
-      headers: { default: new Header({ children: [paragraph(title, { children: runs(title, { color: "000000", size: 18 }), spacing: { after: 0 } })] }) },
+      headers: { default: new Header({ children: [paragraph(runningTitle, { children: runs(runningTitle, { color: "000000", size: 18 }), spacing: { after: 0, line: 240 } })] }) },
       footers: { default: new Footer({ children: [paragraph(`نسخة ${versionNumber}`, { alignment: AlignmentType.CENTER, children: [...runs(`نسخة ${versionNumber}   |   `, { size: 18 }), new TextRun({ children: [PageNumber.CURRENT], size: 18 })] })] }) },
       children: contents,
     }],

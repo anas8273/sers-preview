@@ -110,7 +110,7 @@ suite("immutable WorkVersion PDF output pipeline against real MySQL", () => {
 
     const first = await generatePrivatePdfForWorkVersion(ownerId, version.id, dependencies);
     expect(first?.reused).toBe(false);
-    expect(first?.rendererVersion).toBe(4);
+    expect(first?.rendererVersion).toBe(5);
     expect(first?.contentHash).toBe(expectedHash);
     expect(first?.storageKey).toContain(`/version-${version.id}/${expectedHash}.pdf`);
     expect(first?.downloadUrl).toContain("https://signed.example/");
@@ -186,20 +186,20 @@ suite("immutable WorkVersion PDF output pipeline against real MySQL", () => {
     expect(uploadCalls).toBe(0);
   });
 
-  it("keeps r3 downloads readable and blocks resurrection across the r4 renderer upgrade", async () => {
+  it.each([1, 2, 3, 4])("keeps r%i downloads readable and blocks resurrection across the r5 renderer upgrade", async oldRevision => {
     const { work, version } = await createVersion();
     const oldBytes = Buffer.from("%PDF-1.4\nold-renderer\n%%EOF");
     const oldHash = createHash("sha256").update(oldBytes).digest("hex");
     const old = (await createOutputForUser(ownerId, { workVersionId: version.id, type: "pdf", visibility: "private",
-      token: `artifact:v${version.id}:pdf:r3`, storageKey: `outputs/work-${work.id}/version-${version.id}/${oldHash}.pdf` }))!;
+      token: `artifact:v${version.id}:pdf:r${oldRevision}`, storageKey: `outputs/work-${work.id}/version-${version.id}/${oldHash}.pdf` }))!;
     let renders = 0;
     const dependencies = { renderPdf: async () => { renders++; return Buffer.from("%PDF-1.4\nnew-renderer\n%%EOF"); },
       putStorage: async (key: string) => ({ key, url: "" }), getStorage: async (key: string) => ({ key, url: `https://signed.example/${key}` }) };
-    expect(await getPrivatePdfDownloadForUser(ownerId, old.id, dependencies)).toMatchObject({ rendererVersion: 3, contentHash: oldHash });
+    expect(await getPrivatePdfDownloadForUser(ownerId, old.id, dependencies)).toMatchObject({ rendererVersion: oldRevision, contentHash: oldHash });
     const current = (await generatePrivatePdfForWorkVersion(ownerId, version.id, dependencies))!;
-    expect(current).toMatchObject({ rendererVersion: 4, reused: false });
+    expect(current).toMatchObject({ rendererVersion: 5, reused: false });
     expect(current.outputId).not.toBe(old.id);
-    expect(await getPrivatePdfDownloadForUser(ownerId, old.id, dependencies)).toMatchObject({ rendererVersion: 3 });
+    expect(await getPrivatePdfDownloadForUser(ownerId, old.id, dependencies)).toMatchObject({ rendererVersion: oldRevision });
     await revokeOutputForUser(ownerId, old.id);
     await expect(generatePrivatePdfForWorkVersion(ownerId, version.id, dependencies)).rejects.toThrow(/revoked/);
     await expect(getPrivatePdfDownloadForUser(ownerId, current.outputId, dependencies)).rejects.toThrow(/revoked/);

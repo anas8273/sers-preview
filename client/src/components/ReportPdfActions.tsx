@@ -96,7 +96,7 @@ function ReportArtifactSession({ workId }: { workId: number }) {
       {open && (
         <section
           id="report-pdf-actions"
-          className="mb-3 w-[min(92vw,390px)] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl"
+          className="mb-3 max-h-[calc(100dvh-11rem)] w-[min(92vw,390px)] overflow-y-auto overscroll-contain rounded-2xl border border-slate-200 bg-white shadow-2xl lg:max-h-[calc(100dvh-6rem)]"
           aria-label="إخراج المستند من نسخة التقرير"
         >
           <header className="flex items-start justify-between gap-3 border-b border-slate-100 bg-slate-950 px-4 py-4 text-white">
