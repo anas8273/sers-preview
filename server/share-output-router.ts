@@ -10,7 +10,7 @@ const badRequest = (message: string) => new TRPCError({ code: "BAD_REQUEST", mes
 
 export const shareOutputRouter = router({
   create: protectedProcedure
-    .input(z.object({
+    .input(z.strictObject({
       workVersionId: z.number().int().positive(),
       type: z.enum(["link", "qr"]),
       visibility: z.enum(["public", "protected"]),

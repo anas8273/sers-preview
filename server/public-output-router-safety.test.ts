@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { projectReportSnapshot } from "./public-output-service";
+import { createGoldenWorkVersionSnapshot } from "../tests/fixtures/work-version-golden";
 
 const rootRouterSource = readFileSync(resolve(process.cwd(), "server/root-router.ts"), "utf8");
 const publicRouterSource = readFileSync(resolve(process.cwd(), "server/public-output-router.ts"), "utf8");
@@ -49,10 +51,21 @@ describe("public output router safety", () => {
   });
 
   it("returns an allowlisted public projection rather than raw snapshots", () => {
-    expect(serviceSource).toContain("FIELD_DEFINITIONS");
+    expect(serviceSource).toContain("projectReportDocument");
     expect(serviceSource).toContain("templateLabel");
-    expect(serviceSource).toContain("fields,");
     expect(serviceSource).toContain("evidence,");
     expect(serviceSource).not.toContain("return row.version.snapshot");
+    const snapshot = createGoldenWorkVersionSnapshot() as any;
+    snapshot.work.ownerUserId = "private-owner-marker";
+    snapshot.assets[0].storageKey = "private-storage-marker";
+    snapshot.assets[0].externalUrl = "https://private.invalid/evidence";
+    const projection = projectReportSnapshot(snapshot);
+    expect(projection?.fields.find(field => field.key === "summary")?.value).toBe(snapshot.reportDraft.fields.summary);
+    expect(projection?.evidence).toHaveLength(12);
+    const serialized = JSON.stringify(projection);
+    expect(serialized).not.toContain("private-owner-marker");
+    expect(serialized).not.toContain("private-storage-marker");
+    expect(serialized).not.toContain("private.invalid");
+    expect(serialized).not.toContain("dataBase64");
   });
 });

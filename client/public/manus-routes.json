@@ -1,0 +1,103 @@
+{
+  "routes": [
+    {
+      "path": "/output/:token",
+      "title": "المخرج المشترك"
+    },
+    {
+      "path": "/",
+      "title": "الرئيسية"
+    },
+    {
+      "path": "/work/:id/report",
+      "title": "محرر التقرير"
+    },
+    {
+      "path": "/work/:id",
+      "title": "تفاصيل العمل"
+    },
+    {
+      "path": "/work",
+      "title": "أعمالي"
+    },
+    {
+      "path": "/evidence",
+      "title": "الشواهد"
+    },
+    {
+      "path": "/reviews",
+      "title": "المراجعات"
+    },
+    {
+      "path": "/notifications",
+      "title": "الإشعارات"
+    },
+    {
+      "path": "/account",
+      "title": "الحساب والمدرسة"
+    },
+    {
+      "path": "/performance-evidence"
+    },
+    {
+      "path": "/certificates"
+    },
+    {
+      "path": "/grade-analysis"
+    },
+    {
+      "path": "/covers"
+    },
+    {
+      "path": "/treatment-plans"
+    },
+    {
+      "path": "/section/:sectionId"
+    },
+    {
+      "path": "/share/:token",
+      "title": "ملف مشترك"
+    },
+    {
+      "path": "/admin"
+    },
+    {
+      "path": "/admin/templates"
+    },
+    {
+      "path": "/shared-template/:token"
+    },
+    {
+      "path": "/store"
+    },
+    {
+      "path": "/portfolio"
+    },
+    {
+      "path": "/reports",
+      "title": "التقارير والمراجعة"
+    },
+    {
+      "path": "/reports/legacy",
+      "title": "التقارير المحلية القديمة"
+    },
+    {
+      "path": "/school-radio"
+    },
+    {
+      "path": "/smart-cv"
+    },
+    {
+      "path": "/exams",
+      "title": "الاختبارات"
+    },
+    {
+      "path": "/exam/:token",
+      "title": "تسليم اختبار"
+    },
+    {
+      "path": "/audit-log",
+      "title": "سجل التدقيق"
+    }
+  ]
+}

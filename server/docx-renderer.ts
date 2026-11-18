@@ -808,7 +808,7 @@ export async function renderHtmlToDocx(htmlContent: string): Promise<Buffer> {
 <body>${htmlContent}</body>
 </html>`;
 
-    await page.setContent(fullHtml, { waitUntil: ["networkidle0", "domcontentloaded"], timeout: 60000 });
+    await page.setContent(fullHtml, { waitUntil: "load", timeout: 60000 });
     await page.evaluate(() => document.fonts.ready);
     await new Promise(resolve => setTimeout(resolve, 2000));
 

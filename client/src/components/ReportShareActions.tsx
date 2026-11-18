@@ -16,6 +16,7 @@ import {
 import QRCode from "qrcode";
 import { useRoute } from "wouter";
 import { trpc } from "@/lib/trpc";
+import { compareReportDraftToVersion } from "@shared/report-stale";
 
 type CreatedOutput = {
   id: number;
@@ -50,8 +51,13 @@ function ReportShareSession({ workId }: { workId: number }) {
   const [shareUrl, setShareUrl] = useState("");
   const [qrDataUrl, setQrDataUrl] = useState<string | undefined>();
   const [copied, setCopied] = useState(false);
+  const [continueWithOldVersion, setContinueWithOldVersion] = useState(false);
 
   const versionsQuery = trpc.reviewSupport.versions.useQuery(
+    { workItemId: workId },
+    { retry: false, refetchOnWindowFocus: false },
+  );
+  const draftQuery = trpc.domain.reportDraft.get.useQuery(
     { workItemId: workId },
     { retry: false, refetchOnWindowFocus: false },
   );
@@ -96,10 +102,15 @@ function ReportShareSession({ workId }: { workId: number }) {
     setQrDataUrl(undefined);
     createMutation.reset();
     revokeMutation.reset();
+    setContinueWithOldVersion(false);
   }, [selectedVersionId]);
 
+  const selectedVersion = versions.find(version => version.id === selectedVersionId);
+  const freshness = compareReportDraftToVersion(draftQuery.data?.draft.revision, selectedVersion);
+  const guarded = freshness !== "fresh" && !continueWithOldVersion;
+
   const createShare = async () => {
-    if (!selectedVersionId) return;
+    if (!selectedVersionId || guarded) return;
     const expiry = expiryOptions.find(option => option.value === expiryPreset);
     const result = await createMutation.mutateAsync({
       workVersionId: selectedVersionId,
@@ -152,6 +163,12 @@ function ReportShareSession({ workId }: { workId: number }) {
 
             {!created && selectedVersionId && (
               <>
+                {freshness !== "fresh" && (
+                  <div className="mb-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs leading-6 text-amber-900" role="alert">
+                    <div className="flex items-start gap-2"><ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" /><p>{freshness === "stale" ? "المسودة الحالية أحدث من النسخة المختارة. أنشئ نسخة جديدة أو اختر متابعة النسخة القديمة صراحة." : "تعذر التحقق من مراجعة المسودة مقابل النسخة. المشاركة محجوبة حتى تختار متابعة النسخة القديمة صراحة."}</p></div>
+                    <button type="button" onClick={() => setContinueWithOldVersion(true)} className="mt-2 rounded-lg border border-amber-300 bg-white px-3 py-2 text-[11px] font-bold text-amber-900">متابعة النسخة القديمة على أي حال</button>
+                  </div>
+                )}
                 <div className="grid grid-cols-2 gap-2">
                   <button type="button" onClick={() => setType("link")} className={`inline-flex items-center justify-center gap-2 rounded-xl border px-3 py-2.5 text-xs font-bold ${type === "link" ? "border-teal-500 bg-teal-50 text-teal-800" : "border-slate-200 text-slate-600"}`}><Link2 className="h-4 w-4" /> رابط</button>
                   <button type="button" onClick={() => setType("qr")} className={`inline-flex items-center justify-center gap-2 rounded-xl border px-3 py-2.5 text-xs font-bold ${type === "qr" ? "border-teal-500 bg-teal-50 text-teal-800" : "border-slate-200 text-slate-600"}`}><QrCode className="h-4 w-4" /> QR</button>
@@ -174,7 +191,7 @@ function ReportShareSession({ workId }: { workId: number }) {
                   </select>
                 </label>
 
-                <button type="button" onClick={() => void createShare().catch(() => undefined)} disabled={createMutation.isPending || (visibility === "protected" && password.length < 6)} className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-teal-700 px-4 py-3 text-sm font-black text-white hover:bg-teal-800 disabled:cursor-not-allowed disabled:opacity-50">
+                <button type="button" onClick={() => void createShare().catch(() => undefined)} disabled={createMutation.isPending || guarded || (visibility === "protected" && password.length < 6)} className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-teal-700 px-4 py-3 text-sm font-black text-white hover:bg-teal-800 disabled:cursor-not-allowed disabled:opacity-50">
                   {createMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : type === "qr" ? <QrCode className="h-4 w-4" /> : <Link2 className="h-4 w-4" />}
                   إنشاء {type === "qr" ? "QR" : "الرابط"}
                 </button>

@@ -1,4 +1,6 @@
 import { deflateSync, inflateSync } from "node:zlib";
+import jpeg from "jpeg-js";
+import { PNG } from "pngjs";
 
 const signature = Buffer.from("89504e470d0a1a0a", "hex");
 const crcTable = Array.from({ length: 256 }, (_, n) => {
@@ -53,4 +55,29 @@ export function sanitizeInlinePng(base64: string) {
   if (pixels.length !== expected) throw new Error("Invalid inline PNG pixels");
   for (let y = 0; y < height; y++) if (pixels[y * stride] > 4) throw new Error("Invalid inline PNG filter");
   return { bytes: Buffer.concat([signature, chunk("IHDR", header), chunk("IDAT", deflateSync(pixels)), chunk("IEND", Buffer.alloc(0))]), width, height };
+}
+
+/** Decode an already scanned private image and produce a bounded, metadata-free
+ * PNG preview. This function never accepts URLs and never replaces the source
+ * object; the immutable version stores both its source identity and this copy.
+ */
+export function sanitizeEvidenceImage(input: Uint8Array, mimeType: string) {
+  const bytes = Buffer.from(input);
+  if (bytes.length < 1 || bytes.length > 6 * 1024 * 1024) throw new Error("Evidence image exceeds the preview limit");
+  let decoded: { width: number; height: number; data: Buffer };
+  if (mimeType === "image/png") {
+    const parsed = PNG.sync.read(bytes, { checkCRC: true });
+    decoded = { width: parsed.width, height: parsed.height, data: Buffer.from(parsed.data) };
+  } else if (mimeType === "image/jpeg") {
+    const parsed = jpeg.decode(bytes, { useTArray: true, maxMemoryUsageInMB: 64, maxResolutionInMP: 8 });
+    decoded = { width: parsed.width, height: parsed.height, data: Buffer.from(parsed.data) };
+  } else {
+    throw new Error("Unsupported evidence image type");
+  }
+  if (!Number.isSafeInteger(decoded.width) || !Number.isSafeInteger(decoded.height) || decoded.width < 1 || decoded.height < 1
+    || decoded.width > 1600 || decoded.height > 1600 || decoded.width * decoded.height > 1_000_000
+    || decoded.data.length !== decoded.width * decoded.height * 4) throw new Error("Evidence image dimensions exceed the preview limit");
+  const output = new PNG({ width: decoded.width, height: decoded.height });
+  output.data = decoded.data;
+  return { bytes: PNG.sync.write(output, { colorType: 6, inputColorType: 6 }), width: decoded.width, height: decoded.height };
 }

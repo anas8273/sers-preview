@@ -182,7 +182,7 @@ async function renderPdf(
     await configureSafePage(page);
     await page.setViewport({ width: 794, height: 1123, deviceScaleFactor: 3 });
     await page.setContent(wrapWithFonts(htmlContent), {
-      waitUntil: ["domcontentloaded", "networkidle2"],
+      waitUntil: "load",
       timeout: 30_000,
     });
     await page.evaluate(async () => {

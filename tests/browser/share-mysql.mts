@@ -1,3 +1,4 @@
+import { assertDisposableMySQL } from "../fixtures/assert-disposable-mysql";
 /** Real browser -> tRPC -> MySQL sharing test. Identity is injected only in this
  * loopback test server; production OAuth and cloud storage are outside scope. */
 import assert from 'node:assert/strict';
@@ -24,9 +25,7 @@ import { closeBrowser } from '../../server/pdf-renderer';
 import { decryptedRecords } from './private-storage-helpers.mts';
 
 // Refuse to touch an arbitrary database, even if someone supplies SERS_INTEGRATION.
-assert.equal(process.env.GITHUB_ACTIONS, 'true');
-assert.equal(process.env.SERS_INTEGRATION, '1');
-assert.equal(process.env.DATABASE_URL, 'mysql://root:root@127.0.0.1:3306/sers_test');
+assertDisposableMySQL();
 
 async function clickButton(page: Page, label: string) {
   await page.waitForFunction(value => Array.from(document.querySelectorAll('button')).some(button => button.textContent?.trim() === value && !button.disabled), {}, label);
@@ -171,6 +170,9 @@ test('reports retain the latest overlapping edit through reload, review, PDF, ed
     await page.click('[aria-controls="report-pdf-actions"]');
     for (const format of ['PDF', 'Word'] as const) {
       if (format === 'Word') await click('Word قابل للتعديل');
+      await page.waitForFunction(label => Array.from(document.querySelectorAll('#report-pdf-actions button')).some(button => button.textContent?.trim() === label && (button as HTMLButtonElement).disabled), {}, `إنشاء ${format} خاص`);
+      assert((await page.$eval('#report-pdf-actions', element => element.textContent))?.includes('المسودة الحالية أحدث'));
+      await click('متابعة النسخة القديمة على أي حال');
       await click(`إنشاء ${format} خاص`); await visible(`تنزيل ${format}`);
       const link = await page.$eval('#report-pdf-actions a[download]', a => (a as HTMLAnchorElement).href);
       const [record] = await db.select().from(outputs).where(eq(outputs.id, Number(new URL(link).pathname.split('/')[3])));
@@ -190,6 +192,9 @@ test('reports retain the latest overlapping edit through reload, review, PDF, ed
     });
     await click('QR'); await click('كلمة مرور');
     await page.type('#report-share-actions input[type=password]', 'browser-secret');
+    await page.waitForFunction(() => Array.from(document.querySelectorAll('#report-share-actions button')).some(button => button.textContent?.trim() === 'إنشاء QR' && (button as HTMLButtonElement).disabled));
+    assert((await page.$eval('#report-share-actions', element => element.textContent))?.includes('المسودة الحالية أحدث'));
+    await click('متابعة النسخة القديمة على أي حال');
     await click('إنشاء QR');
     await visible('تم إنشاء مخرج محمي');
     await page.waitForSelector('#report-share-actions img[src^="data:image/png"]');

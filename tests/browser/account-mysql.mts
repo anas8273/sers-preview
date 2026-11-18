@@ -1,3 +1,4 @@
+import { assertDisposableMySQL } from "../fixtures/assert-disposable-mysql";
 /** Synthetic identities exist only in this loopback test, never application auth. */
 import assert from "node:assert/strict";
 import { test } from "node:test";
@@ -12,9 +13,7 @@ import { getDb } from "../../server/db";
 import { users } from "../../drizzle/schema";
 import { academicYears, memberships, organizations, workItems } from "../../drizzle/domain-core";
 
-assert.equal(process.env.GITHUB_ACTIONS, "true");
-assert.equal(process.env.SERS_INTEGRATION, "1");
-assert.equal(process.env.DATABASE_URL, "mysql://root:root@127.0.0.1:3306/sers_test");
+assertDisposableMySQL();
 
 test("browser manages a school invitation, academic year and work using real MySQL", { timeout: 120_000 }, async () => {
   const db = await getDb(); assert(db);

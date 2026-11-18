@@ -1,0 +1,8 @@
+{
+  "sourceRepository": "anas8273/sers-preview",
+  "sourceBaseCommit": "e666157a988f10efd6dcae5e808526ae32985945",
+  "phase": "foundation-gate-20261118",
+  "mode": "isolated-development",
+  "publishedArtifactVerified": false,
+  "notes": "This development workspace contains unmerged foundation repairs. It is not proof of the currently published production artifact."
+}

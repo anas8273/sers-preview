@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { useRoute } from "wouter";
 import { trpc } from "@/lib/trpc";
+import { compareReportDraftToVersion } from "@shared/report-stale";
 
 type PdfArtifact = {
   type: "pdf" | "docx";
@@ -48,8 +49,13 @@ function ReportArtifactSession({ workId }: { workId: number }) {
   const label = format === "pdf" ? "PDF" : "Word";
   const [open, setOpen] = useState(false);
   const [artifact, setArtifact] = useState<PdfArtifact | undefined>();
+  const [continueWithOldVersion, setContinueWithOldVersion] = useState(false);
 
   const versionsQuery = trpc.reviewSupport.versions.useQuery(
+    { workItemId: workId },
+    { retry: false, refetchOnWindowFocus: false },
+  );
+  const draftQuery = trpc.domain.reportDraft.get.useQuery(
     { workItemId: workId },
     { retry: false, refetchOnWindowFocus: false },
   );
@@ -71,10 +77,14 @@ function ReportArtifactSession({ workId }: { workId: number }) {
     downloadMutation.reset();
     generateDocxMutation.reset();
     downloadDocxMutation.reset();
-  }, [latestVersion?.id, format]);
+    setContinueWithOldVersion(false);
+  }, [latestVersion?.id, format, draftQuery.data?.draft.revision]);
+
+  const freshness = compareReportDraftToVersion(draftQuery.data?.draft.revision, latestVersion);
+  const guarded = freshness !== "fresh" && !continueWithOldVersion;
 
   const handleGenerate = async () => {
-    if (!latestVersion) return;
+    if (!latestVersion || guarded) return;
     const generated = format === "pdf"
       ? await generateMutation.mutateAsync({ workVersionId: latestVersion.id })
       : await generateDocxMutation.mutateAsync({ workVersionId: latestVersion.id });
@@ -159,15 +169,23 @@ function ReportArtifactSession({ workId }: { workId: number }) {
                 </div>
 
                 {!artifact && (
-                  <button
-                    type="button"
-                    onClick={() => void handleGenerate().catch(() => undefined)}
-                    disabled={generating}
-                    className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-teal-600 px-4 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-teal-700 disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    {generating ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileDown className="h-4 w-4" />}
-                    {generating ? `جارٍ إنشاء ${label} من النسخة...` : `إنشاء ${label} خاص`}
-                  </button>
+                  <>
+                    {freshness !== "fresh" && (
+                      <div className="mb-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs leading-6 text-amber-900" role="alert">
+                        <div className="flex items-start gap-2"><ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" /><p>{freshness === "stale" ? "المسودة الحالية أحدث من هذه النسخة الثابتة. أنشئ نسخة جديدة أو اختر متابعة النسخة القديمة صراحة." : "تعذر التحقق من مراجعة المسودة مقابل النسخة. لا يُسمح بالإخراج قبل اختيار متابعة النسخة القديمة صراحة."}</p></div>
+                        <button type="button" onClick={() => setContinueWithOldVersion(true)} className="mt-2 rounded-lg border border-amber-300 bg-white px-3 py-2 text-[11px] font-bold text-amber-900">متابعة النسخة القديمة على أي حال</button>
+                      </div>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => void handleGenerate().catch(() => undefined)}
+                      disabled={generating || guarded}
+                      className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-teal-600 px-4 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-teal-700 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {generating ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileDown className="h-4 w-4" />}
+                      {generating ? `جارٍ إنشاء ${label} من النسخة...` : `إنشاء ${label} خاص`}
+                    </button>
+                  </>
                 )}
 
                 {artifact && (

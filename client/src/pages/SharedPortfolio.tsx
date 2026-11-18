@@ -22,6 +22,15 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
+export const SHARED_PORTFOLIO_LOAD_TIMEOUT_MS = 5000;
+
+export function getSharedPortfolioFailureCopy(timedOut: boolean, hasQueryError: boolean, hasResponseError: boolean) {
+  if (timedOut) return "تعذر الوصول إلى ملف الإنجاز خلال المهلة المحددة.";
+  if (hasQueryError) return "تعذر الاتصال بصفحة المشاركة الآن.";
+  if (hasResponseError) return "رابط المشاركة غير متاح أو لم يعد صالحًا.";
+  return "تعذر عرض ملف الإنجاز الآن.";
+}
+
 const JOB_TITLES: Record<string, string> = {
   teacher: "معلم / معلمة",
   principal: "مدير / مديرة مدرسة",
@@ -211,6 +220,7 @@ export default function SharedPortfolio() {
   const [submitted, setSubmitted] = useState(false);
   const [showScrollTop, setShowScrollTop] = useState(false);
   const [activeSection, setActiveSection] = useState("overview");
+  const [timedOut, setTimedOut] = useState(false);
   const contentRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -219,12 +229,21 @@ export default function SharedPortfolio() {
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
-  const { data, isLoading, error } = trpc.share.view.useQuery(
+  const { data, isLoading, error, refetch } = trpc.share.view.useQuery(
     { token, password: submitted ? password : undefined },
     { enabled: !!token, retry: false }
   );
 
-  if (isLoading) {
+  useEffect(() => {
+    if (!isLoading) {
+      setTimedOut(false);
+      return;
+    }
+    const timeoutId = window.setTimeout(() => setTimedOut(true), SHARED_PORTFOLIO_LOAD_TIMEOUT_MS);
+    return () => window.clearTimeout(timeoutId);
+  }, [isLoading, submitted, token]);
+
+  if (isLoading && !timedOut) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-teal-50/30" dir="rtl">
         <div className="text-center">
@@ -272,28 +291,23 @@ export default function SharedPortfolio() {
     );
   }
 
-  if (data?.error) {
+  if (timedOut || error || data?.error || !data?.portfolio) {
+    const failureCopy = getSharedPortfolioFailureCopy(Boolean(timedOut), Boolean(error), Boolean(data?.error || !data?.portfolio));
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-red-50/30 p-4" dir="rtl">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100 p-4" dir="rtl">
         <Card className="w-full max-w-md shadow-2xl border-0">
           <CardContent className="p-8 text-center">
-            <div className="w-16 h-16 rounded-2xl bg-red-100 flex items-center justify-center mx-auto mb-6">
-              <XCircle className="w-8 h-8 text-red-500" />
+            <div className="w-16 h-16 rounded-2xl bg-teal-50 flex items-center justify-center mx-auto mb-6">
+              <AlertTriangle className="w-8 h-8 text-teal-600" />
             </div>
-            <h1 className="text-xl font-bold text-gray-900 mb-2" style={{ fontFamily: "'Tajawal', sans-serif" }}>{data.error}</h1>
-            <p className="text-sm text-gray-500">
-              {data.error.includes("صلاحية") ? "يرجى طلب رابط جديد من صاحب الملف." : "تأكد من صحة الرابط وحاول مرة أخرى."}
-            </p>
-            {data.requiresPassword && (
-              <Button onClick={() => { setSubmitted(false); setPassword(""); }} variant="outline" className="mt-4">إعادة المحاولة</Button>
-            )}
+            <h1 className="text-xl font-bold text-gray-900 mb-2" style={{ fontFamily: "'Tajawal', sans-serif" }}>{failureCopy}</h1>
+            <p className="text-sm leading-7 text-gray-500">لن نعرض بيانات صاحب الملف أو تفاصيله من رابط غير متاح. أعد المحاولة، وإذا استمر التعذر اطلب رابطًا جديدًا من صاحبه.</p>
+            <Button onClick={() => { setTimedOut(false); void refetch(); }} variant="outline" className="mt-4 border-teal-200 text-teal-700 hover:bg-teal-50">إعادة المحاولة</Button>
           </CardContent>
         </Card>
       </div>
     );
   }
-
-  if (!data?.portfolio) return null;
 
   const portfolio = data.portfolio;
   const files = data.files || [];

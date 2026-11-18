@@ -1,3 +1,4 @@
+import { assertDisposableMySQL } from "../tests/fixtures/assert-disposable-mysql";
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { and, eq, inArray, sql } from "drizzle-orm";
@@ -28,7 +29,7 @@ suite("account membership and academic contexts on disposable MySQL", () => {
     if (schoolIds.length) { await db.delete(memberships).where(inArray(memberships.organizationId, schoolIds)); await db.delete(organizations).where(inArray(organizations.id, schoolIds)); schoolIds.length = 0; }
   }
   beforeAll(async () => {
-    if (process.env.GITHUB_ACTIONS !== "true" || process.env.DATABASE_URL !== "mysql://root:root@127.0.0.1:3306/sers_test") throw new Error("Account integration requires disposable CI MySQL");
+    assertDisposableMySQL();
     const db = (await getDb())!;
     const [result] = await db.execute(sql`SELECT DATABASE() AS dbName, VERSION() AS dbVersion`);
     expect((result as any)[0].dbName).toBe("sers_test"); expect((result as any)[0].dbVersion).toMatch(/^8\.4\./);

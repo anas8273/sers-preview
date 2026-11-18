@@ -15,7 +15,7 @@ describe("online exam sharing", () => {
   });
 
   it("does not expose correct answers when an exam is viewed publicly", () => {
-    expect(routerSource).toContain("const questions = (exam.questions as Array<Record<string, unknown>>).map(({ correctAnswer, correctIndex, ...question }) => question)");
+    expect(routerSource).toMatch(/map\(\(\{ correctAnswer, correctIndex, \.\.\.question \}\) => question\)/);
     expect(routerSource).toContain("onlineExam: router");
     expect(routerSource).toContain("view: publicProcedure");
   });
@@ -30,7 +30,7 @@ describe("online exam sharing", () => {
   it("keeps response summaries private to the exam owner or an administrator", () => {
     expect(routerSource).toContain("responses: protectedProcedure");
     expect(routerSource).toContain("لا تملك صلاحية مراجعة تسليمات هذا الاختبار");
-    expect(routerSource).toContain("getOnlineExamResponses(exam.id)");
+    expect(routerSource).toMatch(/getOnlineExamResponses\(exam\.id,/);
     expect(builderSource).toContain("تسليمات الاختبار الإلكتروني");
     expect(builderSource).toContain("تظهر أسماء الطلاب ونتائج التصحيح الآلي فقط");
   });

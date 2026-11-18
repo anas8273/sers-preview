@@ -1,3 +1,4 @@
+import { assertDisposableMySQL } from "../fixtures/assert-disposable-mysql";
 /** Production OAuth/session/context code against a synthetic loopback issuer.
  * This proves the application's protocol and persistence, not external Manus login. */
 import { decryptedRecords } from "./private-storage-helpers.mts";
@@ -10,9 +11,7 @@ import { academicYears, memberships, organizations, workItems } from "../../driz
 import { authSessions } from "../../drizzle/auth";
 import { authRpc, startAuthHarness } from "../fixtures/auth-http-harness";
 
-assert.equal(process.env.GITHUB_ACTIONS, "true");
-assert.equal(process.env.SERS_INTEGRATION, "1");
-assert.equal(process.env.DATABASE_URL, "mysql://root:root@127.0.0.1:3306/sers_test");
+assertDisposableMySQL();
 
 test("production auth browser journey with synthetic issuer: login, account, work, logout, report re-entry, account isolation and denied cookie replay", { timeout: 120_000 }, async () => {
   const harness = await startAuthHarness();

@@ -1,5 +1,14 @@
 import { privateLocalStorage as localStorage } from "@/lib/private-browser-storage";
 import { ReportDraftSession, type ReportDraftContent } from "@/lib/report-draft-session";
+import { WORK_REPORT_SCHEMAS } from "@/lib/report-schemas";
+import {
+  REPORT_TEMPLATE_DEFINITIONS,
+  REPORT_TEMPLATE_OPTIONS,
+  REPORT_THEME_OPTIONS,
+  REPORT_FONT_OPTIONS,
+  projectReportDocument,
+  type ReportFieldValue,
+} from "@shared/report-projection";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
@@ -19,32 +28,9 @@ import { useLocation, useRoute } from "wouter";
 import AppSidebar from "@/components/AppSidebar";
 import { trpc } from "@/lib/trpc";
 
-const fieldDefinitions = [
-  { key: "summary", label: "ملخص التقرير", placeholder: "اكتب ملخصًا موجزًا للعمل أو البرنامج المنفذ...", rows: 4 },
-  { key: "objectives", label: "الأهداف", placeholder: "ما الأهداف التي سعى العمل إلى تحقيقها؟", rows: 4 },
-  { key: "audience", label: "الفئة المستهدفة", placeholder: "مثال: منسوبات المدرسة، طالبات الصف الثالث...", rows: 2 },
-  { key: "implementation", label: "آلية التنفيذ", placeholder: "صف خطوات التنفيذ الفعلية بترتيب واضح...", rows: 6 },
-  { key: "results", label: "النتائج والمخرجات", placeholder: "ما النتائج الفعلية التي تحققت؟", rows: 4 },
-  { key: "impact", label: "قياس الأثر", placeholder: "أدخل أداة القياس والنتيجة، أو وضّح أن القياس لم يُجمع بعد...", rows: 4 },
-  { key: "recommendations", label: "التوصيات والخطوات التالية", placeholder: "أضف توصيات قابلة للتنفيذ...", rows: 4 },
-] as const;
-
-const templateOptions = [
-  { id: "custom", label: "تقرير عام" },
-  { id: "program-report", label: "تقرير برنامج" },
-  { id: "initiative-report", label: "تقرير مبادرة" },
-  { id: "workshop-report", label: "تقرير ورشة" },
-  { id: "meeting-report", label: "محضر/تقرير اجتماع" },
-  { id: "visit-report", label: "تقرير زيارة" },
-];
-
-const themeOptions = [
-  { id: "classic", label: "رسمي كلاسيكي" },
-  { id: "formal", label: "مؤسسي هادئ" },
-  { id: "minimal", label: "بسيط حديث" },
-];
-
-const fontOptions = ["Cairo", "Tajawal", "Noto Kufi Arabic"];
+const templateOptions = REPORT_TEMPLATE_OPTIONS;
+const themeOptions = REPORT_THEME_OPTIONS;
+const fontOptions = REPORT_FONT_OPTIONS;
 
 type SaveState = "idle" | "dirty" | "saving" | "saved" | "offline" | "conflict" | "error";
 
@@ -53,6 +39,37 @@ const emptyDraft: ReportDraftContent = { templateId: "custom", themeId: "classic
 
 function contentOf({ templateId, themeId, fontFamily, fields, evidenceAssetIds }: ReportDraftContent): ReportDraftContent {
   return { templateId, themeId, fontFamily, fields, evidenceAssetIds };
+}
+
+function editorFields(templateId: string) {
+  return REPORT_TEMPLATE_DEFINITIONS[templateId]?.fields ?? REPORT_TEMPLATE_DEFINITIONS.custom.fields;
+}
+
+function editorFieldValues(templateId: string, values: Record<string, unknown>) {
+  const definitions = new Map(editorFields(templateId).map(field => [field.key, field]));
+  return Object.fromEntries(Object.entries(values).flatMap(([key, value]) => {
+    const definition = definitions.get(key);
+    if (!definition) return [];
+    if (Array.isArray(value)) return [[key, value.join("\n")]];
+    return [[key, typeof value === "number" ? String(value) : typeof value === "string" ? value : ""]];
+  })) as Record<string, string>;
+}
+
+function serverFieldValues(templateId: string, values: Record<string, string>): Record<string, ReportFieldValue> {
+  const definitions = new Map(editorFields(templateId).map(field => [field.key, field]));
+  const output: Record<string, ReportFieldValue> = {};
+  for (const [key, value] of Object.entries(values)) {
+    const definition = definitions.get(key);
+    if (!definition || !value.trim()) continue;
+    if (definition.type === "list") { output[key] = value.split(/\r?\n/).map(item => item.trim()).filter(Boolean); continue; }
+    if (definition.type === "number") {
+      const parsed = Number(value);
+      if (Number.isSafeInteger(parsed)) output[key] = parsed;
+      continue;
+    }
+    output[key] = value;
+  }
+  return output;
 }
 
 function sameContent(a: ReportDraftContent, b: ReportDraftContent) {
@@ -169,7 +186,7 @@ function ReportEditor({ workId }: { workId: number }) {
   }, [workId]);
 
   const applyServerDraft = useCallback((data: NonNullable<typeof reportQuery.data>, recover: boolean) => {
-    const confirmed = contentOf(data.draft);
+  const confirmed = contentOf({ ...data.draft, fields: editorFieldValues(data.draft.templateId, data.draft.fields) });
     const backup = recover ? parseBackup(workId) : undefined;
     const unsaved = backup && !sameContent(confirmed, backup) ? backup : undefined;
     const session = new ReportDraftSession(data.draft.revision, confirmed, unsaved && contentOf(unsaved));
@@ -213,7 +230,7 @@ function ReportEditor({ workId }: { workId: number }) {
       return await session.flush(async (content, expectedRevision) => {
         if (!isCurrent(session) || !navigator.onLine) throw new Error("Report session unavailable");
         setSaveState("saving");
-        return writeDraft({ workItemId: workId, expectedRevision, ...content });
+        return writeDraft({ workItemId: workId, expectedRevision, ...content, fields: serverFieldValues(content.templateId, content.fields) });
       }, receipt => {
         if (!isCurrent(session)) return;
         backupRevision.current = receipt.revision;
@@ -316,7 +333,17 @@ function ReportEditor({ workId }: { workId: number }) {
     () => linkedAssets.filter(asset => evidenceAssetIds.includes(asset.id)),
     [evidenceAssetIds, linkedAssets],
   );
-  const filledFields = fieldDefinitions.filter(field => fields[field.key]?.trim());
+  const fieldDefinitions = editorFields(templateId);
+  const previewModel = useMemo(() => {
+    try {
+      return projectReportDocument({
+        reportDraft: { ...draft, fields: serverFieldValues(templateId, fields) },
+        assets: selectedEvidence.map(asset => ({ id: asset.id, title: asset.title, kind: asset.kind, role: asset.role, caption: asset.caption })),
+      });
+    } catch {
+      return undefined;
+    }
+  }, [draft, fields, selectedEvidence, templateId]);
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] pb-20 lg:pb-0" dir="rtl">
@@ -413,14 +440,21 @@ function ReportEditor({ workId }: { workId: number }) {
                   <div className="mt-5 space-y-5">
                     {fieldDefinitions.map(field => (
                       <label key={field.key} className="block text-xs font-bold text-slate-700">{field.label}
-                        <textarea
-                          value={fields[field.key] ?? ""}
-                          onChange={event => editDraft(current => ({ fields: { ...current.fields, [field.key]: event.target.value } }))}
-                          rows={field.rows}
-                          maxLength={20_000}
-                          placeholder={field.placeholder}
-                          className="mt-2 w-full resize-y rounded-xl border border-slate-200 px-3 py-3 text-sm font-normal leading-7 outline-none transition focus:border-teal-400 focus:ring-2 focus:ring-teal-100"
-                        />
+                        {field.type === "select" ? (
+                          <select value={fields[field.key] ?? ""} onChange={event => editDraft(current => ({ fields: { ...current.fields, [field.key]: event.target.value } }))} className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-normal">
+                            <option value="">اختر قيمة</option>{(field.options ?? []).map(option => <option key={option} value={option}>{option}</option>)}
+                          </select>
+                        ) : (
+                          <textarea
+                            value={fields[field.key] ?? ""}
+                            onChange={event => editDraft(current => ({ fields: { ...current.fields, [field.key]: event.target.value } }))}
+                            rows={field.rows ?? (field.type === "list" ? 4 : 3)}
+                            maxLength={field.maxLength ?? 20_000}
+                            inputMode={field.type === "number" ? "numeric" : undefined}
+                            placeholder={field.placeholder || (field.type === "list" ? "عنصر في كل سطر" : undefined)}
+                            className="mt-2 w-full resize-y rounded-xl border border-slate-200 px-3 py-3 text-sm font-normal leading-7 outline-none transition focus:border-teal-400 focus:ring-2 focus:ring-teal-100"
+                          />
+                        )}
                       </label>
                     ))}
                   </div>
@@ -496,12 +530,12 @@ function ReportEditor({ workId }: { workId: number }) {
                         <p className="mt-2 text-xs text-slate-500">{templateOptions.find(option => option.id === templateId)?.label}</p>
                       </div>
                       <div className="mt-6 space-y-6">
-                        {filledFields.length === 0 ? (
+                        {!previewModel || previewModel.fields.length === 0 ? (
                           <div className="rounded-xl border border-dashed border-slate-200 px-4 py-16 text-center text-sm text-slate-400">ابدأ بإدخال بيانات التقرير لتظهر المعاينة هنا.</div>
-                        ) : filledFields.map(field => (
+                        ) : previewModel.fields.map(field => (
                           <section key={field.key}>
                             <h3 className="text-sm font-black text-slate-900">{field.label}</h3>
-                            <p className="mt-2 whitespace-pre-wrap text-sm leading-8 text-slate-700">{fields[field.key]}</p>
+                            <p className="mt-2 whitespace-pre-wrap text-sm leading-8 text-slate-700">{Array.isArray(field.value) ? field.value.join("\n") : String(field.value)}</p>
                           </section>
                         ))}
                         {selectedEvidence.length > 0 && (

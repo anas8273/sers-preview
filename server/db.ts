@@ -216,14 +216,99 @@ export async function deactivateOnlineExam(id: number, userId: number) {
 export async function createOnlineExamResponse(data: InsertOnlineExamResponse) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  const result = await db.insert(onlineExamResponses).values(data);
-  return { id: Number(result[0].insertId) };
+  const summary = {
+    id: onlineExamResponses.id,
+    attemptId: onlineExamResponses.attemptId,
+    studentName: onlineExamResponses.studentName,
+    studentId: onlineExamResponses.studentId,
+    autoScore: onlineExamResponses.autoScore,
+    autoMaxScore: onlineExamResponses.autoMaxScore,
+    submittedAt: onlineExamResponses.submittedAt,
+  };
+  const sameSubmission = (existing: any) => {
+    if (!existing) return false;
+    if (existing.studentName !== data.studentName || (existing.studentId ?? null) !== (data.studentId ?? null)) return false;
+    return JSON.stringify(existing.answers ?? null) === JSON.stringify(data.answers);
+  };
+  const resultFor = (row: any, deduplicated: boolean) => ({
+    id: Number(row.id),
+    autoScore: Number(row.autoScore),
+    autoMaxScore: Number(row.autoMaxScore),
+    submittedAt: row.submittedAt,
+    deduplicated,
+  });
+
+  // Legacy clients omit attemptId by policy. They remain accepted, but each
+  // request is a distinct submission and is protected by the router limiter.
+  if (!data.attemptId) {
+    const result = await db.insert(onlineExamResponses).values(data);
+    return { id: Number(result[0].insertId), autoScore: data.autoScore, autoMaxScore: data.autoMaxScore, deduplicated: false };
+  }
+
+  const findExisting = async (connection: any) => {
+    const rows = await connection.select({ ...summary, answers: onlineExamResponses.answers })
+      .from(onlineExamResponses)
+      .where(and(eq(onlineExamResponses.onlineExamId, data.onlineExamId), eq(onlineExamResponses.attemptId, data.attemptId!)))
+      .limit(1);
+    return rows[0];
+  };
+  const assertSameSubmission = (existing: any) => {
+    if (!sameSubmission(existing)) throw new TRPCError({ code: "CONFLICT", message: "معرف المحاولة مستخدم لطالب أو إجابات مختلفة" });
+    return resultFor(existing, true);
+  };
+
+  try {
+    return await db.transaction(async tx => {
+      const existing = await findExisting(tx);
+      if (existing) return assertSameSubmission(existing);
+      const inserted = await tx.insert(onlineExamResponses).values(data);
+      return {
+        id: Number(inserted[0].insertId),
+        autoScore: data.autoScore,
+        autoMaxScore: data.autoMaxScore,
+        deduplicated: false,
+      };
+    });
+  } catch (error) {
+    // Two requests can both observe no row before one inserts. Only a unique
+    // constraint race is resolved by reading the committed winner; all other
+    // DB errors remain failures instead of being hidden as idempotency.
+    const duplicate = error && typeof error === "object" && (("errno" in error && Number(error.errno) === 1062) || ("code" in error && error.code === "ER_DUP_ENTRY"));
+    if (!duplicate) throw error;
+    const existing = await findExisting(db);
+    if (!existing) throw new Error("تعذر تثبيت محاولة الاختبار بأمان");
+    return assertSameSubmission(existing);
+  }
 }
 
-export async function getOnlineExamResponses(onlineExamId: number) {
+export async function getOnlineExamResponses(onlineExamId: number, options?: { limit?: number; cursor?: string }) {
   const db = await getDb();
   if (!db) return [];
-  return db.select().from(onlineExamResponses).where(eq(onlineExamResponses.onlineExamId, onlineExamId)).orderBy(desc(onlineExamResponses.submittedAt));
+  const limit = Math.min(Math.max(options?.limit ?? 50, 1), 100);
+  const paginated = options?.limit !== undefined || options?.cursor !== undefined;
+  const cursor = options?.cursor === undefined ? undefined : Number(options.cursor);
+  if (cursor !== undefined && (!Number.isSafeInteger(cursor) || cursor <= 0)) {
+    throw new TRPCError({ code: "BAD_REQUEST", message: "مؤشر صفحات التسليمات غير صالح" });
+  }
+  const condition = and(eq(onlineExamResponses.onlineExamId, onlineExamId), cursor === undefined ? undefined : lt(onlineExamResponses.id, cursor));
+  const rows = await db.select({
+    id: onlineExamResponses.id,
+    attemptId: onlineExamResponses.attemptId,
+    studentName: onlineExamResponses.studentName,
+    studentId: onlineExamResponses.studentId,
+    autoScore: onlineExamResponses.autoScore,
+    autoMaxScore: onlineExamResponses.autoMaxScore,
+    submittedAt: onlineExamResponses.submittedAt,
+  }).from(onlineExamResponses).where(condition).orderBy(desc(onlineExamResponses.id)).limit(limit + 1);
+  if (!paginated) {
+    if (rows.length > limit) {
+      throw new TRPCError({ code: "PRECONDITION_FAILED", message: "توجد تسليمات إضافية؛ استخدم التصفح بالصفحات لعرض جميع النتائج" });
+    }
+    return rows;
+  }
+  const hasMore = rows.length > limit;
+  const items = hasMore ? rows.slice(0, limit) : rows;
+  return { items, nextCursor: hasMore ? String(items[items.length - 1].id) : null };
 }
 
 // ─── Admin: All Portfolios ──────────────────────────────

@@ -41,4 +41,11 @@ describe("report WorkVersion PDF controls", () => {
     expect(panelSource).toContain("workVersionDocx.generatePrivateDocx.useMutation");
     expect(panelSource).toContain("ReportArtifactSession key={workId}");
   });
+
+  it("guards export when the draft revision is stale or unverifiable and requires deliberate continuation", () => {
+    expect(panelSource).toContain("domain.reportDraft.get.useQuery");
+    expect(panelSource).toContain("compareReportDraftToVersion");
+    expect(panelSource).toContain("متابعة النسخة القديمة على أي حال");
+    expect(panelSource).toContain("disabled={generating || guarded}");
+  });
 });

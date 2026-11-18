@@ -6,16 +6,23 @@ import {
   getReportDraftForUser,
   ReportDraftAccessError,
   ReportDraftConflictError,
+  ReportDraftValidationError,
+  ReportEvidenceFreezeError,
   saveReportDraftForUser,
 } from "./work-report-draft-db";
 
 const forbidden = (message: string) => new TRPCError({ code: "FORBIDDEN", message });
 const notFound = (message: string) => new TRPCError({ code: "NOT_FOUND", message });
 const conflict = (message: string) => new TRPCError({ code: "CONFLICT", message });
+const badRequest = (message: string) => new TRPCError({ code: "BAD_REQUEST", message });
 
 const reportFieldsSchema = z.record(
   z.string().trim().min(1).max(128),
-  z.string().max(20_000),
+  z.union([
+    z.string().max(20_000),
+    z.number().finite(),
+    z.array(z.string().max(2_000)).max(100),
+  ]),
 ).refine(value => Object.keys(value).length <= 100, "عدد حقول التقرير أكبر من الحد المسموح");
 
 export const reportDraftRouter = router({
@@ -28,6 +35,7 @@ export const reportDraftRouter = router({
         return result;
       } catch (error) {
         if (error instanceof ReportDraftAccessError) throw forbidden(error.message);
+        if (error instanceof ReportDraftValidationError) throw badRequest(error.message);
         throw error;
       }
     }),
@@ -50,6 +58,7 @@ export const reportDraftRouter = router({
         if (error instanceof ReportDraftConflictError) {
           throw conflict("تغير التقرير في جلسة أخرى؛ حدّث الصفحة ثم راجع التغييرات قبل الحفظ");
         }
+        if (error instanceof ReportDraftValidationError) throw badRequest(error.message);
         throw error;
       }
     }),
@@ -66,6 +75,8 @@ export const reportDraftRouter = router({
       } catch (error) {
         if (error instanceof ReportDraftAccessError) throw forbidden(error.message);
         if (error instanceof ReportDraftConflictError) throw conflict(error.message);
+        if (error instanceof ReportDraftValidationError) throw badRequest(error.message);
+        if (error instanceof ReportEvidenceFreezeError) throw conflict(error.message);
         throw error;
       }
     }),

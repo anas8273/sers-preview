@@ -1,3 +1,4 @@
+import { assertDisposableMySQL } from "../tests/fixtures/assert-disposable-mysql";
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { and, eq, inArray, sql } from "drizzle-orm";
@@ -22,7 +23,7 @@ suite("immutable editable WorkVersion DOCX on disposable MySQL", () => {
   };
   const dependencies = { ...storage, renderDocx: renderReportWorkVersionDocx };
   beforeAll(async () => {
-    if (process.env.GITHUB_ACTIONS !== "true" || process.env.DATABASE_URL !== "mysql://root:root@127.0.0.1:3306/sers_test") throw new Error("DOCX integration requires disposable CI database");
+    assertDisposableMySQL();
     const db = (await getDb())!;
     const [raw] = await db.execute(sql`SELECT DATABASE() AS name, VERSION() AS version`);
     const row = (raw as unknown as { name: string; version: string }[])[0];

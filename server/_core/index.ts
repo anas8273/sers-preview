@@ -19,6 +19,17 @@ import { registerEvidenceHttpRoutes } from "../evidence-http-routes";
 import { registerPrivateOutputRoutes } from "../output-artifact-storage";
 import { renderHtmlToPdf } from "../pdf-renderer";
 import { fetchRemoteImage, RemoteImageError } from "../safe-remote-image";
+import {
+  AI_TRPC_BODY_MAX_BYTES,
+  DOCX_BODY_MAX_BYTES,
+  GLOBAL_FORM_BODY_MAX_BYTES,
+  GLOBAL_JSON_BODY_MAX_BYTES,
+  PDF_BODY_MAX_BYTES,
+  boundedBodyParser,
+  boundedJsonBodyParser,
+  httpBodyAdmission,
+  isRouteSpecificBodyPath,
+} from "./http-body-admission";
 
 type AuthenticatedRequest = Request & { authUser?: User };
 
@@ -125,14 +136,21 @@ async function startServer() {
   registerRuntimeObservability(app);
   registerEvidenceHttpRoutes(app, { authenticate: req => sdk.authenticateRequest(req) });
   registerPrivateOutputRoutes(app, req => sdk.authenticateRequest(req));
-  app.use(express.json({ limit: "50mb" }));
-  app.use(express.urlencoded({ limit: "50mb", extended: true }));
+
+  const jsonBodyParser = boundedJsonBodyParser(GLOBAL_JSON_BODY_MAX_BYTES);
+  const formBodyParser = boundedBodyParser(express.urlencoded({ limit: GLOBAL_FORM_BODY_MAX_BYTES, extended: false, parameterLimit: 32, inflate: false }));
+  app.use((req, res, next) => {
+    if (isRouteSpecificBodyPath(req.path)) { next(); return; }
+    jsonBodyParser(req, res, error => error ? next(error) : formBodyParser(req, res, next));
+  });
   registerOAuthRoutes(app);
 
   const exportRateLimit = rateLimit("export", 10, 60_000);
   const proxyRateLimit = rateLimit("image-proxy", 60, 60_000);
+  const pdfBodyParser = boundedBodyParser(express.json({ limit: PDF_BODY_MAX_BYTES, strict: true, inflate: false, type: "application/json" }));
+  const docxBodyParser = boundedBodyParser(express.json({ limit: DOCX_BODY_MAX_BYTES, strict: true, inflate: false, type: "application/json" }));
 
-  app.post("/api/export-pdf", requireAuthenticatedUser, exportRateLimit, async (req: AuthenticatedRequest, res) => {
+  app.post("/api/export-pdf", httpBodyAdmission({ maxBytes: PDF_BODY_MAX_BYTES, contentType: "application/json" }), requireAuthenticatedUser, exportRateLimit, pdfBodyParser, async (req: AuthenticatedRequest, res) => {
     try {
       assertPayloadSize(req.body, 3_000_000, "PDF request");
       const html = assertSafeHtml(req.body?.html);
@@ -153,7 +171,7 @@ async function startServer() {
     }
   });
 
-  app.post("/api/export-docx", requireAuthenticatedUser, exportRateLimit, async (req: AuthenticatedRequest, res) => {
+  app.post("/api/export-docx", httpBodyAdmission({ maxBytes: DOCX_BODY_MAX_BYTES, contentType: "application/json" }), requireAuthenticatedUser, exportRateLimit, docxBodyParser, async (req: AuthenticatedRequest, res) => {
     try {
       assertPayloadSize(req.body, 16_000_000, "DOCX request");
       const { data, html: rawHtml, imageBase64, width, height } = req.body ?? {};
@@ -218,6 +236,10 @@ async function startServer() {
     }
   });
 
+  const aiTrpcBodyParser = boundedJsonBodyParser(AI_TRPC_BODY_MAX_BYTES);
+  const trpcBodyParser = boundedJsonBodyParser(GLOBAL_JSON_BODY_MAX_BYTES);
+  app.use("/api/trpc/genAI.extractGradesFromImage", aiTrpcBodyParser);
+  app.use("/api/trpc", trpcBodyParser);
   app.use(
     "/api/trpc",
     createExpressMiddleware({
