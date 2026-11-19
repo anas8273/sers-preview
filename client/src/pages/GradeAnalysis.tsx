@@ -4,18 +4,25 @@
  * المستخدم يدخل بيانات المادة والطلاب → رسوم بيانية تلقائية → تقرير → تصدير PDF
  */
 import { useState, useMemo } from "react";
-import { ArrowLeft, Download, Printer, Plus, Trash2, BarChart3, PieChart, TrendingUp, Users, Eye, Upload, ScanLine, Loader2, CheckCircle2, AlertCircle, FileImage, Undo2 } from "lucide-react";
+import { ArrowLeft, Download, Printer, Plus, Trash2, BarChart3, PieChart, TrendingUp, Users, Eye, Upload, ScanLine, Loader2, CheckCircle2, AlertCircle, FileImage, FileSpreadsheet, Undo2 } from "lucide-react";
 import { useLocation } from "wouter";
 import { exportToPDF, printElement } from "@/lib/pdf-export";
 import { OfficialHeader } from "@/components/OfficialHeader";
 import { trpc } from "@/lib/trpc";
 import { aiFailureMessage } from "@/lib/ai-feedback";
 import { toast } from "sonner";
+import { LOCAL_GRADE_CSV_MAX_BYTES, parseLocalGradeCsv } from "@shared/local-csv-helper";
 
 interface Student {
   id: string;
   name: string;
   score: number | null;
+}
+
+const AI_DATA_POLICY_VERSION = "ai-data-minimization-v1";
+
+function normalizeMaxScore(value: number): number {
+  return Number.isFinite(value) && value > 0 ? Math.floor(value) : 100;
 }
 
 export default function GradeAnalysis() {
@@ -28,7 +35,10 @@ export default function GradeAnalysis() {
   const [scanFileName, setScanFileName] = useState("");
   const [lastImportedIds, setLastImportedIds] = useState<string[]>([]);
   const [isDragActive, setIsDragActive] = useState(false);
+  const [gradePrivacyAcknowledged, setGradePrivacyAcknowledged] = useState(false);
   const extractGradesMutation = trpc.genAI.extractGradesFromImage.useMutation();
+  const aiAccess = trpc.aiAccess.status.useQuery(undefined, { retry: false, staleTime: 30_000 });
+  const gradePolicy = aiAccess.data?.dataPolicy?.operations.extractGradesFromImage;
 
   const [subjectInfo, setSubjectInfo] = useState({
     subject: "",
@@ -59,8 +69,9 @@ export default function GradeAnalysis() {
   };
 
   const updateStudent = (id: string, field: keyof Student, value: string | number | null) => {
+    const maxScore = normalizeMaxScore(subjectInfo.maxScore);
     const normalizedValue = field === "score" && value !== null
-      ? Math.min(Math.max(Number(value) || 0, 0), Math.max(subjectInfo.maxScore || 100, 1))
+      ? Math.min(Math.max(Number(value) || 0, 0), maxScore)
       : value;
     setStudents((prev) => prev.map((s) => (s.id === id ? { ...s, [field]: normalizedValue } : s)));
   };
@@ -71,7 +82,7 @@ export default function GradeAnalysis() {
     if (validStudents.length === 0) return null;
 
     const scores = validStudents.map((s) => s.score);
-    const max = subjectInfo.maxScore || 100;
+    const max = normalizeMaxScore(subjectInfo.maxScore);
     const avg = scores.reduce((a, b) => a + b, 0) / scores.length;
     const highest = Math.max(...scores);
     const lowest = Math.min(...scores);
@@ -100,7 +111,7 @@ export default function GradeAnalysis() {
   }, [students, subjectInfo.maxScore]);
 
   const getGradeColor = (score: number) => {
-    const pct = (score / (subjectInfo.maxScore || 100)) * 100;
+    const pct = (score / normalizeMaxScore(subjectInfo.maxScore)) * 100;
     if (pct >= 90) return "#059669";
     if (pct >= 80) return "#1a5f3f";
     if (pct >= 70) return "#d97706";
@@ -109,7 +120,7 @@ export default function GradeAnalysis() {
   };
 
   const getGradeLabel = (score: number) => {
-    const pct = (score / (subjectInfo.maxScore || 100)) * 100;
+    const pct = (score / normalizeMaxScore(subjectInfo.maxScore)) * 100;
     if (pct >= 90) return "ممتاز";
     if (pct >= 80) return "جيد جداً";
     if (pct >= 70) return "جيد";
@@ -125,6 +136,14 @@ export default function GradeAnalysis() {
 
   const processGradeSheet = async (file: File) => {
     if (!file) return;
+    if (!gradePolicy?.available) {
+      toast.info("استيراد الصورة متوقف افتراضيًا؛ استخدم الإدخال الرقمي أو CSV اليدوي حتى يعتمد المشغل سياسة البيانات.");
+      return;
+    }
+    if (!gradePrivacyAcknowledged) {
+      toast.info("أكد غرض معالجة كشف الدرجات والمعلومات التي سترسل قبل المتابعة.");
+      return;
+    }
     if (!["image/png", "image/jpeg"].includes(file.type)) {
       toast.error("اختر صورة لكشف الدرجات بصيغة PNG أو JPG.");
       return;
@@ -145,14 +164,18 @@ export default function GradeAnalysis() {
         reader.onerror = () => reject(new Error("تعذر قراءة الصورة"));
         reader.readAsDataURL(file);
       });
-      const result = await extractGradesMutation.mutateAsync({ imageData, maxScore: subjectInfo.maxScore || 100 });
+      const result = await extractGradesMutation.mutateAsync({
+        imageData,
+        maxScore: normalizeMaxScore(subjectInfo.maxScore),
+        privacyConfirmation: { policyVersion: AI_DATA_POLICY_VERSION, purpose: gradePolicy.purpose, acknowledged: true },
+      });
       if (!result.success || result.students.length === 0) {
         throw new Error(result.unreadableNote || "لم يتم العثور على صفوف درجات واضحة.");
       }
       const imported = result.students.map((student: { name: string; score: number }, index: number) => ({
         id: `scan-${Date.now()}-${index}`,
         name: student.name,
-        score: Math.min(Math.max(student.score, 0), Math.max(subjectInfo.maxScore || 100, 1)),
+        score: Math.min(Math.max(student.score, 0), normalizeMaxScore(subjectInfo.maxScore)),
       }));
       setStudents((previous) => [...previous.filter((student) => student.name.trim() || student.score !== null), ...imported]);
       setLastImportedIds(imported.map((student: Student) => student.id));
@@ -174,6 +197,33 @@ export default function GradeAnalysis() {
     const file = event.target.files?.[0];
     event.target.value = "";
     if (file) void processGradeSheet(file);
+  };
+
+  const handleCsvUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    try {
+      if (file.size > LOCAL_GRADE_CSV_MAX_BYTES) {
+        throw new Error(`حجم CSV كبير. اختر ملفًا لا يتجاوز ${LOCAL_GRADE_CSV_MAX_BYTES / 1_000_000} ميغابايت.`);
+      }
+      const parsed = parseLocalGradeCsv(await file.text());
+      const imported = parsed.rows.map((student, index) => ({
+        id: `csv-${Date.now()}-${index}`,
+        name: student.name,
+        score: Math.min(Math.max(student.score, 0), normalizeMaxScore(subjectInfo.maxScore)),
+      }));
+      if (!imported.length) throw new Error("لم نجد صفوفًا بصيغة اسم,درجة");
+      setStudents((previous) => [...previous.filter((student) => student.name.trim() || student.score !== null), ...imported]);
+      setLastImportedIds(imported.map((student) => student.id));
+      setScanPhase("success");
+      setScanNote(`تمت إضافة ${imported.length} صفًا من CSV محليًا دون إرسالها إلى مزود AI.${parsed.warnings.length ? ` تحذيرات: ${parsed.warnings.join(" ")}` : ""}`);
+      toast.success(`تم استيراد ${imported.length} صفًا من CSV.`);
+    } catch (error) {
+      setScanPhase("error");
+      setScanNote(error instanceof Error ? error.message : "تعذر قراءة ملف CSV");
+      toast.error("تعذر قراءة CSV. استخدم الصيغة: اسم الطالب,الدرجة");
+    }
   };
 
   const undoLastImport = () => {
@@ -259,7 +309,8 @@ export default function GradeAnalysis() {
                   <input
                     type="number"
                     value={subjectInfo.maxScore}
-                    onChange={(e) => setSubjectInfo((prev) => ({ ...prev, maxScore: parseInt(e.target.value) || 100 }))}
+                    min={1}
+                    onChange={(e) => setSubjectInfo((prev) => ({ ...prev, maxScore: normalizeMaxScore(Number(e.target.value)) }))}
                     className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:border-teal-400"
                   />
                 </div>
@@ -323,10 +374,14 @@ export default function GradeAnalysis() {
                   درجات الطلاب ({students.length})
                 </h2>
                 <div className="flex items-center gap-2">
-                  <label className={`flex cursor-pointer items-center gap-1 rounded-lg border px-3 py-1.5 text-xs font-bold transition-colors ${isScanningSheet ? "cursor-wait border-gray-200 bg-gray-50 text-gray-400" : "border-teal-200 bg-teal-50 text-teal-700 hover:bg-teal-100"}`}>
-                    <input type="file" accept="image/png,image/jpeg,image/webp" className="sr-only" disabled={isScanningSheet} onChange={handleGradeSheetUpload} />
+                  <label className={`flex cursor-pointer items-center gap-1 rounded-lg border px-3 py-1.5 text-xs font-bold transition-colors ${isScanningSheet || !gradePolicy?.available || !gradePrivacyAcknowledged ? "cursor-not-allowed border-gray-200 bg-gray-50 text-gray-400" : "border-teal-200 bg-teal-50 text-teal-700 hover:bg-teal-100"}`}>
+                    <input type="file" accept="image/png,image/jpeg" className="sr-only" disabled={isScanningSheet || !gradePolicy?.available || !gradePrivacyAcknowledged} onChange={handleGradeSheetUpload} />
                     {isScanningSheet ? <Loader2 className="h-4 w-4 animate-spin" /> : <ScanLine className="h-4 w-4" />}
-                    {isScanningSheet ? "جاري قراءة الصورة..." : "استيراد من صورة"}
+                    {isScanningSheet ? "جاري قراءة الصورة..." : gradePolicy?.available ? "استيراد من صورة" : "الصورة متوقفة بالسياسة"}
+                  </label>
+                  <label className="flex cursor-pointer items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-100">
+                    <input type="file" accept=".csv,text/csv" className="sr-only" onChange={handleCsvUpload} />
+                    <FileSpreadsheet className="h-4 w-4" /> CSV يدوي
                   </label>
                   <button type="button" onClick={addStudent} className="flex items-center gap-1 text-sm font-medium" style={{ color: C.teal }}>
                     <Plus className="w-4 h-4" />
@@ -341,10 +396,20 @@ export default function GradeAnalysis() {
                 onDragLeave={() => setIsDragActive(false)}
                 onDrop={(event) => { event.preventDefault(); setIsDragActive(false); const file = event.dataTransfer.files?.[0]; if (file && !isScanningSheet) void processGradeSheet(file); }}
               >
+                <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-[11px] leading-5 text-amber-900">
+                  {!gradePolicy?.available ? (
+                    <p><strong>بوابة الخصوصية:</strong> لا نضمن تنقيح أسماء الطلاب من الصورة، لذلك يبقى إرسال كشف الطلاب إلى AI محجوبًا حتى يعتمد المشغل سياسة versioned للمصدر والغرض والمزود والمنطقة والاحتفاظ. الإدخال الرقمي وCSV اليدوي متاحان الآن.</p>
+                  ) : (
+                    <label className="flex items-start gap-2">
+                      <input type="checkbox" checked={gradePrivacyAcknowledged} onChange={(event) => setGradePrivacyAcknowledged(event.target.checked)} className="mt-1 h-3.5 w-3.5 accent-amber-600" />
+                      <span><strong>تأكيد قبل الإرسال:</strong> الغرض هو {gradePolicy.purpose}، وستُرسل فقط {gradePolicy.fieldsSent.join(" و")}. لا يُعد هذا إثبات امتثال SDAIA أو سلطة مستأجر حقيقية؛ راجع الصفوف بعد الاستخراج.</span>
+                    </label>
+                  )}
+                </div>
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div className="flex items-start gap-2 text-[11px] leading-5">
                     {scanPhase === "analyzing" ? <Loader2 className="mt-0.5 h-5 w-5 shrink-0 animate-spin text-teal-600" /> : scanPhase === "success" ? <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-600" /> : scanPhase === "error" ? <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-red-600" /> : <FileImage className="mt-0.5 h-5 w-5 shrink-0 text-blue-700" />}
-                    <div><p className="font-bold text-gray-800">{scanPhase === "analyzing" ? "نحلل الصورة ونستخرج الصفوف..." : scanPhase === "success" ? "اكتمل الاستيراد — راجع الصفوف المظللة ثم صححها عند الحاجة." : scanPhase === "error" ? "تعذر قراءة الصورة كما ينبغي." : "اسحب صورة كشف الدرجات هنا أو اخترها من جهازك."}</p><p className="mt-0.5 text-gray-600">{scanNote || "الصيغ المدعومة PNG وJPG وWEBP حتى 5 ميغابايت. لن تُستبدل الدرجات المدخلة مسبقاً."}</p>{scanFileName && <p className="mt-1 text-[10px] text-gray-500">الملف الأخير: {scanFileName}</p>}</div>
+                    <div><p className="font-bold text-gray-800">{scanPhase === "analyzing" ? "نحلل الصورة ونستخرج الصفوف..." : scanPhase === "success" ? "اكتمل الاستيراد — راجع الصفوف المظللة ثم صححها عند الحاجة." : scanPhase === "error" ? "تعذر قراءة الصورة كما ينبغي." : "اسحب صورة كشف الدرجات هنا أو اخترها من جهازك."}</p><p className="mt-0.5 text-gray-600">{scanNote || "الصيغ المدعومة PNG وJPG حتى 5 ميغابايت. لن تُستبدل الدرجات المدخلة مسبقاً."}</p>{scanFileName && <p className="mt-1 text-[10px] text-gray-500">الملف الأخير: {scanFileName}</p>}</div>
                   </div>
                   {lastImportedIds.length > 0 && <button type="button" onClick={undoLastImport} className="inline-flex shrink-0 items-center justify-center gap-1 rounded-lg border border-amber-200 bg-white px-3 py-2 text-xs font-bold text-amber-700 hover:bg-amber-50"><Undo2 className="h-3.5 w-3.5" />التراجع عن الاستيراد</button>}
                 </div>
@@ -365,7 +430,8 @@ export default function GradeAnalysis() {
                   </thead>
                   <tbody>
                     {students.map((student, index) => {
-                      const pct = subjectInfo.maxScore > 0 && student.score !== null ? ((student.score / subjectInfo.maxScore) * 100) : 0;
+                      const maxScore = normalizeMaxScore(subjectInfo.maxScore);
+                      const pct = student.score !== null ? ((student.score / maxScore) * 100) : 0;
                       return (
                         <tr
                           key={student.id}
@@ -388,7 +454,7 @@ export default function GradeAnalysis() {
                               onChange={(e) => updateStudent(student.id, "score", e.target.value === "" ? null : Number(e.target.value))}
                               placeholder="0"
                               min={0}
-                              max={subjectInfo.maxScore}
+                              max={maxScore}
                               className="w-full px-2 py-1.5 rounded border border-gray-200 text-sm text-center focus:outline-none focus:ring-1 focus:border-teal-400"
                             />
                           </td>
@@ -657,7 +723,7 @@ export default function GradeAnalysis() {
                           <td style={{ padding: '6px', border: `1px solid ${C.teal}15`, textAlign: 'center', fontWeight: 800 }}>{student.score}</td>
                           <td style={{ padding: '6px', border: `1px solid ${C.teal}15`, textAlign: 'center', color: '#999' }}>{subjectInfo.maxScore}</td>
                           <td style={{ padding: '6px', border: `1px solid ${C.teal}15`, textAlign: 'center', fontWeight: 700, color: getGradeColor(student.score) }}>
-                            {((student.score / subjectInfo.maxScore) * 100).toFixed(0)}%
+                            {((student.score / normalizeMaxScore(subjectInfo.maxScore)) * 100).toFixed(0)}%
                           </td>
                           <td style={{ padding: '6px', border: `1px solid ${C.teal}15`, textAlign: 'center' }}>
                             <span style={{

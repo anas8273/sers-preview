@@ -16,8 +16,10 @@ import {
 } from "../drizzle/domain-core";
 import { createWorkItemForUser } from "./domain-db";
 import { getDb } from "./db";
-import { createOutputForUser, revokeOutputForUser } from "./review-output-db";
-import { createReportDraftVersionForUser, saveReportDraftForUser } from "./work-report-draft-db";
+import { assertDisposableMySQL, clearDisposableAcademicFixtures } from "../tests/fixtures/assert-disposable-mysql";
+import { createOutputForUser, getOutputRecordForUser, revokeOutputForUser } from "./review-output-db";
+import { createReportDraftVersionForUser, getReportDraftForUser, saveReportDraftForUser } from "./work-report-draft-db";
+import { reportDraftSaveInput } from "../tests/fixtures/report-draft-contract";
 import {
   generatePrivatePdfForWorkVersion,
   getPrivatePdfDownloadForUser,
@@ -34,6 +36,7 @@ suite("immutable WorkVersion PDF output pipeline against real MySQL", () => {
   async function clean() {
     const db = await getDb();
     if (!db) throw new Error("Database not available");
+    await clearDisposableAcademicFixtures(db);
     await db.delete(reviewComments);
     await db.delete(reviews);
     await db.delete(outputs);
@@ -48,6 +51,7 @@ suite("immutable WorkVersion PDF output pipeline against real MySQL", () => {
   }
 
   beforeAll(async () => {
+    assertDisposableMySQL();
     const db = await getDb();
     if (!db) throw new Error("Database not available");
     await clean();
@@ -63,10 +67,9 @@ suite("immutable WorkVersion PDF output pipeline against real MySQL", () => {
 
   async function createVersion() {
     const work = await createWorkItemForUser(ownerId, { title: "تقرير مخرج ثابت", type: "report" });
-    const draft = await saveReportDraftForUser(ownerId, {
+    const initial = (await getReportDraftForUser(ownerId, work!.id))!;
+    const draft = await saveReportDraftForUser(ownerId, reportDraftSaveInput(initial.draft, {
       workItemId: work!.id,
-      expectedRevision: 0,
-      templateId: "program-report",
       themeId: "formal",
       fontFamily: "Cairo",
       fields: {
@@ -74,7 +77,8 @@ suite("immutable WorkVersion PDF output pipeline against real MySQL", () => {
         objectives: "هدف قابل للقياس",
       },
       evidenceAssetIds: [],
-    });
+      expectedRevision: initial.draft.revision,
+    }));
     const version = await createReportDraftVersionForUser(ownerId, {
       workItemId: work!.id,
       expectedRevision: draft.revision,
@@ -110,10 +114,13 @@ suite("immutable WorkVersion PDF output pipeline against real MySQL", () => {
 
     const first = await generatePrivatePdfForWorkVersion(ownerId, version.id, dependencies);
     expect(first?.reused).toBe(false);
-    expect(first?.rendererVersion).toBe(2);
-    expect(first?.contentHash).toBe(expectedHash);
-    expect(first?.storageKey).toContain(`/version-${version.id}/${expectedHash}.pdf`);
-    expect(first?.downloadUrl).toContain("https://signed.example/");
+    const firstRecord = (await getOutputRecordForUser(ownerId, first!.outputId))!;
+    expect(firstRecord.token).toBe(`artifact:v${version.id}:pdf:r2`);
+    expect(firstRecord.storageKey).toContain(`/version-${version.id}/${expectedHash}.pdf`);
+    expect(first).not.toHaveProperty("storageKey");
+    expect(first).not.toHaveProperty("contentHash");
+    expect(first).not.toHaveProperty("rendererVersion");
+    expect(first?.downloadUrl).toBe(`/api/work-outputs/${first!.outputId}/download`);
     expect(first?.fileSize).toBe(pdfBytes.length);
 
     const second = await generatePrivatePdfForWorkVersion(ownerId, version.id, dependencies);
@@ -128,7 +135,7 @@ suite("immutable WorkVersion PDF output pipeline against real MySQL", () => {
     expect(rows).toHaveLength(1);
     expect(rows[0].type).toBe("pdf");
     expect(rows[0].visibility).toBe("private");
-    expect(rows[0].storageKey).toBe(first?.storageKey);
+    expect(rows[0].storageKey).toBe(firstRecord.storageKey);
   });
 
   it("deduplicates concurrent PDF generation with one renderer-version output row", async () => {
@@ -195,11 +202,15 @@ suite("immutable WorkVersion PDF output pipeline against real MySQL", () => {
     let renders = 0;
     const dependencies = { renderPdf: async () => { renders++; return Buffer.from("%PDF-1.4\nnew-renderer\n%%EOF"); },
       putStorage: async (key: string) => ({ key, url: "" }), getStorage: async (key: string) => ({ key, url: `https://signed.example/${key}` }) };
-    expect(await getPrivatePdfDownloadForUser(ownerId, old.id, dependencies)).toMatchObject({ rendererVersion: 1, contentHash: oldHash });
+    expect(await getPrivatePdfDownloadForUser(ownerId, old.id, dependencies)).toMatchObject({ outputId: old.id, reused: true });
+    const oldRecord = (await getOutputRecordForUser(ownerId, old.id))!;
+    expect(oldRecord.token).toBe(`artifact:v${version.id}:pdf:r1`);
+    expect(oldRecord.storageKey).toContain(`${oldHash}.pdf`);
     const current = (await generatePrivatePdfForWorkVersion(ownerId, version.id, dependencies))!;
-    expect(current).toMatchObject({ rendererVersion: 2, reused: false });
+    expect(current).toMatchObject({ reused: false });
+    expect((await getOutputRecordForUser(ownerId, current.outputId))!.token).toBe(`artifact:v${version.id}:pdf:r2`);
     expect(current.outputId).not.toBe(old.id);
-    expect(await getPrivatePdfDownloadForUser(ownerId, old.id, dependencies)).toMatchObject({ rendererVersion: 1 });
+    expect(await getPrivatePdfDownloadForUser(ownerId, old.id, dependencies)).toMatchObject({ outputId: old.id, reused: true });
     await revokeOutputForUser(ownerId, old.id);
     await expect(generatePrivatePdfForWorkVersion(ownerId, version.id, dependencies)).rejects.toThrow(/revoked/);
     await expect(getPrivatePdfDownloadForUser(ownerId, current.outputId, dependencies)).rejects.toThrow(/revoked/);

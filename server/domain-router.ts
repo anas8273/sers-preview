@@ -25,6 +25,7 @@ import {
   createOutputForUser,
   createReviewForUser,
   decideReviewForUser,
+  getPublicationReceiptForUser,
   getReviewForUser,
   listOutputsForWorkForUser,
   listReviewsForUser,
@@ -98,6 +99,11 @@ export const domainRouter = router({
       }))
       .mutation(async ({ ctx, input }) => {
         try {
+          const work = await getWorkItemForUser(ctx.user.id, input.id);
+          if (!work) throw forbidden("لا تملك صلاحية إنشاء نسخة لهذا العمل");
+          if (work.type === "portfolio") {
+            throw badRequest("لا يمكن إنشاء نسخة ملف إنجاز من بيانات وصفية فقط؛ استخدم المنشئ المحلي حتى يتوفر استيراد محتوى اختياري بعقد typed");
+          }
           const version = await createWorkVersionForUser(ctx.user.id, input.id, input.snapshot, input.reason);
           if (!version) throw forbidden("لا تملك صلاحية إنشاء نسخة لهذا العمل");
           return version;
@@ -218,6 +224,22 @@ export const domainRouter = router({
         const list = await listOutputsForWorkForUser(ctx.user.id, input.workItemId);
         if (!list) throw forbidden("لا تملك صلاحية عرض مخرجات هذا العمل");
         return list;
+      }),
+
+    publicationReceipt: protectedProcedure
+      .input(z.object({ id: z.number().int().positive() }))
+      .mutation(async ({ ctx, input }) => {
+        // Explicit publication management, never a reader/list side effect.
+        const receipt = await getPublicationReceiptForUser(ctx.user.id, input.id);
+        if (!receipt || typeof receipt.token !== "string" || !receipt.token.trim()
+          || receipt.revokedAt || (receipt.expiresAt && receipt.expiresAt.getTime() <= Date.now())) {
+          throw forbidden("لا تملك صلاحية استرجاع رابط نشر نشط لهذا المخرج");
+        }
+        return {
+          outputId: receipt.id, workVersionId: receipt.workVersionId,
+          versionNumber: receipt.versionNumber, type: receipt.type,
+          visibility: receipt.visibility, token: receipt.token, expiresAt: receipt.expiresAt,
+        };
       }),
 
     generatePrivatePdf: protectedProcedure

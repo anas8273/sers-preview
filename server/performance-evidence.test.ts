@@ -1,6 +1,13 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe as describeIntegration, it, expect, vi, beforeAll } from "vitest";
 import { appRouter } from "./routers";
 import type { TrpcContext } from "./_core/context";
+import { assertDisposableMySQL } from "../tests/fixtures/assert-disposable-mysql";
+
+// This legacy file performs real CRUD and share writes. A project DATABASE_URL
+// or NODE_ENV=test is never permission to use a shared or production database.
+const integrationEnabled = process.env.SERS_INTEGRATION === "1";
+const describe = describeIntegration.skipIf(!integrationEnabled);
+beforeAll(() => { if (integrationEnabled) assertDisposableMySQL(); });
 
 type AuthenticatedUser = NonNullable<TrpcContext["user"]>;
 
@@ -176,11 +183,11 @@ describe("Multi-User Data Isolation", () => {
       completionPercentage: 0,
     });
 
-    // User 2 trying to update User 1's portfolio should fail or return null
-    const result = await caller2.portfolio.update({
+    // A denied write is an explicit error, not a successful no-op.
+    await expect(caller2.portfolio.update({
       id: created.id,
       completionPercentage: 100,
-    });
+    })).rejects.toMatchObject({ code: "FORBIDDEN" });
     // Should not have updated - verify original data unchanged
     const fetched = await caller1.portfolio.get({ id: created.id });
     expect(fetched!.completionPercentage).toBe(0);
@@ -201,8 +208,9 @@ describe("Multi-User Data Isolation", () => {
       completionPercentage: 0,
     });
 
-    // User 2 trying to delete User 1's portfolio
-    await caller2.portfolio.delete({ id: created.id });
+    // A denied delete must remain forbidden and preserve the owner's row.
+    await expect(caller2.portfolio.delete({ id: created.id }))
+      .rejects.toMatchObject({ code: "FORBIDDEN" });
     // Portfolio should still exist for User 1
     const fetched = await caller1.portfolio.get({ id: created.id });
     expect(fetched).not.toBeNull();

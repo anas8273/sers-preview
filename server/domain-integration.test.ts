@@ -32,6 +32,7 @@ import {
   revokeOutputForUser,
 } from "./review-output-db";
 import { getDb } from "./db";
+import { assertDisposableMySQL, clearDisposableAcademicFixtures } from "../tests/fixtures/assert-disposable-mysql";
 
 const integrationEnabled = process.env.SERS_INTEGRATION === "1";
 const suite = integrationEnabled ? describe : describe.skip;
@@ -47,6 +48,7 @@ suite("SERS domain integration against real MySQL", () => {
   async function cleanDomainData() {
     const db = await getDb();
     if (!db) throw new Error("Database not available");
+    await clearDisposableAcademicFixtures(db);
     await db.delete(reviewComments);
     await db.delete(reviews);
     await db.delete(outputs);
@@ -82,6 +84,7 @@ suite("SERS domain integration against real MySQL", () => {
   }
 
   beforeAll(async () => {
+    assertDisposableMySQL();
     const db = await getDb();
     if (!db) throw new Error("Database not available");
     await cleanDomainData();

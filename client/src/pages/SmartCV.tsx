@@ -21,6 +21,7 @@ import { exportToPDF, printElement } from "@/lib/pdf-export";
 import { usePreviewScale } from "@/hooks/usePreviewScale";
 
 const A4_WIDTH_PX = 793.7;
+const AI_CV_DATA_POLICY_VERSION = "ai-data-minimization-v1";
 
 // ═══════════════════════════════════════════════════════════════
 // Types
@@ -247,6 +248,7 @@ export default function SmartCV() {
   const [platinumStyle, setPlatinumStyle] = useState(false);
   const [view, setView] = useState<"editor" | "preview">("editor");
   const [aiLoading, setAiLoading] = useState(false);
+  const [cvPrivacyAcknowledged, setCvPrivacyAcknowledged] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
   const atsReadiness = useMemo(() => calculateATSReadiness(cvData), [cvData]);
@@ -283,17 +285,25 @@ export default function SmartCV() {
 
   const handleAIFill = useCallback(async () => {
     if (!cvData.name && !cvData.title) { toast.error("أدخل الاسم والمسمى الوظيفي أولاً"); return; }
+    if (!cvPrivacyAcknowledged) { toast.error("أكد أن المسودة لا تمنح ترخيصًا لبيانات الطلاب قبل استخدام المساعد."); return; }
     setAiLoading(true);
     try {
       const result = await generateCVMutation.mutateAsync({
         name: cvData.name,
+        fullName: cvData.name,
+        email: cvData.email || undefined,
+        phone: cvData.phone || undefined,
         jobTitle: cvData.title,
         experience: cvData.experience.map((e) => e.title).filter(Boolean).join(", ") || undefined,
         education: cvData.education.map((e) => e.title).filter(Boolean).join(", ") || undefined,
         skills: cvData.skills.filter(Boolean).join(", ") || undefined,
+        additionalInfo: cvData.summary || undefined,
+        privacyConfirmation: { policyVersion: AI_CV_DATA_POLICY_VERSION, purpose: "draft-cv-wording", acknowledged: true },
       });
       if (result.success && result.cvData) {
         const ai = result.cvData as any;
+        // Identity and contact fields remain local; only generated draft sections
+        // are merged back explicitly after the provider response is validated.
         setCvData((prev) => ({
           ...prev,
           summary: ai.summary || prev.summary,
@@ -307,7 +317,7 @@ export default function SmartCV() {
       }
     } catch (error) { toast.error(aiFailureMessage(error)); }
     finally { setAiLoading(false); }
-  }, [cvData, generateCVMutation]);
+  }, [cvData, cvPrivacyAcknowledged, generateCVMutation]);
 
   const handleExportPDF = useCallback(async () => {
     setExporting(true);
@@ -411,6 +421,13 @@ export default function SmartCV() {
                     </button>
                   ))}
                 </div>
+              </section>
+
+              <section className="mb-4 rounded-xl border border-amber-200 bg-amber-50/70 p-3" aria-label="إقرار خصوصية مسودة السيرة">
+                <label className="flex items-start gap-2 text-[11px] leading-5 text-amber-900">
+                  <input type="checkbox" checked={cvPrivacyAcknowledged} onChange={(event) => setCvPrivacyAcknowledged(event.target.checked)} className="mt-1 h-3.5 w-3.5 accent-amber-600" />
+                  <span><strong>إقرار قبل التعبئة:</strong> سيُستخدم سياق منقّح لصياغة مسودة قابلة للمراجعة؛ تبقى الهوية وبيانات التواصل محلية، وهذه المسودة لا تمنح ترخيصًا لبيانات الطلاب أو تثبت امتثالًا تنظيميًا.</span>
+                </label>
               </section>
 
               {/* Section tabs */}

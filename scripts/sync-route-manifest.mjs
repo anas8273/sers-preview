@@ -11,6 +11,7 @@ if (!paths.length || new Set(paths).size !== paths.length || paths.some(path => 
 const titles = {
   "/": "الرئيسية", "/work": "أعمالي", "/work/:id": "تفاصيل العمل", "/work/:id/report": "محرر التقرير",
   "/evidence": "الشواهد", "/reviews": "المراجعات", "/notifications": "الإشعارات", "/account": "الحساب والمدرسة",
+  "/catalog": "مكتبة الأدوات والخدمات",
   "/reports": "التقارير والمراجعة", "/reports/legacy": "التقارير المحلية القديمة", "/output/:token": "المخرج المشترك",
   "/exam/:token": "تسليم اختبار", "/exams": "الاختبارات", "/audit-log": "سجل التدقيق", "/share/:token": "ملف مشترك",
 };

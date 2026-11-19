@@ -28,6 +28,9 @@ function normalize(value: unknown) {
   if (snapshot.assets && (!Array.isArray(snapshot.assets) || snapshot.assets.length > 100)) throw new ReportDocxValidationError("Too many report evidence entries");
   return snapshot;
 }
+function normalizeFrozenDraft(value: Record<string, unknown>) {
+  return normalizeReportDraft(value);
+}
 
 /** All text comes from the immutable snapshot. No HTML evaluation, external
  * relationship, file URL or storage key is fetched or copied into the document. */
@@ -37,14 +40,16 @@ export async function renderReportWorkVersionDocx(value: unknown, versionNumber:
   let draft;
   let model;
   try {
-    draft = normalizeReportDraft(snapshot.reportDraft!);
-    model = projectReportDocument({ reportDraft: snapshot.reportDraft!, assets: snapshot.assets });
+    draft = normalizeFrozenDraft(snapshot.reportDraft!);
+    model = projectReportDocument({ reportDraft: draft, assets: snapshot.assets });
   } catch (error) {
     if (error instanceof ReportDocxValidationError) throw error;
     throw new ReportDocxValidationError(error instanceof Error ? error.message : "Invalid report document");
   }
   const title = text(snapshot.work!.title, 255) || "تقرير";
-  const font = ["Cairo", "Tajawal", "Arial"].includes(draft.fontFamily || "") ? draft.fontFamily! : "Arial";
+  const supportedFonts = ["Cairo", "Tajawal", "Noto Kufi Arabic", "Arial"] as const;
+  if (!supportedFonts.includes(draft.fontFamily as typeof supportedFonts[number])) throw new ReportDocxValidationError(`Unsupported report font: ${draft.fontFamily}`);
+  const font = draft.fontFamily;
   const captured = snapshot.capturedAt || (snapshot.reportDraft?.updatedAt as string | undefined);
   const timestamp = captured && Number.isFinite(Date.parse(captured)) ? new Date(captured) : new Date("2000-01-01T00:00:00Z");
   const dateLabel = new Intl.DateTimeFormat("ar-SA", { calendar: "gregory", year: "numeric", month: "long", day: "numeric", timeZone: "UTC" }).format(timestamp);

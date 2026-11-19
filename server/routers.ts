@@ -6,6 +6,7 @@ import { publicProcedure, protectedProcedure, adminProcedure, router } from "./_
 import { invokeLLM, type Message } from "./_core/llm";
 import { aiProcedure } from "./ai-admission";
 import { AI_MAX_OUTPUT_TOKENS } from "./ai-provider-policy";
+import { sanitizeCvInput } from "./ai-data-policy";
 import { aiInputs, aiResponseContent, AI_DRAFT_RULES, aiJsonFormat, boundedAiText, classificationOutput, cvOutput, examOutput, fieldsOutputSchema, gradeOutput, parseAiJson, radioOutput, validateClassification, validateExam, validateGrades } from "./ai-contracts";
 import { MAX_UPLOAD_BASE64_LENGTH } from "./upload-validation";
 import { notifyOwner } from "./_core/notification";
@@ -436,7 +437,9 @@ export const appRouter = router({
         const portfolio = await getPortfolioById(link.portfolioId);
         if (!portfolio) return { error: "الملف غير موجود", portfolio: null };
 
-        const files = await getFilesByPortfolio(portfolio.id);
+        // Public links expose descriptive metadata only. Raw provider URLs and
+        // storage keys are never a public download grant.
+        const files = await getFilesByPortfolio(portfolio.id, { publicProjection: true });
         const currentLink = await getShareLinkByToken(input.token);
         if (!currentLink || !currentLink.isActive || new Date() >= currentLink.expiresAt || currentLink.id !== link.id || currentLink.portfolioId !== link.portfolioId || currentLink.hasPassword !== link.hasPassword || currentLink.passwordHash !== link.passwordHash) return { error: "الرابط لم يعد متاحًا", portfolio: null };
 
@@ -746,9 +749,12 @@ export const appRouter = router({
       return valid ? { segments: result.segments, success: true } : { segments: [], success: false };
     }),
     generateCV: aiProcedure("generateCV", aiInputs.generateCV).mutation(async ({ input }) => {
+      // Defense in depth: aiProcedure already minimizes before reservation; keep
+      // the provider payload explicitly free of local identity/contact fields.
+      const providerInput = sanitizeCvInput(input);
       const response = await invokeLLM({ maxTokens: AI_MAX_OUTPUT_TOKENS, messages: [
-        { role: "system", content: `${AI_DRAFT_RULES} حرّر مسودة سيرة ذاتية من الوقائع المقدمة فقط. لا تنشئ خبرة أو مؤهلًا أو جهة أو مدة أو دورة أو إنجازًا غير وارد. المجموعات غير الموثقة تبقى مصفوفات فارغة.` },
-        { role: "user", content: JSON.stringify(input) },
+        { role: "system", content: `${AI_DRAFT_RULES} الهوية وبيانات التواصل محجوبة محليًا؛ لا تحاول استعادتها أو اختلاقها. حرّر مسودة سيرة ذاتية من الوقائع المقدمة فقط. لا تنشئ خبرة أو مؤهلًا أو جهة أو مدة أو دورة أو إنجازًا غير وارد. المجموعات غير الموثقة تبقى مصفوفات فارغة.` },
+        { role: "user", content: JSON.stringify(providerInput) },
       ], response_format: aiJsonFormat("cv_data", cvOutput) });
       const cvData = parseAiJson(aiResponseContent(response), cvOutput);
       return { cvData, success: cvData !== null };

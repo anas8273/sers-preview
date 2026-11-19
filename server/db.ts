@@ -98,8 +98,15 @@ export async function createPortfolio(data: InsertPortfolio) {
 export async function updatePortfolio(id: number, userId: number, data: Partial<InsertPortfolio>) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  await db.update(portfolios).set(data).where(and(eq(portfolios.id, id), eq(portfolios.userId, userId)));
-  return { success: true };
+  return db.transaction(async tx => {
+    const [owned] = await tx.select({ id: portfolios.id }).from(portfolios)
+      .where(and(eq(portfolios.id, id), eq(portfolios.userId, userId)))
+      .limit(1).for("update");
+    if (!owned) throw new TRPCError({ code: "FORBIDDEN", message: "لا تملك صلاحية تعديل هذا الملف" });
+    await tx.update(portfolios).set(data)
+      .where(and(eq(portfolios.id, id), eq(portfolios.userId, userId)));
+    return { success: true };
+  });
 }
 
 export async function getPortfoliosByUser(userId: number) {
@@ -380,9 +387,20 @@ export async function createUploadedFile(data: InsertUploadedFile) {
   });
 }
 
-export async function getFilesByPortfolio(portfolioId: number) {
+export async function getFilesByPortfolio(portfolioId: number, options?: { publicProjection?: boolean }) {
   const db = await getDb();
   if (!db) return [];
+  if (options?.publicProjection) {
+    return db.select({
+      id: uploadedFiles.id,
+      originalName: uploadedFiles.originalName,
+      mimeType: uploadedFiles.mimeType,
+      fileSize: uploadedFiles.fileSize,
+      criterionId: uploadedFiles.criterionId,
+      subEvidenceId: uploadedFiles.subEvidenceId,
+      createdAt: uploadedFiles.createdAt,
+    }).from(uploadedFiles).where(eq(uploadedFiles.portfolioId, portfolioId)).orderBy(desc(uploadedFiles.createdAt));
+  }
   return db.select().from(uploadedFiles).where(eq(uploadedFiles.portfolioId, portfolioId)).orderBy(desc(uploadedFiles.createdAt));
 }
 

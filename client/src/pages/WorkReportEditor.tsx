@@ -7,6 +7,7 @@ import {
   REPORT_THEME_OPTIONS,
   REPORT_FONT_OPTIONS,
   projectReportDocument,
+  type ReportFieldDefinition,
   type ReportFieldValue,
 } from "@shared/report-projection";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -37,16 +38,17 @@ type SaveState = "idle" | "dirty" | "saving" | "saved" | "offline" | "conflict" 
 type LocalBackup = ReportDraftContent & { baseRevision: number; updatedAt: string };
 const emptyDraft: ReportDraftContent = { templateId: "custom", themeId: "classic", fontFamily: "Cairo", fields: {}, evidenceAssetIds: [] };
 
-function contentOf({ templateId, themeId, fontFamily, fields, evidenceAssetIds }: ReportDraftContent): ReportDraftContent {
-  return { templateId, themeId, fontFamily, fields, evidenceAssetIds };
+function contentOf({ schemaVersion, templateId, templateVersionId, themeId, fontFamily, fields, evidenceAssetIds, fieldDefinitions }: ReportDraftContent): ReportDraftContent {
+  return { schemaVersion, templateId, templateVersionId, themeId, fontFamily, fields, evidenceAssetIds, fieldDefinitions };
 }
 
-function editorFields(templateId: string) {
-  return REPORT_TEMPLATE_DEFINITIONS[templateId]?.fields ?? REPORT_TEMPLATE_DEFINITIONS.custom.fields;
+function editorFields(content: Pick<ReportDraftContent, "templateId" | "schemaVersion" | "fieldDefinitions">): readonly ReportFieldDefinition[] {
+  if (content.schemaVersion === 2 && content.fieldDefinitions?.length) return content.fieldDefinitions;
+  return REPORT_TEMPLATE_DEFINITIONS[content.templateId]?.fields ?? REPORT_TEMPLATE_DEFINITIONS.custom.fields;
 }
 
-function editorFieldValues(templateId: string, values: Record<string, unknown>) {
-  const definitions = new Map(editorFields(templateId).map(field => [field.key, field]));
+function editorFieldValues(content: Pick<ReportDraftContent, "templateId" | "schemaVersion" | "fieldDefinitions">, values: Record<string, unknown>) {
+  const definitions = new Map(editorFields(content).map(field => [field.key, field]));
   return Object.fromEntries(Object.entries(values).flatMap(([key, value]) => {
     const definition = definitions.get(key);
     if (!definition) return [];
@@ -55,8 +57,8 @@ function editorFieldValues(templateId: string, values: Record<string, unknown>) 
   })) as Record<string, string>;
 }
 
-function serverFieldValues(templateId: string, values: Record<string, string>): Record<string, ReportFieldValue> {
-  const definitions = new Map(editorFields(templateId).map(field => [field.key, field]));
+function serverFieldValues(content: Pick<ReportDraftContent, "templateId" | "schemaVersion" | "fieldDefinitions">, values: Record<string, string>): Record<string, ReportFieldValue> {
+  const definitions = new Map(editorFields(content).map(field => [field.key, field]));
   const output: Record<string, ReportFieldValue> = {};
   for (const [key, value] of Object.entries(values)) {
     const definition = definitions.get(key);
@@ -74,6 +76,8 @@ function serverFieldValues(templateId: string, values: Record<string, string>): 
 
 function sameContent(a: ReportDraftContent, b: ReportDraftContent) {
   return a.templateId === b.templateId && a.themeId === b.themeId && a.fontFamily === b.fontFamily
+    && a.schemaVersion === b.schemaVersion && a.templateVersionId === b.templateVersionId
+    && JSON.stringify(a.fieldDefinitions ?? []) === JSON.stringify(b.fieldDefinitions ?? [])
     && Object.keys(a.fields).length === Object.keys(b.fields).length
     && Object.entries(a.fields).every(([key, value]) => b.fields[key] === value)
     && a.evidenceAssetIds.length === b.evidenceAssetIds.length
@@ -95,6 +99,8 @@ function parseBackup(workId: number): LocalBackup | undefined {
     return {
       baseRevision: Number(parsed.baseRevision),
       updatedAt: parsed.updatedAt,
+      schemaVersion: parsed.schemaVersion,
+      templateVersionId: typeof parsed.templateVersionId === "string" ? parsed.templateVersionId : undefined,
       templateId: typeof parsed.templateId === "string" ? parsed.templateId : "custom",
       themeId: typeof parsed.themeId === "string" ? parsed.themeId : "classic",
       fontFamily: typeof parsed.fontFamily === "string" ? parsed.fontFamily : "Cairo",
@@ -102,6 +108,9 @@ function parseBackup(workId: number): LocalBackup | undefined {
       evidenceAssetIds: Array.isArray(parsed.evidenceAssetIds)
         ? parsed.evidenceAssetIds.filter((id): id is number => Number.isInteger(id) && Number(id) > 0)
         : [],
+      fieldDefinitions: parsed.schemaVersion === 2 && Array.isArray(parsed.fieldDefinitions)
+        ? parsed.fieldDefinitions as ReportFieldDefinition[]
+        : undefined,
     };
   } catch {
     return undefined;
@@ -142,6 +151,7 @@ function ReportEditor({ workId }: { workId: number }) {
   const [backupError, setBackupError] = useState(false);
   const [lastSavedAt, setLastSavedAt] = useState<string | undefined>();
   const [versionReason, setVersionReason] = useState("");
+  const [templateError, setTemplateError] = useState<string | undefined>();
   const [createdVersion, setCreatedVersion] = useState<{ id: number; versionNumber: number; revision: number } | undefined>();
   const [selectedReviewerId, setSelectedReviewerId] = useState<number | undefined>();
 
@@ -186,7 +196,8 @@ function ReportEditor({ workId }: { workId: number }) {
   }, [workId]);
 
   const applyServerDraft = useCallback((data: NonNullable<typeof reportQuery.data>, recover: boolean) => {
-  const confirmed = contentOf({ ...data.draft, fields: editorFieldValues(data.draft.templateId, data.draft.fields) });
+    const contract = { templateId: data.draft.templateId, schemaVersion: data.draft.schemaVersion, fieldDefinitions: data.draft.fieldDefinitions ? [...data.draft.fieldDefinitions] : undefined };
+    const confirmed = contentOf({ ...data.draft, fieldDefinitions: contract.fieldDefinitions, fields: editorFieldValues(contract, data.draft.fields) });
     const backup = recover ? parseBackup(workId) : undefined;
     const unsaved = backup && !sameContent(confirmed, backup) ? backup : undefined;
     const session = new ReportDraftSession(data.draft.revision, confirmed, unsaved && contentOf(unsaved));
@@ -201,6 +212,7 @@ function ReportEditor({ workId }: { workId: number }) {
     setDraft(session.content);
     setRevision(session.revision);
     setLastSavedAt(data.draft.updatedAt);
+    setTemplateError(undefined);
     setCreatedVersion(undefined);
     setSaveState(conflict.current ? "conflict" : session.dirty ? (navigator.onLine ? "dirty" : "offline") : "saved");
   }, [workId, updateBackup]);
@@ -222,6 +234,24 @@ function ReportEditor({ workId }: { workId: number }) {
     if (!conflict.current) setSaveState(navigator.onLine ? "dirty" : "offline");
   };
 
+  const changeTemplate = (nextTemplateId: string) => {
+    const session = sessionRef.current;
+    if (!session || !isCurrent(session) || nextTemplateId === session.content.templateId) return;
+    // Historical v2 data is immutable. A mapping UI is deliberately not
+    // implicit: rejecting here is safer than relabelling or dropping fields.
+    if (session.content.schemaVersion === 2) {
+      setTemplateError("لا يمكن تبديل قالب تقرير مجمّد دون تعيين حقول صريح؛ لم تتغير البيانات.");
+      return;
+    }
+    const next = REPORT_TEMPLATE_DEFINITIONS[nextTemplateId];
+    if (!next) {
+      setTemplateError("القالب المطلوب غير متاح، ولم تتغير البيانات.");
+      return;
+    }
+    setTemplateError(undefined);
+    editDraft({ templateId: next.id, templateVersionId: `${next.id}@${next.version}`, fieldDefinitions: [...next.fields] });
+  };
+
   const saveDraft = useCallback(async (): Promise<number | undefined> => {
     const session = sessionRef.current;
     if (!session || !isCurrent(session) || conflict.current) return;
@@ -230,7 +260,16 @@ function ReportEditor({ workId }: { workId: number }) {
       return await session.flush(async (content, expectedRevision) => {
         if (!isCurrent(session) || !navigator.onLine) throw new Error("Report session unavailable");
         setSaveState("saving");
-        return writeDraft({ workItemId: workId, expectedRevision, ...content, fields: serverFieldValues(content.templateId, content.fields) });
+        const fieldDefinitions = content.fieldDefinitions?.map(field => ({
+          key: field.key,
+          label: field.label,
+          type: field.type,
+          ...(field.placeholder !== undefined ? { placeholder: field.placeholder } : {}),
+          ...(field.options ? { options: [...field.options] } : {}),
+          ...(field.maxLength !== undefined ? { maxLength: field.maxLength } : {}),
+          ...(field.rows !== undefined ? { rows: field.rows } : {}),
+        }));
+        return writeDraft({ workItemId: workId, expectedRevision, ...content, fieldDefinitions, fields: serverFieldValues(content, content.fields) });
       }, receipt => {
         if (!isCurrent(session)) return;
         backupRevision.current = receipt.revision;
@@ -333,11 +372,11 @@ function ReportEditor({ workId }: { workId: number }) {
     () => linkedAssets.filter(asset => evidenceAssetIds.includes(asset.id)),
     [evidenceAssetIds, linkedAssets],
   );
-  const fieldDefinitions = editorFields(templateId);
+  const fieldDefinitions = editorFields(draft);
   const previewModel = useMemo(() => {
     try {
       return projectReportDocument({
-        reportDraft: { ...draft, fields: serverFieldValues(templateId, fields) },
+        reportDraft: { ...draft, fields: serverFieldValues(draft, fields) },
         assets: selectedEvidence.map(asset => ({ id: asset.id, title: asset.title, kind: asset.kind, role: asset.role, caption: asset.caption })),
       });
     } catch {
@@ -414,7 +453,8 @@ function ReportEditor({ workId }: { workId: number }) {
                 <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
                   <div className="grid gap-4 md:grid-cols-3">
                     <label className="text-xs font-bold text-slate-700">نوع التقرير
-                      <select value={templateId} onChange={event => editDraft({ templateId: event.target.value })} className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-normal">
+                      <select value={templateId} onChange={event => changeTemplate(event.target.value)} className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-normal">
+                        {!templateOptions.some(option => option.id === templateId) && <option value={templateId}>القالب التاريخي ({templateId})</option>}
                         {templateOptions.map(option => <option key={option.id} value={option.id}>{option.label}</option>)}
                       </select>
                     </label>
@@ -429,7 +469,8 @@ function ReportEditor({ workId }: { workId: number }) {
                       </select>
                     </label>
                   </div>
-                  <p className="mt-4 text-xs leading-6 text-slate-500">المحتوى محفوظ كبيانات مستقلة عن القالب؛ تغيير الشكل لا يحذف النصوص أو الشواهد.</p>
+                  <p className="mt-4 text-xs leading-6 text-slate-500">المحرر يعرض عقد الحقول المحفوظ مع التقرير. تغيير قالب schema مختلف موقوف حتى يتم تعيين الحقول صراحة، لذلك لا تُستبدل البيانات بصمت.</p>
+                  {templateError && <p role="alert" className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800">{templateError}</p>}
                 </section>
 
                 <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
@@ -527,7 +568,7 @@ function ReportEditor({ workId }: { workId: number }) {
                       <div className="border-b border-slate-200 pb-5 text-center">
                         <p className="text-xs font-bold text-teal-700">SERS</p>
                         <h2 className="mt-2 text-xl font-black text-slate-950">{workQuery.data.title}</h2>
-                        <p className="mt-2 text-xs text-slate-500">{templateOptions.find(option => option.id === templateId)?.label}</p>
+                        <p className="mt-2 text-xs text-slate-500">{previewModel?.template.label || templateOptions.find(option => option.id === templateId)?.label || templateId}</p>
                       </div>
                       <div className="mt-6 space-y-6">
                         {!previewModel || previewModel.fields.length === 0 ? (
@@ -542,7 +583,10 @@ function ReportEditor({ workId }: { workId: number }) {
                           <section>
                             <h3 className="text-sm font-black text-slate-900">الشواهد المرفقة</h3>
                             <div className="mt-3 space-y-2">
-                              {selectedEvidence.map(asset => <div key={asset.id} className="rounded-lg border border-slate-200 px-3 py-2 text-xs text-slate-700">{asset.title} · {asset.kind}</div>)}
+                              {selectedEvidence.map(asset => <div key={asset.id} className="rounded-lg border border-slate-200 px-3 py-2 text-xs text-slate-700">
+                                <div>{asset.title} · {asset.kind}</div>
+                                {asset.kind === "file" && <div className="mt-1 rounded border border-dashed border-amber-200 bg-amber-50 px-2 py-1 text-[10px] text-amber-800">الصورة لا تُقرأ من رابط أو مصدر متغير؛ ستظهر هنا فقط بعد تثبيتها داخل النسخة.</div>}
+                              </div>)}
                             </div>
                           </section>
                         )}
@@ -550,7 +594,7 @@ function ReportEditor({ workId }: { workId: number }) {
                     </article>
                   </div>
                 </section>
-                <p className="mt-3 text-center text-[11px] leading-5 text-slate-500">يستخدم تصدير PDF وWord آخر نسخة ثابتة أنشأتها.</p>
+                <p className="mt-3 text-center text-[11px] leading-5 text-slate-500">المعاينة مبنية من نفس ReportDocumentModel، لكنها ليست parity كاملة مع PDF/Word: الصور غير المثبتة والفواصل تُعرض كعلامات صريحة، والمخرج النهائي قد يضيف صفحات.</p>
                 {lastSavedAt && <p className="mt-1 text-center text-[10px] text-slate-400">آخر حفظ خادمي: {new Date(lastSavedAt).toLocaleString("ar-SA")}</p>}
               </aside>
             </div>

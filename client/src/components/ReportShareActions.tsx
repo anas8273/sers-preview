@@ -17,6 +17,7 @@ import QRCode from "qrcode";
 import { useRoute } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { compareReportDraftToVersion } from "@shared/report-stale";
+import { useAuth } from "@/_core/hooks/useAuth";
 
 type CreatedOutput = {
   id: number;
@@ -49,6 +50,7 @@ function ReportShareSession({ workId }: { workId: number }) {
   const [expiryPreset, setExpiryPreset] = useState<(typeof expiryOptions)[number]["value"]>("7d");
   const [created, setCreated] = useState<CreatedOutput | undefined>();
   const [shareUrl, setShareUrl] = useState("");
+  const [restoredPublication, setRestoredPublication] = useState(false);
   const [qrDataUrl, setQrDataUrl] = useState<string | undefined>();
   const [copied, setCopied] = useState(false);
   const [continueWithOldVersion, setContinueWithOldVersion] = useState(false);
@@ -61,6 +63,12 @@ function ReportShareSession({ workId }: { workId: number }) {
     { workItemId: workId },
     { retry: false, refetchOnWindowFocus: false },
   );
+  const { user } = useAuth();
+  const outputsQuery = trpc.domain.output.listForWork.useQuery(
+    { workItemId: workId },
+    { enabled: open, retry: false, refetchOnWindowFocus: false },
+  );
+  const receiptMutation = trpc.domain.output.publicationReceipt.useMutation();
   const createMutation = trpc.shareOutput.create.useMutation();
   const revokeMutation = trpc.domain.output.revoke.useMutation();
 
@@ -99,9 +107,11 @@ function ReportShareSession({ workId }: { workId: number }) {
   useEffect(() => {
     setCreated(undefined);
     setShareUrl("");
+    setRestoredPublication(false);
     setQrDataUrl(undefined);
     createMutation.reset();
     revokeMutation.reset();
+    receiptMutation.reset();
     setContinueWithOldVersion(false);
   }, [selectedVersionId]);
 
@@ -120,7 +130,18 @@ function ReportShareSession({ workId }: { workId: number }) {
       expiresAt: expiry?.milliseconds ? new Date(Date.now() + expiry.milliseconds) : undefined,
     });
     setCreated(result as CreatedOutput);
+    setRestoredPublication(false);
     setPassword("");
+    await outputsQuery.refetch();
+  };
+
+  const restorePublication = async (outputId: number) => {
+    const receipt = await receiptMutation.mutateAsync({ id: outputId });
+    if (receipt.type !== "link" && receipt.type !== "qr") return;
+    if (receipt.visibility !== "public" && receipt.visibility !== "protected") return;
+    setCreated({ id: receipt.outputId, token: receipt.token, type: receipt.type,
+      visibility: receipt.visibility, expiresAt: receipt.expiresAt });
+    setRestoredPublication(true);
   };
 
   const copyShareUrl = async () => {
@@ -136,6 +157,7 @@ function ReportShareSession({ workId }: { workId: number }) {
     setCreated(undefined);
     setShareUrl("");
     setQrDataUrl(undefined);
+    await outputsQuery.refetch();
   };
 
   return (
@@ -201,7 +223,7 @@ function ReportShareSession({ workId }: { workId: number }) {
 
             {created && shareUrl && (
               <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
-                <div className="flex items-start gap-2 text-emerald-800"><ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" /><div><p className="text-xs font-black">تم إنشاء مخرج {created.visibility === "protected" ? "محمي" : "عام"}</p><p className="mt-1 text-[10px] leading-5">يمكن إلغاؤه من هنا، ويطبق الخادم الانتهاء والإلغاء عند كل عرض.</p></div></div>
+                <div className="flex items-start gap-2 text-emerald-800"><ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" /><div><p className="text-xs font-black">{restoredPublication ? "تم استعادة رابط مخرج" : "تم إنشاء مخرج"} {created.visibility === "protected" ? "محمي" : "عام"}</p><p className="mt-1 text-[10px] leading-5">يمكن إلغاؤه من هنا، ويطبق الخادم الانتهاء والإلغاء عند كل عرض.</p></div></div>
                 <div className="mt-3 rounded-xl bg-white p-3 text-left font-mono text-[10px] leading-5 text-slate-600" dir="ltr">{shareUrl}</div>
                 {qrDataUrl && <div className="mt-3 flex justify-center rounded-xl bg-white p-4"><img src={qrDataUrl} alt="QR للمخرج الموثق" className="h-48 w-48" /></div>}
                 <div className="mt-3 grid gap-2 sm:grid-cols-2">
@@ -210,6 +232,26 @@ function ReportShareSession({ workId }: { workId: number }) {
                 </div>
                 <button type="button" onClick={() => void revokeShare().catch(() => undefined)} disabled={revokeMutation.isPending} className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-red-200 bg-white px-3 py-2.5 text-xs font-bold text-red-700 hover:bg-red-50 disabled:opacity-50">{revokeMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />} إلغاء المخرج</button>
                 {revokeMutation.error && <p className="mt-2 text-xs text-red-600">{revokeMutation.error.message}</p>}
+              </div>
+            )}
+
+            {!created && selectedVersionId && (
+              <div className="rounded-xl border border-slate-200 p-3">
+                <p className="text-xs font-bold text-slate-700">روابطك المنشورة لهذه النسخة</p>
+                <p className="mt-1 text-[10px] leading-5 text-slate-500">استعادة رابط قائم لا تنشئ مخرجًا جديدًا. يتحقق الخادم من المنشئ وصلاحية الإدارة عند كل طلب.</p>
+                {outputsQuery.isLoading && <p className="mt-2 text-xs text-slate-500">جاري تحميل المخرجات...</p>}
+                {outputsQuery.error && <p role="alert" className="mt-2 text-xs text-red-700">تعذر تحميل سجل المخرجات. حاول إعادة فتح النافذة.</p>}
+                {(outputsQuery.data ?? []).filter(output => output.workVersionId === selectedVersionId
+                  && output.createdByUserId === user?.id && !output.revokedAt
+                  && (!output.expiresAt || new Date(output.expiresAt).getTime() > Date.now())
+                  && output.visibility !== "private" && (output.type === "link" || output.type === "qr")).map(output => (
+                  <button key={output.id} type="button" disabled={receiptMutation.isPending}
+                    onClick={() => void restorePublication(output.id).catch(() => undefined)}
+                    className="mt-2 flex min-h-11 w-full items-center justify-center gap-2 rounded-lg border border-teal-200 px-3 py-2 text-xs font-bold text-teal-800 disabled:opacity-50">
+                    {receiptMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Link2 className="h-4 w-4" />} استعادة رابط المخرج #{output.id}
+                  </button>
+                ))}
+                {receiptMutation.error && <p role="alert" className="mt-2 text-xs leading-5 text-red-700">تعذر استعادة رابط نشر نشط ضمن صلاحيتك الحالية.</p>}
               </div>
             )}
 

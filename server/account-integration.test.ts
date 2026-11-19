@@ -1,4 +1,4 @@
-import { assertDisposableMySQL } from "../tests/fixtures/assert-disposable-mysql";
+import { assertDisposableMySQL, clearDisposableAcademicFixtures } from "../tests/fixtures/assert-disposable-mysql";
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { and, eq, inArray, sql } from "drizzle-orm";
@@ -8,6 +8,7 @@ import { getDb } from "./db";
 import { AccountAccessError, AccountConflictError, acceptSchoolInvitationForUser, createAcademicYearForUser, createSchoolForUser, getAccountOverviewForUser, inviteSchoolMemberForUser, listAcademicYearsForUser, listSchoolMembersForUser, setSchoolMemberForUser } from "./account-db";
 import { assertAssetAccess, assertWorkAccess, createAssetForUser, createWorkItemForUser, createWorkVersionForUser, listAssetsForUser, listWorkItemsForUser } from "./domain-db";
 import { createReportDraftVersionForUser, getReportDraftForUser, ReportDraftAccessError, ReportDraftConflictError, saveReportDraftForUser } from "./work-report-draft-db";
+import { reportDraftSaveInput } from "../tests/fixtures/report-draft-contract";
 const suite = process.env.SERS_INTEGRATION === "1" ? describe : describe.skip;
 suite("account membership and academic contexts on disposable MySQL", () => {
   let owner = 0, colleague = 0, outsider = 0, school = 0, otherSchool = 0;
@@ -16,6 +17,7 @@ suite("account membership and academic contexts on disposable MySQL", () => {
   async function clean() {
     if (!userIds.length) return;
     const db = (await getDb())!;
+    await clearDisposableAcademicFixtures(db);
     const works = await db.select({ id: workItems.id }).from(workItems).where(inArray(workItems.creatorUserId, userIds));
     if (works.length) {
       const ids = works.map(w => w.id);
@@ -117,7 +119,8 @@ suite("account membership and academic contexts on disposable MySQL", () => {
     const [isolationRows] = await db.execute(sql`SELECT @@transaction_isolation AS isolationLevel`);
     expect((isolationRows as unknown as { isolationLevel: string }[])[0].isolationLevel).toBe("REPEATABLE-READ");
     const work = (await createWorkItemForUser(owner, { title: "مسودة متزامنة", type: "report", ownerType: "organization", organizationId: school }))!;
-    const base = { workItemId: work.id, expectedRevision: 0, templateId: "custom", themeId: "classic", fontFamily: "Cairo", evidenceAssetIds: [] as number[] };
+    const initial = (await getReportDraftForUser(owner, work.id))!;
+    const base = reportDraftSaveInput(initial.draft, { workItemId: work.id, expectedRevision: initial.draft.revision, fields: {}, evidenceAssetIds: [] });
     const saved = await saveReportDraftForUser(owner, { ...base, fields: { summary: "Initial" } });
     type Result = PromiseSettledResult<Awaited<ReturnType<typeof saveReportDraftForUser>>>;
     let pending: Promise<Result[]> | undefined;
@@ -168,7 +171,8 @@ suite("account membership and academic contexts on disposable MySQL", () => {
     expect((await listWorkItemsForUser(owner, { academicYearId: year.id })).map(w => w.id)).toEqual([first!.id]);
     expect((await listWorkItemsForUser(owner, { academicTermId: next.terms[0].id })).map(w => w.id)).toEqual([second!.id]);
     expect((await listWorkItemsForUser(owner, { unassigned: true })).map(w => w.id)).toEqual([old!.id]);
-    const draft = await saveReportDraftForUser(owner, { workItemId: first!.id, expectedRevision: 0, templateId: "custom", themeId: "classic", fontFamily: "Cairo", fields: { summary: "ملخص" }, evidenceAssetIds: [] });
+    const initial = (await getReportDraftForUser(owner, first!.id))!;
+    const draft = await saveReportDraftForUser(owner, reportDraftSaveInput(initial.draft, { workItemId: first!.id, expectedRevision: initial.draft.revision, fields: { summary: "ملخص" }, evidenceAssetIds: [] }));
     const reportVersion = await createReportDraftVersionForUser(owner, { workItemId: first!.id, expectedRevision: draft.revision });
     const genericVersion = await createWorkVersionForUser(owner, first!.id, { kind: "report", academicContext: { yearLabel: "spoofed" } });
     const db = (await getDb())!;

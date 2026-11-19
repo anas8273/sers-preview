@@ -1,9 +1,21 @@
+import type { ReportFieldDefinition, ReportFieldValue } from "@shared/report-projection";
+
 export type ReportDraftContent = {
+  schemaVersion?: number;
   templateId: string;
+  templateVersionId?: string;
   themeId: string;
   fontFamily: string;
   fields: Record<string, string>;
   evidenceAssetIds: number[];
+  /** Historical v2 reports own this contract; never replace it from the live registry. */
+  fieldDefinitions?: ReportFieldDefinition[];
+};
+
+export type ReportDraftContract = {
+  schemaVersion: 2;
+  templateVersionId: string;
+  fieldDefinitions: ReportFieldDefinition[];
 };
 
 type Receipt = { revision: number; updatedAt: string };
@@ -49,3 +61,7 @@ export class ReportDraftSession {
     return this.revision;
   }
 }
+
+/** Keep the public type useful to tests and adapters without making callers
+ * infer the shape of typed values from a live template registry. */
+export type FrozenReportFieldValue = ReportFieldValue;

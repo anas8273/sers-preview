@@ -7,9 +7,14 @@
  * ملاحظة: القوالب الثلاثة الأساسية مدمجة في الواجهة، بينما seedDefaultTemplates
  * ينشئ قالب DB إضافيًا واحدًا باسم «بطاقات - شريط جانبي».
  */
-import { describe, expect, it } from "vitest";
+import { describe as describeIntegration, expect, it, beforeAll } from "vitest";
 import { appRouter } from "./routers";
 import type { TrpcContext } from "./_core/context";
+import { assertDisposableMySQL } from "../tests/fixtures/assert-disposable-mysql";
+
+const integrationEnabled = process.env.SERS_INTEGRATION === "1";
+const describe = describeIntegration.skipIf(!integrationEnabled);
+beforeAll(() => { if (integrationEnabled) assertDisposableMySQL(); });
 
 type AuthenticatedUser = NonNullable<TrpcContext["user"]>;
 

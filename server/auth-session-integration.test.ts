@@ -10,6 +10,7 @@ import { getDb } from "./db";
 import { AuthRateLimitError, authCredential, consumeOAuthAttempt, createOAuthAttempt, getActiveAuthSession, hashAuthCredential } from "./auth-session-db";
 import { ENV } from "./_core/env";
 import { sdk } from "./_core/sdk";
+import { assertDisposableMySQL } from "../tests/fixtures/assert-disposable-mysql";
 
 const suite = process.env.SERS_INTEGRATION === "1" ? describe : describe.skip;
 suite("durable OAuth attempts and sessions on disposable MySQL", () => {
@@ -36,7 +37,7 @@ suite("durable OAuth attempts and sessions on disposable MySQL", () => {
     return input;
   }
   beforeAll(async () => {
-    if (process.env.GITHUB_ACTIONS !== "true" || process.env.DATABASE_URL !== "mysql://root:root@127.0.0.1:3306/sers_test") throw new Error("Auth integration requires disposable CI MySQL");
+    assertDisposableMySQL();
     const db = (await getDb())!;
     const [rows] = await db.execute(sql`SELECT DATABASE() AS dbName, VERSION() AS dbVersion`);
     expect((rows as unknown as { dbName: string; dbVersion: string }[])[0]).toMatchObject({ dbName: "sers_test", dbVersion: expect.stringMatching(/^8\.4\./) });

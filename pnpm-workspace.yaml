@@ -2,7 +2,16 @@ packages:
   - .
 
 overrides:
-  tailwindcss>nanoid: 3.3.7
+  tar: 7.5.21
+  rollup: 4.59.0
+  picomatch: 4.0.4
+  postcss: 8.5.23
+  postcss>nanoid: 3.3.18
+  '@babel/core': 7.29.6
+  browserslist: 4.28.7
+  baseline-browser-mapping: 2.11.0
+  source-map-js: 1.2.2
+  '@tailwindcss/typography>postcss-selector-parser': 6.1.5
   proxy-addr: 2.0.8
   path-to-regexp: 0.1.13
   body-parser: 1.20.9
@@ -21,11 +30,17 @@ overrides:
   lodash-es: 4.18.1
   mermaid: 11.16.1
   basic-ftp: 6.2.4
+  katex: 0.18.2
+  esbuild: 0.25.10
 
 patchedDependencies:
   wouter@3.7.1: patches/wouter@3.7.1.patch
 
-# Puppeteer downloads Chromium through the project postinstall instead of its dependency build hook.
+# Only trusted, pinned native toolchain packages may run install scripts; Puppeteer is
+# intentionally handled by the project postinstall with its browser download skipped.
+onlyBuiltDependencies:
+  - esbuild
+  - '@tailwindcss/oxide'
 ignoredBuiltDependencies:
   - puppeteer
 

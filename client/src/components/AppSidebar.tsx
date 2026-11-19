@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
-import { Home, BriefcaseBusiness, Library, CheckSquare, ShoppingBag, Bell, UserRound, Menu, X, Sparkles, Settings2 } from "lucide-react";
+import { Home, BriefcaseBusiness, Library, CheckSquare, ShoppingBag, Bell, UserRound, Menu, X, Sparkles, Settings2, Wrench } from "lucide-react";
 import { PRODUCT_NAV_ITEMS, LEGACY_TOOLS_ENABLED, isProductRouteActive } from "@/config/productNavigation";
 
 const iconMap = {
@@ -11,6 +11,7 @@ const iconMap = {
   store: ShoppingBag,
   notifications: Bell,
   account: UserRound,
+  catalog: Wrench,
 };
 
 interface AppSidebarProps { currentPath?: string; }

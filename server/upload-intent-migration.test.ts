@@ -6,14 +6,13 @@ import mysql from "mysql2/promise";
 import { drizzle } from "drizzle-orm/mysql2";
 import { migrate } from "drizzle-orm/mysql2/migrator";
 import { describe, expect, it } from "vitest";
+import { disposableMySQLConnectionOptions } from "../tests/fixtures/assert-disposable-mysql";
 
 const suite = process.env.SERS_INTEGRATION === "1" ? describe : describe.skip;
 suite("upload quota migration of existing personal intents", () => {
   it("preserves history while expiring old unreserved requests", async () => {
-    if (process.env.GITHUB_ACTIONS !== "true" || process.env.DATABASE_URL !== "mysql://root:root@127.0.0.1:3306/sers_test") {
-      throw new Error("Migration test requires disposable CI MySQL");
-    }
-    const admin = await mysql.createConnection(process.env.DATABASE_URL);
+    const connectionOptions = disposableMySQLConnectionOptions();
+    const admin = await mysql.createConnection(connectionOptions);
     const databaseName = `sers_upload_migration_${randomUUID().replaceAll("-", "")}`;
     const folder = mkdtempSync(path.join(tmpdir(), "sers-upload-migration-"));
     let connection: Awaited<ReturnType<typeof mysql.createConnection>> | undefined;
@@ -23,7 +22,7 @@ suite("upload quota migration of existing personal intents", () => {
       expect((versionRows as Array<{ version: string }>)[0].version).toMatch(/^8\.4\./);
       await admin.query(`CREATE DATABASE \`${databaseName}\``);
       created = true;
-      connection = await mysql.createConnection({ host: "127.0.0.1", port: 3306, user: "root", password: "root", database: databaseName });
+      connection = await mysql.createConnection({ ...connectionOptions, database: databaseName });
       cpSync(path.resolve("drizzle"), folder, { recursive: true });
       const journalPath = path.join(folder, "meta/_journal.json");
       const journal = JSON.parse(readFileSync(journalPath, "utf8"));
@@ -57,8 +56,8 @@ suite("upload quota migration of existing personal intents", () => {
   }, 60000);
 
   it("upgrades reserved and terminal records from 0014 without losing capacity or history", async () => {
-    if (process.env.GITHUB_ACTIONS !== "true" || process.env.DATABASE_URL !== "mysql://root:root@127.0.0.1:3306/sers_test") throw new Error("Migration test requires disposable CI MySQL");
-    const admin = await mysql.createConnection(process.env.DATABASE_URL);
+    const connectionOptions = disposableMySQLConnectionOptions();
+    const admin = await mysql.createConnection(connectionOptions);
     const databaseName = `sers_reception_migration_${randomUUID().replaceAll("-", "")}`;
     const folder = mkdtempSync(path.join(tmpdir(), "sers-reception-migration-"));
     let connection: Awaited<ReturnType<typeof mysql.createConnection>> | undefined;
@@ -68,7 +67,7 @@ suite("upload quota migration of existing personal intents", () => {
       expect((versionRows as Array<{ version: string }>)[0].version).toMatch(/^8\.4\./);
       await admin.query(`CREATE DATABASE \`${databaseName}\``);
       created = true;
-      connection = await mysql.createConnection({ host: "127.0.0.1", port: 3306, user: "root", password: "root", database: databaseName });
+      connection = await mysql.createConnection({ ...connectionOptions, database: databaseName });
       cpSync(path.resolve("drizzle"), folder, { recursive: true });
       const journalPath = path.join(folder, "meta/_journal.json");
       const journal = JSON.parse(readFileSync(journalPath, "utf8"));

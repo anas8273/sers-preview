@@ -12,6 +12,7 @@ import { receiveUploadIntentForUser } from "./upload-reception-service";
 import { cleanupUploadIntent, completeUploadIntentForUser, downloadReadyAssetForUser } from "./upload-lifecycle-service";
 import type { PrivateUploadStorage } from "./private-upload-storage";
 import type { UploadScanner } from "./upload-scanner";
+import { assertDisposableMySQL } from "../tests/fixtures/assert-disposable-mysql";
 
 const suite = process.env.SERS_INTEGRATION === "1" ? describe : describe.skip;
 const bytes = Buffer.from("Synthetic evidence only — شاهد تجريبي", "utf8");
@@ -85,7 +86,7 @@ suite("private upload scan, publication, download and cleanup on MySQL", () => {
     await db.delete(uploadQuotaBudgets).where(inArray(uploadQuotaBudgets.scopeKey, [`personal:${owner}`, `organization:${school}`]));
   }
   beforeAll(async () => {
-    if (process.env.GITHUB_ACTIONS !== "true" || process.env.DATABASE_URL !== "mysql://root:root@127.0.0.1:3306/sers_test") throw new Error("Upload lifecycle tests require disposable CI MySQL");
+    assertDisposableMySQL();
     const db = (await getDb())!;
     const [result] = await db.execute(sql`SELECT DATABASE() AS name, VERSION() AS version`);
     const database = (result as unknown as Array<{ name: string; version: string }>)[0];

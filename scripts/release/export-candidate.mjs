@@ -21,13 +21,21 @@ const FAILURE_REASONS = new Set([
   'image-command', 'image-json', 'image-identity', 'image-platform', 'image-labels', 'image-digests',
   'immutable-reference-missing', 'immutable-reference-ambiguous',
 ]);
+const COMMAND_SUBREASONS = new Set(['code', 'noimage', 'template', 'timeout', 'exit', 'buffer']);
 export const PRODUCER_FAILURE_REASONS = Object.freeze([...FAILURE_REASONS]);
+export const PRODUCER_COMMAND_SUBREASONS = Object.freeze([...COMMAND_SUBREASONS]);
 export const producerFailureStage = error => STAGES.has(error?.producerStage) ? error.producerStage : 'context';
 export const producerFailureReason = error => FAILURE_REASONS.has(error?.producerReason) ? error.producerReason : 'verification-failed';
-export const producerFailureDiagnostic = error => `${producerFailureStage(error)}:${producerFailureReason(error)}`;
-function failure(reason, message = 'Candidate verification failed') {
+export const producerFailureSubreason = error => COMMAND_SUBREASONS.has(error?.producerSubreason) ? error.producerSubreason : undefined;
+export const producerFailureDiagnostic = error => {
+  const diagnostic = `${producerFailureStage(error)}:${producerFailureReason(error)}`;
+  const subreason = producerFailureSubreason(error);
+  return subreason ? `${diagnostic}:${subreason}` : diagnostic;
+};
+function failure(reason, message = 'Candidate verification failed', subreason) {
   const error = new Error(message);
   if (FAILURE_REASONS.has(reason)) error.producerReason = reason;
+  if (reason === 'image-command' && COMMAND_SUBREASONS.has(subreason)) error.producerSubreason = subreason;
   return error;
 }
 async function atStage(stage, operation) {
@@ -37,13 +45,23 @@ async function atStage(stage, operation) {
     const error = new Error('Candidate verification refused');
     error.producerStage = STAGES.has(cause?.producerStage) ? cause.producerStage : stage;
     error.producerReason = FAILURE_REASONS.has(cause?.producerReason) ? cause.producerReason : 'verification-failed';
+    if (COMMAND_SUBREASONS.has(cause?.producerSubreason)) error.producerSubreason = cause.producerSubreason;
     throw error;
   }
+}
+function commandSubreason(error) {
+  if (error?.code === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER') return 'buffer';
+  if (error?.code === 'ETIMEDOUT' || error?.killed === true || error?.signal === 'SIGTERM') return 'timeout';
+  const stderr = typeof error?.stderr === 'string' ? error.stderr : '';
+  if (/no such (?:image|object)|manifest unknown|image\s+[^\n]*\s+not found/i.test(stderr)) return 'noimage';
+  if (/template (?:parsing|execution) error|can't evaluate field|executing .* at <.*>:/i.test(stderr)) return 'template';
+  if (error?.code === 'ENOENT' || error?.code === 'EACCES') return 'code';
+  return 'exit';
 }
 export async function runProducerCommand(binary, args, options = {}, runner = exec) {
   const { failureReason = 'verification-failed', ...execOptions } = options;
   try { return (await runner(binary, args, { cwd: root, timeout: 30_000, maxBuffer: 2 * 1024 ** 2, ...execOptions })).stdout.trim(); }
-  catch { throw failure(failureReason, 'Candidate verification command failed'); }
+  catch (cause) { throw failure(failureReason, 'Candidate verification command failed', failureReason === 'image-command' ? commandSubreason(cause) : undefined); }
 }
 const command = (binary, args, options = {}) => runProducerCommand(binary, args, options);
 const compose = args => command('docker', ['compose', '-f', path.join(root, 'compose.staging.yml'), ...args], { failureReason: 'container-command' });
@@ -115,12 +133,24 @@ export function parseImageInspection(imageId, info) {
   if (info.digests != null && (!Array.isArray(info.digests) || info.digests.some(value => typeof value !== 'string'))) throw failure('image-digests', 'Invalid image digests');
   return { ...info, revision: info.labels?.['org.opencontainers.image.revision'], source: info.labels?.['org.opencontainers.image.source'], digests: info.digests ?? [] };
 }
-async function inspectImage(imageId) {
-  // Dependency images need not have labels. Passing the whole nullable map to
-  // json avoids Go template `index` failing before JavaScript can validate it.
-  const format = '{"id":{{json .Id}},"os":{{json .Os}},"architecture":{{json .Architecture}},"labels":{{json .Config.Labels}},"digests":{{json .RepoDigests}}}';
-  const inspected = await command('docker', ['image', 'inspect', '--format', format, imageId], { failureReason: 'image-command' });
-  return parseImageInspection(imageId, parseInspectionJson(inspected, 'image-json'));
+export function parseImageInspectionJson(output, imageId) {
+  const inspected = parseInspectionJson(output, 'image-json');
+  if (!Array.isArray(inspected) || inspected.length !== 1) throw failure('image-json');
+  const raw = inspected[0];
+  return parseImageInspection(imageId, {
+    id: raw?.Id,
+    os: raw?.Os,
+    architecture: raw?.Architecture,
+    labels: raw?.Config?.Labels ?? null,
+    digests: raw?.RepoDigests ?? [],
+  });
+}
+export async function inspectImage(imageId, run = command) {
+  // Avoid a Go-template failure on nullable Config.Labels/RepoDigests. The
+  // unformatted inspect response is JSON, while --platform binds selection to
+  // the only platform accepted by the candidate contract.
+  const inspected = await run('docker', ['image', 'inspect', '--platform', 'linux/amd64', imageId], { failureReason: 'image-command' });
+  return parseImageInspectionJson(inspected, imageId);
 }
 export function immutableReference(repository, digests) {
   const prefix = `${repository}@sha256:`;
@@ -129,8 +159,8 @@ export function immutableReference(repository, digests) {
   if (normalized.length !== 1) throw failure('immutable-reference-ambiguous', 'Exercised dependency has ambiguous immutable registry references');
   return normalized[0];
 }
-async function dependency(service, repository) {
-  const imageId = await exercisedImage(service), info = await inspectImage(imageId);
+export async function dependency(service, repository, run = command) {
+  const imageId = await exercisedImage(service), info = await inspectImage(imageId, run);
   return { imageId, ref: immutableReference(repository, info.digests) };
 }
 async function saveImage(imageId, file) {

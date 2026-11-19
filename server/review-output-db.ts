@@ -455,10 +455,15 @@ export async function createOutputForUser(userId: number, input: {
     return id;
   });
 
-  return outputId ? getOutputForUser(userId, outputId) : undefined;
+  return outputId ? getPublicationReceiptForUser(userId, outputId) : undefined;
 }
 
-export async function getOutputForUser(userId: number, outputId: number) {
+/**
+ * The database row contains bearer material and private storage coordinates.
+ * Keep the full row behind this explicitly internal helper; callers serving
+ * read/list RPCs must use getOutputForUser/listOutputsForWorkForUser below.
+ */
+export async function getOutputRecordForUser(userId: number, outputId: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   const [row] = await db
@@ -472,16 +477,47 @@ export async function getOutputForUser(userId: number, outputId: number) {
   return { ...row.output, versionNumber: row.version.versionNumber, workId: row.work.id, workTitle: row.work.title };
 }
 
+type OutputRecord = NonNullable<Awaited<ReturnType<typeof getOutputRecordForUser>>>;
+
+/** Safe output projection for protected reader/list callers. Never expose bearer material or private coordinates. */
+function projectOutputForUser(row: OutputRecord, userId: number) {
+  return {
+    id: row.id, workVersionId: row.workVersionId, versionNumber: row.versionNumber,
+    workId: row.workId, workTitle: row.workTitle, type: row.type, visibility: row.visibility,
+    createdByUserId: row.createdByUserId, createdAt: row.createdAt,
+    expiresAt: row.expiresAt, revokedAt: row.revokedAt,
+  };
+}
+
+export async function getOutputForUser(userId: number, outputId: number) {
+  const row = await getOutputRecordForUser(userId, outputId);
+  return row ? projectOutputForUser(row, userId) : undefined;
+}
+
+/**
+ * Publication creation/management receipt, never used by reader/list RPCs:
+ * only the creator who still has write access may receive a share bearer.
+ */
+export async function getPublicationReceiptForUser(userId: number, outputId: number) {
+  const row = await getOutputRecordForUser(userId, outputId);
+  if (!row || row.createdByUserId !== userId || !(await assertWorkAccess(userId, row.workId, "write"))) return undefined;
+  return {
+    ...projectOutputForUser(row, userId),
+    token: row.visibility === "private" ? null : row.token,
+  };
+}
+
 export async function listOutputsForWorkForUser(userId: number, workItemId: number) {
   if (!(await assertWorkAccess(userId, workItemId, "read"))) return undefined;
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  return db
+  const rows = await db
     .select({ output: outputs, versionNumber: workVersions.versionNumber })
     .from(outputs)
     .innerJoin(workVersions, eq(outputs.workVersionId, workVersions.id))
     .where(eq(workVersions.workItemId, workItemId))
     .orderBy(desc(outputs.createdAt));
+  return rows.map(row => projectOutputForUser({ ...row.output, versionNumber: row.versionNumber, workId: workItemId, workTitle: "" }, userId));
 }
 
 export async function revokeOutputForUser(userId: number, outputId: number) {

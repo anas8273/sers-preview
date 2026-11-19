@@ -16,6 +16,23 @@ function tinyPng() {
   png.data.fill(220);
   return PNG.sync.write(png);
 }
+const crcTable = Array.from({ length: 256 }, (_, n) => {
+  let c = n;
+  for (let bit = 0; bit < 8; bit++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+  return c >>> 0;
+});
+function crc32(data: Buffer) {
+  let crc = 0xffffffff;
+  for (let i = 0; i < data.length; i++) crc = crcTable[(crc ^ data[i]) & 255] ^ (crc >>> 8);
+  return (crc ^ 0xffffffff) >>> 0;
+}
+function patchPngHeader(png: Buffer, width: number, height: number) {
+  const result = Buffer.from(png);
+  result.writeUInt32BE(width, 16);
+  result.writeUInt32BE(height, 20);
+  result.writeUInt32BE(crc32(result.subarray(12, 29)), 29);
+  return result;
+}
 
 function snapshot() {
   return {
@@ -74,7 +91,7 @@ describe("report-integrity vertical slice", () => {
     expect(normalized.fields.materials).toEqual(["دليل"]);
     expect(() => normalizeReportDraft({ templateId: "program-report", fields: { silentlyLost: "x" } })).toThrow(/Unknown report field/);
     expect(() => normalizeReportDraft({ schemaVersion: REPORT_SCHEMA_VERSION, templateId: "workshop-report", fields: {}, fieldDefinitions: [] })).toThrow(/Schema v2 requires/);
-    expect(() => normalizeReportDraft({ schemaVersion: REPORT_SCHEMA_VERSION, templateId: "workshop-report", fields: {}, fieldDefinitions: [{ key: "bad key", label: "x", type: "text" }] })).toThrow(/invalid frozen field/);
+    expect(() => normalizeReportDraft({ schemaVersion: REPORT_SCHEMA_VERSION, templateId: "workshop-report", templateVersionId: "workshop-report@9", fields: {}, fieldDefinitions: [{ key: "bad key", label: "x", type: "text" }] })).toThrow(/invalid frozen field/);
   });
 
   it("uses one projection for all known fields and selected frozen evidence", () => {
@@ -109,12 +126,25 @@ describe("report-integrity vertical slice", () => {
     expect(docx.length).toBeGreaterThan(1000);
   });
 
-  it("sanitizes a bounded PNG into a metadata-free preview and rejects bombs", () => {
+  it("sanitizes bounded PNGs, rejects malformed containers, and downsamples without cropping", () => {
     const bytes = tinyPng();
     const result = sanitizeEvidenceImage(bytes, "image/png");
     expect(result.width).toBe(3);
     expect(result.height).toBe(2);
     expect(result.bytes.length).toBeGreaterThan(0);
     expect(() => sanitizeEvidenceImage(Buffer.alloc(6 * 1024 * 1024 + 1), "image/png")).toThrow(/preview limit/);
+
+    const badCrc = Buffer.from(bytes);
+    badCrc[badCrc.length - 1] ^= 1;
+    expect(() => sanitizeEvidenceImage(badCrc, "image/png")).toThrow(/checksum/);
+    expect(() => sanitizeEvidenceImage(bytes.subarray(0, bytes.length - 1), "image/png")).toThrow();
+    expect(() => sanitizeEvidenceImage(patchPngHeader(bytes, 16_000, 16_000), "image/png")).toThrow(/dimensions|inflate/);
+
+    const larger = new PNG({ width: 2_000, height: 1_000 });
+    larger.data.fill(127);
+    const resized = sanitizeEvidenceImage(PNG.sync.write(larger), "image/png");
+    expect(resized.width).toBe(1_414);
+    expect(resized.height).toBe(707);
+    expect(PNG.sync.read(resized.bytes, { checkCRC: true }).data).toHaveLength(1_414 * 707 * 4);
   });
 });

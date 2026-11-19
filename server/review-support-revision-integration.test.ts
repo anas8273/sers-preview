@@ -5,21 +5,18 @@ import { users } from "../drizzle/schema";
 import { contentBlocks, workItems, workVersions } from "../drizzle/domain-core";
 import { getDb } from "./db";
 import { createWorkItemForUser } from "./domain-db";
-import { createReportDraftVersionForUser, saveReportDraftForUser } from "./work-report-draft-db";
+import { createReportDraftVersionForUser, getReportDraftForUser, saveReportDraftForUser } from "./work-report-draft-db";
 import { reviewSupportRouter } from "./review-support-router";
 import { compareReportDraftToVersion } from "../shared/report-stale";
+import { assertDisposableMySQL } from "../tests/fixtures/assert-disposable-mysql";
+import { reportDraftSaveInput } from "../tests/fixtures/report-draft-contract";
 
 const suite = process.env.SERS_INTEGRATION === "1" ? describe : describe.skip;
 suite("server-projected immutable report revision on isolated MySQL", () => {
   let userId = 0;
   let workId = 0;
   beforeAll(async () => {
-    const dsn = new URL(process.env.DATABASE_URL ?? "mysql://invalid");
-    const allowed = dsn.hostname === "127.0.0.1" && dsn.pathname === "/sers_test" && (
-      (dsn.port === "3306" && process.env.GITHUB_ACTIONS === "true") ||
-      (dsn.port === "3307" && process.env.SERS_DISPOSABLE_LOCAL_MYSQL === "1")
-    );
-    if (!allowed) throw new Error("Refusing a non-disposable report revision database");
+    assertDisposableMySQL();
     const db = (await getDb())!;
     const [inserted] = await db.insert(users).values({ openId: `revision-${randomUUID()}`, name: "مستخدم اصطناعي" });
     userId = Number(inserted.insertId);
@@ -35,8 +32,9 @@ suite("server-projected immutable report revision on isolated MySQL", () => {
   });
   it("returns the frozen revision and distinguishes a subsequently changed draft", async () => {
     const db = (await getDb())!;
-    const input = { workItemId: workId, templateId: "custom", themeId: "classic", fontFamily: "Cairo", evidenceAssetIds: [] as number[] };
-    const saved = await saveReportDraftForUser(userId, { ...input, expectedRevision: 0, fields: { summary: "النص الأصلي" } });
+    const initial = (await getReportDraftForUser(userId, workId))!;
+    const input = reportDraftSaveInput(initial.draft, { workItemId: workId, expectedRevision: initial.draft.revision, fields: {}, evidenceAssetIds: [] });
+    const saved = await saveReportDraftForUser(userId, { ...input, fields: { summary: "النص الأصلي" } });
     const version = await createReportDraftVersionForUser(userId, { workItemId: workId, expectedRevision: saved.revision, reason: "اختبار المقارنة" });
     const [user] = await db.select().from(users).where(eq(users.id, userId));
     const caller = reviewSupportRouter.createCaller({ user, req: {} as any, res: {} as any });

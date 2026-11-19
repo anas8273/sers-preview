@@ -15,6 +15,8 @@ import {
 } from "../drizzle/domain-core";
 import { createAssetForUser, createWorkItemForUser, linkAssetToWorkForUser } from "./domain-db";
 import { getDb } from "./db";
+import { assertDisposableMySQL, clearDisposableAcademicFixtures } from "../tests/fixtures/assert-disposable-mysql";
+import { reportDraftSaveInput } from "../tests/fixtures/report-draft-contract";
 import {
   createReportDraftVersionForUser,
   getReportDraftForUser,
@@ -31,6 +33,7 @@ suite("server-backed report draft against real MySQL", () => {
   async function clean() {
     const db = await getDb();
     if (!db) throw new Error("Database not available");
+    await clearDisposableAcademicFixtures(db);
     await db.delete(reviewComments);
     await db.delete(reviews);
     await db.delete(outputs);
@@ -45,6 +48,7 @@ suite("server-backed report draft against real MySQL", () => {
   }
 
   beforeAll(async () => {
+    assertDisposableMySQL();
     const db = await getDb();
     if (!db) throw new Error("Database not available");
     await clean();
@@ -61,10 +65,8 @@ suite("server-backed report draft against real MySQL", () => {
     const initial = await getReportDraftForUser(userId, work!.id);
     expect(initial?.draft.revision).toBe(0);
 
-    const saved = await saveReportDraftForUser(userId, {
+    const saved = await saveReportDraftForUser(userId, reportDraftSaveInput(initial!.draft, {
       workItemId: work!.id,
-      expectedRevision: 0,
-      templateId: "program-report",
       themeId: "classic",
       fontFamily: "Cairo",
       fields: {
@@ -72,52 +74,49 @@ suite("server-backed report draft against real MySQL", () => {
         objectives: "هدف أول",
       },
       evidenceAssetIds: [],
-    });
+      expectedRevision: initial!.draft.revision,
+    }));
     expect(saved.revision).toBe(1);
 
     const reloaded = await getReportDraftForUser(userId, work!.id);
     expect(reloaded?.draft.fields.summary).toBe("ملخص محفوظ في الخادم");
     expect(reloaded?.draft.revision).toBe(1);
 
-    await expect(saveReportDraftForUser(userId, {
+    await expect(saveReportDraftForUser(userId, reportDraftSaveInput(saved, {
       workItemId: work!.id,
       expectedRevision: 0,
-      templateId: "program-report",
-      themeId: "classic",
-      fontFamily: "Cairo",
       fields: { summary: "كتابة قديمة" },
       evidenceAssetIds: [],
-    })).rejects.toBeInstanceOf(ReportDraftConflictError);
+    }))).rejects.toBeInstanceOf(ReportDraftConflictError);
   });
 
   it("keeps only evidence already linked to the report work", async () => {
     const work = await createWorkItemForUser(userId, { title: "Evidence Report", type: "report" });
+    const initial = (await getReportDraftForUser(userId, work!.id))!;
     const linkedAsset = await createAssetForUser(userId, { title: "Linked", kind: "text", metadata: { text: "proof" } });
     const unlinkedAsset = await createAssetForUser(userId, { title: "Unlinked", kind: "text", metadata: { text: "other" } });
     await linkAssetToWorkForUser(userId, { workItemId: work!.id, assetId: linkedAsset!.id });
 
-    const saved = await saveReportDraftForUser(userId, {
+    const saved = await saveReportDraftForUser(userId, reportDraftSaveInput(initial.draft, {
       workItemId: work!.id,
-      expectedRevision: 0,
-      templateId: "custom",
       themeId: "classic",
       fontFamily: "Cairo",
       fields: { summary: "Evidence filter" },
       evidenceAssetIds: [linkedAsset!.id, unlinkedAsset!.id],
-    });
+      expectedRevision: initial.draft.revision,
+    }));
     expect(saved.evidenceAssetIds).toEqual([linkedAsset!.id]);
   });
 
   it("serializes concurrent saves so only one writer can use a revision", async () => {
     const work = await createWorkItemForUser(userId, { title: "Concurrent Draft", type: "report" });
-    const baseInput = {
+    const initial = (await getReportDraftForUser(userId, work!.id))!;
+    const baseInput = reportDraftSaveInput(initial.draft, {
       workItemId: work!.id,
-      expectedRevision: 0,
-      templateId: "custom",
-      themeId: "classic",
-      fontFamily: "Cairo",
       evidenceAssetIds: [] as number[],
-    };
+      expectedRevision: initial.draft.revision,
+      fields: {},
+    });
     const results = await Promise.allSettled([
       saveReportDraftForUser(userId, { ...baseInput, fields: { summary: "Writer A" } }),
       saveReportDraftForUser(userId, { ...baseInput, fields: { summary: "Writer B" } }),
@@ -128,17 +127,17 @@ suite("server-backed report draft against real MySQL", () => {
 
   it("creates an authoritative version from the saved server draft and linked assets", async () => {
     const work = await createWorkItemForUser(userId, { title: "Versioned Report", type: "report" });
+    const initial = (await getReportDraftForUser(userId, work!.id))!;
     const asset = await createAssetForUser(userId, { title: "Version Evidence", kind: "link", externalUrl: "https://example.com/evidence" });
     await linkAssetToWorkForUser(userId, { workItemId: work!.id, assetId: asset!.id });
-    const saved = await saveReportDraftForUser(userId, {
+    const saved = await saveReportDraftForUser(userId, reportDraftSaveInput(initial.draft, {
       workItemId: work!.id,
-      expectedRevision: 0,
-      templateId: "visit-report",
       themeId: "formal",
       fontFamily: "Cairo",
       fields: { summary: "نسخة سلطوية", results: "نتيجة" },
       evidenceAssetIds: [asset!.id],
-    });
+      expectedRevision: initial.draft.revision,
+    }));
 
     const version = await createReportDraftVersionForUser(userId, {
       workItemId: work!.id,

@@ -18,9 +18,9 @@ const operationInputs = [
   ["ai", "analyzeGaps", { coveredIndicators: [], totalIndicators: 2 }],
   ["genAI", "fillReport", { templateName: "تقرير", fields: [{ id: "topic", label: "الموضوع", type: "text" }] }],
   ["genAI", "generateRadio", { theme: "العلم", segments: ["مقدمة"] }],
-  ["genAI", "generateCV", { name: "اسم اصطناعي", jobTitle: "معلم" }],
+  ["genAI", "generateCV", { name: "اسم اصطناعي", jobTitle: "معلم", privacyConfirmation: { policyVersion: "ai-data-minimization-v1", purpose: "draft-cv-wording", acknowledged: true } }],
   ["genAI", "generateExamQuestions", { subject: "رياضيات", grade: "رابع", questionTypes: ["multiple-choice"], count: 1 }],
-  ["genAI", "extractGradesFromImage", { imageData: aiPngDataUrl, maxScore: 100 }],
+  ["genAI", "extractGradesFromImage", { imageData: aiPngDataUrl, maxScore: 100, privacyConfirmation: { policyVersion: "ai-data-minimization-v1", purpose: "synthetic-grade-image-test", acknowledged: true } }],
   ["genAI", "generatePortfolioContent", { section: "أهداف", jobTitle: "معلم" }],
 ] as const;
 beforeEach(() => { vi.clearAllMocks(); configureAiTestEnvironment(); });
@@ -55,9 +55,47 @@ describe("AI procedure admission", () => {
     await expect(appRouter.createCaller(aiTestContext()).ai.suggest({ prompt: "فكرة" })).rejects.toMatchObject({ code: "PRECONDITION_FAILED" });
     expect(reserveAiRequest).not.toHaveBeenCalled(); expect(model).not.toHaveBeenCalled();
   });
+  it("denies CV without versioned API confirmation before reservation or provider", async () => {
+    await expect(appRouter.createCaller(aiTestContext()).genAI.generateCV({ jobTitle: "معلم" }))
+      .rejects.toMatchObject({ code: "PRECONDITION_FAILED" });
+    expect(reserveAiRequest).not.toHaveBeenCalled(); expect(model).not.toHaveBeenCalled();
+  });
+  it("denies an unapproved student sheet before durable reservation or provider work", async () => {
+    vi.stubEnv("SERS_AI_DATA_POLICY_APPROVED_VERSION", "");
+    await expect(appRouter.createCaller(aiTestContext()).genAI.extractGradesFromImage({ imageData: aiPngDataUrl, maxScore: 100,
+      privacyConfirmation: { policyVersion: "ai-data-minimization-v1", purpose: "synthetic-grade-image-test", acknowledged: true } })).rejects.toMatchObject({ code: "PRECONDITION_FAILED" });
+    expect(reserveAiRequest).not.toHaveBeenCalled(); expect(model).not.toHaveBeenCalled();
+  });
+  it("denies an unapproved classifier image before durable reservation or provider work", async () => {
+    vi.stubEnv("SERS_AI_DATA_POLICY_APPROVED_VERSION", "");
+    await expect(appRouter.createCaller(aiTestContext()).ai.classifyEvidence({ criteriaList: aiTaxonomy, fileUrl: aiPngDataUrl,
+      privacyConfirmation: { policyVersion: "ai-data-minimization-v1", purpose: "synthetic-grade-image-test", acknowledged: true } })).rejects.toMatchObject({ code: "PRECONDITION_FAILED" });
+    expect(reserveAiRequest).not.toHaveBeenCalled(); expect(model).not.toHaveBeenCalled();
+  });
+  it("allows a classifier image only with matching versioned approval and user acknowledgement", async () => {
+    respond({ standardId: "std-1", standardNumber: 1, standardName: "معيار", indicatorIndex: 1, indicatorText: "مؤشر", subIndicatorIndex: 0,
+      subIndicatorText: "", confidence: 0.8, reasoning: "اقتراح", contentDescription: "وصف", suggestedPriority: "supporting", suggestedKeywords: [] });
+    const result = await appRouter.createCaller(aiTestContext()).ai.classifyEvidence({ criteriaList: aiTaxonomy, fileUrl: aiPngDataUrl,
+      privacyConfirmation: { policyVersion: "ai-data-minimization-v1", purpose: "synthetic-grade-image-test", acknowledged: true } });
+    expect(result.success).toBe(true);
+    expect(reserveAiRequest).toHaveBeenCalledTimes(1); expect(model).toHaveBeenCalledTimes(1);
+    expect((model.mock.calls[0][0] as any).messages[1].content).toEqual(expect.arrayContaining([expect.objectContaining({ type: "image_url" })]));
+  });
 });
 
 describe("AI structured output validation", () => {
+  it("sends minimized CV drafting context and never raw local identity to the provider", async () => {
+    respond({ summary: "مسودة", experience: [], education: [], skills: [], courses: [], achievements: [] });
+    const raw = { name: "معلم سري", fullName: "معلم سري", email: "teacher@example.com", phone: "0551234567", jobTitle: "معلم", experience: "معلم سري ذو خبرة واتصل ٠٥٥١٢٣٤٥٦٧", additionalInfo: "الهوية 1234567890", privacyConfirmation: { policyVersion: "ai-data-minimization-v1", purpose: "draft-cv-wording", acknowledged: true as const } };
+    const result = await appRouter.createCaller(aiTestContext()).genAI.generateCV(raw);
+    expect(result.success).toBe(true);
+    const userMessage = (model.mock.calls[0][0] as any).messages[1].content as string;
+    expect(userMessage).not.toContain("معلم سري");
+    expect(userMessage).not.toContain("teacher@example.com");
+    expect(userMessage).not.toContain("0551234567");
+    expect(userMessage).not.toContain("1234567890");
+    expect(userMessage).toContain("الهوية محجوبة محليًا");
+  });
   it("marks empty, overlong and truncated plaintext as unsuccessful and preserves the original edit", async () => {
     model.mockResolvedValueOnce({ choices: [{ message: { content: { unexpected: true } } }] } as any);
     const caller = appRouter.createCaller(aiTestContext());
@@ -76,7 +114,7 @@ describe("AI structured output validation", () => {
   });
   it.each([105, -1, "98", null])("does not coerce or clamp an uncertain provider grade %j", async score => {
     respond({ students: [{ name: "طالب اصطناعي", score }], unreadableNote: "" });
-    const result = await appRouter.createCaller(aiTestContext()).genAI.extractGradesFromImage({ imageData: aiPngDataUrl, maxScore: 100 });
+    const result = await appRouter.createCaller(aiTestContext()).genAI.extractGradesFromImage({ imageData: aiPngDataUrl, maxScore: 100, privacyConfirmation: { policyVersion: "ai-data-minimization-v1", purpose: "synthetic-grade-image-test", acknowledged: true } });
     expect(result.success).toBe(false); expect(result.students).toEqual([]);
   });
   it("returns the actual multiple-choice answer index, never a default first answer", async () => {

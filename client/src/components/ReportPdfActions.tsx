@@ -17,12 +17,8 @@ import { compareReportDraftToVersion } from "@shared/report-stale";
 type PdfArtifact = {
   type: "pdf" | "docx";
   outputId: number;
-  workId: number;
   workVersionId: number;
   versionNumber: number;
-  rendererVersion: number;
-  storageKey: string;
-  contentHash?: string;
   fileSize?: number;
   filename: string;
   downloadUrl: string;
@@ -197,9 +193,6 @@ function ReportArtifactSession({ workId }: { workId: number }) {
                         <p className="mt-1 break-all text-[10px] leading-5 text-emerald-700">
                           {artifact.reused ? "تم استخدام المخرج السابق نفسه دون إعادة إنشاء." : "تم إنشاء المخرج وتثبيت بصمته."}
                         </p>
-                        {artifact.contentHash && (
-                          <p className="mt-1 truncate font-mono text-[9px] text-emerald-700" title={artifact.contentHash}>SHA-256: {artifact.contentHash}</p>
-                        )}
                         {formatBytes(artifact.fileSize) && <p className="mt-1 text-[10px] text-emerald-700">الحجم: {formatBytes(artifact.fileSize)}</p>}
                       </div>
                     </div>

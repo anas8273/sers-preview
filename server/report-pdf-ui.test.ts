@@ -27,8 +27,10 @@ describe("report WorkVersion PDF controls", () => {
     expect(panelSource).not.toContain("innerHTML");
   });
 
-  it("shows artifact integrity and requires an explicit user download", () => {
-    expect(panelSource).toContain("SHA-256:");
+  it("keeps artifact integrity internal and requires an explicit user download", () => {
+    expect(panelSource).not.toContain("SHA-256:");
+    expect(panelSource).not.toContain("contentHash");
+    expect(panelSource).not.toContain("storageKey");
     expect(panelSource).toContain('target="_blank"');
     expect(panelSource).toContain('rel="noreferrer"');
     expect(panelSource).toContain("تحديث رابط التنزيل");

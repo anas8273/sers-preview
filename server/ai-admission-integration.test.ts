@@ -3,6 +3,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { eq, inArray, sql } from "drizzle-orm";
 import { aiProviderState, aiRequestBudgets, aiRequests } from "../drizzle/ai";
 import { users } from "../drizzle/schema";
+import { assertDisposableMySQL } from "../tests/fixtures/assert-disposable-mysql";
 import { getDb } from "./db";
 import { AiAdmissionError, finishAiRequest, reserveAiRequest } from "./ai-admission-db";
 import { type AiLimits } from "./ai-policy";
@@ -13,8 +14,7 @@ suite.sequential("durable AI admission under concurrency on disposable MySQL", (
   const userIds: number[] = [];
   const limits: AiLimits = { userDaily: 50, globalDaily: 100, userMinute: 60, userConcurrency: 4, globalConcurrency: 8 };
   async function guard() {
-    expect(process.env.GITHUB_ACTIONS).toBe("true");
-    expect(process.env.DATABASE_URL).toBe("mysql://root:root@127.0.0.1:3306/sers_test");
+    assertDisposableMySQL();
     const [rows] = await db.execute(sql`SELECT DATABASE() AS name, VERSION() AS version`);
     expect((rows as unknown as Array<{ name: string; version: string }>)[0]).toMatchObject({ name: "sers_test", version: expect.stringMatching(/^8\.4\./) });
   }
@@ -25,7 +25,7 @@ suite.sequential("durable AI admission under concurrency on disposable MySQL", (
   const reserve = (userId = userIds[0], overrides: Partial<AiLimits> = {}) => reserveAiRequest({ userId, operation: "suggest", limits: { ...limits, ...overrides } });
   const finish = (requestId: string) => finishAiRequest({ requestId, outcome: "succeeded", providerInvoked: true, returnedModel: "gemini-2.5-flash", promptTokens: 10, completionTokens: 5 });
   beforeAll(async () => {
-    if (process.env.GITHUB_ACTIONS !== "true" || process.env.DATABASE_URL !== "mysql://root:root@127.0.0.1:3306/sers_test") throw new Error("AI admission proof requires disposable CI MySQL");
+    assertDisposableMySQL();
     const database = await getDb(); expect(database).not.toBeNull(); db = database!; await guard();
     for (let index = 0; index < 3; index++) {
       const [inserted] = await db.insert(users).values({ openId: `ai-admission-${randomUUID()}` }); userIds.push(Number(inserted.insertId));

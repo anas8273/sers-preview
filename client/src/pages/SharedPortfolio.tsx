@@ -653,19 +653,21 @@ export default function SharedPortfolio() {
                 </CardHeader>
                 <CardContent className="p-4">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {files.map((file: any) => (
-                      <a key={file.id} href={file.url} target="_blank" rel="noopener noreferrer"
-                        className="flex items-center gap-3 p-3 rounded-xl border border-gray-100 hover:bg-blue-50/50 hover:border-blue-200 transition-all group">
-                        <div className="w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center group-hover:bg-blue-100 transition-colors">
+                    {files.map((file: any) => {
+                      return (
+                        <div key={file.id} className="flex items-center gap-3 p-3 rounded-xl border border-gray-100 bg-gray-50/70">
+                        <div className="w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center">
                           {file.mimeType?.startsWith("image/") ? <Image className="w-5 h-5 text-blue-500" /> : <FileText className="w-5 h-5 text-orange-500" />}
                         </div>
                         <div className="min-w-0 flex-1">
                           <p className="text-sm font-medium text-gray-900 truncate">{file.originalName}</p>
                           <p className="text-xs text-gray-500">{file.mimeType}</p>
+                          <p className="text-[10px] text-gray-400">التنزيل غير متاح من الرابط العام</p>
                         </div>
-                        <Download className="w-4 h-4 text-gray-300 group-hover:text-blue-500 transition-colors" />
-                      </a>
-                    ))}
+                        <span className="text-[10px] text-gray-400">أصل خاص</span>
+                        </div>
+                      );
+                    })}
                   </div>
                 </CardContent>
               </Card>

@@ -32,6 +32,9 @@ function normalizeSnapshot(value: unknown) {
   if (snapshot.assets && (!Array.isArray(snapshot.assets) || snapshot.assets.length > 100)) throw new Error("Too many report evidence entries");
   return snapshot;
 }
+function normalizeFrozenDraft(value: Record<string, unknown>) {
+  return normalizeReportDraft(value);
+}
 function formatSnapshotDate(value?: string) {
   if (!value || !Number.isFinite(Date.parse(value))) return "غير محدد";
   return new Intl.DateTimeFormat("ar-SA", { calendar: "gregory", year: "numeric", month: "long", day: "numeric", timeZone: "UTC" }).format(new Date(value));
@@ -42,12 +45,14 @@ function formatSnapshotDate(value?: string) {
  * source URLs and storage keys are never fetched or included. */
 export function renderReportWorkVersionHtml(snapshotValue: unknown, versionNumber: number) {
   if (!Number.isSafeInteger(versionNumber) || versionNumber < 1) throw new Error("Invalid version number");
-  const snapshot = normalizeSnapshot(snapshotValue), draft = normalizeReportDraft(snapshot.reportDraft!);
-  const model = projectReportDocument({ reportDraft: snapshot.reportDraft!, assets: snapshot.assets });
+  const snapshot = normalizeSnapshot(snapshotValue), draft = normalizeFrozenDraft(snapshot.reportDraft!);
+  const model = projectReportDocument({ reportDraft: draft, assets: snapshot.assets });
   const title = escapeHtml(text(snapshot.work!.title, 255) || "تقرير بدون عنوان");
   const templateLabel = escapeHtml(model.template.label);
   const color = THEME_COLORS[draft.themeId] || THEME_COLORS.classic;
-  const font = ["Arial", "Cairo", "Tajawal"].includes(draft.fontFamily) ? draft.fontFamily : "Cairo";
+  const supportedFonts = ["Arial", "Cairo", "Tajawal", "Noto Kufi Arabic"] as const;
+  if (!supportedFonts.includes(draft.fontFamily as typeof supportedFonts[number])) throw new Error(`Unsupported report font: ${draft.fontFamily}`);
+  const font = draft.fontFamily;
   const date = escapeHtml(formatSnapshotDate(snapshot.capturedAt || (snapshot.reportDraft?.updatedAt as string | undefined)));
   // Numeric ranges need their own LTR isolate inside an otherwise Arabic label.
   const year = escapeHtml(text(snapshot.academicContext?.yearLabel, 100)).replace(/[0-9٠-٩]+(?:[-–—/][0-9٠-٩]+)+/g, range => `<bdi dir="ltr">${range}</bdi>`);

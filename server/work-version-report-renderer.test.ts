@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { renderReportWorkVersionHtml } from "./work-version-report-renderer";
+import { getReportTemplate } from "../shared/report-projection";
 
 const snapshot = {
   schemaVersion: 1,
@@ -36,7 +37,7 @@ describe("immutable report version renderer", () => {
     const second = renderReportWorkVersionHtml(snapshot, 3);
     expect(first).toBe(second);
     expect(first).toContain("نسخة 3");
-    expect(first).toContain("تقرير برنامج");
+    expect(first).toContain(getReportTemplate("program-report").label);
   });
 
   it("escapes user-controlled HTML instead of executing active content", () => {

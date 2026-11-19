@@ -189,6 +189,19 @@ function frozenFieldDefinitions(value: unknown): readonly ReportFieldDefinition[
   return result;
 }
 
+function frozenTemplate(templateId: string, fields: readonly ReportFieldDefinition[]): ReportTemplateDefinition {
+  const compatibilityHint = REPORT_TEMPLATE_DEFINITIONS[templateId];
+  return {
+    id: templateId,
+    // A historical template may no longer exist in the live registry. Its
+    // persisted label/fields remain authoritative; the id is only a safe
+    // fallback label for older snapshots that did not persist one separately.
+    label: compatibilityHint?.label ?? templateId,
+    version: compatibilityHint?.version ?? 0,
+    fields,
+  };
+}
+
 export function getReportTemplate(templateId: string): ReportTemplateDefinition {
   const template = REPORT_TEMPLATE_DEFINITIONS[templateId];
   if (!template) throw new ReportDocumentValidationError(`Unknown report template: ${templateId}`);
@@ -203,10 +216,13 @@ export function normalizeReportDraft(value: unknown, options: { allowLegacy?: bo
     throw new ReportDocumentValidationError(`Unsupported report schema version: ${sourceSchemaVersion}`);
   }
   const templateId = typeof input.templateId === "string" ? input.templateId : "custom";
-  const template = getReportTemplate(templateId);
-  if (input.templateVersionId !== undefined && input.templateVersionId !== `${template.id}@${template.version}`) {
-    throw new ReportDocumentValidationError("Report template version is not compatible");
-  }
+  const template = sourceSchemaVersion === 1 ? getReportTemplate(templateId) : undefined;
+  const templateVersionId = sourceSchemaVersion === REPORT_SCHEMA_VERSION
+    ? typeof input.templateVersionId === "string" && input.templateVersionId.trim().length > 0 && input.templateVersionId.length <= 128
+      ? input.templateVersionId
+      : undefined
+    : `${template!.id}@${template!.version}`;
+  if (!templateVersionId) throw new ReportDocumentValidationError("Schema v2 requires its original template version");
   const themeId = typeof input.themeId === "string" ? input.themeId : "classic";
   if (!REPORT_THEME_OPTIONS.some(option => option.id === themeId)) throw new ReportDocumentValidationError(`Unknown report theme: ${themeId}`);
   const fontFamily = typeof input.fontFamily === "string" ? input.fontFamily : "Cairo";
@@ -216,7 +232,7 @@ export function normalizeReportDraft(value: unknown, options: { allowLegacy?: bo
   // A v2 snapshot is historical data and must carry its own complete contract.
   const definitionsList = sourceSchemaVersion === REPORT_SCHEMA_VERSION
     ? frozenFieldDefinitions(input.fieldDefinitions)
-    : template.fields;
+    : template!.fields;
   const definitions = new Map(definitionsList.map(field => [field.key, field]));
   const fields: Record<string, ReportFieldValue> = {};
   for (const [key, raw] of Object.entries(rawFields)) {
@@ -231,7 +247,7 @@ export function normalizeReportDraft(value: unknown, options: { allowLegacy?: bo
   return {
     schemaVersion: REPORT_SCHEMA_VERSION,
     templateId,
-    templateVersionId: `${template.id}@${template.version}`,
+    templateVersionId,
     themeId,
     fontFamily,
     fields,
@@ -296,7 +312,9 @@ export function projectReportDocument(input: { reportDraft: unknown; assets?: Re
     .map(definition => ({ key: definition.key, label: definition.label, type: definition.type, value: draft.fields[definition.key] }))
     .filter((field): field is ReportDocumentModel["fields"][number] => field.value !== undefined && field.value !== "" && (!Array.isArray(field.value) || field.value.length > 0));
   const selected = new Set(draft.evidenceAssetIds);
-  const template = getReportTemplate(draft.templateId);
+  const template = draft.migratedFromSchemaVersion === 1
+    ? getReportTemplate(draft.templateId)
+    : frozenTemplate(draft.templateId, draft.fieldDefinitions);
   const evidence = (input.assets ?? []).filter(asset => selected.has(asset.id));
   for (const asset of evidence) assertFrozenEvidence(asset);
   return { schemaVersion: REPORT_SCHEMA_VERSION, template: { ...template, fields: draft.fieldDefinitions }, fields, evidence };

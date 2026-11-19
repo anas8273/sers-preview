@@ -13,6 +13,13 @@ export const aiClassification = {
 };
 export function configureAiTestEnvironment() {
   vi.stubEnv("SERS_AI_ENABLED", "1");
+  vi.stubEnv("SERS_AI_DATA_POLICY_ALLOW_FAKE", "1");
+  vi.stubEnv("SERS_AI_DATA_POLICY_APPROVED_VERSION", "ai-data-minimization-v1");
+  vi.stubEnv("SERS_AI_DATA_POLICY_SOURCE", "fake-test");
+  vi.stubEnv("SERS_AI_DATA_POLICY_PURPOSE", "synthetic-grade-image-test");
+  vi.stubEnv("SERS_AI_DATA_POLICY_PROVIDER", "manus-forge");
+  vi.stubEnv("SERS_AI_DATA_POLICY_REGION", "test-only");
+  vi.stubEnv("SERS_AI_DATA_POLICY_RETENTION", "test-only");
   vi.stubEnv("APP_PUBLIC_ORIGIN", "http://127.0.0.1:3000");
   vi.stubEnv("BUILT_IN_FORGE_API_URL", "https://provider.invalid");
   vi.stubEnv("BUILT_IN_FORGE_API_KEY", "synthetic-ai-test-key");

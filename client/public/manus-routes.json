@@ -37,6 +37,10 @@
       "title": "الحساب والمدرسة"
     },
     {
+      "path": "/catalog",
+      "title": "مكتبة الأدوات والخدمات"
+    },
+    {
       "path": "/performance-evidence"
     },
     {

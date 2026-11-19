@@ -19,6 +19,7 @@ import {
   linkAssetToWorkForUser,
 } from "./domain-db";
 import { getDb } from "./db";
+import { assertDisposableMySQL, clearDisposableAcademicFixtures } from "../tests/fixtures/assert-disposable-mysql";
 import { hashProtectedOutputPassword } from "./output-password";
 import {
   PublicOutputNotFoundError,
@@ -34,8 +35,10 @@ import {
 } from "./review-output-db";
 import {
   createReportDraftVersionForUser,
+  getReportDraftForUser,
   saveReportDraftForUser,
 } from "./work-report-draft-db";
+import { reportDraftSaveInput } from "../tests/fixtures/report-draft-contract";
 
 const integrationEnabled = process.env.SERS_INTEGRATION === "1";
 const suite = integrationEnabled ? describe : describe.skip;
@@ -49,6 +52,7 @@ suite("public and protected WorkVersion outputs against real MySQL", () => {
   async function clean() {
     const db = await getDb();
     if (!db) throw new Error("Database not available");
+    await clearDisposableAcademicFixtures(db);
     await db.delete(reviewComments);
     await db.delete(reviews);
     await db.delete(outputs);
@@ -63,6 +67,7 @@ suite("public and protected WorkVersion outputs against real MySQL", () => {
   }
 
   beforeAll(async () => {
+    assertDisposableMySQL();
     const db = await getDb();
     if (!db) throw new Error("Database not available");
     await clean();
@@ -111,10 +116,9 @@ suite("public and protected WorkVersion outputs against real MySQL", () => {
     await linkAssetToWorkForUser(ownerId, { workItemId: work!.id, assetId: selected!.id, caption: "دليل التنفيذ المراجع" });
     await linkAssetToWorkForUser(ownerId, { workItemId: work!.id, assetId: unselected!.id });
 
-    const draft = await saveReportDraftForUser(ownerId, {
+    const initial = (await getReportDraftForUser(ownerId, work!.id))!;
+    const draft = await saveReportDraftForUser(ownerId, reportDraftSaveInput(initial.draft, {
       workItemId: work!.id,
-      expectedRevision: 0,
-      templateId: "program-report",
       themeId: "formal",
       fontFamily: "Cairo",
       fields: {
@@ -122,7 +126,8 @@ suite("public and protected WorkVersion outputs against real MySQL", () => {
         results: "نتيجة معتمدة",
       },
       evidenceAssetIds: [selected!.id],
-    });
+      expectedRevision: initial.draft.revision,
+    }));
     const version = await createReportDraftVersionForUser(ownerId, {
       workItemId: work!.id,
       expectedRevision: draft.revision,

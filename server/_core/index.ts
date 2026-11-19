@@ -35,6 +35,7 @@ type AuthenticatedRequest = Request & { authUser?: User };
 
 type RateBucket = { count: number; resetAt: number };
 const rateBuckets = new Map<string, RateBucket>();
+const MAX_RATE_BUCKETS = 10_000;
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -74,6 +75,18 @@ function rateLimit(name: string, maxRequests: number, windowMs: number) {
     const now = Date.now();
     const current = rateBuckets.get(key);
     const bucket = !current || current.resetAt <= now ? { count: 0, resetAt: now + windowMs } : current;
+    if (!current) {
+      // Reclaim expired entries, but never evict a live counter: eviction
+      // would reset an attacker's budget. A saturated process fails closed.
+      Array.from(rateBuckets.entries()).forEach(([oldKey, oldBucket]) => {
+        if (oldBucket.resetAt <= now) rateBuckets.delete(oldKey);
+      });
+      if (rateBuckets.size >= MAX_RATE_BUCKETS) {
+        res.setHeader("Retry-After", "1");
+        res.status(429).json({ error: "Too many requests" });
+        return;
+      }
+    }
     bucket.count += 1;
     rateBuckets.set(key, bucket);
 
@@ -186,7 +199,9 @@ async function startServer() {
         if (typeof imageBase64 !== "string" || imageBase64.length > 15_000_000) {
           throw new RemoteImageError("Image payload exceeds the size limit", 413);
         }
-        const { renderImageToDocx } = await import("../docx-renderer");
+        const { renderImageToDocx, validateDocxImageInput } = await import("../docx-renderer");
+        try { validateDocxImageInput(imageBase64, width, height); }
+        catch { throw new RemoteImageError("Invalid PNG image payload", 400); }
         docxBuffer = await withDocumentRenderBudget(async signal => {
           requireActive(signal);
           const bytes = await renderImageToDocx(imageBase64, width, height);
@@ -195,10 +210,13 @@ async function startServer() {
         }, RENDER_LIMITS.docxTimeoutMs);
       } else if (data) {
         assertPayloadSize(data, 5_000_000, "Structured DOCX data");
-        const { renderStructuredDocx } = await import("../docx-renderer");
+        const { renderStructuredDocx, validateStructuredDocxData } = await import("../docx-renderer");
+        let validatedData: Parameters<typeof renderStructuredDocx>[0];
+        try { validatedData = validateStructuredDocxData(data); }
+        catch { throw new RemoteImageError("Invalid structured DOCX data", 400); }
         docxBuffer = await withDocumentRenderBudget(async signal => {
           requireActive(signal);
-          const bytes = await renderStructuredDocx(data);
+          const bytes = await renderStructuredDocx(validatedData);
           requireActive(signal);
           return bytes;
         }, RENDER_LIMITS.docxTimeoutMs);

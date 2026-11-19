@@ -3,7 +3,7 @@ import { and, eq, isNotNull } from "drizzle-orm";
 import { outputs } from "../drizzle/domain-core";
 import { getDb } from "./db";
 import { renderHtmlToPdf } from "./pdf-renderer";
-import { createOutputForUser, getOutputForUser, getWorkVersionForUser } from "./review-output-db";
+import { createOutputForUser, getOutputRecordForUser, getWorkVersionForUser } from "./review-output-db";
 import { storageGet, storagePut } from "./output-artifact-storage";
 import { renderReportWorkVersionHtml } from "./work-version-report-renderer";
 import { renderReportWorkVersionDocx } from "./work-version-docx-renderer";
@@ -72,10 +72,10 @@ async function findRendererArtifact(userId: number, workVersionId: number, type:
   const [candidate] = await db.select({ id: outputs.id }).from(outputs).where(and(
     eq(outputs.workVersionId, workVersionId), eq(outputs.type, type), eq(outputs.visibility, "private"), eq(outputs.token, artifactToken(workVersionId, type)),
   )).limit(1);
-  return candidate ? getOutputForUser(userId, candidate.id) : undefined;
+  return candidate ? getOutputRecordForUser(userId, candidate.id) : undefined;
 }
 async function buildDownloadResult(userId: number, outputId: number, type: ArtifactType, dependencies: Pick<StorageDependencies, "getStorage">, reused: boolean, fileSize?: number) {
-  const output = await getOutputForUser(userId, outputId);
+  const output = await getOutputRecordForUser(userId, outputId);
   if (!output) return undefined;
   if (output.revokedAt) throw new OutputArtifactUnavailableError("Output has been revoked; create a new WorkVersion to generate a new artifact");
   if (output.expiresAt && output.expiresAt.getTime() <= Date.now()) throw new OutputArtifactUnavailableError("Output has expired");
@@ -88,13 +88,18 @@ async function buildDownloadResult(userId: number, outputId: number, type: Artif
   if (!version) return undefined;
   const snapshotTitle = (version.snapshot as { work?: { title?: unknown } }).work?.title;
   const title = typeof snapshotTitle === "string" ? snapshotTitle : output.workTitle;
-  const stored = await dependencies.getStorage(output.storageKey);
-  // getStorage may return an authenticated application route in a self-host setup.
-  return { outputId: output.id, workId: output.workId, workVersionId: output.workVersionId,
-    versionNumber: output.versionNumber, rendererVersion: actualRendererVersion, type,
-    storageKey: output.storageKey, contentHash: identity[1],
-    fileSize, filename: safeFileName(title, output.versionNumber, type), downloadUrl: dependencies.getStorage === storageGet && process.env.SERS_PRIVATE_STORAGE_DIR
-      ? `/api/work-outputs/${output.id}/download` : stored.url, reused,
+  // Read the private object only to prove it is available; never return its
+  // storage coordinate, hash, or provider URL to a browser client.
+  await dependencies.getStorage(output.storageKey);
+  return {
+    outputId: output.id,
+    workVersionId: output.workVersionId,
+    versionNumber: output.versionNumber,
+    type,
+    filename: safeFileName(title, output.versionNumber, type),
+    fileSize,
+    downloadUrl: `/api/work-outputs/${output.id}/download`,
+    reused,
   };
 }
 async function generateArtifact(userId: number, workVersionId: number, type: ArtifactType, dependencies: StorageDependencies,

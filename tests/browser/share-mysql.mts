@@ -204,6 +204,19 @@ test('reports retain the latest overlapping edit through reload, review, PDF, ed
     const [stored] = await db.select().from(outputs).where(eq(outputs.token, token));
     assert(stored); assert.equal(stored.workVersionId, version.id); assert.equal(stored.type, 'qr');
     assert.match(stored.passwordHash!, /^scrypt-v1\$/); assert.equal(stored.revokedAt, null);
+    const countBeforeRestore = (await db.select().from(outputs).where(eq(outputs.workVersionId, version.id))).length;
+    await page.reload(); await page.waitForSelector(summary);
+    const listResponse = page.waitForResponse(response => response.url().includes('domain.output.listForWork'));
+    await click('مشاركة النسخة');
+    const safeList = await (await listResponse).text();
+    assert(!safeList.includes(token)); assert(!safeList.includes('passwordHash'));
+    assert(!safeList.includes('storageKey')); assert(!safeList.includes('contentHash'));
+    await visible(`استعادة رابط المخرج #${stored.id}`);
+    await click(`استعادة رابط المخرج #${stored.id}`);
+    await visible('تم استعادة رابط مخرج محمي');
+    await page.waitForSelector('#report-share-actions img[src^="data:image/png"]');
+    assert.equal(await page.$eval('#report-share-actions a[target="_blank"]', a => (a as HTMLAnchorElement).href), url);
+    assert.equal((await db.select().from(outputs).where(eq(outputs.workVersionId, version.id))).length, countBeforeRestore);
     const visitorContext = await browser.createBrowserContext();
     const visitor = await visitorContext.newPage(); visitor.setDefaultTimeout(15_000);
     await visitor.goto(url);
@@ -213,7 +226,7 @@ test('reports retain the latest overlapping edit through reload, review, PDF, ed
     await visitor.click('form button[type=submit]');
     await visitor.waitForFunction(() => document.body.innerText.includes('BROWSER_MYSQL_APPROVED_CONTENT'));
     await click('إلغاء المخرج');
-    await page.waitForFunction(() => !document.body.innerText.includes('تم إنشاء مخرج محمي'));
+    await page.waitForFunction(() => !document.querySelector('#report-share-actions a[target="_blank"]'));
     const [revoked] = await db.select().from(outputs).where(eq(outputs.id, stored.id)); assert(revoked.revokedAt);
     await visitor.reload();
     await visitor.waitForFunction(() => document.body.innerText.includes('المخرج غير متاح'));

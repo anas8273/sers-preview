@@ -4,7 +4,7 @@ import { mkdtemp, mkdir, rm, symlink, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { MAX_ARCHIVE_BYTES, assertRuntimeIdentity, candidateArtifactName, validateCandidate } from './candidate.mjs';
-import { assertOperationProofs, immutableReference, parseContainerInspection, parseContainerList, parseImageInspection, parseInspectionJson, producerFailureDiagnostic, producerFailureReason, producerFailureStage, PRODUCER_FAILURE_REASONS, readProducerIdentity, runProducerCommand } from './export-candidate.mjs';
+import { assertOperationProofs, immutableReference, inspectImage, parseContainerInspection, parseContainerList, parseImageInspection, parseImageInspectionJson, parseInspectionJson, producerFailureDiagnostic, producerFailureReason, producerFailureStage, producerFailureSubreason, PRODUCER_COMMAND_SUBREASONS, PRODUCER_FAILURE_REASONS, readProducerIdentity, runProducerCommand } from './export-candidate.mjs';
 
 const h = character => character.repeat(40), d = character => character.repeat(64);
 function fixture() {
@@ -71,8 +71,21 @@ test('producer diagnostics are stage-compatible and bounded to an allowlist', as
   ]);
   assert.equal(producerFailureDiagnostic({ producerStage: 'mysql-image', producerReason: 'image-json', message: 'secret SQL stderr' }), 'mysql-image:image-json');
   assert.equal(producerFailureDiagnostic({ producerStage: 'mysql-image', producerReason: 'stderr-secret' }), 'mysql-image:verification-failed');
+  assert.deepEqual(PRODUCER_COMMAND_SUBREASONS, ['code', 'noimage', 'template', 'timeout', 'exit', 'buffer']);
+  assert.equal(producerFailureDiagnostic({ producerStage: 'mysql-image', producerReason: 'image-command', producerSubreason: 'timeout', message: 'secret SQL stderr' }), 'mysql-image:image-command:timeout');
+  assert.equal(producerFailureSubreason({ producerSubreason: 'SECRET' }), undefined);
   assert.equal(producerFailureStage({ producerStage: 'raw-secret-value' }), 'context');
   assert.equal(producerFailureReason({ producerReason: 'raw-secret-value' }), 'verification-failed');
+  for (const [cause, subreason] of [
+    [{ code: 'ENOENT', stderr: 'SECRET=not-public' }, 'code'],
+    [{ code: 1, stderr: 'Error response from daemon: No such image: mysql' }, 'noimage'],
+    [{ code: 1, stderr: 'template parsing error: secret SQL' }, 'template'],
+    [{ code: 'ETIMEDOUT', stderr: 'DATABASE_URL=private' }, 'timeout'],
+    [{ code: 1, stderr: 'exit status; token=private' }, 'exit'],
+    [{ code: 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER', stderr: 'secret output' }, 'buffer'],
+  ]) {
+    await assert.rejects(runProducerCommand('docker', [], { failureReason: 'image-command' }, async () => { throw cause; }), error => producerFailureSubreason(error) === subreason && !error.message.includes('SECRET') && !error.message.includes('SQL') && !error.message.includes('DATABASE_URL'));
+  }
   await assert.rejects(
     runProducerCommand('docker', [], { failureReason: 'container-command' }, async () => { throw new Error('stderr SECRET SQL'); }),
     error => producerFailureReason(error) === 'container-command' && !error.message.includes('SECRET') && !error.message.includes('SQL'),
@@ -88,6 +101,20 @@ test('inspection JSON and container count boundaries classify malformed and ambi
     const expected = output === 'not-a-container' ? 'container-identity' : 'container-ambiguous-count';
     assert.throws(() => parseContainerList(output), error => producerFailureReason(error) === expected);
   }
+});
+test('image inspection uses raw JSON and pins the tested platform without exposing metadata', async () => {
+  const imageId = `sha256:${d('a')}`;
+  const calls = [];
+  const raw = [{ Id: imageId, Os: 'linux', Architecture: 'amd64', Config: { Labels: null, Env: ['DATABASE_URL=must-not-be-returned'] }, RepoDigests: [`mysql@sha256:${d('b')}`] }];
+  const info = await inspectImage(imageId, async (binary, args, options) => { calls.push({ binary, args, options }); return JSON.stringify(raw); });
+  assert.equal(info.id, imageId);
+  assert.deepEqual(info.digests, raw[0].RepoDigests);
+  assert.equal(info.labels, null);
+  assert.deepEqual(calls[0].args, ['image', 'inspect', '--platform', 'linux/amd64', imageId]);
+  assert.equal(calls[0].options.failureReason, 'image-command');
+  assert.equal(info.env, undefined);
+  assert.throws(() => parseImageInspectionJson(JSON.stringify([{ ...raw[0], Architecture: 'arm64' }]), imageId), error => producerFailureReason(error) === 'image-platform');
+  assert.throws(() => parseImageInspectionJson('{}', imageId), error => producerFailureReason(error) === 'image-json');
 });
 test('image identity, platform and metadata diagnostics remain separate', () => {
   const imageId = `sha256:${d('a')}`;

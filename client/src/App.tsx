@@ -37,6 +37,7 @@ const SmartCV = lazy(() => import("./pages/SmartCV"));
 const ExamBuilder = lazy(() => import("./pages/ExamBuilder"));
 const SharedOnlineExam = lazy(() => import("./pages/SharedOnlineExam"));
 const AuditLog = lazy(() => import("./pages/AuditLog"));
+const CatalogPage = lazy(() => import("./pages/CatalogPage"));
 
 function LoadingFallback() {
   return (
@@ -62,6 +63,7 @@ function Router() {
         <Route path={"/reviews"} component={ReviewsHub} />
         <Route path={"/notifications"} component={NotificationsHub} />
         <Route path={"/account"} component={AccountHub} />
+        <Route path={"/catalog"} component={CatalogPage} />
 
         {/* Existing capabilities stay available during migration, but are no longer the product IA. */}
         <Route path={"/performance-evidence"} component={PerformanceEvidence} />

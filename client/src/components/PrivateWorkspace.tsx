@@ -5,6 +5,7 @@ import { useLocation } from "wouter";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { getLoginUrl } from "@/const";
 import { onRemoteAuthChange, privateLocalStorage } from "@/lib/private-browser-storage";
+import { resetUserStoreForAuthTransition, useUserStore } from "@/stores/userStore";
 
 export function isPrivateWorkspacePath(path: string) {
   return !(path === "/" || path === "/store" || path === "/404" || /^\/(output|share|exam|shared-template)\//.test(path));
@@ -34,7 +35,11 @@ function AuthenticatedWorkspace({ children, required }: { children: ReactNode; r
   useEffect(() => {
     let cancelled = false;
     const controller = new AbortController();
-    setReady(null); setStorageError(""); privateLocalStorage.lock();
+    setReady(null); setStorageError("");
+    // Clear the previous actor synchronously; never let Zustand's readable
+    // state survive while the next actor's scope is being opened.
+    resetUserStoreForAuthTransition();
+    privateLocalStorage.lock();
     void (async () => {
       // Do not cancel public queries during the first anonymous/auth lookup.
       // Only a previously established account can leave private query data.
@@ -52,9 +57,11 @@ function AuthenticatedWorkspace({ children, required }: { children: ReactNode; r
       const body = await response.json();
       if (cancelled) return;
       await privateLocalStorage.unlock(body.result?.data?.json);
+      if (cancelled) return;
+      await useUserStore.persist.rehydrate();
       if (!cancelled) setReady(user.id);
     })().catch(error => { if (!cancelled) setStorageError(error instanceof Error ? error.message : "تعذر فتح مساحة العمل"); });
-    return () => { cancelled = true; controller.abort(); privateLocalStorage.lock(); };
+    return () => { cancelled = true; controller.abort(); resetUserStoreForAuthTransition(); privateLocalStorage.lock(); };
   }, [user?.id, attempt, queryClient]);
   if (typeof previousUser.current === "number" && previousUser.current !== user?.id) return <div dir="rtl" className="p-10 text-center">جارٍ تبديل الحساب...</div>;
   if (!required) return <div key={cacheEpoch}>{children}</div>;
@@ -89,6 +96,7 @@ export default function PrivateWorkspace({ children }: { children: ReactNode }) 
       document.documentElement.style.visibility = "hidden";
       // This immediately invalidates the readable key and records. The old
       // account can only contribute ciphertext to the bounded recovery buffer.
+      resetUserStoreForAuthTransition();
       const preservation = privateLocalStorage.suspendForAuthChange();
       setSuspended("saving");
       void Promise.all([preservation, clearPrivateQueryCache(queryClient)])

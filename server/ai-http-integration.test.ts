@@ -2,6 +2,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
 import { PNG } from "pngjs";
 import { startAiHarness } from "../tests/fixtures/ai-http-harness";
+import { assertDisposableMySQL } from "../tests/fixtures/assert-disposable-mysql";
 
 const suite = process.env.SERS_INTEGRATION === "1" ? describe : describe.skip;
 const png = new PNG({ width: 1, height: 1 }); png.data.set([25, 150, 160, 255]);
@@ -19,7 +20,7 @@ const operations: Array<[string, unknown]> = [
   ["genAI.generateRadio", { theme: "القراءة", segments: ["المقدمة"] }],
   ["genAI.generateCV", { name: "حساب اصطناعي", jobTitle: "معلم" }],
   ["genAI.generateExamQuestions", { subject: "لغتي", grade: "الثالث", questionTypes: ["multiple-choice"], count: 1 }],
-  ["genAI.extractGradesFromImage", { imageData: image, maxScore: 100 }],
+  ["genAI.extractGradesFromImage", { imageData: image, maxScore: 100, privacyConfirmation: { policyVersion: "ai-data-minimization-v1", purpose: "synthetic-grade-image-test", acknowledged: true } }],
   ["genAI.generatePortfolioContent", { section: "الرؤية", jobTitle: "معلم" }],
 ];
 
@@ -29,9 +30,8 @@ suite.sequential("production AI HTTP admission against disposable MySQL and a sy
   const resetAiTables = async () => {
     // This suite runs alone. Guard the exact disposable database before touching
     // global circuit/budget rows; application code has no such reset endpoint.
+    assertDisposableMySQL();
     const [rows] = await harness.db.execute(sql`SELECT DATABASE() AS name, VERSION() AS version`);
-    expect(process.env.GITHUB_ACTIONS).toBe("true");
-    expect(process.env.DATABASE_URL).toBe("mysql://root:root@127.0.0.1:3306/sers_test");
     expect((rows as unknown as Array<{ name: string; version: string }>)[0]).toMatchObject({ name: "sers_test", version: expect.stringMatching(/^8\.4\./) });
     for (const table of ["ai_requests", "ai_request_budgets", "ai_provider_state"]) await harness.db.execute(sql`DELETE FROM ${sql.identifier(table)}`);
   };
@@ -49,6 +49,7 @@ suite.sequential("production AI HTTP admission against disposable MySQL and a sy
     expect(result.data).toBeUndefined();
   };
   beforeAll(async () => {
+    assertDisposableMySQL();
     harness = await startAiHarness({ env: { SERS_AI_USER_MINUTE_LIMIT: "5", SERS_AI_USER_DAILY_LIMIT: "5",
       SERS_AI_GLOBAL_DAILY_LIMIT: "300", SERS_AI_USER_CONCURRENCY: "2", SERS_AI_GLOBAL_CONCURRENCY: "8" } });
     identity = await harness.signIn();
@@ -174,7 +175,8 @@ suite.sequential("production AI HTTP admission against disposable MySQL and a sy
     const classification = await harness.rpc("ai.classifyEvidence", identity.cookie, { description: "مسودة", criteriaList: taxonomy });
     expect(classification.response.status).toBe(200); expect(classification.data).toMatchObject({ success: false, classification: null });
     harness.next("success", JSON.stringify({ students: [{ name: "طالب اصطناعي", score: 101 }], unreadableNote: "" }));
-    const grades = await harness.rpc("genAI.extractGradesFromImage", identity.cookie, { imageData: image, maxScore: 100 });
+    const grades = await harness.rpc("genAI.extractGradesFromImage", identity.cookie, { imageData: image, maxScore: 100,
+      privacyConfirmation: { policyVersion: "ai-data-minimization-v1", purpose: "synthetic-grade-image-test", acknowledged: true } });
     expect(grades.response.status).toBe(200); expect(grades.data).toMatchObject({ success: false, students: [] });
   });
 

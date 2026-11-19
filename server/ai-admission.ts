@@ -4,6 +4,7 @@ import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
 import { AiAdmissionError, finishAiRequest, reserveAiRequest } from "./ai-admission-db";
 import { remainingAiExecutionTimeMs, runWithAiExecution, type AiExecution } from "./ai-execution-context";
 import { aiAvailability, type AiOperation } from "./ai-policy";
+import { aiDataPolicyCapabilities, evaluateAiDataPolicy } from "./ai-data-policy";
 
 function unavailable() { return new TRPCError({ code: "SERVICE_UNAVAILABLE", message: "المساعد غير متاح الآن. يمكنك متابعة العمل يدويًا والمحاولة لاحقًا." }); }
 export function isAiRequestOrigin(origin: string | undefined) {
@@ -12,9 +13,20 @@ export function isAiRequestOrigin(origin: string | undefined) {
   try { const url = new URL(configured); return !url.username && !url.password && !url.search && !url.hash && url.pathname === "/" && origin === url.origin && (url.protocol === "https:" || (process.env.NODE_ENV !== "production" && url.protocol === "http:" && ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname))); } catch { return false; }
 }
 export function aiProcedure<T extends z.ZodTypeAny>(operation: AiOperation, schema: T) {
-  return protectedProcedure.input(schema).use(async ({ ctx, next }) => {
+  return protectedProcedure.input(schema).use(async ({ ctx, next, input }) => {
     if (!isAiRequestOrigin(ctx.req.headers.origin)) throw new TRPCError({ code: "FORBIDDEN", message: "مصدر الطلب غير صالح" });
     if (!aiAvailability(true).available) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "المساعد غير مفعّل لهذه البيئة. يمكنك متابعة العمل يدويًا." });
+    // Data policy is deliberately evaluated before durable budget admission.
+    // A denied image must not consume a request slot or reach the provider.
+    const dataPolicy = evaluateAiDataPolicy(operation, input);
+    if (!dataPolicy.allowed) {
+      throw new TRPCError({ code: "PRECONDITION_FAILED", message: dataPolicy.reason === "operator_policy_required"
+        ? operation === "classifyEvidence"
+          ? "تصنيف الصورة متوقف حتى يعتمد المشغل سياسة بيانات versioned؛ يمكنك تصنيف النص أو المتابعة يدويًا."
+          : "استيراد صورة كشف الدرجات متوقف حتى يعتمد المشغل سياسة بيانات versioned؛ يمكنك الإدخال أو الاستيراد اليدوي."
+        : dataPolicy.reason === "prepared_input_too_large" ? "سياق المسودة بعد تنقيح البيانات أكبر من الحد الآمن؛ اختصر النص أو تابع يدويًا."
+        : "أكد غرض معالجة البيانات والمعلومات التي سترسل قبل متابعة طلب المساعدة." });
+    }
     const started = performance.now();
     let admission: Awaited<ReturnType<typeof reserveAiRequest>>;
     try { admission = await reserveAiRequest({ userId: ctx.user.id, operation }); }
@@ -26,7 +38,7 @@ export function aiProcedure<T extends z.ZodTypeAny>(operation: AiOperation, sche
     let result: Awaited<ReturnType<typeof next>>;
     try { result = await runWithAiExecution(execution, () => {
       if (remainingAiExecutionTimeMs() <= 0) throw unavailable();
-      return next();
+      return next({ input: dataPolicy.sanitizedInput as z.infer<T> });
     }); }
     catch {
       try { await finishAiRequest({ ...execution, outcome: "failed", errorCode: "failed" }); } catch { /* Lease remains held until expiry. */ }
@@ -45,5 +57,5 @@ export function aiProcedure<T extends z.ZodTypeAny>(operation: AiOperation, sche
 
 export const aiAccessRouter = router({ status: publicProcedure.query(({ ctx }) => {
   ctx.res.setHeader?.("Cache-Control", "private, no-store");
-  return aiAvailability(Boolean(ctx.user));
+  return { ...aiAvailability(Boolean(ctx.user)), dataPolicy: aiDataPolicyCapabilities() };
 }) });
