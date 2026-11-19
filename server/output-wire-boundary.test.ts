@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import ts from "typescript";
 
 const reviewDb = readFileSync(resolve(process.cwd(), "server/review-output-db.ts"), "utf8");
 const outputService = readFileSync(resolve(process.cwd(), "server/work-version-output-service.ts"), "utf8");
@@ -9,8 +10,16 @@ const sharedPortfolio = readFileSync(resolve(process.cwd(), "client/src/pages/Sh
 
 describe("output wire boundary", () => {
   it("keeps reader/list projections free of bearer and private coordinates", () => {
-    expect(reviewDb).toContain("const { passwordHash: _passwordHash, storageKey: _storageKey, token: _token, ...safe } = row");
-    expect(reviewDb).toContain("return safe;");
+    const source = ts.createSourceFile("review-output-db.ts", reviewDb, ts.ScriptTarget.Latest, true);
+    const projection = source.statements.find((node): node is ts.FunctionDeclaration =>
+      ts.isFunctionDeclaration(node) && node.name?.text === "projectOutputForUser");
+    const returned = projection?.body?.statements.find(ts.isReturnStatement)?.expression;
+    expect(returned && ts.isObjectLiteralExpression(returned)).toBe(true);
+    if (!returned || !ts.isObjectLiteralExpression(returned)) throw Error("Missing explicit output allowlist");
+    expect(returned.properties.every(ts.isPropertyAssignment)).toBe(true);
+    const keys = returned.properties.map(property => property.name?.getText(source));
+    expect(keys.sort()).toEqual(["id", "workVersionId", "versionNumber", "workId", "workTitle", "type", "visibility", "createdByUserId", "createdAt", "expiresAt", "revokedAt"].sort());
+    for (const forbidden of ["token", "passwordHash", "storageKey", "contentHash", "metadata"]) expect(keys).not.toContain(forbidden);
     expect(reviewDb).toContain("getPublicationReceiptForUser");
     expect(reviewDb).toContain('assertWorkAccess(userId, row.workId, "write")');
   });
