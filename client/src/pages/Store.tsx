@@ -138,6 +138,7 @@ export default function Store() {
               <p className="text-white/80 text-sm mt-1">
                 {allItems.length} منتج رقمي تعليمي · {totalFree} مجاني · {totalPaid} مدفوع
               </p>
+              <p className="mt-2 text-xs text-white/70">كتالوج للعرض فقط حالياً؛ الشراء والتنزيل يحتاجان مزود دفع وتسليم منشورين.</p>
             </div>
           </div>
         </div>
@@ -280,14 +281,7 @@ export default function Store() {
                   {filteredItems.map(({ section, service }, index) => (
                     <div
                       key={service.id}
-                      className="bg-white rounded-xl border border-gray-100 overflow-hidden transition-all group cursor-pointer"
-                      onClick={() => {
-                        import("sonner").then(({ toast }) => {
-                          toast.info("المتجر قيد التجهيز", {
-                            description: `${service.title} — ${service.price > 0 ? service.price + " ر.س" : "مجاني"} — سيتوفر قريباً`,
-                          });
-                        });
-                      }}
+                      className="bg-white rounded-xl border border-gray-100 overflow-hidden transition-all group"
                     >
                       {/* Color bar */}
                       <div className="h-1.5" style={{ backgroundColor: section.color }} />
@@ -336,7 +330,7 @@ export default function Store() {
                               <Star className="w-3.5 h-3.5" /> مجاني
                             </span>
                           )}
-                          <span className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold bg-gray-100 text-gray-500">
+                          <span className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold bg-gray-100 text-gray-500" aria-label="الشراء والتنزيل غير منشورين">
                             <Clock className="w-3 h-3" /> قريباً
                           </span>
                         </div>

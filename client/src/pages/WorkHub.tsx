@@ -63,13 +63,21 @@ export default function WorkHub({ reportsOnly = false }: { reportsOnly?: boolean
               <p className="text-xs font-bold text-teal-700">مساحة العمل</p>
               <h1 className="mt-1 text-2xl font-black text-slate-950 sm:text-3xl" style={{ fontFamily: "'Tajawal', sans-serif" }}>{reportsOnly ? "التقارير" : "أعمالي"}</h1>
               {reportsOnly ? (
-                <Link href="/reports/legacy" className="mt-3 inline-flex items-center gap-1 text-sm font-bold text-teal-700 underline underline-offset-4">التقارير السابقة على هذا الجهاز <ArrowLeft className="h-4 w-4" /></Link>
+                <p className="mt-2 max-w-2xl text-sm leading-7 text-slate-500">هذا هو مدخل التقارير الخادمي الجديد: تُحفظ الأعمال والنسخ مع ملكيتها في مساحة العمل. تبقى المسودات القديمة على هذا الجهاز منفصلة ولا تُنقل تلقائيًا.</p>
               ) : <p className="mt-2 max-w-2xl text-sm leading-7 text-slate-500">التقارير وملفات الإنجاز لها نموذج عمل واحد، مع ملكية واضحة ونسخ محفوظة وشواهد قابلة لإعادة الاستخدام.</p>}
             </div>
             <button onClick={() => setShowCreate(true)} className="inline-flex items-center justify-center gap-2 rounded-xl bg-teal-600 px-4 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-teal-700">
               <Plus className="h-4 w-4" /> {reportsOnly ? "إنشاء تقرير" : "إنشاء عمل"}
             </button>
           </header>
+
+          {reportsOnly && (
+            <aside className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm leading-7 text-amber-950" aria-label="تنبيه انتقالي للتقارير القديمة">
+              <strong className="block">التقارير المحفوظة على هذا الجهاز — مسار انتقالي</strong>
+              <p className="mt-1">يمكنك فتحها وتعديلها محليًا دون حذفها. لا تُعد خدمة خادمية ولا تُدمج تلقائيًا مع التقارير الجديدة.</p>
+              <Link href="/reports/legacy" className="mt-2 inline-flex items-center gap-1 font-bold underline underline-offset-4">فتح التقارير القديمة <ArrowLeft className="h-4 w-4" /></Link>
+            </aside>
+          )}
 
           <div className="mt-6 flex flex-wrap gap-3">
             <label className="text-xs font-bold text-slate-600">السنة الدراسية

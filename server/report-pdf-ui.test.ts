@@ -27,8 +27,10 @@ describe("report WorkVersion PDF controls", () => {
     expect(panelSource).not.toContain("innerHTML");
   });
 
-  it("shows artifact integrity and requires an explicit user download", () => {
-    expect(panelSource).toContain("SHA-256:");
+  it("keeps artifact integrity internal and requires an explicit user download", () => {
+    expect(panelSource).not.toContain("SHA-256:");
+    expect(panelSource).not.toContain("contentHash");
+    expect(panelSource).not.toContain("storageKey");
     expect(panelSource).toContain('target="_blank"');
     expect(panelSource).toContain('rel="noreferrer"');
     expect(panelSource).toContain("تحديث رابط التنزيل");
@@ -40,5 +42,12 @@ describe("report WorkVersion PDF controls", () => {
     expect(panelSource).toContain("Word قابل للتعديل");
     expect(panelSource).toContain("workVersionDocx.generatePrivateDocx.useMutation");
     expect(panelSource).toContain("ReportArtifactSession key={workId}");
+  });
+
+  it("guards export when the draft revision is stale or unverifiable and requires deliberate continuation", () => {
+    expect(panelSource).toContain("domain.reportDraft.get.useQuery");
+    expect(panelSource).toContain("compareReportDraftToVersion");
+    expect(panelSource).toContain("متابعة النسخة القديمة على أي حال");
+    expect(panelSource).toContain("disabled={generating || guarded}");
   });
 });

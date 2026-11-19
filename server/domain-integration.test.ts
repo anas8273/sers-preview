@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { and, eq } from "drizzle-orm";
-import { users } from "../drizzle/schema";
+import { auditLogs, users } from "../drizzle/schema";
 import {
   assets,
   entitlements,
@@ -32,6 +32,7 @@ import {
   revokeOutputForUser,
 } from "./review-output-db";
 import { getDb } from "./db";
+import { assertDisposableMySQL, clearDisposableAcademicFixtures } from "../tests/fixtures/assert-disposable-mysql";
 
 const integrationEnabled = process.env.SERS_INTEGRATION === "1";
 const suite = integrationEnabled ? describe : describe.skip;
@@ -47,9 +48,11 @@ suite("SERS domain integration against real MySQL", () => {
   async function cleanDomainData() {
     const db = await getDb();
     if (!db) throw new Error("Database not available");
+    await clearDisposableAcademicFixtures(db);
     await db.delete(reviewComments);
     await db.delete(reviews);
     await db.delete(outputs);
+    await db.delete(auditLogs);
     await db.delete(workAssetLinks);
     await db.delete(workVersions);
     await db.delete(notifications);
@@ -81,6 +84,7 @@ suite("SERS domain integration against real MySQL", () => {
   }
 
   beforeAll(async () => {
+    assertDisposableMySQL();
     const db = await getDb();
     if (!db) throw new Error("Database not available");
     await cleanDomainData();
@@ -262,6 +266,51 @@ suite("SERS domain integration against real MySQL", () => {
       expiresAt: new Date(Date.now() + 60_000),
     });
     expect(shared?.visibility).toBe("public");
+  });
+
+  it("audits shared create/revoke atomically and keeps outsiders from changing the grant", async () => {
+    const work = await createOrganizationWork("Audited Shared Output");
+    const version = await createWorkVersionForUser(ownerId, work!.id, { title: "Audited frozen output" });
+    const review = await createReviewForUser(ownerId, version!.id, reviewerId);
+    await decideReviewForUser(reviewerId, review!.id, "approved");
+
+    const shared = await createOutputForUser(ownerId, {
+      workVersionId: version!.id,
+      type: "qr",
+      visibility: "protected",
+      token: "audited-output-token",
+      passwordHash: "scrypt-v1$synthetic-fixture",
+      expiresAt: new Date(Date.now() + 60_000),
+    });
+    expect(shared).toBeTruthy();
+
+    const db = await getDb();
+    const createdAudit = await db!.select().from(auditLogs).where(eq(auditLogs.resourceId, String(shared!.id)));
+    expect(createdAudit).toHaveLength(1);
+    expect(createdAudit[0]).toMatchObject({
+      actorUserId: ownerId,
+      action: "output.share_created",
+      resourceType: "output",
+    });
+    expect(createdAudit[0].metadata).toMatchObject({
+      outputId: shared!.id,
+      workVersionId: version!.id,
+      versionNumber: version!.versionNumber,
+      grant: "protected",
+      context: "create",
+    });
+    const serialized = JSON.stringify(createdAudit[0]);
+    expect(serialized).not.toContain("audited-output-token");
+    expect(serialized).not.toContain("scrypt-v1$synthetic-fixture");
+
+    expect(await revokeOutputForUser(outsiderId, shared!.id)).toBe(false);
+    expect(await revokeOutputForUser(ownerId, shared!.id)).toBe(true);
+    expect(await revokeOutputForUser(ownerId, shared!.id)).toBe(true);
+
+    const auditRows = await db!.select().from(auditLogs).where(eq(auditLogs.resourceId, String(shared!.id)));
+    expect(auditRows).toHaveLength(2);
+    expect(auditRows.map(row => row.action).sort()).toEqual(["output.share_created", "output.share_revoked"]);
+    expect(auditRows.find(row => row.action === "output.share_revoked")?.actorUserId).toBe(ownerId);
   });
 
   it("pins outputs to versions and revocation preserves work/version", async () => {

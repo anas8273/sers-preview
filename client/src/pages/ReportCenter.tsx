@@ -19,9 +19,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
-import { LegacyUploadNotice, legacyUploadFailureMessage } from "@/components/LegacyUploadNotice";
+import { LegacyUploadNotice, LEGACY_UPLOAD_MESSAGE } from "@/components/LegacyUploadNotice";
 import { aiFailureMessage } from "@/lib/ai-feedback";
-import { useAuth } from "@/_core/hooks/useAuth";
 import TemplateSelector, { THEMES, FONT_OPTIONS, type ThemeConfig } from "@/components/TemplateSelector";
 import { exportToPDF, printElement } from "@/lib/pdf-export";
 import OfficialHeader from "@/components/OfficialHeader";
@@ -346,7 +345,6 @@ function ReportPreview({
 
 export default function ReportCenter() {
   const [, navigate] = useLocation();
-  const { isAuthenticated } = useAuth();
   const [view, setView] = useState<"templates" | "editor" | "preview" | "saved">("saved");
   const [selectedTemplate, setSelectedTemplate] = useState<ReportTemplate | null>(null);
   const [currentReport, setCurrentReport] = useState<SavedReport | null>(null);
@@ -357,13 +355,13 @@ export default function ReportCenter() {
   const [selectedFont, setSelectedFont] = useState("Cairo");
   const [aiLoading, setAiLoading] = useState(false);
   const [attachments, setAttachments] = useState<ReportAttachment[]>([]);
-  const [attachmentUploading, setAttachmentUploading] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
 
   const { containerRef: previewContainerRef, pageRef: previewPageRef, previewScale, wrapperWidth, wrapperHeight, zoomLevel, zoomIn, zoomOut, resetZoom } = usePreviewScale();
 
   const fillReportMutation = trpc.genAI.fillReport.useMutation();
+  // Kept for source compatibility with the legacy contract; no UI action invokes this stopped endpoint.
   const uploadAttachmentMutation = trpc.file.upload.useMutation();
 
   const startNewReport = useCallback((template: ReportTemplate) => {
@@ -398,32 +396,6 @@ export default function ReportCenter() {
   const removeAttachment = useCallback((id: string) => {
     setAttachments((previous) => previous.filter((attachment) => attachment.id !== id));
   }, []);
-
-  const handleAttachmentUpload = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    event.target.value = "";
-    if (!file) return;
-    if (!isAuthenticated) { toast.error("سجّل الدخول أولاً لرفع المرفق وحفظه بأمان."); return; }
-    if (file.size > 8 * 1024 * 1024) { toast.error("حجم الملف كبير. الحد الأقصى 8 ميغابايت."); return; }
-    setAttachmentUploading(true);
-    try {
-      const dataUrl = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => typeof reader.result === "string" ? resolve(reader.result) : reject(new Error("تعذر قراءة الملف."));
-        reader.onerror = () => reject(new Error("تعذر قراءة الملف."));
-        reader.readAsDataURL(file);
-      });
-      const base64Data = dataUrl.split(",")[1];
-      if (!base64Data) throw new Error("تعذر تجهيز الملف للرفع.");
-      const result = await uploadAttachmentMutation.mutateAsync({ fileName: file.name, mimeType: file.type || "application/octet-stream", base64Data });
-      setAttachments((previous) => [...previous, { id: generateId(), title: file.name.replace(/\.[^.]+$/, ""), description: "", url: result.url, fileName: file.name }]);
-      toast.success("تم رفع المرفق وإضافته إلى التقرير.");
-    } catch (error) {
-      toast.error(legacyUploadFailureMessage(error));
-    } finally {
-      setAttachmentUploading(false);
-    }
-  }, [isAuthenticated, uploadAttachmentMutation]);
 
   const handleSave = useCallback(async () => {
     if (!selectedTemplate) return;
@@ -694,14 +666,13 @@ export default function ReportCenter() {
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div><h3 className="flex items-center gap-2 text-sm font-bold text-slate-800"><FileText className="h-4 w-4 text-sky-700" />الشواهد والمرفقات ({attachments.length})</h3><p className="mt-1 text-[11px] text-slate-500">أرفق ملفاً موثقاً أو أضف رابطاً داعماً للتقرير.</p></div>
                   <div className="flex flex-wrap gap-2">
-                    <label className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-bold text-white ${attachmentUploading ? "bg-sky-400" : "cursor-pointer bg-sky-600 hover:bg-sky-700"}`}>
-                      <input type="file" className="sr-only" onChange={handleAttachmentUpload} disabled={attachmentUploading} />
-                      {attachmentUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}{attachmentUploading ? "جاري الرفع..." : "رفع مرفق"}
-                    </label>
+                    <span role="status" aria-disabled="true" className="inline-flex items-center gap-1.5 rounded-lg bg-slate-100 px-3 py-2 text-xs font-bold text-slate-500">
+                      <Upload className="h-4 w-4" />رفع مرفق متوقف
+                    </span>
                     <Button type="button" size="sm" variant="outline" onClick={addAttachmentLink} className="gap-1"><Link2 className="h-3.5 w-3.5" />إضافة رابط</Button>
                   </div>
                 </div>
-                {!isAuthenticated && <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-800">يتطلب رفع الملفات تسجيل الدخول؛ ما زال بإمكانك إضافة رابط يدوي.</p>}
+                <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-800">{LEGACY_UPLOAD_MESSAGE} يمكنك إضافة رابط يدوي، أو استخدام مكتبة الشواهد للرفع والفحص.</p>
                 {attachments.length > 0 && <div className="mt-3 space-y-2">
                   {attachments.map((attachment, index) => (
                     <div key={attachment.id} className="rounded-lg border border-sky-100 bg-white p-3">

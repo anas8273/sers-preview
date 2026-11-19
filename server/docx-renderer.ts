@@ -25,6 +25,8 @@ import {
   TabStopType,
   convertInchesToTwip,
 } from "docx";
+import { z } from "zod";
+import { sanitizeEvidenceImage } from "./work-version-inline-image";
 
 // ===== Types =====
 interface DocxField {
@@ -68,6 +70,36 @@ interface DocxExportData {
   themeColor?: string;
   mode: "single" | "full";
   singleTitle?: string;
+}
+
+const boundedText = z.string().max(10_000);
+const docxExportSchema = z.object({
+  personalInfo: z.object({
+    name: boundedText, school: boundedText, department: boundedText, year: boundedText,
+    semester: boundedText, evaluator: boundedText, evaluatorRole: boundedText,
+    date: boundedText, reportTitle: boundedText,
+  }).strict(),
+  criteria: z.array(z.object({
+    title: boundedText,
+    subEvidences: z.array(z.object({
+      title: boundedText,
+      fields: z.array(z.object({ label: boundedText, value: boundedText }).strict()).max(200),
+      evidences: z.array(z.object({
+        fileName: z.string().max(512).optional(), fileUrl: z.string().max(2_048).optional(),
+        displayAs: z.enum(["image", "qr"]).optional(), type: z.string().max(64).optional(),
+        text: boundedText.optional(), link: z.string().max(2_048).optional(),
+      }).strict()).max(200),
+    }).strict()).max(100),
+  }).strict()).max(100),
+  themeColor: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
+  mode: z.enum(["single", "full"]), singleTitle: boundedText.optional(),
+}).strict();
+
+/** Validate untrusted structured export data before building a document. */
+export function validateStructuredDocxData(input: unknown): DocxExportData {
+  const parsed = docxExportSchema.safeParse(input);
+  if (!parsed.success) throw new Error("Invalid structured DOCX data");
+  return parsed.data;
 }
 
 // ===== Helper functions =====
@@ -767,9 +799,10 @@ function buildFullReportDoc(data: DocxExportData): Document {
 
 // ===== Main export function =====
 export async function renderStructuredDocx(data: DocxExportData): Promise<Buffer> {
-  const doc = data.mode === 'single'
-    ? buildSingleEvidenceDoc(data)
-    : buildFullReportDoc(data);
+  const validated = validateStructuredDocxData(data);
+  const doc = validated.mode === 'single'
+    ? buildSingleEvidenceDoc(validated)
+    : buildFullReportDoc(validated);
 
   const buffer = await Packer.toBuffer(doc);
   return Buffer.from(buffer);
@@ -808,7 +841,7 @@ export async function renderHtmlToDocx(htmlContent: string): Promise<Buffer> {
 <body>${htmlContent}</body>
 </html>`;
 
-    await page.setContent(fullHtml, { waitUntil: ["networkidle0", "domcontentloaded"], timeout: 60000 });
+    await page.setContent(fullHtml, { waitUntil: "load", timeout: 60000 });
     await page.evaluate(() => document.fonts.ready);
     await new Promise(resolve => setTimeout(resolve, 2000));
 
@@ -849,8 +882,7 @@ export async function renderImageToDocx(
   canvasWidth?: number,
   canvasHeight?: number
 ): Promise<Buffer> {
-  const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, '');
-  const imageBuffer = Buffer.from(base64Data, 'base64');
+  const imageBuffer = validateDocxImageInput(imageBase64, canvasWidth, canvasHeight);
 
   const a4WidthPt = 595;
   const a4HeightPt = 842;
@@ -898,4 +930,114 @@ export async function renderImageToDocx(
 
   const buffer = await Packer.toBuffer(doc);
   return Buffer.from(buffer);
+}
+
+const DOCX_PNG_SIGNATURE = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
+const DOCX_MAX_IMAGE_BYTES = 6 * 1024 * 1024;
+const DOCX_MAX_IMAGE_DIMENSION = 1_600;
+const DOCX_MAX_IMAGE_PIXELS = 1_000_000;
+
+const docxPngCrcTable = Array.from({ length: 256 }, (_, value) => {
+  let crc = value;
+  for (let bit = 0; bit < 8; bit++) crc = crc & 1 ? 0xedb88320 ^ (crc >>> 1) : crc >>> 1;
+  return crc >>> 0;
+});
+
+function docxPngCrc32(bytes: Buffer): number {
+  let crc = 0xffffffff;
+  for (let index = 0; index < bytes.length; index++) {
+    const byte = bytes[index];
+    crc = docxPngCrcTable[(crc ^ byte) & 0xff] ^ (crc >>> 8);
+  }
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+/**
+ * Check the complete PNG container before invoking pngjs. This preflight is
+ * important because a valid signature/IHDR does not prove that chunks fit in
+ * the input or that their CRCs and compressed raster are safe to decode.
+ */
+function validateBoundedDocxPng(imageBuffer: Buffer): { width: number; height: number } {
+  if (imageBuffer.length < 33 || imageBuffer.length > DOCX_MAX_IMAGE_BYTES || !imageBuffer.subarray(0, 8).equals(DOCX_PNG_SIGNATURE)) {
+    throw new Error("Invalid DOCX PNG image");
+  }
+
+  let offset = 8;
+  let chunkCount = 0;
+  let width = 0;
+  let height = 0;
+  let sawHeader = false;
+  let sawImageData = false;
+  let sawEnd = false;
+  while (offset < imageBuffer.length) {
+    if (++chunkCount > 128 || offset + 12 > imageBuffer.length) throw new Error("Invalid DOCX PNG chunks");
+    const length = imageBuffer.readUInt32BE(offset);
+    const end = offset + 12 + length;
+    if (end > imageBuffer.length) throw new Error("Invalid DOCX PNG chunk length");
+    const type = imageBuffer.toString("ascii", offset + 4, offset + 8);
+    const body = imageBuffer.subarray(offset + 8, end - 4);
+    if (docxPngCrc32(imageBuffer.subarray(offset + 4, end - 4)) !== imageBuffer.readUInt32BE(end - 4)) {
+      throw new Error("Invalid DOCX PNG checksum");
+    }
+    if (sawEnd) throw new Error("Invalid DOCX PNG trailing data");
+
+    if (type === "IHDR") {
+      if (sawHeader || chunkCount !== 1 || length !== 13) throw new Error("Invalid DOCX PNG header");
+      sawHeader = true;
+      width = body.readUInt32BE(0);
+      height = body.readUInt32BE(4);
+      const bitDepth = body[8];
+      const colorType = body[9];
+      if (!width || !height || width > DOCX_MAX_IMAGE_DIMENSION || height > DOCX_MAX_IMAGE_DIMENSION
+        || width * height > DOCX_MAX_IMAGE_PIXELS || bitDepth !== 8 || ![0, 2, 3, 4, 6].includes(colorType)
+        || body[10] !== 0 || body[11] !== 0 || body[12] !== 0) {
+        throw new Error("Unsupported DOCX PNG dimensions or encoding");
+      }
+    } else {
+      if (!sawHeader) throw new Error("Missing DOCX PNG header");
+      if (type === "IDAT") sawImageData = true;
+      else if (type === "IEND") {
+        if (length !== 0 || !sawImageData || end !== imageBuffer.length) throw new Error("Invalid DOCX PNG end");
+        sawEnd = true;
+      } else if (/^[A-Z]/.test(type) && !["PLTE", "tRNS"].includes(type)) {
+        throw new Error("Unsupported DOCX PNG format");
+      }
+    }
+    offset = end;
+  }
+  if (!sawHeader || !sawImageData || !sawEnd) throw new Error("Incomplete DOCX PNG");
+  return { width, height };
+}
+
+function validateDocxCanvasDimension(value: unknown): asserts value is number | undefined {
+  if (value !== undefined && (typeof value !== "number" || !Number.isFinite(value) || !Number.isSafeInteger(value)
+    || value < 1 || value > DOCX_MAX_IMAGE_DIMENSION)) throw new Error("Invalid DOCX canvas dimensions");
+}
+
+/**
+ * Legacy image export only emits PNG ImageRun data. Accept strict canonical
+ * base64 with an exact PNG MIME, fully validate the PNG, and pass only the
+ * bounded metadata-free PNG returned by the existing evidence sanitizer to
+ * ImageRun. No header-only or truncated image is accepted.
+ */
+export function validateDocxImageInput(imageBase64: unknown, canvasWidth?: unknown, canvasHeight?: unknown): Buffer {
+  if (typeof imageBase64 !== "string" || imageBase64.length > 1_400_000) throw new Error("Invalid DOCX image payload");
+  const raw = imageBase64.match(/^data:(image\/png);base64,([A-Za-z0-9+/]+={0,2})$/);
+  const base64Data = raw ? raw[2] : imageBase64;
+  if (!/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(base64Data)
+    || base64Data.length % 4 !== 0) throw new Error("Invalid DOCX image encoding");
+  const imageBuffer = Buffer.from(base64Data, "base64");
+  if (imageBuffer.toString("base64") !== base64Data) throw new Error("Invalid DOCX image encoding");
+  const dimensions = validateBoundedDocxPng(imageBuffer);
+  validateDocxCanvasDimension(canvasWidth);
+  validateDocxCanvasDimension(canvasHeight);
+  if (canvasWidth !== undefined && canvasHeight !== undefined && canvasWidth * canvasHeight > DOCX_MAX_IMAGE_PIXELS) {
+    throw new Error("DOCX canvas dimensions exceed the pixel limit");
+  }
+
+  const sanitized = sanitizeEvidenceImage(imageBuffer, "image/png");
+  if (sanitized.width !== dimensions.width || sanitized.height !== dimensions.height || sanitized.bytes.length > DOCX_MAX_IMAGE_BYTES) {
+    throw new Error("Invalid DOCX sanitized PNG");
+  }
+  return sanitized.bytes;
 }

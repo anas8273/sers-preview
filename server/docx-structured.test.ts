@@ -179,4 +179,14 @@ describe("Structured DOCX Export", () => {
     expect(buffer).toBeInstanceOf(Buffer);
     expect(buffer.length).toBeGreaterThan(0);
   });
+
+  it("rejects oversized nested collections before document construction", async () => {
+    const { validateStructuredDocxData } = await import("./docx-renderer");
+    const data = {
+      personalInfo: { name: "test", school: "test", department: "test", year: "test", semester: "test", evaluator: "test", evaluatorRole: "test", date: "test", reportTitle: "test" },
+      criteria: [{ title: "criterion", subEvidences: Array.from({ length: 101 }, () => ({ title: "sub", fields: [], evidences: [] })) }],
+      mode: "full" as const,
+    };
+    expect(() => validateStructuredDocxData(data)).toThrow("Invalid structured DOCX data");
+  });
 });

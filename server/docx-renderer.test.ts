@@ -18,12 +18,12 @@ vi.mock('puppeteer', () => ({
 }));
 
 vi.mock('docx', () => ({
-  Document: vi.fn().mockImplementation(() => ({})),
+  Document: vi.fn().mockImplementation(function () { return {}; }),
   Packer: {
     toBuffer: vi.fn().mockResolvedValue(Buffer.from('fake-docx-content')),
   },
-  Paragraph: vi.fn().mockImplementation(() => ({})),
-  ImageRun: vi.fn().mockImplementation(() => ({})),
+  Paragraph: vi.fn().mockImplementation(function () { return {}; }),
+  ImageRun: vi.fn().mockImplementation(function () { return {}; }),
   AlignmentType: { CENTER: 'center' },
   PageOrientation: { PORTRAIT: 'portrait' },
   SectionType: { NEXT_PAGE: 'nextPage' },

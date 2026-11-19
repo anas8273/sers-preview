@@ -44,7 +44,15 @@ export function createGoldenWorkVersionSnapshot() { return {
   assets: Array.from({ length: 12 }, (_, index) => ({
     id: index + 1, title: `شاهد تجريبي ${index + 1} لتوثيق النشاط`,
     caption: "وصف عربي قابل للتحرير يوضح محتوى الشاهد والغرض من إدراجه في النسخة المعتمدة.",
-    ...(index < 2 ? { preview: { mimeType: "image/png", dataBase64: preview(index === 0 ? [[15, 118, 110], [45, 140, 135], [78, 157, 151], [109, 174, 169]] : [[35, 86, 137], [60, 112, 164], [89, 139, 188], [120, 164, 207]]) } } : {}),
+    ...(index < 2 ? { frozen: {
+      referenceVersion: `fixture-version-${index + 1}`,
+      digest: ("a".repeat(63) + String(index + 1)).slice(0, 64),
+      bytes: 1,
+      contentType: "image/png" as const,
+      sourceAssetId: index + 1,
+      sourceUploadIntentId: `fixture-intent-${String(index + 1).padStart(16, "0")}`,
+      preview: { mimeType: "image/png" as const, dataBase64: preview(index === 0 ? [[15, 118, 110], [45, 140, 135], [78, 157, 151], [109, 174, 169]] : [[35, 86, 137], [60, 112, 164], [89, 139, 188], [120, 164, 207]]), width: 640, height: 280 },
+    } } : {}),
   })),
   shareReference: { url: "https://example.invalid/output/fixture_token_not_a_live_link", label: "مرجع المشاركة التجريبي" },
 }; }

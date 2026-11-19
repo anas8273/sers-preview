@@ -10,7 +10,7 @@ import { describe, it, expect } from "vitest";
 const EXPECTED_SECTIONS = [
   { id: "1", slug: "performance-evidence", title: "شواهد الأداء الوظيفي", hasInteractive: true, hasStore: true, route: "/performance-evidence" },
   { id: "2", slug: "achievement-portfolio", title: "ملف الإنجاز", hasInteractive: true, hasStore: true, route: "/portfolio" },
-  { id: "3", slug: "reports-center", title: "مركز التقارير الشامل", hasInteractive: true, hasStore: true, route: "/reports" },
+  { id: "3", slug: "reports-center", title: "التقارير والمراجعة", hasInteractive: true, hasStore: true, route: "/reports" },
   { id: "4", slug: "certificate-builder", title: "صانع الشهادات", hasInteractive: true, hasStore: true, route: "/certificates" },
   { id: "5", slug: "smart-resume", title: "السيرة الذاتية الذكية", hasInteractive: true, hasStore: true, route: "/smart-cv" },
   { id: "6", slug: "treatment-plans", title: "الخطط العلاجية والإثرائية", hasInteractive: true, hasStore: true, route: "/treatment-plans" },
@@ -164,7 +164,7 @@ describe("Platform Restructure - User Roles Filter", () => {
 describe("Platform Restructure - New Pages", () => {
   const NEW_PAGES = [
     { path: "/portfolio", name: "PortfolioBuilder" },
-    { path: "/reports", name: "ReportCenter" },
+    { path: "/reports", name: "WorkHub" },
     { path: "/school-radio", name: "SchoolRadio" },
     { path: "/smart-cv", name: "SmartCV" },
     { path: "/exams", name: "ExamBuilder" },

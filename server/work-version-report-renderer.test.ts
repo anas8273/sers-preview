@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { renderReportWorkVersionHtml } from "./work-version-report-renderer";
+import { getReportTemplate } from "../shared/report-projection";
 
 const snapshot = {
   schemaVersion: 1,
@@ -16,9 +17,9 @@ const snapshot = {
     themeId: "formal",
     fontFamily: "Cairo",
     fields: {
-      summary: "ملخص <script>alert('x')</script>",
-      objectives: "الهدف الأول\nالهدف الثاني",
-      empty: "",
+        summary: "ملخص <script>alert('x')</script>",
+        objectives: "الهدف الأول\nالهدف الثاني",
+        subject: "برنامج القراءة",
     },
     evidenceAssetIds: [10],
     updatedAt: "2026-10-19T20:00:00.000Z",
@@ -36,7 +37,7 @@ describe("immutable report version renderer", () => {
     const second = renderReportWorkVersionHtml(snapshot, 3);
     expect(first).toBe(second);
     expect(first).toContain("نسخة 3");
-    expect(first).toContain("تقرير برنامج");
+    expect(first).toContain(getReportTemplate("program-report").label);
   });
 
   it("escapes user-controlled HTML instead of executing active content", () => {
@@ -56,5 +57,10 @@ describe("immutable report version renderer", () => {
   it("rejects snapshots that are not authoritative report versions", () => {
     expect(() => renderReportWorkVersionHtml({ kind: "portfolio" }, 1)).toThrow(/not a report snapshot/i);
     expect(() => renderReportWorkVersionHtml(undefined, 1)).toThrow(/snapshot is missing/i);
+  });
+
+  it("rejects a selected raw preview instead of silently rendering mutable evidence", () => {
+    expect(() => renderReportWorkVersionHtml({ ...snapshot, assets: [{ id: 10, title: "صورة غير موثقة", preview: { mimeType: "image/png", dataBase64: "not-valid" } }] }, 3)).toThrow(/unfrozen preview/i);
+    expect(() => renderReportWorkVersionHtml({ ...snapshot, assets: [{ id: 10, title: "شاهد بلا صورة" }] }, 3)).not.toThrow();
   });
 });

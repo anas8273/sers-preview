@@ -1,25 +1,18 @@
 import qrcode from "qrcode-generator";
 import { sanitizeInlinePng } from "./work-version-inline-image";
+import {
+  formatReportFieldValue,
+  normalizeReportDraft,
+  projectReportDocument,
+  type ReportProjectionAsset,
+} from "../shared/report-projection";
 
-type ReportAssetSnapshot = {
-  id?: number; title?: string; kind?: string; role?: string; caption?: string | null;
-  preview?: { mimeType?: string; dataBase64?: string };
-};
 type ReportVersionSnapshot = {
   kind?: string; work?: { title?: string };
-  reportDraft?: { templateId?: string; themeId?: string; fontFamily?: string; fields?: Record<string, unknown>; evidenceAssetIds?: unknown[]; updatedAt?: string };
-  assets?: ReportAssetSnapshot[]; capturedAt?: string;
+  reportDraft?: Record<string, unknown>;
+  assets?: ReportProjectionAsset[]; capturedAt?: string;
   academicContext?: { yearLabel?: string; termLabel?: string | null };
   shareReference?: { url?: string; label?: string };
-};
-const FIELD_DEFINITIONS = [
-  ["summary", "ملخص التقرير"], ["objectives", "الأهداف"], ["audience", "الفئة المستهدفة"],
-  ["implementation", "آلية التنفيذ"], ["results", "النتائج والمخرجات"], ["impact", "قياس الأثر"],
-  ["recommendations", "التوصيات والخطوات التالية"],
-] as const;
-const TEMPLATE_LABELS: Record<string, string> = {
-  custom: "تقرير عام", "program-report": "تقرير برنامج", "initiative-report": "تقرير مبادرة",
-  "workshop-report": "تقرير ورشة", "meeting-report": "محضر/تقرير اجتماع", "visit-report": "تقرير زيارة",
 };
 const THEME_COLORS: Record<string, string> = { classic: "#0f172a", formal: "#134e4a", minimal: "#334155" };
 function text(value: unknown, maximum = 40_000) {
@@ -39,6 +32,9 @@ function normalizeSnapshot(value: unknown) {
   if (snapshot.assets && (!Array.isArray(snapshot.assets) || snapshot.assets.length > 100)) throw new Error("Too many report evidence entries");
   return snapshot;
 }
+function normalizeFrozenDraft(value: Record<string, unknown>) {
+  return normalizeReportDraft(value);
+}
 function formatSnapshotDate(value?: string) {
   if (!value || !Number.isFinite(Date.parse(value))) return "غير محدد";
   return new Intl.DateTimeFormat("ar-SA", { calendar: "gregory", year: "numeric", month: "long", day: "numeric", timeZone: "UTC" }).format(new Date(value));
@@ -49,32 +45,36 @@ function formatSnapshotDate(value?: string) {
  * source URLs and storage keys are never fetched or included. */
 export function renderReportWorkVersionHtml(snapshotValue: unknown, versionNumber: number) {
   if (!Number.isSafeInteger(versionNumber) || versionNumber < 1) throw new Error("Invalid version number");
-  const snapshot = normalizeSnapshot(snapshotValue), draft = snapshot.reportDraft!;
+  const snapshot = normalizeSnapshot(snapshotValue), draft = normalizeFrozenDraft(snapshot.reportDraft!);
+  const model = projectReportDocument({ reportDraft: draft, assets: snapshot.assets });
   const title = escapeHtml(text(snapshot.work!.title, 255) || "تقرير بدون عنوان");
-  const templateLabel = escapeHtml(TEMPLATE_LABELS[draft.templateId || "custom"] || "تقرير");
-  const color = THEME_COLORS[draft.themeId || "classic"] || THEME_COLORS.classic;
-  const font = ["Arial", "Cairo", "Tajawal"].includes(draft.fontFamily || "") ? draft.fontFamily! : "Cairo";
-  const date = escapeHtml(formatSnapshotDate(snapshot.capturedAt || draft.updatedAt));
+  const templateLabel = escapeHtml(model.template.label);
+  const color = THEME_COLORS[draft.themeId] || THEME_COLORS.classic;
+  const supportedFonts = ["Arial", "Cairo", "Tajawal", "Noto Kufi Arabic"] as const;
+  if (!supportedFonts.includes(draft.fontFamily as typeof supportedFonts[number])) throw new Error(`Unsupported report font: ${draft.fontFamily}`);
+  const font = draft.fontFamily;
+  const date = escapeHtml(formatSnapshotDate(snapshot.capturedAt || (snapshot.reportDraft?.updatedAt as string | undefined)));
   // Numeric ranges need their own LTR isolate inside an otherwise Arabic label.
   const year = escapeHtml(text(snapshot.academicContext?.yearLabel, 100)).replace(/[0-9٠-٩]+(?:[-–—/][0-9٠-٩]+)+/g, range => `<bdi dir="ltr">${range}</bdi>`);
   const term = escapeHtml(text(snapshot.academicContext?.termLabel, 100));
   let totalText = 0;
-  const sections = FIELD_DEFINITIONS.flatMap(([key, label]) => {
-    const value = text(draft.fields?.[key]); totalText += value.length;
+  const sections = model.fields.map(field => {
+    const value = formatReportFieldValue(field.value); totalText += value.length;
     if (totalText > 180_000) throw new Error("Report text exceeds the PDF export limit");
-    if (!value) return [];
-    return [`<section class="report-section"><h2>${label}</h2>${value.split(/\r?\n/).map(line => `<p>${escapeHtml(line) || "&nbsp;"}</p>`).join("")}</section>`];
+    return `<section class="report-section"><h2>${escapeHtml(field.label)}</h2>${value.split(/\r?\n/).map(line => `<p>${escapeHtml(line) || "&nbsp;"}</p>`).join("")}</section>`;
   });
   if (!sections.length) sections.push('<section class="report-section"><h2>لا يوجد محتوى نصي مثبت في هذه النسخة</h2></section>');
-  const selectedIds = new Set((Array.isArray(draft.evidenceAssetIds) ? draft.evidenceAssetIds : []).filter((id): id is number => Number.isSafeInteger(id) && Number(id) > 0));
-  const selected = (snapshot.assets ?? []).filter(asset => asset && typeof asset.id === "number" && selectedIds.has(asset.id));
+  const selected = model.evidence;
   if (selected.length) {
     sections.push(`<section class="report-section"><h2>الشواهد المستخدمة</h2><table><thead><tr><th>الشاهد</th><th>الوصف</th></tr></thead><tbody>${selected.map((asset, index) => `<tr><td>${index + 1}. ${escapeHtml(text(asset.title, 255) || "شاهد")}</td><td>${escapeHtml(text(asset.caption, 4000)) || "—"}</td></tr>`).join("")}</tbody></table></section>`);
     const images: string[] = [];
     for (const asset of selected) {
-      if (!asset.preview) continue;
-      if (images.length >= 4 || asset.preview.mimeType !== "image/png" || typeof asset.preview.dataBase64 !== "string") throw new Error("Unsupported report preview");
-      const preview = sanitizeInlinePng(asset.preview.dataBase64);
+      // projectReportDocument rejects a selected raw preview. A selected
+      // evidence item without a preview is intentionally label-only.
+      const frozenPreview = asset.frozen?.preview;
+      if (!frozenPreview) continue;
+      if (images.length >= 4 || frozenPreview.mimeType !== "image/png" || typeof frozenPreview.dataBase64 !== "string") throw new Error("Unsupported report preview");
+      const preview = sanitizeInlinePng(frozenPreview.dataBase64);
       images.push(`<figure><figcaption>${escapeHtml(text(asset.title, 255) || "صورة الشاهد")}</figcaption><img src="data:image/png;base64,${preview.bytes.toString("base64")}" width="${preview.width}" height="${preview.height}" alt="${escapeHtml(text(asset.title, 255))}"/></figure>`);
     }
     if (images.length) sections.push(`<section class="report-section report-previews"><h2>صور الشواهد</h2>${images.join("")}</section>`);

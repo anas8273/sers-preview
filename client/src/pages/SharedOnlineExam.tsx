@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Link, useRoute } from "wouter";
 import { CheckCircle2, ClipboardCheck, Loader2, Send, XCircle } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
+import { browserExamAttemptStorage, getOrCreateOnlineExamAttempt } from "@shared/online-exam-attempt";
 
 type OnlineQuestion = {
   id: string;
@@ -19,6 +20,8 @@ export default function SharedOnlineExam() {
   const [studentId, setStudentId] = useState("");
   const [answers, setAnswers] = useState<Record<string, string | number>>({});
   const [result, setResult] = useState<{ autoScore: number; autoMaxScore: number; requiresManualReview: boolean } | null>(null);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const attemptId = useMemo(() => getOrCreateOnlineExamAttempt(token, browserExamAttemptStorage()), [token]);
 
   const examQuery = (trpc as any).onlineExam.view.useQuery({ token }, { enabled: !!token, retry: false });
   const submitMutation = (trpc as any).onlineExam.submit.useMutation();
@@ -32,14 +35,25 @@ export default function SharedOnlineExam() {
   };
 
   const handleSubmit = async () => {
-    if (!exam || !studentName.trim()) return;
-    const response = await submitMutation.mutateAsync({
-      token,
-      studentName: studentName.trim(),
-      studentId: studentId.trim() || undefined,
-      answers,
-    });
-    setResult(response);
+    if (!exam || studentName.trim().length < 2 || submitMutation.isPending) return;
+    setSubmitError(null);
+    try {
+      const response = await submitMutation.mutateAsync({
+        token,
+        attemptId,
+        studentName: studentName.trim(),
+        studentId: studentId.trim() || undefined,
+        answers,
+      });
+      setResult(response);
+    } catch (error) {
+      const code = (error as { data?: { code?: string } })?.data?.code;
+      setSubmitError(code === "CONFLICT"
+        ? "هذه المحاولة سُلّمت ببيانات مختلفة. لا تعيد تسليمها؛ تواصل مع المعلم للتحقق."
+        : code === "TOO_MANY_REQUESTS"
+          ? "تكررت محاولات التسليم بسرعة. انتظر قليلًا، ثم أعد المحاولة دون تغيير الإجابات."
+          : "لم يتأكد التسليم. راجع بياناتك وأعد المحاولة؛ سيُستخدم معرف المحاولة نفسه لمنع التكرار.");
+    }
   };
 
   if (examQuery.isLoading) {
@@ -106,8 +120,8 @@ export default function SharedOnlineExam() {
           ))}
         </div>
 
-        {submitMutation.error && <p className="mt-4 rounded-lg bg-rose-50 p-3 text-xs text-rose-700">{submitMutation.error.message}</p>}
-        <Button onClick={handleSubmit} disabled={!studentName.trim() || submitMutation.isPending} className="mt-6 w-full gap-2 bg-teal-600 py-5 hover:bg-teal-700">
+        {submitError && <p role="alert" className="mt-4 rounded-lg bg-rose-50 p-3 text-xs text-rose-700">{submitError}</p>}
+        <Button onClick={handleSubmit} disabled={studentName.trim().length < 2 || submitMutation.isPending} className="mt-6 w-full gap-2 bg-teal-600 py-5 hover:bg-teal-700">
           {submitMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />} تسليم الاختبار
         </Button>
       </section>

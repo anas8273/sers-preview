@@ -1,6 +1,11 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe as describeIntegration, it, expect, vi, beforeEach, beforeAll } from "vitest";
 import { appRouter } from "./routers";
 import type { TrpcContext } from "./_core/context";
+import { assertDisposableMySQL } from "../tests/fixtures/assert-disposable-mysql";
+
+const integrationEnabled = process.env.SERS_INTEGRATION === "1";
+const describe = describeIntegration.skipIf(!integrationEnabled);
+beforeAll(() => { if (integrationEnabled) assertDisposableMySQL(); });
 
 // ===== Helper: Create authenticated context =====
 function createAuthContext(role: "user" | "admin" = "user"): { ctx: TrpcContext } {

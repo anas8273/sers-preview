@@ -12,7 +12,7 @@ import {
   Radio, Table2, Lightbulb, Users, Presentation, Wrench, Mail,
   UserCircle, ShoppingCart, Download, Star, Filter, ExternalLink
 } from "lucide-react";
-import { sections, type Section, type Service } from "@/lib/data";
+import { getSectionEntryRoute, getServiceAvailability, sections, type Section, type Service } from "@/lib/data";
 
 // Icon map for sections
 const iconMap: Record<string, React.ComponentType<any>> = {
@@ -20,15 +20,6 @@ const iconMap: Record<string, React.ComponentType<any>> = {
   CalendarDays, ClipboardCheck, Medal, GraduationCap, BookOpen,
   Radio, Table2, Lightbulb, Users, Presentation, Zap, Wrench, Mail,
   ShoppingBag, UserCircle,
-};
-
-// خريطة الأقسام التي لها صفحات تفاعلية مبنية
-const INTERACTIVE_ROUTES: Record<string, string> = {
-  "1": "/performance-evidence",
-  "4": "/certificates",
-  "6": "/treatment-plans",
-  "8": "/grade-analysis",
-  "13": "/covers",
 };
 
 type FilterMode = "all" | "interactive" | "store";
@@ -62,31 +53,12 @@ export default function SectionPage() {
   }
 
   const Icon = iconMap[section.icon] || FileText;
-  const sectionRoute = section.route || INTERACTIVE_ROUTES[section.id];
+  const sectionRoute = getSectionEntryRoute(section);
   const interactiveCount = section.services.filter((s) => s.mode === "interactive" || s.mode === "both").length;
   const storeCount = section.services.filter((s) => s.mode === "store" || s.mode === "both").length;
 
   const handleServiceClick = (service: Service) => {
-    if (service.comingSoon) {
-      import("sonner").then(({ toast }) => {
-        toast.info("قريباً إن شاء الله", { description: "هذه الخدمة قيد التطوير" });
-      });
-      return;
-    }
-    if (service.mode === "interactive" || service.mode === "both") {
-      if (sectionRoute) {
-        navigate(sectionRoute);
-      } else {
-        import("sonner").then(({ toast }) => {
-          toast.info("قيد التطوير", { description: "الخدمة التفاعلية قيد البناء" });
-        });
-      }
-    } else {
-      // Store item - show coming soon for payment
-      import("sonner").then(({ toast }) => {
-        toast.info("المتجر قيد التجهيز", { description: `${service.title} - ${service.price > 0 ? service.price + " ر.س" : "مجاني"} — سيتوفر قريباً` });
-      });
-    }
+    if (sectionRoute && (service.mode === "interactive" || service.mode === "both") && !service.comingSoon) navigate(sectionRoute);
   };
 
   return (
@@ -187,12 +159,16 @@ export default function SectionPage() {
               const isInteractive = service.mode === "interactive" || service.mode === "both";
               const isStore = service.mode === "store" || service.mode === "both";
               const isComingSoon = service.comingSoon;
+              const availability = getServiceAvailability(section, service);
+              const canOpen = Boolean(sectionRoute && isInteractive && !isComingSoon);
 
               return (
-                <div
+                <button
+                  type="button"
                   key={service.id}
+                  disabled={!canOpen}
                   className={`bg-white rounded-xl border p-5 transition-all group ${
-                    isComingSoon ? "border-dashed border-gray-300 opacity-70" : "border-gray-100 hover:border-gray-200 cursor-pointer"
+                    !canOpen ? "border-dashed border-gray-300 text-right opacity-75" : "border-gray-100 hover:border-gray-200 cursor-pointer text-right"
                   }`}
                   onClick={() => handleServiceClick(service)}
                 >
@@ -218,6 +194,11 @@ export default function SectionPage() {
                         {service.format.join(" · ").toUpperCase()}
                       </span>
                     )}
+                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium border ${
+                      availability === "server" ? "bg-blue-50 text-blue-700 border-blue-200" : availability === "partial" ? "bg-amber-50 text-amber-700 border-amber-200" : availability === "local" ? "bg-slate-100 text-slate-700 border-slate-200" : availability === "catalog" ? "bg-pink-50 text-pink-700 border-pink-200" : "bg-gray-100 text-gray-600 border-gray-200"
+                    }`}>
+                      {availability === "server" ? "محفوظ في مساحة العمل" : availability === "partial" ? "مرتبط جزئياً" : availability === "local" ? "محلي على الجهاز" : availability === "catalog" ? "كتالوج غير منشور" : "قيد الإعداد"}
+                    </span>
                   </div>
 
                   {/* Title + description */}
@@ -239,17 +220,17 @@ export default function SectionPage() {
                     </div>
                     {!isComingSoon && (
                       <span className="text-[11px] font-medium flex items-center gap-1" style={{ color: section.color }}>
-                        {isInteractive && sectionRoute ? (
+                        {canOpen ? (
                           <><Zap className="w-3 h-3" /> ابدأ الآن</>
                         ) : isStore ? (
-                          <><ShoppingBag className="w-3 h-3" /> تصفح</>
+                          <><ShoppingBag className="w-3 h-3" /> غير منشور للشراء</>
                         ) : (
-                          <><FileText className="w-3 h-3" /> قريباً</>
+                          <><FileText className="w-3 h-3" /> لا يوجد فتح منشور</>
                         )}
                       </span>
                     )}
                   </div>
-                </div>
+                </button>
               );
             })}
           </>

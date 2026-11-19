@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
-import { Home, BriefcaseBusiness, Library, CheckSquare, ShoppingBag, Bell, UserRound, Menu, X, Sparkles, Settings2 } from "lucide-react";
+import { Home, BriefcaseBusiness, Library, CheckSquare, ShoppingBag, Bell, UserRound, Menu, X, Sparkles, Settings2, Wrench } from "lucide-react";
 import { PRODUCT_NAV_ITEMS, LEGACY_TOOLS_ENABLED, isProductRouteActive } from "@/config/productNavigation";
 
 const iconMap = {
@@ -11,6 +11,7 @@ const iconMap = {
   store: ShoppingBag,
   notifications: Bell,
   account: UserRound,
+  catalog: Wrench,
 };
 
 interface AppSidebarProps { currentPath?: string; }
@@ -29,8 +30,26 @@ const legacyLinks = [
 export default function AppSidebar({ currentPath }: AppSidebarProps) {
   const [location, navigate] = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const menuButtonRef = useRef<HTMLButtonElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const wasOpenRef = useRef(false);
   const path = currentPath ?? location;
   const go = (target: string) => { navigate(target); setSidebarOpen(false); };
+
+  useEffect(() => {
+    if (sidebarOpen) closeButtonRef.current?.focus();
+    else if (wasOpenRef.current) menuButtonRef.current?.focus();
+    wasOpenRef.current = sidebarOpen;
+  }, [sidebarOpen]);
+
+  useEffect(() => {
+    if (!sidebarOpen) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setSidebarOpen(false);
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [sidebarOpen]);
 
   const sidebarContent = (
     <div className="flex flex-col h-full" dir="rtl">
@@ -41,7 +60,7 @@ export default function AppSidebar({ currentPath }: AppSidebarProps) {
             <h1 className="text-base font-bold text-slate-950 leading-none" style={{ fontFamily: "'Tajawal', sans-serif" }}>SERS</h1>
             <p className="text-[10px] text-slate-500 mt-1 truncate">مساحة السجلات التعليمية الذكية</p>
           </div>
-          <button onClick={() => setSidebarOpen(false)} className="mr-auto lg:hidden p-1.5 rounded-lg hover:bg-slate-100" aria-label="إغلاق القائمة"><X className="w-4 h-4 text-slate-500" /></button>
+          <button ref={closeButtonRef} onClick={() => setSidebarOpen(false)} className="mr-auto lg:hidden p-1.5 rounded-lg hover:bg-slate-100" aria-label="إغلاق القائمة"><X className="w-4 h-4 text-slate-500" /></button>
         </div>
       </div>
 
@@ -50,12 +69,12 @@ export default function AppSidebar({ currentPath }: AppSidebarProps) {
         <p className="text-xs text-slate-500 mt-1 leading-5">ابدأ بالنتيجة التي تريد إنجازها، وليس بقائمة أدوات.</p>
       </div>
 
-      <nav className="flex-1 overflow-y-auto px-2 pb-4">
+      <nav className="flex-1 overflow-y-auto px-2 pb-4" aria-label="التنقل الرئيسي">
         {PRODUCT_NAV_ITEMS.map((item) => {
           const Icon = iconMap[item.icon];
-          const active = isProductRouteActive(path, item.path);
+          const active = isProductRouteActive(path, item.path, item.aliases);
           return (
-            <button key={item.path} onClick={() => go(item.path)} className={`w-full flex items-start gap-3 px-3 py-3 rounded-xl text-sm transition-colors mb-1 ${active ? "bg-teal-50 text-teal-800" : "text-slate-600 hover:bg-slate-50"}`}>
+            <button key={item.path} onClick={() => go(item.path)} aria-current={active ? "page" : undefined} className={`w-full flex items-start gap-3 px-3 py-3 rounded-xl text-sm transition-colors mb-1 ${active ? "bg-teal-50 text-teal-800" : "text-slate-600 hover:bg-slate-50"}`}>
               <Icon className={`w-4.5 h-4.5 mt-0.5 shrink-0 ${active ? "text-teal-700" : "text-slate-400"}`} />
               <span className="min-w-0 flex-1 text-right">
                 <span className={`block truncate ${active ? "font-bold" : "font-semibold"}`}>{item.label}</span>
@@ -77,16 +96,16 @@ export default function AppSidebar({ currentPath }: AppSidebarProps) {
       </nav>
 
       <div className="p-3 border-t border-slate-100 bg-slate-50/60">
-        <p className="text-[10px] text-slate-500 leading-4">النواة الجديدة: عمل → شاهد → نسخة → مراجعة → مخرج</p>
+        <p className="text-[10px] text-slate-500 leading-4">رحلة عملك: شاهد → عمل → نسخة → مراجعة → مخرج</p>
       </div>
     </div>
   );
 
   return (
     <>
-      <button onClick={() => setSidebarOpen(true)} className="fixed top-2.5 right-3 z-50 lg:hidden bg-white/95 rounded-lg shadow-sm border border-slate-200 p-2" aria-label="فتح القائمة"><Menu className="w-5 h-5 text-slate-700" /></button>
-      {sidebarOpen && <div className="fixed inset-0 bg-slate-950/30 backdrop-blur-sm z-40 lg:hidden" onClick={() => setSidebarOpen(false)} />}
-      <aside className={`fixed top-0 right-0 h-full w-72 bg-white border-l border-slate-200 z-50 transition-transform duration-300 overflow-hidden ${sidebarOpen ? "translate-x-0" : "translate-x-full lg:translate-x-0"}`}>{sidebarContent}</aside>
+      <button ref={menuButtonRef} onClick={() => setSidebarOpen(true)} aria-expanded={sidebarOpen} aria-controls="sers-sidebar" className="fixed top-2.5 right-3 z-50 lg:hidden bg-white/95 rounded-lg shadow-sm border border-slate-200 p-2" aria-label="فتح القائمة"><Menu className="w-5 h-5 text-slate-700" /></button>
+      {sidebarOpen && <div className="fixed inset-0 bg-slate-950/30 backdrop-blur-sm z-40 lg:hidden" aria-hidden="true" onClick={() => setSidebarOpen(false)} />}
+      <aside id="sers-sidebar" aria-label="قائمة SERS" className={`fixed top-0 right-0 h-full w-72 bg-white border-l border-slate-200 z-50 transition-transform duration-300 overflow-hidden ${sidebarOpen ? "translate-x-0" : "translate-x-full lg:translate-x-0"}`}>{sidebarContent}</aside>
     </>
   );
 }

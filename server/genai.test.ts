@@ -157,6 +157,7 @@ describe("genAI.generateCV", () => {
     const result = await caller.genAI.generateCV({
       name: "أحمد محمد",
       jobTitle: "معلم رياضيات",
+      privacyConfirmation: { policyVersion: "ai-data-minimization-v1", purpose: "draft-cv-wording", acknowledged: true },
     });
 
     expect(result.success).toBe(true);
@@ -180,6 +181,7 @@ describe("genAI.generateCV", () => {
     const result = await caller.genAI.generateCV({
       name: "test",
       jobTitle: "test",
+      privacyConfirmation: { policyVersion: "ai-data-minimization-v1", purpose: "draft-cv-wording", acknowledged: true },
     });
 
     expect(result.success).toBe(false);
@@ -286,6 +288,7 @@ describe("genAI.extractGradesFromImage", () => {
     const result = await caller.genAI.extractGradesFromImage({
       imageData: aiPngDataUrl,
       maxScore: 100,
+      privacyConfirmation: { policyVersion: "ai-data-minimization-v1", purpose: "synthetic-grade-image-test", acknowledged: true },
     });
 
     expect(result.success).toBe(true);

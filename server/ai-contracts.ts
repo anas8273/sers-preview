@@ -13,10 +13,15 @@ const questionType = z.enum(["multiple-choice", "true-false", "essay", "fill-bla
 const link = text(2048).refine(value => {
   try { const url = new URL(value); return ["https:", "http:"].includes(url.protocol) && !url.username && !url.password; } catch { return false; }
 }, "الرابط غير صالح");
+const aiPrivacyConfirmation = z.strictObject({
+  policyVersion: z.string().min(1).max(128),
+  purpose: text(300).min(1),
+  acknowledged: z.literal(true),
+});
 
 export const aiInputs = {
   classifyEvidence: z.strictObject({
-    description: text(8000).optional(), fileName: text(255).optional(), fileType: text(128).optional(), fileUrl: image.optional(), linkUrl: link.optional(),
+    description: text(8000).optional(), fileName: text(255).optional(), fileType: text(128).optional(), fileUrl: image.optional(), linkUrl: link.optional(), privacyConfirmation: aiPrivacyConfirmation.optional(),
     jobId: identifier.optional(), jobTitle: label.optional(),
     criteriaList: z.array(criterion).min(1).max(30).refine(unique),
     learningContext: z.array(z.strictObject({ fileName: text(255), criterionId: identifier, criterionTitle: label, subEvidenceId: identifier, subEvidenceTitle: label })).max(10).optional(),
@@ -28,9 +33,13 @@ export const aiInputs = {
   analyzeGaps: z.strictObject({ coveredIndicators: z.array(label).max(300), totalIndicators: z.number().int().min(1).max(1000) }).refine(value => value.coveredIndicators.length <= value.totalIndicators && JSON.stringify(value).length <= 60_000, "عدد المؤشرات أو حجمها غير صالح"),
   fillReport: z.strictObject({ templateName: label, fields, context: text(16000).optional() }),
   generateRadio: z.strictObject({ theme: label, segments: z.array(label).min(1).max(20).refine(value => new Set(value).size === value.length), additionalNotes: text(8000).optional() }),
-  generateCV: z.strictObject({ name: text(200), jobTitle: text(300), experience: text(8000).optional(), education: text(8000).optional(), skills: text(4000).optional(), additionalInfo: text(8000).optional() }).refine(value => Boolean(value.name.trim() || value.jobTitle.trim())),
+  generateCV: z.strictObject({
+    name: text(200).optional(), fullName: text(200).optional(), email: text(320).optional(), phone: text(80).optional(),
+    jobTitle: text(300), experience: text(8000).optional(), education: text(8000).optional(), skills: text(4000).optional(),
+    additional: text(8000).optional(), additionalInfo: text(8000).optional(), privacyConfirmation: aiPrivacyConfirmation.optional(),
+  }).refine(value => Boolean(value.name?.trim() || value.fullName?.trim() || value.jobTitle.trim())),
   generateExamQuestions: z.strictObject({ subject: label, grade: label, topic: text(24000).optional(), questionTypes: z.array(questionType).min(1).max(4).refine(value => new Set(value).size === value.length), count: z.number().int().min(1).max(30), difficulty: text(100).optional() }),
-  extractGradesFromImage: z.strictObject({ imageData: image, maxScore: z.number().finite().min(1).max(1000) }),
+  extractGradesFromImage: z.strictObject({ imageData: image, maxScore: z.number().finite().min(1).max(1000), privacyConfirmation: aiPrivacyConfirmation.optional() }),
   generatePortfolioContent: z.strictObject({ section: label, jobTitle: label, existingData: text(16000).optional() }),
 };
 

@@ -4,6 +4,7 @@
 export type ServiceMode = "interactive" | "store" | "both";
 export type ServiceFormat = "pdf" | "word" | "pptx" | "google-sites" | "online";
 export type UserRole = "teacher" | "admin" | "counselor" | "activity" | "kindergarten" | "special-ed" | "all";
+export type ServiceAvailability = "server" | "local" | "partial" | "catalog" | "planned";
 
 export interface Service {
   id: string;
@@ -95,8 +96,8 @@ export const sections: Section[] = [
   {
     id: "3",
     slug: "reports-center",
-    title: "مركز التقارير الشامل",
-    description: "إنشاء جميع أنواع التقارير التعليمية والتوثيقية بنماذج ديناميكية مدعومة بالذكاء الاصطناعي",
+    title: "التقارير والمراجعة",
+    description: "تقارير محفوظة في حسابك، وشواهد ونسخ ثابتة للمراجعة والتصدير؛ النماذج المحلية القديمة متاحة في مسار انتقال منفصل",
     icon: "FileText",
     color: "#2563EB",
     hasInteractive: true,
@@ -369,6 +370,32 @@ export const sections: Section[] = [
 // ═══════════════════════════════════════════════════════════════
 // Helper functions
 // ═══════════════════════════════════════════════════════════════
+
+// Routes مثبتة لصفحات موجودة فعلاً. لا نستخدم route القسم كبديل لأداة غير مبنية.
+const SECTION_ENTRY_ROUTES: Record<string, string> = {
+  "1": "/performance-evidence",
+  "2": "/portfolio",
+  "3": "/reports",
+  "4": "/certificates",
+  "5": "/smart-cv",
+  "6": "/treatment-plans",
+  "7": "/exams",
+  "8": "/grade-analysis",
+  "9": "/school-radio",
+  "13": "/covers",
+};
+
+export function getSectionEntryRoute(section: Section): string | undefined {
+  return SECTION_ENTRY_ROUTES[section.id];
+}
+
+export function getServiceAvailability(section: Section, service: Service): ServiceAvailability {
+  if (service.comingSoon || (service.mode !== "store" && !getSectionEntryRoute(section))) return "planned";
+  if (service.mode === "store") return "catalog";
+  if (section.id === "3") return "server";
+  if (section.id === "1" || section.id === "8") return "partial";
+  return "local";
+}
 
 export function getAllServices(): Service[] {
   return sections.flatMap((s) => s.services);

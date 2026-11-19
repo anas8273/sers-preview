@@ -2,6 +2,7 @@ import { and, eq, isNull } from "drizzle-orm";
 import { outputs, reviews, workItems, workVersions } from "../drizzle/domain-core";
 import { getDb } from "./db";
 import { verifyProtectedOutputPassword } from "./output-password";
+import { projectReportDocument, type ReportProjectionAsset } from "../shared/report-projection";
 
 export class PublicOutputNotFoundError extends Error {
   constructor() {
@@ -24,8 +25,7 @@ export class PublicOutputPasswordInvalidError extends Error {
   }
 }
 
-type ReportAssetSnapshot = {
-  id?: number;
+type ReportAssetSnapshot = ReportProjectionAsset & {
   title?: string;
   kind?: string;
   role?: string;
@@ -45,25 +45,6 @@ type ReportSnapshot = {
   capturedAt?: string;
 };
 
-const FIELD_DEFINITIONS = [
-  ["summary", "ملخص التقرير"],
-  ["objectives", "الأهداف"],
-  ["audience", "الفئة المستهدفة"],
-  ["implementation", "آلية التنفيذ"],
-  ["results", "النتائج والمخرجات"],
-  ["impact", "قياس الأثر"],
-  ["recommendations", "التوصيات والخطوات التالية"],
-] as const;
-
-const TEMPLATE_LABELS: Record<string, string> = {
-  custom: "تقرير عام",
-  "program-report": "تقرير برنامج",
-  "initiative-report": "تقرير مبادرة",
-  "workshop-report": "تقرير ورشة",
-  "meeting-report": "محضر/تقرير اجتماع",
-  "visit-report": "تقرير زيارة",
-};
-
 export function projectReportSnapshot(value: unknown) {
   if (!value || typeof value !== "object") return undefined;
   const snapshot = value as ReportSnapshot;
@@ -71,14 +52,13 @@ export function projectReportSnapshot(value: unknown) {
     return undefined;
   }
 
-  const rawFields = snapshot.reportDraft.fields && typeof snapshot.reportDraft.fields === "object"
-    ? snapshot.reportDraft.fields
-    : {};
-  const fields = FIELD_DEFINITIONS.flatMap(([key, label]) => {
-    const rawValue = rawFields[key];
-    if (typeof rawValue !== "string" || !rawValue.trim()) return [];
-    return [{ key, label, value: rawValue.trim() }];
-  });
+  let model;
+  try {
+    model = projectReportDocument({ reportDraft: snapshot.reportDraft, assets: snapshot.assets });
+  } catch {
+    // A malformed historical snapshot is not exposed through a public token.
+    return undefined;
+  }
 
   const selectedIds = new Set(
     Array.isArray(snapshot.reportDraft.evidenceAssetIds)
@@ -94,20 +74,18 @@ export function projectReportSnapshot(value: unknown) {
       caption: typeof asset.caption === "string" && asset.caption.trim() ? asset.caption.trim() : undefined,
     }));
 
-  const templateId = typeof snapshot.reportDraft.templateId === "string"
-    ? snapshot.reportDraft.templateId
-    : "custom";
   return {
     title: typeof snapshot.work.title === "string" && snapshot.work.title.trim()
       ? snapshot.work.title.trim()
       : "تقرير",
-    templateLabel: TEMPLATE_LABELS[templateId] || "تقرير",
+    schemaVersion: model.schemaVersion,
+    templateLabel: model.template.label,
     capturedAt: typeof snapshot.capturedAt === "string"
       ? snapshot.capturedAt
       : typeof snapshot.reportDraft.updatedAt === "string"
         ? snapshot.reportDraft.updatedAt
         : undefined,
-    fields,
+    fields: model.fields.map(field => ({ key: field.key, label: field.label, type: field.type, value: field.value })),
     evidence,
   };
 }

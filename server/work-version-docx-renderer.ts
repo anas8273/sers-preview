@@ -6,24 +6,16 @@ import {
 import JSZip from "jszip";
 import QRCode from "qrcode";
 import { sanitizeInlinePng } from "./work-version-inline-image";
+import { formatReportFieldValue, normalizeReportDraft, projectReportDocument, type ReportProjectionAsset } from "../shared/report-projection";
 
 export class ReportDocxValidationError extends Error {}
-type AssetSnapshot = {
-  id?: number; title?: string; kind?: string; role?: string; caption?: string;
-  preview?: { mimeType?: string; dataBase64?: string };
-};
 type ReportSnapshot = {
   kind?: string; work?: { title?: string };
   academicContext?: { yearLabel?: string; termLabel?: string | null };
-  reportDraft?: { fields?: Record<string, unknown>; fontFamily?: string; evidenceAssetIds?: unknown[]; updatedAt?: string };
-  assets?: AssetSnapshot[]; capturedAt?: string;
+  reportDraft?: Record<string, unknown>;
+  assets?: ReportProjectionAsset[]; capturedAt?: string;
   shareReference?: { url?: string; label?: string };
 };
-const fields = [
-  ["summary", "ملخص التقرير"], ["objectives", "الأهداف"], ["audience", "الفئة المستهدفة"],
-  ["implementation", "آلية التنفيذ"], ["results", "النتائج والمخرجات"],
-  ["impact", "قياس الأثر"], ["recommendations", "التوصيات والخطوات التالية"],
-] as const;
 function text(value: unknown, max = 40_000) {
   if (value === undefined || value === null) return "";
   if (typeof value !== "string" || value.length > max) throw new ReportDocxValidationError("Report text exceeds the export limit");
@@ -36,15 +28,29 @@ function normalize(value: unknown) {
   if (snapshot.assets && (!Array.isArray(snapshot.assets) || snapshot.assets.length > 100)) throw new ReportDocxValidationError("Too many report evidence entries");
   return snapshot;
 }
+function normalizeFrozenDraft(value: Record<string, unknown>) {
+  return normalizeReportDraft(value);
+}
 
 /** All text comes from the immutable snapshot. No HTML evaluation, external
  * relationship, file URL or storage key is fetched or copied into the document. */
 export async function renderReportWorkVersionDocx(value: unknown, versionNumber: number) {
   if (!Number.isSafeInteger(versionNumber) || versionNumber < 1) throw new ReportDocxValidationError("Invalid version number");
-  const snapshot = normalize(value), draft = snapshot.reportDraft!;
+  const snapshot = normalize(value);
+  let draft;
+  let model;
+  try {
+    draft = normalizeFrozenDraft(snapshot.reportDraft!);
+    model = projectReportDocument({ reportDraft: draft, assets: snapshot.assets });
+  } catch (error) {
+    if (error instanceof ReportDocxValidationError) throw error;
+    throw new ReportDocxValidationError(error instanceof Error ? error.message : "Invalid report document");
+  }
   const title = text(snapshot.work!.title, 255) || "تقرير";
-  const font = ["Cairo", "Tajawal", "Arial"].includes(draft.fontFamily || "") ? draft.fontFamily! : "Arial";
-  const captured = snapshot.capturedAt || draft.updatedAt;
+  const supportedFonts = ["Cairo", "Tajawal", "Noto Kufi Arabic", "Arial"] as const;
+  if (!supportedFonts.includes(draft.fontFamily as typeof supportedFonts[number])) throw new ReportDocxValidationError(`Unsupported report font: ${draft.fontFamily}`);
+  const font = draft.fontFamily;
+  const captured = snapshot.capturedAt || (snapshot.reportDraft?.updatedAt as string | undefined);
   const timestamp = captured && Number.isFinite(Date.parse(captured)) ? new Date(captured) : new Date("2000-01-01T00:00:00Z");
   const dateLabel = new Intl.DateTimeFormat("ar-SA", { calendar: "gregory", year: "numeric", month: "long", day: "numeric", timeZone: "UTC" }).format(timestamp);
   const runs = (value: string, options: { bold?: boolean; color?: string; size?: number } = {}) =>
@@ -73,18 +79,17 @@ export async function renderReportWorkVersionDocx(value: unknown, versionNumber:
   if (yearLabel) contents.push(paragraph(`العام الدراسي ${yearLabel}`, { alignment: AlignmentType.CENTER }));
   if (termLabel) contents.push(paragraph(termLabel, { alignment: AlignmentType.CENTER }));
   let populated = 0, totalText = 0;
-  for (const [key, label] of fields) {
-    const content = text(draft.fields?.[key]);
+  for (const field of model.fields) {
+    const content = text(formatReportFieldValue(field.value));
     totalText += content.length;
     if (totalText > 180_000) throw new ReportDocxValidationError("Report text exceeds the export limit");
     if (!content) continue;
-    contents.push(heading(label, populated++ === 0));
+    contents.push(heading(field.label, populated++ === 0));
     for (const line of content.split(/\r?\n/)) contents.push(paragraph(line || " "));
   }
   if (!populated) contents.push(heading("محتوى التقرير", true), paragraph("لا يوجد محتوى نصي مثبت في هذه النسخة."));
 
-  const selectedIds = new Set((Array.isArray(draft.evidenceAssetIds) ? draft.evidenceAssetIds : []).filter((id): id is number => Number.isSafeInteger(id) && Number(id) > 0));
-  const selected = (snapshot.assets ?? []).filter(asset => asset && typeof asset.id === "number" && selectedIds.has(asset.id));
+  const selected = model.evidence;
   if (selected.length) {
     contents.push(heading("الشواهد المستخدمة", true));
     const cell = (value: string, header = false, width = 4500) => new TableCell({
@@ -101,10 +106,13 @@ export async function renderReportWorkVersionDocx(value: unknown, versionNumber:
     }));
     let images = 0;
     for (const asset of selected) {
-      if (!asset.preview) continue;
-      if (++images > 4 || asset.preview.mimeType !== "image/png" || typeof asset.preview.dataBase64 !== "string") throw new ReportDocxValidationError("Unsupported report preview");
+      // Never render a mutable/raw asset preview. The shared projection has
+      // already rejected selected previews without frozen provenance.
+      const frozenPreview = asset.frozen?.preview;
+      if (!frozenPreview) continue;
+      if (++images > 4 || frozenPreview.mimeType !== "image/png" || typeof frozenPreview.dataBase64 !== "string") throw new ReportDocxValidationError("Unsupported report preview");
       let preview;
-      try { preview = sanitizeInlinePng(asset.preview.dataBase64); } catch { throw new ReportDocxValidationError("Invalid report preview"); }
+      try { preview = sanitizeInlinePng(frozenPreview.dataBase64); } catch { throw new ReportDocxValidationError("Invalid report preview"); }
       const scale = Math.min(1, 470 / preview.width, 400 / preview.height);
       contents.push(paragraph(text(asset.title, 255) || "صورة الشاهد", { pageBreakBefore: images === 1, keepNext: true, children: runs(text(asset.title, 255) || "صورة الشاهد", { bold: true }) }),
         new Paragraph({ alignment: AlignmentType.CENTER, children: [new ImageRun({ type: "png", data: preview.bytes, transformation: { width: Math.round(preview.width * scale), height: Math.round(preview.height * scale) }, altText: { name: `evidence-${images}`, title: text(asset.title, 255) || "صورة الشاهد", description: text(asset.caption, 1000) } })] }));

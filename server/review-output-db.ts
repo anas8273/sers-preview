@@ -9,7 +9,7 @@ import {
   workItems,
   workVersions,
 } from "../drizzle/domain-core";
-import { users } from "../drizzle/schema";
+import { auditLogs, users } from "../drizzle/schema";
 import { assertWorkAccess } from "./domain-db";
 import { getDb } from "./db";
 import { projectReportSnapshot } from "./public-output-service";
@@ -35,6 +35,78 @@ export class OutputValidationError extends Error {
     super(message);
     this.name = "OutputValidationError";
   }
+}
+
+const OUTPUT_TYPES = ["pdf", "link", "qr", "docx"] as const;
+const OUTPUT_VISIBILITIES = ["private", "protected", "public"] as const;
+type OutputType = (typeof OUTPUT_TYPES)[number];
+type OutputVisibility = (typeof OUTPUT_VISIBILITIES)[number];
+
+function isOutputType(value: unknown): value is OutputType {
+  return typeof value === "string" && (OUTPUT_TYPES as readonly string[]).includes(value);
+}
+
+function isOutputVisibility(value: unknown): value is OutputVisibility {
+  return typeof value === "string" && (OUTPUT_VISIBILITIES as readonly string[]).includes(value);
+}
+
+/**
+ * The public resolver only has a delivery contract for link/QR records.
+ * Keep this guard pure and before getDb/transaction so unsupported combinations
+ * cannot leave dangling rows even when called outside a tRPC router.
+ */
+export function validateOutputContract(input: {
+  type: unknown;
+  visibility?: unknown;
+  token?: unknown;
+  passwordHash?: unknown;
+  expiresAt?: Date;
+  storageKey?: unknown;
+}) {
+  const visibility = input.visibility ?? "private";
+  if (!isOutputType(input.type)) throw new OutputValidationError("Unsupported output type");
+  if (!isOutputVisibility(visibility)) throw new OutputValidationError("Unsupported output visibility");
+  if (input.type === "docx" && visibility !== "private") {
+    throw new OutputValidationError("Editable DOCX outputs must remain private");
+  }
+  if (visibility !== "private" && input.type !== "link" && input.type !== "qr") {
+    throw new OutputValidationError("Only link and QR outputs can be shared");
+  }
+  if ((input.type === "link" || input.type === "qr") && (typeof input.token !== "string" || !input.token.trim())) {
+    throw new OutputValidationError("Link and QR outputs require a token");
+  }
+  if (visibility === "protected" && (typeof input.passwordHash !== "string" || !input.passwordHash.trim())) {
+    throw new OutputValidationError("Protected outputs require a password hash");
+  }
+  if (visibility !== "protected" && input.passwordHash !== undefined && input.passwordHash !== null) {
+    throw new OutputValidationError("Password hashes are only valid for protected outputs");
+  }
+  if (visibility !== "private" && input.storageKey !== undefined && input.storageKey !== null) {
+    throw new OutputValidationError("Shared outputs cannot carry a private storage key");
+  }
+  if (input.expiresAt && (!Number.isFinite(input.expiresAt.getTime()) || input.expiresAt.getTime() <= Date.now())) {
+    throw new OutputValidationError("Output expiry must be in the future");
+  }
+}
+
+function shareAuditMetadata(input: {
+  outputId: number;
+  workVersionId: number;
+  versionNumber: number;
+  type: OutputType;
+  visibility: OutputVisibility;
+  expiresAt: Date | null;
+  context: "create" | "revoke";
+}) {
+  return {
+    outputId: input.outputId,
+    workVersionId: input.workVersionId,
+    versionNumber: input.versionNumber,
+    outputType: input.type,
+    grant: input.visibility,
+    expiresAt: input.expiresAt?.toISOString() ?? null,
+    context: input.context,
+  };
 }
 
 function getAffectedRows(result: unknown): number {
@@ -327,23 +399,10 @@ export async function createOutputForUser(userId: number, input: {
   storageKey?: string;
   expiresAt?: Date;
 }) {
+  const visibility = input.visibility === undefined ? "private" : input.visibility;
+  validateOutputContract({ ...input, visibility });
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  const visibility = input.visibility ?? "private";
-
-  if (input.type === "docx" && visibility !== "private") {
-    throw new OutputValidationError("Editable DOCX outputs must remain private");
-  }
-
-  if ((input.type === "link" || input.type === "qr") && !input.token) {
-    throw new OutputValidationError("Link and QR outputs require a token");
-  }
-  if (visibility === "protected" && !input.passwordHash) {
-    throw new OutputValidationError("Protected outputs require a password hash");
-  }
-  if (input.expiresAt && input.expiresAt.getTime() <= Date.now()) {
-    throw new OutputValidationError("Output expiry must be in the future");
-  }
 
   const outputId = await db.transaction(async tx => {
     const [row] = await tx
@@ -375,13 +434,36 @@ export async function createOutputForUser(userId: number, input: {
       storageKey: input.storageKey ?? null,
       expiresAt: input.expiresAt ?? null,
     });
-    return Number(inserted[0].insertId);
+    const id = Number(inserted[0].insertId);
+    if (visibility !== "private") {
+      await tx.insert(auditLogs).values({
+        actorUserId: userId,
+        action: "output.share_created",
+        resourceType: "output",
+        resourceId: String(id),
+        metadata: shareAuditMetadata({
+          outputId: id,
+          workVersionId: input.workVersionId,
+          versionNumber: row.version.versionNumber,
+          type: input.type,
+          visibility,
+          expiresAt: input.expiresAt ?? null,
+          context: "create",
+        }),
+      });
+    }
+    return id;
   });
 
-  return outputId ? getOutputForUser(userId, outputId) : undefined;
+  return outputId ? getPublicationReceiptForUser(userId, outputId) : undefined;
 }
 
-export async function getOutputForUser(userId: number, outputId: number) {
+/**
+ * The database row contains bearer material and private storage coordinates.
+ * Keep the full row behind this explicitly internal helper; callers serving
+ * read/list RPCs must use getOutputForUser/listOutputsForWorkForUser below.
+ */
+export async function getOutputRecordForUser(userId: number, outputId: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   const [row] = await db
@@ -395,29 +477,79 @@ export async function getOutputForUser(userId: number, outputId: number) {
   return { ...row.output, versionNumber: row.version.versionNumber, workId: row.work.id, workTitle: row.work.title };
 }
 
+type OutputRecord = NonNullable<Awaited<ReturnType<typeof getOutputRecordForUser>>>;
+
+/** Safe output projection for protected reader/list callers. Never expose bearer material or private coordinates. */
+function projectOutputForUser(row: OutputRecord, userId: number) {
+  return {
+    id: row.id, workVersionId: row.workVersionId, versionNumber: row.versionNumber,
+    workId: row.workId, workTitle: row.workTitle, type: row.type, visibility: row.visibility,
+    createdByUserId: row.createdByUserId, createdAt: row.createdAt,
+    expiresAt: row.expiresAt, revokedAt: row.revokedAt,
+  };
+}
+
+export async function getOutputForUser(userId: number, outputId: number) {
+  const row = await getOutputRecordForUser(userId, outputId);
+  return row ? projectOutputForUser(row, userId) : undefined;
+}
+
+/**
+ * Publication creation/management receipt, never used by reader/list RPCs:
+ * only the creator who still has write access may receive a share bearer.
+ */
+export async function getPublicationReceiptForUser(userId: number, outputId: number) {
+  const row = await getOutputRecordForUser(userId, outputId);
+  if (!row || row.createdByUserId !== userId || !(await assertWorkAccess(userId, row.workId, "write"))) return undefined;
+  return {
+    ...projectOutputForUser(row, userId),
+    token: row.visibility === "private" ? null : row.token,
+  };
+}
+
 export async function listOutputsForWorkForUser(userId: number, workItemId: number) {
   if (!(await assertWorkAccess(userId, workItemId, "read"))) return undefined;
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  return db
+  const rows = await db
     .select({ output: outputs, versionNumber: workVersions.versionNumber })
     .from(outputs)
     .innerJoin(workVersions, eq(outputs.workVersionId, workVersions.id))
     .where(eq(workVersions.workItemId, workItemId))
     .orderBy(desc(outputs.createdAt));
+  return rows.map(row => projectOutputForUser({ ...row.output, versionNumber: row.versionNumber, workId: workItemId, workTitle: "" }, userId));
 }
 
 export async function revokeOutputForUser(userId: number, outputId: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   return db.transaction(async tx => {
-    const [hint] = await tx.select({ work: workItems }).from(outputs)
+    const [hint] = await tx.select({ work: workItems, version: workVersions }).from(outputs)
       .innerJoin(workVersions, eq(outputs.workVersionId, workVersions.id))
       .innerJoin(workItems, eq(workVersions.workItemId, workItems.id)).where(eq(outputs.id, outputId)).limit(1);
     if (!hint || !await lockWorkAccess(tx, userId, hint.work, "write")) return false;
     const [output] = await tx.select().from(outputs).where(eq(outputs.id, outputId)).limit(1).for("update");
     if (!output) return false;
-    if (!output.revokedAt) await tx.update(outputs).set({ revokedAt: new Date() }).where(eq(outputs.id, outputId));
+    if (!output.revokedAt) {
+      await tx.update(outputs).set({ revokedAt: new Date() }).where(eq(outputs.id, outputId));
+      if (output.visibility !== "private") {
+        await tx.insert(auditLogs).values({
+          actorUserId: userId,
+          action: "output.share_revoked",
+          resourceType: "output",
+          resourceId: String(output.id),
+          metadata: shareAuditMetadata({
+            outputId: output.id,
+            workVersionId: output.workVersionId,
+            versionNumber: hint.version.versionNumber,
+            type: output.type,
+            visibility: output.visibility,
+            expiresAt: output.expiresAt,
+            context: "revoke",
+          }),
+        });
+      }
+    }
     return true;
   });
 }

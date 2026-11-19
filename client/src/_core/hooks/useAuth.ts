@@ -4,6 +4,7 @@ import { TRPCClientError } from "@trpc/client";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo } from "react";
 import { privateLocalStorage, broadcastAuthChange } from "@/lib/private-browser-storage";
+import { resetUserStoreForAuthTransition } from "@/stores/userStore";
 
 type UseAuthOptions = {
   redirectOnUnauthenticated?: boolean;
@@ -43,6 +44,9 @@ export function useAuth(options?: UseAuthOptions) {
     await queryClient.cancelQueries();
     queryClient.clear();
     utils.auth.me.setData(undefined, null);
+    // The old actor's profile must leave component memory before the vault is
+    // invalidated. The reset intentionally does not overwrite its ciphertext.
+    resetUserStoreForAuthTransition();
     privateLocalStorage.lock();
     try { localStorage.removeItem("manus-runtime-user-info"); } catch { /* Storage is optional. */ }
     broadcastAuthChange();

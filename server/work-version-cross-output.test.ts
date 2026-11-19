@@ -37,7 +37,7 @@ describe("cross-output immutable report acceptance", () => {
 
   it("rejects malformed frozen media and invalid QR references in PDF too", () => {
     const snapshot = createGoldenWorkVersionSnapshot();
-    snapshot.assets[0].preview!.dataBase64 = Buffer.from("not a PNG").toString("base64");
+    snapshot.assets[0].frozen!.preview!.dataBase64 = Buffer.from("not a PNG").toString("base64");
     expect(() => renderReportWorkVersionHtml(snapshot, 7)).toThrow();
     const invalidQr = createGoldenWorkVersionSnapshot();
     invalidQr.shareReference.url = "file:///etc/passwd";

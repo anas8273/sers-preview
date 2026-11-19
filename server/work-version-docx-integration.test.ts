@@ -1,3 +1,4 @@
+import { assertDisposableMySQL } from "../tests/fixtures/assert-disposable-mysql";
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { and, eq, inArray, sql } from "drizzle-orm";
@@ -6,10 +7,11 @@ import { users } from "../drizzle/schema";
 import { contentBlocks, memberships, notifications, organizations, outputs, reviewComments, reviews, workAssetLinks, workItems, workVersions } from "../drizzle/domain-core";
 import { getDb } from "./db";
 import { createWorkItemForUser, createWorkVersionForUser } from "./domain-db";
-import { createReportDraftVersionForUser, saveReportDraftForUser } from "./work-report-draft-db";
-import { addReviewCommentForUser, createOutputForUser, createReviewForUser, decideReviewForUser, getOutputForUser, revokeOutputForUser } from "./review-output-db";
+import { createReportDraftVersionForUser, getReportDraftForUser, saveReportDraftForUser } from "./work-report-draft-db";
+import { addReviewCommentForUser, createOutputForUser, createReviewForUser, decideReviewForUser, getOutputForUser, getOutputRecordForUser, revokeOutputForUser } from "./review-output-db";
 import { renderReportWorkVersionDocx } from "./work-version-docx-renderer";
 import { generatePrivateDocxForWorkVersion, generatePrivatePdfForWorkVersion, getPrivateDocxDownloadForUser, getPrivatePdfDownloadForUser } from "./work-version-output-service";
+import { reportDraftSaveInput } from "../tests/fixtures/report-draft-contract";
 
 const suite = process.env.SERS_INTEGRATION === "1" ? describe : describe.skip;
 suite("immutable editable WorkVersion DOCX on disposable MySQL", () => {
@@ -22,7 +24,7 @@ suite("immutable editable WorkVersion DOCX on disposable MySQL", () => {
   };
   const dependencies = { ...storage, renderDocx: renderReportWorkVersionDocx };
   beforeAll(async () => {
-    if (process.env.GITHUB_ACTIONS !== "true" || process.env.DATABASE_URL !== "mysql://root:root@127.0.0.1:3306/sers_test") throw new Error("DOCX integration requires disposable CI database");
+    assertDisposableMySQL();
     const db = (await getDb())!;
     const [raw] = await db.execute(sql`SELECT DATABASE() AS name, VERSION() AS version`);
     const row = (raw as unknown as { name: string; version: string }[])[0];
@@ -56,7 +58,15 @@ suite("immutable editable WorkVersion DOCX on disposable MySQL", () => {
   async function version(organization = false) {
     const work = (await createWorkItemForUser(owner, { title: "تقرير ثابت قابل للتحرير", type: "report", ...(organization ? { ownerType: "organization" as const, organizationId: school } : {}) }))!;
     workIds.push(work.id);
-    const draft = await saveReportDraftForUser(owner, { workItemId: work.id, expectedRevision: 0, templateId: "custom", themeId: "formal", fontFamily: "Arial", fields: { summary: "محتوى مثبت قبل التعديل", objectives: "قياس التحسن في القراءة" }, evidenceAssetIds: [] });
+    const initial = (await getReportDraftForUser(owner, work.id))!;
+    const draft = await saveReportDraftForUser(owner, reportDraftSaveInput(initial.draft, {
+      workItemId: work.id,
+      expectedRevision: initial.draft.revision,
+      themeId: "formal",
+      fontFamily: "Arial",
+      fields: { summary: "محتوى مثبت قبل التعديل", objectives: "قياس التحسن في القراءة" },
+      evidenceAssetIds: [],
+    }));
     const frozen = await createReportDraftVersionForUser(owner, { workItemId: work.id, expectedRevision: draft.revision });
     versionIds.push(frozen.id); return { work, frozen, draft };
   }
@@ -66,13 +76,24 @@ suite("immutable editable WorkVersion DOCX on disposable MySQL", () => {
     const first = (await generatePrivateDocxForWorkVersion(owner, frozen.id, dependencies))!;
     expect(first).toMatchObject({ type: "docx", versionNumber: 1, reused: false });
     expect(first.filename).toMatch(/\.docx$/);
-    const buffer = blobs.get(first.storageKey)!;
+    const firstRecord = (await getOutputRecordForUser(owner, first.outputId))!;
+    expect(first).not.toHaveProperty("storageKey");
+    expect(first).not.toHaveProperty("contentHash");
+    const buffer = blobs.get(firstRecord.storageKey!)!;
     const zip = await JSZip.loadAsync(buffer);
     expect(await zip.file("word/document.xml")!.async("string")).toContain("محتوى مثبت قبل التعديل");
-    await saveReportDraftForUser(owner, { workItemId: work.id, expectedRevision: draft.revision, templateId: "custom", themeId: "formal", fontFamily: "Arial", fields: { summary: "مسودة جديدة لا تدخل النسخة السابقة" }, evidenceAssetIds: [] });
+    await saveReportDraftForUser(owner, reportDraftSaveInput(draft, {
+      workItemId: work.id,
+      expectedRevision: draft.revision,
+      fields: { summary: "مسودة جديدة لا تدخل النسخة السابقة" },
+      evidenceAssetIds: [],
+    }));
     const second = (await generatePrivateDocxForWorkVersion(owner, frozen.id, dependencies))!;
-    expect(second).toMatchObject({ outputId: first.outputId, contentHash: first.contentHash, storageKey: first.storageKey, reused: true });
-    expect(blobs.get(second.storageKey)).toEqual(buffer);
+    expect(second).toMatchObject({ outputId: first.outputId, reused: true });
+    const secondRecord = (await getOutputRecordForUser(owner, second.outputId))!;
+    expect(secondRecord.storageKey).toBe(firstRecord.storageKey);
+    expect(secondRecord.metadata).toEqual(firstRecord.metadata);
+    expect(blobs.get(secondRecord.storageKey!)).toEqual(buffer);
   });
 
   it("deduplicates concurrent DOCX requests and keeps PDF and Word artifacts distinct", async () => {
@@ -128,7 +149,12 @@ suite("immutable editable WorkVersion DOCX on disposable MySQL", () => {
     await decideReviewForUser(reviewer, firstReview.id, "approved");
     const sharedFirst = (await createOutputForUser(owner, { workVersionId: frozen.id, type: "link", visibility: "public", token: randomUUID() }))!;
     expect((await db.select().from(workItems).where(eq(workItems.id, work.id)))[0]).toMatchObject({ status: "approved", currentVersionNumber: 1 });
-    const nextDraft = await saveReportDraftForUser(owner, { workItemId: work.id, expectedRevision: draft.revision, templateId: "custom", themeId: "formal", fontFamily: "Arial", fields: { summary: "محتوى النسخة الثانية قيد المراجعة" }, evidenceAssetIds: [] });
+    const nextDraft = await saveReportDraftForUser(owner, reportDraftSaveInput(draft, {
+      workItemId: work.id,
+      expectedRevision: draft.revision,
+      fields: { summary: "محتوى النسخة الثانية قيد المراجعة" },
+      evidenceAssetIds: [],
+    }));
     const createNext = () => creator === "report"
       ? createReportDraftVersionForUser(owner, { workItemId: work.id, expectedRevision: nextDraft.revision })
       : createWorkVersionForUser(owner, work.id, { ...(original.snapshot as Record<string, unknown>), reportDraft: nextDraft });

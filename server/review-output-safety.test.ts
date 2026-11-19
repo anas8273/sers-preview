@@ -63,4 +63,14 @@ describe("review/output domain invariants", () => {
     expect(reviewService).toContain('eq(reviews.status, "approved")');
     expect(reviewService).toContain("Shared outputs require an approved review for this exact version");
   });
+
+  it("keeps bearer tokens and private storage keys out of output read/list projections", () => {
+    expect(reviewService).toContain("getOutputRecordForUser");
+    expect(reviewService).toContain("projectOutputForUser");
+    expect(reviewService).toContain("passwordHash: _passwordHash");
+    expect(reviewService).toContain("storageKey: _storageKey");
+    expect(reviewService).toContain("getPublicationReceiptForUser");
+    expect(reviewService).toContain("row.createdByUserId !== userId");
+    expect(reviewService).toContain("token: _token");
+  });
 });

@@ -61,7 +61,7 @@ describe("editable immutable WorkVersion DOCX", () => {
   it("embeds only bounded sanitized selected PNG previews and an explicit share QR", async () => {
     const preview = await QRCode.toBuffer("synthetic-preview", { type: "png", width: 128 });
     const value = { ...snapshot(), shareReference: { url: "https://demo.example/output/abcdefghijklmnopqrstuvwx", label: "رابط التقرير" },
-      assets: [{ id: 1, title: "صورة ثابتة", preview: { mimeType: "image/png", dataBase64: preview.toString("base64") } },
+      assets: [{ id: 1, title: "صورة ثابتة", frozen: { referenceVersion: "fixture-version-1", digest: "a".repeat(64), bytes: preview.length, contentType: "image/png" as const, sourceAssetId: 1, sourceUploadIntentId: "fixture-intent-0000001", preview: { mimeType: "image/png" as const, dataBase64: preview.toString("base64"), width: 128, height: 128 } } },
         { id: 2, title: "غير مختارة", preview: { mimeType: "image/png", dataBase64: "not-valid" } }],
     };
     const { zip, document } = await unpack(await renderReportWorkVersionDocx(value, 1));
@@ -69,6 +69,12 @@ describe("editable immutable WorkVersion DOCX", () => {
     expect(Object.keys(zip.files).filter(path => path.startsWith("word/media/") && path.endsWith(".png"))).toHaveLength(2);
     expect(document).toContain("رابط التقرير");
     expect(await renderReportWorkVersionDocx(value, 1)).toEqual(await renderReportWorkVersionDocx(value, 1));
+  });
+
+  it("rejects a selected preview that is not frozen and permits an intentional label-only witness", async () => {
+    const value = snapshot();
+    await expect(renderReportWorkVersionDocx({ ...value, assets: [{ id: 1, title: "صورة غير موثقة", preview: { mimeType: "image/png", dataBase64: "not-valid" } }] }, 1)).rejects.toBeInstanceOf(ReportDocxValidationError);
+    await expect(renderReportWorkVersionDocx({ ...value, assets: [{ id: 1, title: "شاهد بلا صورة" }] }, 1)).resolves.toBeTruthy();
   });
 
   it.each(["file:///etc/passwd", "http://localhost/output/abcdefghijklmnopqrst", "https://demo.example/private/source", "https://demo.example/output/abcdefghijklmnopqrst?password=secret"])("rejects an invalid snapshotted share reference %s", async url => {

@@ -33,3 +33,15 @@ describe.each(creators)("%s output password creation", (_name, create) => {
     expect(vi.mocked(createOutputForUser).mock.calls[0][1].passwordHash).toBeUndefined();
   });
 });
+
+describe("share output input boundary", () => {
+  it("rejects unsupported view-count policy instead of silently dropping it", async () => {
+    const create = shareOutputRouter.createCaller(ctx).create;
+    await expect(create({
+      workVersionId: 1,
+      type: "link",
+      visibility: "public",
+      maxViews: 1,
+    } as never)).rejects.toMatchObject({ code: "BAD_REQUEST" });
+  });
+});

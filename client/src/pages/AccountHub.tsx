@@ -5,12 +5,35 @@ import AppSidebar from "@/components/AppSidebar";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { getLoginUrl } from "@/const";
+import {
+  hasLegacyPlaintextUserRecord,
+  readLegacyPlaintextUserRecord,
+  removeLegacyPlaintextUserRecord,
+  privateLocalStorage,
+} from "@/lib/private-browser-storage";
+import { useUserStore } from "@/stores/userStore";
 
 type Role = "owner" | "admin" | "reviewer" | "member";
 const roleLabels: Record<Role, string> = { owner: "مالك", admin: "مدير", reviewer: "مراجع", member: "عضو" };
 const statusLabels = { active: "نشط", invited: "دعوة بانتظار القبول", suspended: "موقوف", left: "عضوية مسحوبة" };
 const field = "mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm";
 const button = "rounded-xl bg-teal-700 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50";
+
+type LegacyImportStatus = "none" | "available" | "importing" | "imported" | "preserved" | "error";
+
+function isLegacyUserSnapshot(raw: string) {
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object" || !("state" in parsed)) return false;
+    const state = (parsed as { state?: unknown }).state;
+    return Boolean(state && typeof state === "object"
+      && "personalInfo" in state && "profile" in state
+      && typeof (state as { personalInfo?: unknown }).personalInfo === "object"
+      && typeof (state as { profile?: unknown }).profile === "object");
+  } catch {
+    return false;
+  }
+}
 
 function SchoolMembers({ organizationId, owner }: { organizationId: number; owner: boolean }) {
   const utils = trpc.useUtils();
@@ -51,6 +74,8 @@ export default function AccountHub() {
   const [location] = useLocation();
   const { user, logout, loading: authLoading } = useAuth();
   const [logoutError, setLogoutError] = useState("");
+  const [legacyImportStatus, setLegacyImportStatus] = useState<LegacyImportStatus>(() => hasLegacyPlaintextUserRecord() ? "available" : "none");
+  const [legacyImportError, setLegacyImportError] = useState("");
   const utils = trpc.useUtils();
   const overview = trpc.account.overview.useQuery(undefined, { retry: false, enabled: Boolean(user) });
   const years = trpc.account.academicYears.useQuery(undefined, { retry: false, enabled: Boolean(user) });
@@ -65,12 +90,39 @@ export default function AccountHub() {
   const accept = trpc.account.acceptInvitation.useMutation({ onSuccess: refresh });
   const createYear = trpc.account.createAcademicYear.useMutation({ onSuccess: async () => { setYearLabel(""); await utils.account.academicYears.invalidate(); } });
   const manageable = overview.data?.schools.filter(s => s.status === "active" && ["owner", "admin"].includes(s.role)) ?? [];
+  const importLegacyProfile = async () => {
+    if (!window.confirm("لا يمكن إثبات مالك النسخة المحلية القديمة تلقائيًا. هل تؤكد أنها تخص هذا الحساب وتريد نسخها إلى الخزنة المشفرة؟ لن تُحذف النسخة الأصلية إلا بعد نجاح الحفظ المشفر.")) return;
+    setLegacyImportStatus("importing");
+    setLegacyImportError("");
+    let sourceRemoved = false;
+    try {
+      const raw = readLegacyPlaintextUserRecord();
+      if (!raw || !isLegacyUserSnapshot(raw)) throw new Error("تعذر التحقق من بنية النسخة القديمة");
+      // Commit ciphertext in the current server-provided account scope first.
+      await privateLocalStorage.setItemDurably("sers-user", raw);
+      await privateLocalStorage.flush();
+      try {
+        removeLegacyPlaintextUserRecord();
+        sourceRemoved = true;
+        setLegacyImportStatus("imported");
+      } catch {
+        // The encrypted copy is safe; retaining the source is preferable to a
+        // silent delete when browser storage removal is unavailable.
+        setLegacyImportStatus("preserved");
+      }
+      await useUserStore.persist.rehydrate();
+    } catch (error) {
+      setLegacyImportStatus(sourceRemoved ? "imported" : "error");
+      setLegacyImportError(sourceRemoved ? "" : (error instanceof Error ? error.message : "تعذر حفظ النسخة القديمة بأمان"));
+    }
+  };
   if (!user) return <div dir="rtl" className="min-h-screen bg-slate-50 pb-24"><AppSidebar currentPath={location} /><main className="px-4 py-8 lg:mr-72"><h1 className="text-3xl font-black text-slate-950">الحساب والمدرسة</h1>{authLoading ? <Loader2 aria-label="جارٍ التحميل" className="mt-6 animate-spin" /> : <a href={getLoginUrl()} className="mt-6 inline-flex rounded-xl bg-teal-700 px-4 py-2.5 text-sm font-bold text-white">تسجيل الدخول</a>}</main></div>;
   return <div dir="rtl" className="min-h-screen bg-slate-50 pb-24 lg:pb-8">
     <AppSidebar currentPath={location} />
     <main className="lg:mr-72"><div className="mx-auto max-w-5xl space-y-6 px-4 py-8 sm:px-6">
       <header><p className="text-xs font-bold text-teal-700">الهوية والملكية</p><h1 className="mt-2 text-3xl font-black text-slate-950">الحساب والمدرسة</h1><p className="mt-3 text-sm leading-7 text-slate-500">عضويات واضحة وسنوات دراسية مستقلة تحفظ أعمال كل عام في سياقها.</p></header>
       {user ? <div><button type="button" disabled={authLoading} className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 disabled:opacity-50" onClick={() => { setLogoutError(""); void logout().catch(() => setLogoutError("تعذر إنهاء الجلسة الآن. أعد المحاولة حتى يكتمل تسجيل الخروج.")); }}><LogOut className="h-4 w-4" />تسجيل الخروج</button>{logoutError && <p role="alert" className="mt-2 text-sm text-red-700">{logoutError}</p>}</div> : !authLoading && <a href={getLoginUrl()} className="inline-flex rounded-xl bg-teal-700 px-4 py-2.5 text-sm font-bold text-white">تسجيل الدخول</a>}
+      {legacyImportStatus !== "none" && legacyImportStatus !== "imported" && <section className="rounded-2xl border border-amber-200 bg-amber-50 p-5" aria-live="polite"><h2 className="font-bold text-amber-950">نسخة محلية قديمة متاحة</h2><p className="mt-2 text-sm leading-7 text-amber-900">لا ننسب هذه النسخة تلقائيًا لأي حساب ولا نعرض محتواها قبل موافقتك. إذا كانت تخص هذا الحساب، يمكنك نسخها إلى الخزنة المشفرة المرتبطة بجلسة الدخول. تبقى النسخة الأصلية حتى ينجح الحفظ.</p>{legacyImportStatus === "available" && <button type="button" className={`${button} mt-3 bg-amber-800`} onClick={() => void importLegacyProfile()}>مراجعة واستيراد النسخة بموافقتي</button>}{legacyImportStatus === "importing" && <p role="status" className="mt-3 text-sm">جارٍ حفظ نسخة مشفرة durable…</p>}{legacyImportStatus === "preserved" && <p role="status" className="mt-3 text-sm">حُفظت النسخة المشفرة، وتعذر حذف الأصل؛ بقي الأصل دون حذف صامت.</p>}{legacyImportStatus === "error" && <p role="alert" className="mt-3 text-sm text-red-800">{legacyImportError || "تعذر الاستيراد؛ بقيت النسخة القديمة دون تغيير."}</p>}</section>}
       {overview.isLoading && <Loader2 aria-label="جارٍ التحميل" className="animate-spin" />}
       {overview.error && <p role="alert" className="rounded-xl bg-amber-50 p-4 text-amber-900">تعذر تحميل الحساب. سجل الدخول ثم أعد المحاولة.</p>}
       {overview.data && <section className="rounded-2xl border border-slate-200 bg-white p-5"><div className="flex items-center gap-3"><UserRound className="h-7 w-7 text-teal-700" /><div><h2 className="font-bold">{overview.data.user.name || "حسابي"}</h2><p className="mt-1 text-sm text-slate-600">معرّف حسابك: <strong>{overview.data.user.id}</strong></p>{overview.data.user.email && <p className="mt-1 text-xs text-slate-500" dir="ltr">{overview.data.user.email}</p>}</div></div></section>}

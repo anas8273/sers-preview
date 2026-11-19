@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import type { Express, Request } from "express";
 import type { User } from "../drizzle/schema";
-import { getOutputForUser, getWorkVersionForUser } from "./review-output-db";
+import { getOutputRecordForUser, getWorkVersionForUser } from "./review-output-db";
 import { getConfiguredPrivateStorage } from "./upload-runtime";
 import { storageGet as legacyGet, storagePut as legacyPut } from "./storage";
 import { MAX_EVIDENCE_BYTES } from "./upload-validation";
@@ -35,7 +35,7 @@ export async function storageGet(key: string): Promise<{ key: string; url: strin
   return { key, url: "" };
 }
 export async function readPrivateOutputForUser(userId: number, id: number) {
-  const output = await getOutputForUser(userId, id);
+  const output = await getOutputRecordForUser(userId, id);
   if (!output || output.visibility !== "private" || !["pdf", "docx"].includes(output.type) || !output.storageKey || output.revokedAt || (output.expiresAt && output.expiresAt.getTime() <= Date.now())) return undefined;
   const identity = artifactIdentity(output.storageKey);
   if (identity.type !== output.type || identity.workId !== output.workId || identity.versionId !== output.workVersionId || !output.token?.startsWith(`artifact:v${output.workVersionId}:${output.type}:r`)) return undefined;
@@ -47,7 +47,7 @@ export async function readPrivateOutputForUser(userId: number, id: number) {
   const read = await storage.readPrivate(identity.key, head.version, MAX_EVIDENCE_BYTES);
   if (read.status !== "found" || read.bytes.byteLength !== head.bytes || digest(read.bytes) !== identity.sha256) return undefined;
   // Membership and revocation can change while reading from storage.
-  const current = await getOutputForUser(userId, id);
+  const current = await getOutputRecordForUser(userId, id);
   if (!current || current.storageKey !== output.storageKey || current.visibility !== "private" || current.revokedAt || (current.expiresAt && current.expiresAt.getTime() <= Date.now())) return undefined;
   if (await hasRevokedRendererArtifact(output.workVersionId, identity.type, output.workId)) return undefined;
   const version = await getWorkVersionForUser(userId, output.workVersionId);

@@ -115,6 +115,11 @@ describe("bounded AI provider transport", () => {
     await expect(invokeLLM(input)).rejects.toMatchObject({ kind: "invalid_response" });
   });
 
+  it("rejects a valid envelope from a model outside the pinned policy", async () => {
+    fetchMock.mockResolvedValueOnce(reply({ ...envelope(), model: "other-approved-looking-model" }));
+    await expect(invokeLLM(input)).rejects.toMatchObject({ kind: "invalid_response" });
+  });
+
   it("never returns truncated or filtered completion text as a usable draft", async () => {
     for (const finish_reason of ["length", "content_filter", null]) {
       fetchMock.mockResolvedValueOnce(reply({ ...envelope(), choices: [{ ...envelope().choices[0], finish_reason }] }));

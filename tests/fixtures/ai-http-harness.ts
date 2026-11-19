@@ -5,22 +5,23 @@ import { randomBytes } from "node:crypto";
 import { setTimeout as delay } from "node:timers/promises";
 import express, { type Response } from "express";
 import { authRpc, sessionCookie, startAuthHarness } from "./auth-http-harness";
+import { assertDisposableMySQL } from "./assert-disposable-mysql";
 
 export type SyntheticAiMode = "success" | "failure" | "oversized" | "redirect" | "malformed" | "incomplete" | "hold" | "disconnect";
 export type SyntheticAiCall = { model: unknown; maxTokens: unknown; messages: unknown; authorizationMatched: boolean };
 const privateFailure = "SYNTHETIC_PRIVATE_PROVIDER_SECRET_DO_NOT_DISCLOSE";
 
 export async function startAiHarness(options: { env?: Record<string, string> } = {}) {
-  assert.equal(process.env.GITHUB_ACTIONS, "true", "AI proof requires disposable GitHub CI");
-  assert.equal(process.env.SERS_INTEGRATION, "1");
-  assert.equal(process.env.DATABASE_URL, "mysql://root:root@127.0.0.1:3306/sers_test");
+  assertDisposableMySQL();
   const provider = express(); provider.use(express.json({ limit: "12mb" }));
   const server = provider.listen(0, "127.0.0.1");
   await new Promise<void>((done, reject) => { server.once("listening", done); server.once("error", reject); });
   const address = server.address(); assert(address && typeof address !== "string");
   const providerBase = `http://127.0.0.1:${address.port}`, apiKey = randomBytes(32).toString("hex");
   const environment = { BUILT_IN_FORGE_API_URL: providerBase, BUILT_IN_FORGE_API_KEY: apiKey,
-    SERS_AI_ENABLED: "1", ...options.env };
+    SERS_AI_ENABLED: "1", SERS_AI_DATA_POLICY_ALLOW_FAKE: "1", SERS_AI_DATA_POLICY_APPROVED_VERSION: "ai-data-minimization-v1",
+    SERS_AI_DATA_POLICY_SOURCE: "fake-test", SERS_AI_DATA_POLICY_PURPOSE: "synthetic-grade-image-test",
+    SERS_AI_DATA_POLICY_PROVIDER: "manus-forge", SERS_AI_DATA_POLICY_REGION: "test-only", SERS_AI_DATA_POLICY_RETENTION: "test-only", ...options.env };
   const previous = new Map(Object.keys(environment).map(key => [key, process.env[key]]));
   Object.assign(process.env, environment);
   const calls: SyntheticAiCall[] = [], held: Array<{ response: Response; content: string }> = [];

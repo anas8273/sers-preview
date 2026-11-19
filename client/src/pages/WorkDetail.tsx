@@ -8,7 +8,6 @@ import {
   Loader2,
   PencilLine,
   Plus,
-  Save,
   Send,
   Trash2,
   UserRound,
@@ -30,7 +29,6 @@ export default function WorkDetail() {
   const workId = Number(params?.id);
   const validWorkId = Number.isInteger(workId) && workId > 0;
   const [selectedAssetId, setSelectedAssetId] = useState<number | undefined>();
-  const [versionReason, setVersionReason] = useState("");
   const [selectedVersionId, setSelectedVersionId] = useState<number | undefined>();
   const [selectedReviewerId, setSelectedReviewerId] = useState<number | undefined>();
 
@@ -63,17 +61,6 @@ export default function WorkDetail() {
       await utils.domain.work.get.invalidate({ id: workId });
     },
   });
-  const createVersion = trpc.domain.work.createVersion.useMutation({
-    onSuccess: async created => {
-      setVersionReason("");
-      setSelectedVersionId(created.id);
-      await Promise.all([
-        utils.domain.work.get.invalidate({ id: workId }),
-        utils.domain.work.list.invalidate(),
-        utils.reviewSupport.versions.invalidate({ workItemId: workId }),
-      ]);
-    },
-  });
   const requestReview = trpc.domain.review.request.useMutation({
     onSuccess: async () => {
       await Promise.all([
@@ -95,32 +82,6 @@ export default function WorkDetail() {
   );
   const versions = versionsQuery.data ?? [];
   const reviewers = reviewersQuery.data ?? [];
-
-  const makePortfolioSnapshot = () => {
-    const work = workQuery.data;
-    if (!work) return {};
-    return {
-      schemaVersion: 1,
-      kind: "portfolio",
-      work: {
-        id: work.id,
-        title: work.title,
-        type: work.type,
-        ownerType: work.ownerType,
-        ownerUserId: work.ownerUserId,
-        ownerOrganizationId: work.ownerOrganizationId,
-        status: work.status,
-      },
-      assets: work.assets.map(asset => ({
-        id: asset.id,
-        title: asset.title,
-        kind: asset.kind,
-        role: asset.role,
-        caption: asset.caption,
-      })),
-      capturedAt: new Date().toISOString(),
-    };
-  };
 
   if (!validWorkId) {
     return <div className="min-h-screen bg-[#F8FAFC] p-8 text-sm text-red-700" dir="rtl">معرّف العمل غير صالح.</div>;
@@ -220,16 +181,13 @@ export default function WorkDetail() {
                     </section>
                   ) : (
                     <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
-                      <p className="text-xs font-bold text-teal-700">نسخة ثابتة</p>
-                      <h2 className="mt-1 text-lg font-bold text-slate-950">إنشاء نسخة من ملف الإنجاز</h2>
-                      <p className="mt-2 text-xs leading-6 text-slate-500">النسخة تحفظ لقطة من بيانات العمل والشواهد الحالية. المراجعات والمخرجات اللاحقة ترتبط بهذه النسخة بدل الحالة المتغيرة.</p>
-                      <label className="mt-4 block text-xs font-bold text-slate-700">سبب إنشاء النسخة</label>
-                      <textarea value={versionReason} onChange={event => setVersionReason(event.target.value)} maxLength={255} rows={3} placeholder="مثال: نسخة جاهزة للمراجعة" className="mt-2 w-full resize-none rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-teal-400 focus:ring-2 focus:ring-teal-100" />
-                      <button onClick={() => createVersion.mutate({ id: workId, reason: versionReason.trim() || undefined, snapshot: makePortfolioSnapshot() })} disabled={createVersion.isPending} className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50">
-                        {createVersion.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} إنشاء نسخة ثابتة
+                      <p className="text-xs font-bold text-teal-700">ملف الإنجاز المحلي</p>
+                      <h2 className="mt-1 text-lg font-bold text-slate-950">المحتوى غير مرتبط بهذه النسخة السحابية</h2>
+                      <p className="mt-2 text-xs leading-6 text-slate-600">هذا العمل يحتفظ حاليًا ببيانات وصفية وشواهد فقط، وليس نسخة مكتملة من محتوى ملف الإنجاز المحلي. لن ننشئ نسخة ناقصة أو نكتب إلى قاعدة البيانات تلقائيًا.</p>
+                      <button onClick={() => setLocation("/portfolio")} className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-teal-200 bg-teal-50 px-4 py-2.5 text-sm font-bold text-teal-800 hover:bg-teal-100">
+                        فتح منشئ ملف الإنجاز المحلي
                       </button>
-                      {createVersion.data && <p className="mt-3 rounded-lg bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700">تم إنشاء النسخة {createVersion.data.versionNumber} بنجاح.</p>}
-                      {createVersion.error && <p className="mt-3 text-xs text-red-600">{createVersion.error.message}</p>}
+                      <p className="mt-3 text-[11px] leading-5 text-slate-500">الاستيراد إلى Work سيكون اختياريًا لاحقًا بعد اعتماد عقد محتوى typed مع معاينة ومقارنة وتراجع، وليس تلقائيًا الآن.</p>
                     </section>
                   )}
 

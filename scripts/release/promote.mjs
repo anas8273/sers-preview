@@ -37,6 +37,9 @@ export async function promote(directory, output, env = process.env) {
   // A main update can leave an unused immutable image, but never a misleading
   // deploy package or a moving tag that silently changes a previous release.
   await atStage('github-evidence', async () => assertSameEvidence(evidence, await selectEvidence(api, context)));
+  const workflowCount = evidence.gates.length;
+  const jobCount = evidence.gates.reduce((total, gate) => total + gate.jobs.length, 0);
+  if (workflowCount !== 4 || jobCount !== 6) throw new Error('Release evidence must contain four workflows and six jobs');
   const destination = await atStage('package', () => createComposePackage(output, candidate, published.reference));
   await atStage('package', () => validateComposeFiles(destination, candidate, published.reference));
   const provenance = { format: 1, repo: context.repo, mergedMain: context.mainSha, sourceHead: candidate.sourceHead, sourceTree: candidate.sourceTree, testedMerge: candidate.testedMerge, prNumber: candidate.prNumber, image: { reference: published.reference, tag: tagged, imageId: candidate.appImageId, platform: candidate.platform }, archive: candidate.archive, artifact: evidence.artifact, gates: evidence.gates, dependencies: candidate.dependencies, publishedAt: new Date().toISOString(), runtimeIdentity: 'operator-configured', syntheticProof: true, realOAuthVerified: false, externalDeploymentVerified: false };
@@ -50,7 +53,7 @@ export async function promote(directory, output, env = process.env) {
   });
   await writeFile(path.join(destination, 'RELEASE.md'), configuredGuide, { mode: 0o600, flag: 'wx' });
   await writePackageChecksums(destination);
-  if (env.GITHUB_STEP_SUMMARY) await writeFile(env.GITHUB_STEP_SUMMARY, `### Tested SERS runtime published\n\nImage: \`${published.reference}\`\n\nSource: \`${candidate.sourceHead}\`; merged main: \`${context.mainSha}\`. All four latest CI workflow attempts and the exact portable image were verified. No image rebuild or host deployment occurred. Configure real SERS OAuth and the host before use.\n`, { flag: 'a' });
+  if (env.GITHUB_STEP_SUMMARY) await writeFile(env.GITHUB_STEP_SUMMARY, `### Tested SERS runtime published\n\nImage: \`${published.reference}\`\n\nSource: \`${candidate.sourceHead}\`; merged main: \`${context.mainSha}\`. All four latest CI workflow attempts and all six required jobs, plus the exact portable image, were verified. No image rebuild or host deployment occurred. Configure real SERS OAuth and the host before use.\n`, { flag: 'a' });
   return { published: true, image: published.reference, sourceHead: candidate.sourceHead, mergedMain: context.mainSha, deploymentPerformed: false };
 }
 

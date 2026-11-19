@@ -2,7 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { and, eq, inArray, isNull, lte, sql } from "drizzle-orm";
 import { uploadEvents, uploadIntents, uploadQuotaBudgets } from "../drizzle/upload-intents";
 import { assets, memberships, notifications, organizations, workAssetLinks, workItems, workVersions } from "../drizzle/domain-core";
-import { users } from "../drizzle/schema";
+import { auditLogs, users } from "../drizzle/schema";
 import { getDb } from "./db";
 import { MAX_EVIDENCE_BYTES } from "./upload-validation";
 import type { PrivateUploadResult } from "./private-upload-storage";
@@ -342,12 +342,16 @@ export async function finishUploadValidation(lease: UploadValidationLease, resul
         leaseToken: null, leaseUntil: null, nextValidationAt: sql`DATE_ADD(CURRENT_TIMESTAMP, INTERVAL 30 SECOND)`,
         errorCode: row.validationAttempts >= 8 ? "scan_review_required" : "scan_unavailable",
       }).where(eq(uploadIntents.id, row.id));
+      await tx.insert(auditLogs).values({ actorUserId: lease.userId, action: "evidence.scan_unknown", resourceType: "upload_intent", resourceId: row.id,
+        metadata: { scopeKey: row.scopeKey, policyVersion: lease.policyVersion, reason: result.reason, attempt: row.validationAttempts } });
       return project({ ...row, state: "quarantined", revision: row.revision + 1 });
     }
     if (result.status === "rejected") {
       await tx.update(uploadIntents).set({ state: "rejected", revision: row.revision + 1,
         leaseToken: null, leaseUntil: null, nextValidationAt: null, errorCode: "scan_rejected", scanCompletedAt: sql`CURRENT_TIMESTAMP`,
       }).where(eq(uploadIntents.id, row.id));
+      await tx.insert(auditLogs).values({ actorUserId: lease.userId, action: "evidence.scan_rejected", resourceType: "upload_intent", resourceId: row.id,
+        metadata: { scopeKey: row.scopeKey, policyVersion: lease.policyVersion, reason: result.reason, attempt: row.validationAttempts } });
       return project({ ...row, state: "rejected", revision: row.revision + 1 });
     }
     if (result.sha256 !== row.sha256 || result.bytes !== row.expectedBytes || !/^[a-z0-9!#$&^_.+-]+\/[a-z0-9!#$&^_.+-]+$/.test(result.mimeType) || result.mimeType.length > 128 || !result.engineVersion || result.engineVersion.length > 255) throw new UploadIntentConflictError();
@@ -361,6 +365,8 @@ export async function finishUploadValidation(lease: UploadValidationLease, resul
     const assetId = Number(created.insertId);
     if (row.workId) await tx.insert(workAssetLinks).values({ workItemId: row.workId, assetId, role: "evidence" });
     await tx.insert(uploadEvents).values({ intentId: row.id, eventType: "asset.ready", payload: { assetId, actorUserId: lease.userId, scopeKey: row.scopeKey } });
+    await tx.insert(auditLogs).values({ actorUserId: lease.userId, action: "evidence.asset_ready", resourceType: "asset", resourceId: String(assetId),
+      metadata: { intentId: row.id, scopeKey: row.scopeKey, policyVersion: result.policyVersion, engineVersion: result.engineVersion, bytes: result.bytes, mimeType: result.mimeType } });
     await tx.insert(notifications).values({ userId: lease.userId, type: "asset.ready", dedupeKey: `upload-ready:${row.id}`,
       title: "اكتمل رفع الشاهد", body: row.fileName, targetType: "asset", targetId: String(assetId),
     });

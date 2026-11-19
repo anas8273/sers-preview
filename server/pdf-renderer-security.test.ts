@@ -10,10 +10,10 @@ const serverSource = readFileSync(
 describe("legacy export route hardening", () => {
   it("requires authentication and per-user rate limits for PDF and DOCX exports", () => {
     expect(serverSource).toContain(
-      'app.post("/api/export-pdf", requireAuthenticatedUser, exportRateLimit'
+      'app.post("/api/export-pdf", httpBodyAdmission({ maxBytes: PDF_BODY_MAX_BYTES, contentType: "application/json" }), requireAuthenticatedUser, exportRateLimit, pdfBodyParser'
     );
     expect(serverSource).toContain(
-      'app.post("/api/export-docx", requireAuthenticatedUser, exportRateLimit'
+      'app.post("/api/export-docx", httpBodyAdmission({ maxBytes: DOCX_BODY_MAX_BYTES, contentType: "application/json" }), requireAuthenticatedUser, exportRateLimit, docxBodyParser'
     );
     expect(serverSource).toContain('rateLimit("export", 10, 60_000)');
   });

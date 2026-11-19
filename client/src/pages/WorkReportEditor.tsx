@@ -1,5 +1,15 @@
 import { privateLocalStorage as localStorage } from "@/lib/private-browser-storage";
 import { ReportDraftSession, type ReportDraftContent } from "@/lib/report-draft-session";
+import { WORK_REPORT_SCHEMAS } from "@/lib/report-schemas";
+import {
+  REPORT_TEMPLATE_DEFINITIONS,
+  REPORT_TEMPLATE_OPTIONS,
+  REPORT_THEME_OPTIONS,
+  REPORT_FONT_OPTIONS,
+  projectReportDocument,
+  type ReportFieldDefinition,
+  type ReportFieldValue,
+} from "@shared/report-projection";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
@@ -19,44 +29,55 @@ import { useLocation, useRoute } from "wouter";
 import AppSidebar from "@/components/AppSidebar";
 import { trpc } from "@/lib/trpc";
 
-const fieldDefinitions = [
-  { key: "summary", label: "ملخص التقرير", placeholder: "اكتب ملخصًا موجزًا للعمل أو البرنامج المنفذ...", rows: 4 },
-  { key: "objectives", label: "الأهداف", placeholder: "ما الأهداف التي سعى العمل إلى تحقيقها؟", rows: 4 },
-  { key: "audience", label: "الفئة المستهدفة", placeholder: "مثال: منسوبات المدرسة، طالبات الصف الثالث...", rows: 2 },
-  { key: "implementation", label: "آلية التنفيذ", placeholder: "صف خطوات التنفيذ الفعلية بترتيب واضح...", rows: 6 },
-  { key: "results", label: "النتائج والمخرجات", placeholder: "ما النتائج الفعلية التي تحققت؟", rows: 4 },
-  { key: "impact", label: "قياس الأثر", placeholder: "أدخل أداة القياس والنتيجة، أو وضّح أن القياس لم يُجمع بعد...", rows: 4 },
-  { key: "recommendations", label: "التوصيات والخطوات التالية", placeholder: "أضف توصيات قابلة للتنفيذ...", rows: 4 },
-] as const;
-
-const templateOptions = [
-  { id: "custom", label: "تقرير عام" },
-  { id: "program-report", label: "تقرير برنامج" },
-  { id: "initiative-report", label: "تقرير مبادرة" },
-  { id: "workshop-report", label: "تقرير ورشة" },
-  { id: "meeting-report", label: "محضر/تقرير اجتماع" },
-  { id: "visit-report", label: "تقرير زيارة" },
-];
-
-const themeOptions = [
-  { id: "classic", label: "رسمي كلاسيكي" },
-  { id: "formal", label: "مؤسسي هادئ" },
-  { id: "minimal", label: "بسيط حديث" },
-];
-
-const fontOptions = ["Cairo", "Tajawal", "Noto Kufi Arabic"];
+const templateOptions = REPORT_TEMPLATE_OPTIONS;
+const themeOptions = REPORT_THEME_OPTIONS;
+const fontOptions = REPORT_FONT_OPTIONS;
 
 type SaveState = "idle" | "dirty" | "saving" | "saved" | "offline" | "conflict" | "error";
 
 type LocalBackup = ReportDraftContent & { baseRevision: number; updatedAt: string };
 const emptyDraft: ReportDraftContent = { templateId: "custom", themeId: "classic", fontFamily: "Cairo", fields: {}, evidenceAssetIds: [] };
 
-function contentOf({ templateId, themeId, fontFamily, fields, evidenceAssetIds }: ReportDraftContent): ReportDraftContent {
-  return { templateId, themeId, fontFamily, fields, evidenceAssetIds };
+function contentOf({ schemaVersion, templateId, templateVersionId, themeId, fontFamily, fields, evidenceAssetIds, fieldDefinitions }: ReportDraftContent): ReportDraftContent {
+  return { schemaVersion, templateId, templateVersionId, themeId, fontFamily, fields, evidenceAssetIds, fieldDefinitions };
+}
+
+function editorFields(content: Pick<ReportDraftContent, "templateId" | "schemaVersion" | "fieldDefinitions">): readonly ReportFieldDefinition[] {
+  if (content.schemaVersion === 2 && content.fieldDefinitions?.length) return content.fieldDefinitions;
+  return REPORT_TEMPLATE_DEFINITIONS[content.templateId]?.fields ?? REPORT_TEMPLATE_DEFINITIONS.custom.fields;
+}
+
+function editorFieldValues(content: Pick<ReportDraftContent, "templateId" | "schemaVersion" | "fieldDefinitions">, values: Record<string, unknown>) {
+  const definitions = new Map(editorFields(content).map(field => [field.key, field]));
+  return Object.fromEntries(Object.entries(values).flatMap(([key, value]) => {
+    const definition = definitions.get(key);
+    if (!definition) return [];
+    if (Array.isArray(value)) return [[key, value.join("\n")]];
+    return [[key, typeof value === "number" ? String(value) : typeof value === "string" ? value : ""]];
+  })) as Record<string, string>;
+}
+
+function serverFieldValues(content: Pick<ReportDraftContent, "templateId" | "schemaVersion" | "fieldDefinitions">, values: Record<string, string>): Record<string, ReportFieldValue> {
+  const definitions = new Map(editorFields(content).map(field => [field.key, field]));
+  const output: Record<string, ReportFieldValue> = {};
+  for (const [key, value] of Object.entries(values)) {
+    const definition = definitions.get(key);
+    if (!definition || !value.trim()) continue;
+    if (definition.type === "list") { output[key] = value.split(/\r?\n/).map(item => item.trim()).filter(Boolean); continue; }
+    if (definition.type === "number") {
+      const parsed = Number(value);
+      if (Number.isSafeInteger(parsed)) output[key] = parsed;
+      continue;
+    }
+    output[key] = value;
+  }
+  return output;
 }
 
 function sameContent(a: ReportDraftContent, b: ReportDraftContent) {
   return a.templateId === b.templateId && a.themeId === b.themeId && a.fontFamily === b.fontFamily
+    && a.schemaVersion === b.schemaVersion && a.templateVersionId === b.templateVersionId
+    && JSON.stringify(a.fieldDefinitions ?? []) === JSON.stringify(b.fieldDefinitions ?? [])
     && Object.keys(a.fields).length === Object.keys(b.fields).length
     && Object.entries(a.fields).every(([key, value]) => b.fields[key] === value)
     && a.evidenceAssetIds.length === b.evidenceAssetIds.length
@@ -78,6 +99,8 @@ function parseBackup(workId: number): LocalBackup | undefined {
     return {
       baseRevision: Number(parsed.baseRevision),
       updatedAt: parsed.updatedAt,
+      schemaVersion: parsed.schemaVersion,
+      templateVersionId: typeof parsed.templateVersionId === "string" ? parsed.templateVersionId : undefined,
       templateId: typeof parsed.templateId === "string" ? parsed.templateId : "custom",
       themeId: typeof parsed.themeId === "string" ? parsed.themeId : "classic",
       fontFamily: typeof parsed.fontFamily === "string" ? parsed.fontFamily : "Cairo",
@@ -85,6 +108,9 @@ function parseBackup(workId: number): LocalBackup | undefined {
       evidenceAssetIds: Array.isArray(parsed.evidenceAssetIds)
         ? parsed.evidenceAssetIds.filter((id): id is number => Number.isInteger(id) && Number(id) > 0)
         : [],
+      fieldDefinitions: parsed.schemaVersion === 2 && Array.isArray(parsed.fieldDefinitions)
+        ? parsed.fieldDefinitions as ReportFieldDefinition[]
+        : undefined,
     };
   } catch {
     return undefined;
@@ -125,6 +151,7 @@ function ReportEditor({ workId }: { workId: number }) {
   const [backupError, setBackupError] = useState(false);
   const [lastSavedAt, setLastSavedAt] = useState<string | undefined>();
   const [versionReason, setVersionReason] = useState("");
+  const [templateError, setTemplateError] = useState<string | undefined>();
   const [createdVersion, setCreatedVersion] = useState<{ id: number; versionNumber: number; revision: number } | undefined>();
   const [selectedReviewerId, setSelectedReviewerId] = useState<number | undefined>();
 
@@ -169,7 +196,8 @@ function ReportEditor({ workId }: { workId: number }) {
   }, [workId]);
 
   const applyServerDraft = useCallback((data: NonNullable<typeof reportQuery.data>, recover: boolean) => {
-    const confirmed = contentOf(data.draft);
+    const contract = { templateId: data.draft.templateId, schemaVersion: data.draft.schemaVersion, fieldDefinitions: data.draft.fieldDefinitions ? [...data.draft.fieldDefinitions] : undefined };
+    const confirmed = contentOf({ ...data.draft, fieldDefinitions: contract.fieldDefinitions, fields: editorFieldValues(contract, data.draft.fields) });
     const backup = recover ? parseBackup(workId) : undefined;
     const unsaved = backup && !sameContent(confirmed, backup) ? backup : undefined;
     const session = new ReportDraftSession(data.draft.revision, confirmed, unsaved && contentOf(unsaved));
@@ -184,6 +212,7 @@ function ReportEditor({ workId }: { workId: number }) {
     setDraft(session.content);
     setRevision(session.revision);
     setLastSavedAt(data.draft.updatedAt);
+    setTemplateError(undefined);
     setCreatedVersion(undefined);
     setSaveState(conflict.current ? "conflict" : session.dirty ? (navigator.onLine ? "dirty" : "offline") : "saved");
   }, [workId, updateBackup]);
@@ -205,6 +234,24 @@ function ReportEditor({ workId }: { workId: number }) {
     if (!conflict.current) setSaveState(navigator.onLine ? "dirty" : "offline");
   };
 
+  const changeTemplate = (nextTemplateId: string) => {
+    const session = sessionRef.current;
+    if (!session || !isCurrent(session) || nextTemplateId === session.content.templateId) return;
+    // Historical v2 data is immutable. A mapping UI is deliberately not
+    // implicit: rejecting here is safer than relabelling or dropping fields.
+    if (session.content.schemaVersion === 2) {
+      setTemplateError("لا يمكن تبديل قالب تقرير مجمّد دون تعيين حقول صريح؛ لم تتغير البيانات.");
+      return;
+    }
+    const next = REPORT_TEMPLATE_DEFINITIONS[nextTemplateId];
+    if (!next) {
+      setTemplateError("القالب المطلوب غير متاح، ولم تتغير البيانات.");
+      return;
+    }
+    setTemplateError(undefined);
+    editDraft({ templateId: next.id, templateVersionId: `${next.id}@${next.version}`, fieldDefinitions: [...next.fields] });
+  };
+
   const saveDraft = useCallback(async (): Promise<number | undefined> => {
     const session = sessionRef.current;
     if (!session || !isCurrent(session) || conflict.current) return;
@@ -213,7 +260,16 @@ function ReportEditor({ workId }: { workId: number }) {
       return await session.flush(async (content, expectedRevision) => {
         if (!isCurrent(session) || !navigator.onLine) throw new Error("Report session unavailable");
         setSaveState("saving");
-        return writeDraft({ workItemId: workId, expectedRevision, ...content });
+        const fieldDefinitions = content.fieldDefinitions?.map(field => ({
+          key: field.key,
+          label: field.label,
+          type: field.type,
+          ...(field.placeholder !== undefined ? { placeholder: field.placeholder } : {}),
+          ...(field.options ? { options: [...field.options] } : {}),
+          ...(field.maxLength !== undefined ? { maxLength: field.maxLength } : {}),
+          ...(field.rows !== undefined ? { rows: field.rows } : {}),
+        }));
+        return writeDraft({ workItemId: workId, expectedRevision, ...content, fieldDefinitions, fields: serverFieldValues(content, content.fields) });
       }, receipt => {
         if (!isCurrent(session)) return;
         backupRevision.current = receipt.revision;
@@ -316,7 +372,17 @@ function ReportEditor({ workId }: { workId: number }) {
     () => linkedAssets.filter(asset => evidenceAssetIds.includes(asset.id)),
     [evidenceAssetIds, linkedAssets],
   );
-  const filledFields = fieldDefinitions.filter(field => fields[field.key]?.trim());
+  const fieldDefinitions = editorFields(draft);
+  const previewModel = useMemo(() => {
+    try {
+      return projectReportDocument({
+        reportDraft: { ...draft, fields: serverFieldValues(draft, fields) },
+        assets: selectedEvidence.map(asset => ({ id: asset.id, title: asset.title, kind: asset.kind, role: asset.role, caption: asset.caption })),
+      });
+    } catch {
+      return undefined;
+    }
+  }, [draft, fields, selectedEvidence, templateId]);
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] pb-20 lg:pb-0" dir="rtl">
@@ -387,7 +453,8 @@ function ReportEditor({ workId }: { workId: number }) {
                 <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
                   <div className="grid gap-4 md:grid-cols-3">
                     <label className="text-xs font-bold text-slate-700">نوع التقرير
-                      <select value={templateId} onChange={event => editDraft({ templateId: event.target.value })} className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-normal">
+                      <select value={templateId} onChange={event => changeTemplate(event.target.value)} className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-normal">
+                        {!templateOptions.some(option => option.id === templateId) && <option value={templateId}>القالب التاريخي ({templateId})</option>}
                         {templateOptions.map(option => <option key={option.id} value={option.id}>{option.label}</option>)}
                       </select>
                     </label>
@@ -402,7 +469,8 @@ function ReportEditor({ workId }: { workId: number }) {
                       </select>
                     </label>
                   </div>
-                  <p className="mt-4 text-xs leading-6 text-slate-500">المحتوى محفوظ كبيانات مستقلة عن القالب؛ تغيير الشكل لا يحذف النصوص أو الشواهد.</p>
+                  <p className="mt-4 text-xs leading-6 text-slate-500">المحرر يعرض عقد الحقول المحفوظ مع التقرير. تغيير قالب schema مختلف موقوف حتى يتم تعيين الحقول صراحة، لذلك لا تُستبدل البيانات بصمت.</p>
+                  {templateError && <p role="alert" className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800">{templateError}</p>}
                 </section>
 
                 <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
@@ -413,14 +481,21 @@ function ReportEditor({ workId }: { workId: number }) {
                   <div className="mt-5 space-y-5">
                     {fieldDefinitions.map(field => (
                       <label key={field.key} className="block text-xs font-bold text-slate-700">{field.label}
-                        <textarea
-                          value={fields[field.key] ?? ""}
-                          onChange={event => editDraft(current => ({ fields: { ...current.fields, [field.key]: event.target.value } }))}
-                          rows={field.rows}
-                          maxLength={20_000}
-                          placeholder={field.placeholder}
-                          className="mt-2 w-full resize-y rounded-xl border border-slate-200 px-3 py-3 text-sm font-normal leading-7 outline-none transition focus:border-teal-400 focus:ring-2 focus:ring-teal-100"
-                        />
+                        {field.type === "select" ? (
+                          <select value={fields[field.key] ?? ""} onChange={event => editDraft(current => ({ fields: { ...current.fields, [field.key]: event.target.value } }))} className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-normal">
+                            <option value="">اختر قيمة</option>{(field.options ?? []).map(option => <option key={option} value={option}>{option}</option>)}
+                          </select>
+                        ) : (
+                          <textarea
+                            value={fields[field.key] ?? ""}
+                            onChange={event => editDraft(current => ({ fields: { ...current.fields, [field.key]: event.target.value } }))}
+                            rows={field.rows ?? (field.type === "list" ? 4 : 3)}
+                            maxLength={field.maxLength ?? 20_000}
+                            inputMode={field.type === "number" ? "numeric" : undefined}
+                            placeholder={field.placeholder || (field.type === "list" ? "عنصر في كل سطر" : undefined)}
+                            className="mt-2 w-full resize-y rounded-xl border border-slate-200 px-3 py-3 text-sm font-normal leading-7 outline-none transition focus:border-teal-400 focus:ring-2 focus:ring-teal-100"
+                          />
+                        )}
                       </label>
                     ))}
                   </div>
@@ -493,22 +568,25 @@ function ReportEditor({ workId }: { workId: number }) {
                       <div className="border-b border-slate-200 pb-5 text-center">
                         <p className="text-xs font-bold text-teal-700">SERS</p>
                         <h2 className="mt-2 text-xl font-black text-slate-950">{workQuery.data.title}</h2>
-                        <p className="mt-2 text-xs text-slate-500">{templateOptions.find(option => option.id === templateId)?.label}</p>
+                        <p className="mt-2 text-xs text-slate-500">{previewModel?.template.label || templateOptions.find(option => option.id === templateId)?.label || templateId}</p>
                       </div>
                       <div className="mt-6 space-y-6">
-                        {filledFields.length === 0 ? (
+                        {!previewModel || previewModel.fields.length === 0 ? (
                           <div className="rounded-xl border border-dashed border-slate-200 px-4 py-16 text-center text-sm text-slate-400">ابدأ بإدخال بيانات التقرير لتظهر المعاينة هنا.</div>
-                        ) : filledFields.map(field => (
+                        ) : previewModel.fields.map(field => (
                           <section key={field.key}>
                             <h3 className="text-sm font-black text-slate-900">{field.label}</h3>
-                            <p className="mt-2 whitespace-pre-wrap text-sm leading-8 text-slate-700">{fields[field.key]}</p>
+                            <p className="mt-2 whitespace-pre-wrap text-sm leading-8 text-slate-700">{Array.isArray(field.value) ? field.value.join("\n") : String(field.value)}</p>
                           </section>
                         ))}
                         {selectedEvidence.length > 0 && (
                           <section>
                             <h3 className="text-sm font-black text-slate-900">الشواهد المرفقة</h3>
                             <div className="mt-3 space-y-2">
-                              {selectedEvidence.map(asset => <div key={asset.id} className="rounded-lg border border-slate-200 px-3 py-2 text-xs text-slate-700">{asset.title} · {asset.kind}</div>)}
+                              {selectedEvidence.map(asset => <div key={asset.id} className="rounded-lg border border-slate-200 px-3 py-2 text-xs text-slate-700">
+                                <div>{asset.title} · {asset.kind}</div>
+                                {asset.kind === "file" && <div className="mt-1 rounded border border-dashed border-amber-200 bg-amber-50 px-2 py-1 text-[10px] text-amber-800">الصورة لا تُقرأ من رابط أو مصدر متغير؛ ستظهر هنا فقط بعد تثبيتها داخل النسخة.</div>}
+                              </div>)}
                             </div>
                           </section>
                         )}
@@ -516,7 +594,7 @@ function ReportEditor({ workId }: { workId: number }) {
                     </article>
                   </div>
                 </section>
-                <p className="mt-3 text-center text-[11px] leading-5 text-slate-500">يستخدم تصدير PDF وWord آخر نسخة ثابتة أنشأتها.</p>
+                <p className="mt-3 text-center text-[11px] leading-5 text-slate-500">المعاينة مبنية من نفس ReportDocumentModel، لكنها ليست parity كاملة مع PDF/Word: الصور غير المثبتة والفواصل تُعرض كعلامات صريحة، والمخرج النهائي قد يضيف صفحات.</p>
                 {lastSavedAt && <p className="mt-1 text-center text-[10px] text-slate-400">آخر حفظ خادمي: {new Date(lastSavedAt).toLocaleString("ar-SA")}</p>}
               </aside>
             </div>
