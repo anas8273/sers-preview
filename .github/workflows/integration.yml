@@ -44,6 +44,8 @@ jobs:
         uses: actions/checkout@v4
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
+        with:
+          version: 10.18.1
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
@@ -61,6 +63,10 @@ jobs:
         run: pnpm exec vitest run server/domain-integration.test.ts
       - name: Server-backed report draft integration tests
         run: pnpm exec vitest run server/work-report-draft-integration.test.ts
+      - name: Immutable report revisions and stale output guards
+        run: pnpm exec vitest run server/review-support-revision-integration.test.ts
+      - name: Exam nonce concurrency and complete paginated summaries
+        run: pnpm exec vitest run server/online-exam-mysql.integration.test.ts
       - name: Immutable WorkVersion output integration tests
         run: pnpm exec vitest run server/work-version-output-integration.test.ts
       - name: Public and protected WorkVersion delivery tests
