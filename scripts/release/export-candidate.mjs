@@ -15,21 +15,38 @@ const exec = promisify(execFile);
 const sha = /^[a-f0-9]{40}$/;
 const imageIdPattern = /^sha256:[a-f0-9]{64}$/;
 const STAGES = new Set(['context', 'event-identity', 'source-checkout', 'source-clean', 'operation-proofs', 'destination', 'app-container', 'worker-container', 'app-image', 'mysql-image', 'clamav-image', 'image-archive', 'manifest-write']);
+const FAILURE_REASONS = new Set([
+  'verification-failed',
+  'container-command', 'container-json', 'container-identity', 'container-ambiguous-count',
+  'image-command', 'image-json', 'image-identity', 'image-platform', 'image-labels', 'image-digests',
+  'immutable-reference-missing', 'immutable-reference-ambiguous',
+]);
+export const PRODUCER_FAILURE_REASONS = Object.freeze([...FAILURE_REASONS]);
 export const producerFailureStage = error => STAGES.has(error?.producerStage) ? error.producerStage : 'context';
+export const producerFailureReason = error => FAILURE_REASONS.has(error?.producerReason) ? error.producerReason : 'verification-failed';
+export const producerFailureDiagnostic = error => `${producerFailureStage(error)}:${producerFailureReason(error)}`;
+function failure(reason, message = 'Candidate verification failed') {
+  const error = new Error(message);
+  if (FAILURE_REASONS.has(reason)) error.producerReason = reason;
+  return error;
+}
 async function atStage(stage, operation) {
   if (!STAGES.has(stage)) throw new Error('Unknown producer verification stage');
   try { return await operation(); }
   catch (cause) {
     const error = new Error('Candidate verification refused');
     error.producerStage = STAGES.has(cause?.producerStage) ? cause.producerStage : stage;
+    error.producerReason = FAILURE_REASONS.has(cause?.producerReason) ? cause.producerReason : 'verification-failed';
     throw error;
   }
 }
-async function command(binary, args, options = {}) {
-  try { return (await exec(binary, args, { cwd: root, timeout: 30_000, maxBuffer: 2 * 1024 ** 2, ...options })).stdout.trim(); }
-  catch { throw new Error(`Candidate verification command failed: ${binary}`); }
+export async function runProducerCommand(binary, args, options = {}, runner = exec) {
+  const { failureReason = 'verification-failed', ...execOptions } = options;
+  try { return (await runner(binary, args, { cwd: root, timeout: 30_000, maxBuffer: 2 * 1024 ** 2, ...execOptions })).stdout.trim(); }
+  catch { throw failure(failureReason, 'Candidate verification command failed'); }
 }
-const compose = args => command('docker', ['compose', '-f', path.join(root, 'compose.staging.yml'), ...args]);
+const command = (binary, args, options = {}) => runProducerCommand(binary, args, options);
+const compose = args => command('docker', ['compose', '-f', path.join(root, 'compose.staging.yml'), ...args], { failureReason: 'container-command' });
 function number(value) { if (typeof value !== 'string' || !/^[1-9][0-9]*$/.test(value) || !Number.isSafeInteger(Number(value))) throw new Error('Invalid GitHub numeric identity'); return Number(value); }
 async function json(file, maximum = 128 * 1024) {
   const stat = await lstat(file);
@@ -70,33 +87,51 @@ export async function assertOperationProofs(directory, identity) {
   if (restore.dataIntegrityPassed !== true || restore.dataCountsMatch !== true || restore.rowChecksumsMatch !== true || restore.archiveIntegrityVerified !== true || restore.productionDatabaseModified !== false || !(restore.privateContentVerified?.uploads >= 1) || !(restore.privateContentVerified?.outputs >= 1) || restore.recoveryObservations?.actualLostCommits !== null || restore.recoveryObservations?.fullServiceRtoMeasured !== false || restore.recoveryObservations?.checks?.isolatedRestoreWithinTarget !== true || restore.recoveryObservations?.checks?.backupFreshnessWithinTarget !== true) throw new Error('Candidate isolated restore proof is incomplete');
 }
 
+export function parseContainerList(output) {
+  if (typeof output !== 'string') throw failure('container-ambiguous-count');
+  const containers = output.trim() ? output.trim().split(/\s+/) : [];
+  if (containers.length !== 1) throw failure('container-ambiguous-count');
+  if (!/^[a-f0-9]{12,64}$/.test(containers[0])) throw failure('container-identity');
+  return containers[0];
+}
 export function parseContainerInspection(container, info) {
-  if (typeof container !== 'string' || !/^[a-f0-9]{12,64}$/.test(container) || typeof info?.id !== 'string' || !/^[a-f0-9]{64}$/.test(info.id) || !info.id.startsWith(container) || typeof info.imageId !== 'string' || !imageIdPattern.test(info.imageId)) throw new Error('Invalid exercised service container identity');
+  if (typeof container !== 'string' || !/^[a-f0-9]{12,64}$/.test(container) || typeof info?.id !== 'string' || !/^[a-f0-9]{64}$/.test(info.id) || !info.id.startsWith(container) || typeof info.imageId !== 'string' || !imageIdPattern.test(info.imageId)) throw failure('container-identity', 'Invalid exercised service container identity');
   return info.imageId;
 }
+export function parseInspectionJson(output, reason) {
+  if (!['container-json', 'image-json'].includes(reason)) throw new Error('Unknown inspection JSON reason');
+  try { return JSON.parse(output); } catch { throw failure(reason); }
+}
 async function exercisedImage(service) {
-  const container = await compose(['ps', '--all', '--quiet', service]);
-  if (!/^[a-f0-9]{12,64}$/.test(container)) throw new Error('Expected one exercised service container');
-  const info = JSON.parse(await command('docker', ['container', 'inspect', '--format', '{"id":{{json .Id}},"imageId":{{json .Image}}}', container]));
+  const container = parseContainerList(await compose(['ps', '--all', '--quiet', service]));
+  const inspected = await command('docker', ['container', 'inspect', '--format', '{"id":{{json .Id}},"imageId":{{json .Image}}}', container], { failureReason: 'container-command' });
+  const info = parseInspectionJson(inspected, 'container-json');
   return parseContainerInspection(container, info);
 }
 export function parseImageInspection(imageId, info) {
-  if (info.id !== imageId || info.os !== 'linux' || info.architecture !== 'amd64') throw new Error('Candidate image platform is not the tested linux/amd64 platform');
-  if (info.labels != null && (typeof info.labels !== 'object' || Array.isArray(info.labels))) throw new Error('Invalid image labels');
-  if (info.digests != null && (!Array.isArray(info.digests) || info.digests.some(value => typeof value !== 'string'))) throw new Error('Invalid image digests');
+  if (typeof imageId !== 'string' || !imageIdPattern.test(imageId) || typeof info?.id !== 'string' || info.id !== imageId) throw failure('image-identity', 'Invalid exercised image identity');
+  if (info.os !== 'linux' || info.architecture !== 'amd64') throw failure('image-platform', 'Candidate image platform is not the tested linux/amd64 platform');
+  if (info.labels != null && (typeof info.labels !== 'object' || Array.isArray(info.labels))) throw failure('image-labels', 'Invalid image labels');
+  if (info.digests != null && (!Array.isArray(info.digests) || info.digests.some(value => typeof value !== 'string'))) throw failure('image-digests', 'Invalid image digests');
   return { ...info, revision: info.labels?.['org.opencontainers.image.revision'], source: info.labels?.['org.opencontainers.image.source'], digests: info.digests ?? [] };
 }
 async function inspectImage(imageId) {
   // Dependency images need not have labels. Passing the whole nullable map to
   // json avoids Go template `index` failing before JavaScript can validate it.
   const format = '{"id":{{json .Id}},"os":{{json .Os}},"architecture":{{json .Architecture}},"labels":{{json .Config.Labels}},"digests":{{json .RepoDigests}}}';
-  return parseImageInspection(imageId, JSON.parse(await command('docker', ['image', 'inspect', '--format', format, imageId])));
+  const inspected = await command('docker', ['image', 'inspect', '--format', format, imageId], { failureReason: 'image-command' });
+  return parseImageInspection(imageId, parseInspectionJson(inspected, 'image-json'));
+}
+export function immutableReference(repository, digests) {
+  const prefix = `${repository}@sha256:`;
+  const normalized = [...new Set((Array.isArray(digests) ? digests : []).map(ref => typeof ref === 'string' ? ref.replace(/^docker\.io\/(?:library\/)?/, '') : '').filter(ref => ref.startsWith(prefix) && ref.length === prefix.length + 64 && /^[a-f0-9]{64}$/.test(ref.slice(prefix.length))))];
+  if (normalized.length === 0) throw failure('immutable-reference-missing', 'Exercised dependency has no immutable registry reference');
+  if (normalized.length !== 1) throw failure('immutable-reference-ambiguous', 'Exercised dependency has ambiguous immutable registry references');
+  return normalized[0];
 }
 async function dependency(service, repository) {
   const imageId = await exercisedImage(service), info = await inspectImage(imageId);
-  const refs = [...new Set((info.digests ?? []).map(ref => ref.replace(/^docker\.io\/(?:library\/)?/, '')).filter(ref => ref.startsWith(`${repository}@sha256:`)))];
-  if (refs.length !== 1) throw new Error('Exercised dependency has no unique immutable registry reference');
-  return { imageId, ref: refs[0] };
+  return { imageId, ref: immutableReference(repository, info.digests) };
 }
 async function saveImage(imageId, file) {
   const child = spawn('docker', ['image', 'save', imageId], { cwd: root, stdio: ['ignore', 'pipe', 'ignore'] });
@@ -145,5 +180,5 @@ export async function exportCandidate(directory, env = process.env) {
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   if (process.argv.length !== 3) throw new Error('Candidate export requires one destination directory');
-  exportCandidate(process.argv[2]).then(candidate => console.log(JSON.stringify({ candidateArtifact: candidateArtifactName(candidate), imageId: candidate.appImageId, sourceHead: candidate.sourceHead, syntheticProof: true, bytes: candidate.archive.bytes }))).catch(error => { console.error(`Tested runtime candidate export refused: ${producerFailureStage(error)}`); process.exitCode = 1; });
+  exportCandidate(process.argv[2]).then(candidate => console.log(JSON.stringify({ candidateArtifact: candidateArtifactName(candidate), imageId: candidate.appImageId, sourceHead: candidate.sourceHead, syntheticProof: true, bytes: candidate.archive.bytes }))).catch(error => { console.error(`Tested runtime candidate export refused: ${producerFailureDiagnostic(error)}`); process.exitCode = 1; });
 }

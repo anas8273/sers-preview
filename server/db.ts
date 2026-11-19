@@ -3,6 +3,7 @@ import { eq, and, desc, sql, gt, lt } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import { InsertUser, users, auditLogs, portfolios, uploadedFiles, evidenceComments, onlineExams, onlineExamResponses, shareLinks, pdfTemplates, userThemes, type InsertAuditLog, type InsertPortfolio, type InsertUploadedFile, type InsertEvidenceComment, type InsertOnlineExam, type InsertOnlineExamResponse, type InsertShareLink, type InsertPdfTemplate, type InsertUserTheme } from "../drizzle/schema";
 import { ENV } from './_core/env';
+import { isMySqlDuplicateEntryError } from "./mysql-errors";
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
@@ -273,8 +274,7 @@ export async function createOnlineExamResponse(data: InsertOnlineExamResponse) {
     // Two requests can both observe no row before one inserts. Only a unique
     // constraint race is resolved by reading the committed winner; all other
     // DB errors remain failures instead of being hidden as idempotency.
-    const duplicate = error && typeof error === "object" && (("errno" in error && Number(error.errno) === 1062) || ("code" in error && error.code === "ER_DUP_ENTRY"));
-    if (!duplicate) throw error;
+    if (!isMySqlDuplicateEntryError(error)) throw error;
     const existing = await findExisting(db);
     if (!existing) throw new Error("تعذر تثبيت محاولة الاختبار بأمان");
     return assertSameSubmission(existing);

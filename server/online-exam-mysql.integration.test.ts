@@ -76,6 +76,23 @@ suite("online exam submission hardening on disposable MySQL", () => {
     expect(rows[0].studentName).toBe("طالب اصطناعي");
   });
 
+  it("does not replace answers for an existing nonce", async () => {
+    const attemptId = "attempt-answers-bound-0001";
+    await createOnlineExamResponse(response(attemptId));
+    await expect(createOnlineExamResponse(response(attemptId, "طالب اصطناعي", 0))).rejects.toMatchObject({ code: "CONFLICT" });
+    const rows = await (await getDb())!.select().from(onlineExamResponses).where(eq(onlineExamResponses.attemptId, attemptId));
+    expect(rows).toHaveLength(1);
+    expect(rows[0].answers).toEqual({ q1: 1 });
+    expect(rows[0].autoScore).toBe(1);
+  });
+
+  it("returns the stored score on a retry instead of replacing it", async () => {
+    const payload = response("attempt-score-frozen-0001");
+    const original = await createOnlineExamResponse(payload);
+    const retry = await createOnlineExamResponse({ ...payload, autoScore: 999, autoMaxScore: 999 });
+    expect(retry).toMatchObject({ id: original.id, autoScore: 1, autoMaxScore: 1, deduplicated: true });
+  });
+
   it("keeps legacy no-nonce submissions compatible and pages summaries", async () => {
     await createOnlineExamResponse(response(null, "قديم 1"));
     await createOnlineExamResponse(response(null, "قديم 2"));

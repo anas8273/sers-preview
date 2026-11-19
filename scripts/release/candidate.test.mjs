@@ -4,7 +4,7 @@ import { mkdtemp, mkdir, rm, symlink, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { MAX_ARCHIVE_BYTES, assertRuntimeIdentity, candidateArtifactName, validateCandidate } from './candidate.mjs';
-import { assertOperationProofs, readProducerIdentity, parseContainerInspection, parseImageInspection, producerFailureStage } from './export-candidate.mjs';
+import { assertOperationProofs, immutableReference, parseContainerInspection, parseContainerList, parseImageInspection, parseInspectionJson, producerFailureDiagnostic, producerFailureReason, producerFailureStage, PRODUCER_FAILURE_REASONS, readProducerIdentity, runProducerCommand } from './export-candidate.mjs';
 
 const h = character => character.repeat(40), d = character => character.repeat(64);
 function fixture() {
@@ -62,6 +62,54 @@ test('short Compose IDs are resolved to matching canonical IDs without permittin
   assert.equal(parseContainerInspection(id.slice(0, 12), { id, imageId }), imageId);
   for (const value of ['', 'app', `${id}\n${id}`, id.slice(0, 11), d('c')]) assert.throws(() => parseContainerInspection(value, { id, imageId }));
   assert.throws(() => parseContainerInspection(id.slice(0, 12), { id: id.slice(0, 12), imageId }));
+});
+test('producer diagnostics are stage-compatible and bounded to an allowlist', async () => {
+  assert.deepEqual(PRODUCER_FAILURE_REASONS, [
+    'verification-failed', 'container-command', 'container-json', 'container-identity', 'container-ambiguous-count',
+    'image-command', 'image-json', 'image-identity', 'image-platform', 'image-labels', 'image-digests',
+    'immutable-reference-missing', 'immutable-reference-ambiguous',
+  ]);
+  assert.equal(producerFailureDiagnostic({ producerStage: 'mysql-image', producerReason: 'image-json', message: 'secret SQL stderr' }), 'mysql-image:image-json');
+  assert.equal(producerFailureDiagnostic({ producerStage: 'mysql-image', producerReason: 'stderr-secret' }), 'mysql-image:verification-failed');
+  assert.equal(producerFailureStage({ producerStage: 'raw-secret-value' }), 'context');
+  assert.equal(producerFailureReason({ producerReason: 'raw-secret-value' }), 'verification-failed');
+  await assert.rejects(
+    runProducerCommand('docker', [], { failureReason: 'container-command' }, async () => { throw new Error('stderr SECRET SQL'); }),
+    error => producerFailureReason(error) === 'container-command' && !error.message.includes('SECRET') && !error.message.includes('SQL'),
+  );
+});
+test('inspection JSON and container count boundaries classify malformed and ambiguous output safely', () => {
+  for (const reason of ['container-json', 'image-json']) {
+    assert.throws(() => parseInspectionJson('{malformed', reason), error => producerFailureReason(error) === reason && error.message === 'Candidate verification failed');
+  }
+  const id = d('a');
+  assert.equal(parseContainerList(`\n${id.slice(0, 12)}\n`), id.slice(0, 12));
+  for (const output of ['', `${id}\n${d('b')}`, 'not-a-container']) {
+    const expected = output === 'not-a-container' ? 'container-identity' : 'container-ambiguous-count';
+    assert.throws(() => parseContainerList(output), error => producerFailureReason(error) === expected);
+  }
+});
+test('image identity, platform and metadata diagnostics remain separate', () => {
+  const imageId = `sha256:${d('a')}`;
+  const info = { id: imageId, os: 'linux', architecture: 'amd64', labels: null, digests: [] };
+  assert.equal(parseImageInspection(imageId, info).labels, null);
+  for (const [change, reason] of [
+    [value => ({ ...value, id: `sha256:${d('b')}` }), 'image-identity'],
+    [value => ({ ...value, architecture: 'arm64' }), 'image-platform'],
+    [value => ({ ...value, labels: [] }), 'image-labels'],
+    [value => ({ ...value, digests: [42] }), 'image-digests'],
+  ]) assert.throws(() => parseImageInspection(imageId, change(info)), error => producerFailureReason(error) === reason);
+});
+test('immutable dependency references normalize aliases and reject mutable, fake, unknown and distinct refs', () => {
+  const digestA = d('a'), digestB = d('b');
+  assert.equal(immutableReference('mysql', [`docker.io/library/mysql@sha256:${digestA}`]), `mysql@sha256:${digestA}`);
+  assert.equal(immutableReference('mysql', [`mysql@sha256:${digestA}`, `docker.io/library/mysql@sha256:${digestA}`, `mysql@sha256:${digestA}`]), `mysql@sha256:${digestA}`);
+  for (const [digests, reason] of [
+    [['mysql:8.4'], 'immutable-reference-missing'],
+    [['mysql@sha256:fake'], 'immutable-reference-missing'],
+    [[`attacker/mysql@sha256:${digestA}`], 'immutable-reference-missing'],
+    [[`mysql@sha256:${digestA}`, `mysql@sha256:${digestB}`], 'immutable-reference-ambiguous'],
+  ]) assert.throws(() => immutableReference('mysql', digests), error => producerFailureReason(error) === reason);
 });
 test('browser build rejects synthetic OAuth identity and symlinked output', async () => {
   const directory = await mkdtemp(path.join(os.tmpdir(), 'sers-static-identity-'));
