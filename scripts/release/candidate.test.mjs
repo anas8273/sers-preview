@@ -102,7 +102,7 @@ test('inspection JSON and container count boundaries classify malformed and ambi
     assert.throws(() => parseContainerList(output), error => producerFailureReason(error) === expected);
   }
 });
-test('image inspection uses raw JSON and pins the tested platform without exposing metadata', async () => {
+test('image inspection binds the exact content ID and validates linux/amd64 without exposing metadata', async () => {
   const imageId = `sha256:${d('a')}`;
   const calls = [];
   const raw = [{ Id: imageId, Os: 'linux', Architecture: 'amd64', Config: { Labels: null, Env: ['DATABASE_URL=must-not-be-returned'] }, RepoDigests: [`mysql@sha256:${d('b')}`] }];
@@ -110,10 +110,11 @@ test('image inspection uses raw JSON and pins the tested platform without exposi
   assert.equal(info.id, imageId);
   assert.deepEqual(info.digests, raw[0].RepoDigests);
   assert.equal(info.labels, null);
-  assert.deepEqual(calls[0].args, ['image', 'inspect', '--platform', 'linux/amd64', imageId]);
+  assert.deepEqual(calls[0].args, ['image', 'inspect', imageId]);
   assert.equal(calls[0].options.failureReason, 'image-command');
   assert.equal(info.env, undefined);
   assert.throws(() => parseImageInspectionJson(JSON.stringify([{ ...raw[0], Architecture: 'arm64' }]), imageId), error => producerFailureReason(error) === 'image-platform');
+  assert.throws(() => parseImageInspectionJson(JSON.stringify([{ ...raw[0], Id: `sha256:${d('c')}` }]), imageId), error => producerFailureReason(error) === 'image-identity');
   assert.throws(() => parseImageInspectionJson('{}', imageId), error => producerFailureReason(error) === 'image-json');
 });
 test('image identity, platform and metadata diagnostics remain separate', () => {

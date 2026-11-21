@@ -146,10 +146,11 @@ export function parseImageInspectionJson(output, imageId) {
   });
 }
 export async function inspectImage(imageId, run = command) {
-  // Avoid a Go-template failure on nullable Config.Labels/RepoDigests. The
-  // unformatted inspect response is JSON, while --platform binds selection to
-  // the only platform accepted by the candidate contract.
-  const inspected = await run('docker', ['image', 'inspect', '--platform', 'linux/amd64', imageId], { failureReason: 'image-command' });
+  // Inspect the exact content-addressed image ID without platform re-selection.
+  // Docker may resolve --platform to a distinct multi-platform variant ID.
+  // parseImageInspectionJson still requires an exact ID match AND linux/amd64;
+  // this never trusts a mutable tag or accepts a different platform.
+  const inspected = await run('docker', ['image', 'inspect', imageId], { failureReason: 'image-command' });
   return parseImageInspectionJson(inspected, imageId);
 }
 export function immutableReference(repository, digests) {
