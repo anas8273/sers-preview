@@ -18,7 +18,8 @@ import { appRouter } from "../../server/root-router";
 import { registerEvidenceHttpRoutes } from "../../server/evidence-http-routes";
 import { registerPrivateOutputRoutes } from "../../server/output-artifact-storage";
 import { createWorkItemForUser, linkAssetToWorkForUser } from "../../server/domain-db";
-import { saveReportDraftForUser, createReportDraftVersionForUser } from "../../server/work-report-draft-db";
+import { getReportDraftForUser, saveReportDraftForUser, createReportDraftVersionForUser } from "../../server/work-report-draft-db";
+import { reportDraftSaveInput } from "../fixtures/report-draft-contract";
 
 assert.equal(process.env.GITHUB_ACTIONS, "true");
 assert.equal(process.env.SERS_INTEGRATION, "1");
@@ -94,7 +95,15 @@ test("browser uploads, scans, links and downloads evidence and editable Word fro
 
     const work = await createWorkItemForUser(ownerId, { title: "تقرير رحلة الشاهد والـWord", type: "report" }); assert(work);
     assert(await linkAssetToWorkForUser(ownerId, { workItemId: work.id, assetId: asset.id, role: "evidence" }));
-    const draft = await saveReportDraftForUser(ownerId, { workItemId: work.id, expectedRevision: 0, templateId: "program-report", themeId: "formal", fontFamily: "Cairo", fields: { summary: "IMMUTABLE_WORD_ARABIC_REPORT تقرير عربي قابل للتعديل" }, evidenceAssetIds: [asset.id] });
+    const initial = await getReportDraftForUser(ownerId, work.id);
+    assert(initial, "The newly created report must return its frozen v2 contract");
+    const draft = await saveReportDraftForUser(ownerId, reportDraftSaveInput(initial.draft, {
+      workItemId: work.id,
+      expectedRevision: initial.draft.revision,
+      themeId: "formal", fontFamily: "Cairo",
+      fields: { summary: "IMMUTABLE_WORD_ARABIC_REPORT تقرير عربي قابل للتعديل" },
+      evidenceAssetIds: [asset.id],
+    }));
     const version = await createReportDraftVersionForUser(ownerId, { workItemId: work.id, expectedRevision: draft.revision, reason: "اختبار" });
     await page.goto(`${base}/work/${work.id}/report`);
     await page.click('[aria-controls="report-pdf-actions"]');
