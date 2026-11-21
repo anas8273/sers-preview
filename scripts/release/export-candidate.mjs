@@ -165,7 +165,10 @@ export async function dependency(service, repository, run = command) {
   return { imageId, ref: immutableReference(repository, info.digests) };
 }
 async function saveImage(imageId, file) {
-  const child = spawn('docker', ['image', 'save', imageId], { cwd: root, stdio: ['ignore', 'pipe', 'ignore'] });
+  // The tested image is linux/amd64; do not export other variants from a
+  // multi-platform Docker store. The archive reader still checks the exact
+  // content-addressed config ID and every referenced layer.
+  const child = spawn('docker', ['image', 'save', '--platform', 'linux/amd64', imageId], { cwd: root, stdio: ['ignore', 'pipe', 'ignore'] });
   const completion = new Promise((resolve, reject) => { child.once('error', reject); child.once('close', code => code === 0 ? resolve() : reject(new Error('Image export failed'))); });
   const timer = setTimeout(() => child.kill('SIGKILL'), 10 * 60_000);
   const hash = createHash('sha256'); let rawBytes = 0, bytes = 0;

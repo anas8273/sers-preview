@@ -60,8 +60,16 @@ def inspect(source, image_id):
     if not isinstance(manifest, list) or len(manifest) != 1 or not isinstance(manifest[0], dict):
         raise ValueError("Candidate must contain exactly one Docker image")
     image = manifest[0]
-    if image.get("Config") not in configs or configs[image["Config"]] != expected or not isinstance(image.get("Layers"), list) or not image["Layers"] or len(image["Layers"]) > 500 or any(not isinstance(layer, str) or layer not in seen for layer in image["Layers"]):
-        raise ValueError("Docker image configuration does not match candidate")
+    config = image.get("Config")
+    if not isinstance(config, str) or config not in configs:
+        raise ValueError("Docker referenced config is missing")
+    if configs[config] != expected:
+        raise ValueError("Docker referenced config digest does not match")
+    layers = image.get("Layers")
+    if not isinstance(layers, list) or not layers or len(layers) > 500 or any(not isinstance(layer, str) for layer in layers):
+        raise ValueError("Docker manifest layers are invalid")
+    if any(layer not in seen for layer in layers):
+        raise ValueError("Docker referenced layer is missing")
     return {"images": 1, "configSha256": expected, "uncompressedBytes": reader.bytes}
 
 
@@ -87,7 +95,10 @@ if __name__ == "__main__":
                 "Docker image metadata exceeds bound": "metadata-size",
                 "Docker image metadata is truncated": "metadata-truncated",
                 "Candidate must contain exactly one Docker image": "manifest-count",
-                "Docker image configuration does not match candidate": "config-or-layer-mismatch",
+                "Docker referenced config is missing": "config-reference-missing",
+                "Docker referenced config digest does not match": "config-digest-mismatch",
+                "Docker manifest layers are invalid": "manifest-layers-invalid",
+                "Docker referenced layer is missing": "manifest-layer-missing",
             }
             print(json.dumps({"images": 0, "reason": safe.get(str(error), "archive-read")}))
             sys.exit(0)
