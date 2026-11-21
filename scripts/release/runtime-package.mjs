@@ -62,14 +62,40 @@ export function validateImageInspection(image, candidate) {
   return image.Id;
 }
 
-export async function loadCandidateImage(directory, candidate, run = command) {
+const SAFE_ARCHIVE_REASONS = new Set([
+  'image-identity', 'raw-size', 'member-boundary', 'logical-size', 'metadata-size',
+  'metadata-truncated', 'manifest-count', 'config-or-layer-mismatch', 'archive-read',
+]);
+
+export async function loadCandidateImage(directory, candidate, run = command, report = console.error) {
   const archive = path.join(directory, IMAGE_FILE);
-  const inspected = JSON.parse(await run('/usr/bin/prlimit', ['--as=536870912', '--cpu=180', '--', 'python3', path.join(root, 'scripts/release/inspect-image-archive.py'), archive, candidate.appImageId], { timeoutMs: 4 * 60_000, maxBuffer: 64 * 1024 }));
-  if (inspected.images !== 1 || inspected.configSha256 !== candidate.appImageId.slice(7)) throw new Error('Image archive identity differs');
-  await run('docker', ['image', 'load', '--input', archive], { timeoutMs: 15 * 60_000, maxBuffer: 128 * 1024 });
-  const images = JSON.parse(await run('docker', ['image', 'inspect', candidate.appImageId]));
-  if (!Array.isArray(images) || images.length !== 1) throw new Error('Loaded image is ambiguous');
-  validateImageInspection(images[0], candidate);
+  const refuse = (phase, reason) => {
+    const suffix = phase === 'archive-identity' && SAFE_ARCHIVE_REASONS.has(reason) ? `:${reason}` : '';
+    report(`Portable image verification refused: ${phase}${suffix}`);
+    throw new Error('Portable candidate image verification refused');
+  };
+  let inspected;
+  try {
+    inspected = JSON.parse(await run('/usr/bin/prlimit', [
+      '--as=536870912', '--cpu=180', '--', 'python3',
+      path.join(root, 'scripts/release/inspect-image-archive.py'),
+      archive, candidate.appImageId, '--safe-diagnostic',
+    ], { timeoutMs: 4 * 60_000, maxBuffer: 64 * 1024 }));
+  } catch { refuse('archive-command'); }
+  if (inspected?.images !== 1 || inspected.configSha256 !== candidate.appImageId.slice(7)) {
+    refuse('archive-identity', inspected?.reason);
+  }
+  try {
+    await run('docker', ['image', 'load', '--input', archive], { timeoutMs: 15 * 60_000, maxBuffer: 128 * 1024 });
+  } catch { refuse('docker-load'); }
+  let images;
+  try {
+    images = JSON.parse(await run('docker', ['image', 'inspect', candidate.appImageId]));
+  } catch { refuse('docker-inspect'); }
+  try {
+    if (!Array.isArray(images) || images.length !== 1) throw new Error('Loaded image is ambiguous');
+    validateImageInspection(images[0], candidate);
+  } catch { refuse('loaded-identity'); }
 }
 
 export function composeOverride(candidate, appReference) {

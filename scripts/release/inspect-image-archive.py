@@ -66,14 +66,30 @@ def inspect(source, image_id):
 
 
 if __name__ == "__main__":
+    safe_diagnostic = len(sys.argv) == 4 and sys.argv[3] == "--safe-diagnostic"
     try:
         for kind, maximum in [(resource.RLIMIT_AS, 512 * 1024**2), (resource.RLIMIT_CPU, 300)]:
             hard = resource.getrlimit(kind)[1]
             bounded = maximum if hard == resource.RLIM_INFINITY else min(maximum, hard)
             resource.setrlimit(kind, (bounded, bounded))
-        if len(sys.argv) != 3:
+        if len(sys.argv) != (4 if safe_diagnostic else 3):
             raise ValueError("Expected image archive and identity")
         print(json.dumps(inspect(sys.argv[1], sys.argv[2])))
-    except Exception:
+    except Exception as error:
+        if safe_diagnostic:
+            # Only fixed enumerated reasons cross the CI log boundary, never
+            # exception text, archive paths, file names, stderr, or credentials.
+            safe = {
+                "Invalid image identity": "image-identity",
+                "Docker tar exceeds bound": "raw-size",
+                "Invalid Docker tar member": "member-boundary",
+                "Docker tar logical size exceeds bound": "logical-size",
+                "Docker image metadata exceeds bound": "metadata-size",
+                "Docker image metadata is truncated": "metadata-truncated",
+                "Candidate must contain exactly one Docker image": "manifest-count",
+                "Docker image configuration does not match candidate": "config-or-layer-mismatch",
+            }
+            print(json.dumps({"images": 0, "reason": safe.get(str(error), "archive-read")}))
+            sys.exit(0)
         print("Docker image archive verification refused", file=sys.stderr)
         sys.exit(1)

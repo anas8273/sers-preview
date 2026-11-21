@@ -8,7 +8,7 @@ import { gzipSync } from 'node:zlib';
 import os from 'node:os';
 import path from 'node:path';
 import { promotionContext, selectEvidence, verifyCandidateEvidence, assertSameEvidence, downloadArtifact, REPOSITORY, REPOSITORY_ID, WORKFLOWS } from './github-evidence.mjs';
-import { validateImageInspection, composeOverride, validateComposeConfig, readCandidate, root, APP_SERVICES } from './runtime-package.mjs';
+import { validateImageInspection, composeOverride, validateComposeConfig, readCandidate, loadCandidateImage, root, APP_SERVICES } from './runtime-package.mjs';
 import { immutableTag, registryManifest } from './registry.mjs';
 
 const exec = promisify(execFile);
@@ -190,6 +190,8 @@ test('Docker outer tar requires exactly one matching config and refuses sparse l
   const accepted = await exec('python3', [path.join(root, 'scripts/release/inspect-image-archive.py'), archive, expected]);
   assert.equal(JSON.parse(accepted.stdout).images, 1);
   await assert.rejects(exec('python3', [path.join(root, 'scripts/release/inspect-image-archive.py'), archive, imageId]));
+  const refusal = JSON.parse((await exec('python3', [path.join(root, 'scripts/release/inspect-image-archive.py'), archive, imageId, '--safe-diagnostic'])).stdout);
+  assert.deepEqual(refusal, { images: 0, reason: 'config-or-layer-mismatch' });
   const layer = await open(path.join(directory, 'layer.tar'), 'w');
   try { await layer.truncate(9 * 1024 ** 3); } finally { await layer.close(); }
   await exec('tar', ['--sparse', '--format=gnu', '-C', directory, '-cf', tar, 'manifest.json', digest + '.json', 'layer.tar']);
@@ -197,6 +199,24 @@ test('Docker outer tar requires exactly one matching config and refuses sparse l
   await writeFile(archive, gzipSync(await readFile(tar)));
   await assert.rejects(exec('python3', [path.join(root, 'scripts/release/inspect-image-archive.py'), archive, expected]));
 }));
+
+test('portable image failure diagnostics stay enumerated and never waive image identity', async () => {
+  const observed = [];
+  const valid = candidate();
+  await assert.rejects(loadCandidateImage('/disposable-only', valid, async (binary, args) => {
+    assert.equal(binary, '/usr/bin/prlimit');
+    assert.equal(args.at(-1), '--safe-diagnostic');
+    return JSON.stringify({ images: 0, reason: 'manifest-count', secret: 'PRIVATE' });
+  }, message => observed.push(message)));
+  assert.deepEqual(observed, ['Portable image verification refused: archive-identity:manifest-count']);
+  const stages = [];
+  let calls = 0;
+  await assert.rejects(loadCandidateImage('/disposable-only', valid, async () => {
+    if (calls++ === 0) return JSON.stringify({ images: 1, configSha256: valid.appImageId.slice(7) });
+    throw new Error('PRIVATE_CREDENTIAL_DO_NOT_LOG');
+  }, message => stages.push(message)));
+  assert.deepEqual(stages, ['Portable image verification refused: docker-load']);
+});
 
 test('loaded image verification rejects root, foreign source/revision and baked runtime credentials', () => {
   const image = { Id: imageId, Os: 'linux', Architecture: 'amd64', Config: { User: '10001:10001', WorkingDir: '/app', Labels: { 'org.opencontainers.image.source': 'https://github.com/' + REPOSITORY, 'org.opencontainers.image.revision': testedMerge }, Entrypoint: ['/usr/bin/tini', '--', 'node', 'scripts/operations/entrypoint.mjs'], Cmd: ['serve'], Env: ['NODE_ENV=production'] } };
