@@ -189,6 +189,21 @@ test('Docker outer tar requires exactly one matching config and refuses sparse l
   await writeFile(archive, gzipSync(await readFile(tar)));
   const accepted = await exec('python3', [path.join(root, 'scripts/release/inspect-image-archive.py'), archive, expected]);
   assert.equal(JSON.parse(accepted.stdout).images, 1);
+  // A manifest-referenced config can use a different safe path: its digest,
+  // rather than a guessed filename, is the authoritative image identity.
+  await mkdir(path.join(directory, 'alternative'));
+  await writeFile(path.join(directory, 'alternative', 'config.bin'), config);
+  await writeFile(path.join(directory, 'manifest.json'),
+    JSON.stringify([{ Config: 'alternative/config.bin', RepoTags: null, Layers: ['layer.tar'] }]));
+  await exec('tar', ['-C', directory, '-cf', tar, 'manifest.json', 'alternative', 'layer.tar']);
+  await writeFile(archive, gzipSync(await readFile(tar)));
+  assert.equal(JSON.parse((await exec('python3',
+    [path.join(root, 'scripts/release/inspect-image-archive.py'), archive, expected])).stdout).images, 1);
+  // Restore the original layout for rejection/sparse tests.
+  await writeFile(path.join(directory, 'manifest.json'),
+    JSON.stringify([{ Config: digest + '.json', RepoTags: null, Layers: ['layer.tar'] }]));
+  await exec('tar', ['-C', directory, '-cf', tar, 'manifest.json', digest + '.json', 'layer.tar']);
+  await writeFile(archive, gzipSync(await readFile(tar)));
   await assert.rejects(exec('python3', [path.join(root, 'scripts/release/inspect-image-archive.py'), archive, imageId]));
   const refusal = JSON.parse((await exec('python3', [path.join(root, 'scripts/release/inspect-image-archive.py'), archive, imageId, '--safe-diagnostic'])).stdout);
   assert.deepEqual(refusal, { images: 0, reason: 'config-reference-missing' });
@@ -209,6 +224,11 @@ test('portable image failure diagnostics stay enumerated and never waive image i
     return JSON.stringify({ images: 0, reason: 'manifest-count', secret: 'PRIVATE' });
   }, message => observed.push(message)));
   assert.deepEqual(observed, ['Portable image verification refused: archive-identity:manifest-count']);
+  const named = [];
+  await assert.rejects(loadCandidateImage('/disposable-only', valid,
+    async () => JSON.stringify({ images: 0, reason: 'config-reference-missing' }),
+    message => named.push(message)));
+  assert.deepEqual(named, ['Portable image verification refused: archive-identity:config-reference-missing']);
   const stages = [];
   let calls = 0;
   await assert.rejects(loadCandidateImage('/disposable-only', valid, async () => {

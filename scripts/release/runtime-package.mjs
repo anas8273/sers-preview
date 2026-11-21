@@ -64,7 +64,9 @@ export function validateImageInspection(image, candidate) {
 
 const SAFE_ARCHIVE_REASONS = new Set([
   'image-identity', 'raw-size', 'member-boundary', 'logical-size', 'metadata-size',
-  'metadata-truncated', 'manifest-count', 'config-or-layer-mismatch', 'archive-read',
+  'metadata-truncated', 'manifest-count', 'config-reference-missing',
+  'config-digest-mismatch', 'manifest-layers-invalid', 'manifest-layer-missing',
+  'metadata-candidates-limit', 'archive-read',
 ]);
 
 export async function loadCandidateImage(directory, candidate, run = command, report = console.error) {

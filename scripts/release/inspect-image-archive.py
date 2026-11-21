@@ -28,7 +28,6 @@ def inspect(source, image_id):
     if not re.fullmatch(r"sha256:[a-f0-9]{64}", image_id):
         raise ValueError("Invalid image identity")
     expected = image_id[7:]
-    config_names = {expected + ".json", "blobs/sha256/" + expected}
     manifest = None
     configs = {}
     seen = set()
@@ -45,7 +44,11 @@ def inspect(source, image_id):
                 if logical_bytes > 8 * 1024**3:
                     raise ValueError("Docker tar logical size exceeds bound")
                 seen.add(name)
-                if name == "manifest.json" or name in config_names:
+                # Docker v2/OCI stores may place the referenced config under
+                # different names. Hash only bounded small regular files and
+                # accept a config ONLY when the manifest references its exact
+                # path and its SHA-256 equals the exercised image config ID.
+                if name == "manifest.json" or (entry.isfile() and entry.size <= 1024 * 1024):
                     if not entry.isfile() or entry.size > 1024 * 1024:
                         raise ValueError("Docker image metadata exceeds bound")
                     data = archive.extractfile(entry).read(1024 * 1024 + 1)
@@ -54,6 +57,8 @@ def inspect(source, image_id):
                     if name == "manifest.json":
                         manifest = json.loads(data)
                     else:
+                        if len(configs) >= 4096:
+                            raise ValueError("Docker metadata candidate count exceeds bound")
                         configs[name] = hashlib.sha256(data).hexdigest()
         while reader.read(1024 * 1024):
             pass
@@ -99,6 +104,7 @@ if __name__ == "__main__":
                 "Docker referenced config digest does not match": "config-digest-mismatch",
                 "Docker manifest layers are invalid": "manifest-layers-invalid",
                 "Docker referenced layer is missing": "manifest-layer-missing",
+                "Docker metadata candidate count exceeds bound": "metadata-candidates-limit",
             }
             print(json.dumps({"images": 0, "reason": safe.get(str(error), "archive-read")}))
             sys.exit(0)
