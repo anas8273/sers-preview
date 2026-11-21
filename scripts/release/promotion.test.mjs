@@ -206,7 +206,7 @@ test('Docker outer tar requires exactly one matching config and refuses sparse l
   await writeFile(archive, gzipSync(await readFile(tar)));
   await assert.rejects(exec('python3', [path.join(root, 'scripts/release/inspect-image-archive.py'), archive, imageId]));
   const refusal = JSON.parse((await exec('python3', [path.join(root, 'scripts/release/inspect-image-archive.py'), archive, imageId, '--safe-diagnostic'])).stdout);
-  assert.deepEqual(refusal, { images: 0, reason: 'config-reference-missing' });
+  assert.deepEqual(refusal, { images: 0, reason: 'config-digest-mismatch' });
   const layer = await open(path.join(directory, 'layer.tar'), 'w');
   try { await layer.truncate(9 * 1024 ** 3); } finally { await layer.close(); }
   await exec('tar', ['--sparse', '--format=gnu', '-C', directory, '-cf', tar, 'manifest.json', digest + '.json', 'layer.tar']);
