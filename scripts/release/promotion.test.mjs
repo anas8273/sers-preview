@@ -204,9 +204,22 @@ test('Docker outer tar requires exactly one matching config and refuses sparse l
     JSON.stringify([{ Config: digest + '.json', RepoTags: null, Layers: ['layer.tar'] }]));
   await exec('tar', ['-C', directory, '-cf', tar, 'manifest.json', digest + '.json', 'layer.tar']);
   await writeFile(archive, gzipSync(await readFile(tar)));
-  await assert.rejects(exec('python3', [path.join(root, 'scripts/release/inspect-image-archive.py'), archive, imageId]));
-  const refusal = JSON.parse((await exec('python3', [path.join(root, 'scripts/release/inspect-image-archive.py'), archive, imageId, '--safe-diagnostic'])).stdout);
+  // OCI index/manifest IDs are not necessarily equal to the referenced
+  // config blob's digest; only the later loaded Docker image ID must match.
+  const distinctIndex = JSON.parse((await exec('python3',
+    [path.join(root, 'scripts/release/inspect-image-archive.py'), archive, imageId])).stdout);
+  assert.equal(distinctIndex.configSha256, digest);
+  assert.notEqual(distinctIndex.configSha256, imageId.slice(7));
+  // A content-addressed config path must still reject tampered bytes.
+  await writeFile(path.join(directory, digest + '.json'), Buffer.from('{"tampered":true}'));
+  await exec('tar', ['-C', directory, '-cf', tar, 'manifest.json', digest + '.json', 'layer.tar']);
+  await writeFile(archive, gzipSync(await readFile(tar)));
+  const refusal = JSON.parse((await exec('python3',
+    [path.join(root, 'scripts/release/inspect-image-archive.py'), archive, expected, '--safe-diagnostic'])).stdout);
   assert.deepEqual(refusal, { images: 0, reason: 'config-digest-mismatch' });
+  await writeFile(path.join(directory, digest + '.json'), config);
+  await exec('tar', ['-C', directory, '-cf', tar, 'manifest.json', digest + '.json', 'layer.tar']);
+  await writeFile(archive, gzipSync(await readFile(tar)));
   const layer = await open(path.join(directory, 'layer.tar'), 'w');
   try { await layer.truncate(9 * 1024 ** 3); } finally { await layer.close(); }
   await exec('tar', ['--sparse', '--format=gnu', '-C', directory, '-cf', tar, 'manifest.json', digest + '.json', 'layer.tar']);
@@ -232,10 +245,45 @@ test('portable image failure diagnostics stay enumerated and never waive image i
   const stages = [];
   let calls = 0;
   await assert.rejects(loadCandidateImage('/disposable-only', valid, async () => {
-    if (calls++ === 0) return JSON.stringify({ images: 1, configSha256: valid.appImageId.slice(7) });
+    if (calls++ === 0) return JSON.stringify({ images: 1, configSha256: 'a'.repeat(64), uncompressedBytes: 4096 });
     throw new Error('PRIVATE_CREDENTIAL_DO_NOT_LOG');
   }, message => stages.push(message)));
   assert.deepEqual(stages, ['Portable image verification refused: docker-load']);
+});
+
+test('OCI config digest can differ but fresh Docker must load the exact tested image ID', async () => {
+  const candidateImage = candidate();
+  const configDigest = hash(Buffer.from('{}'));
+  assert.notEqual(configDigest, candidateImage.appImageId.slice(7));
+  const loaded = {
+    Id: candidateImage.appImageId, Os: 'linux', Architecture: 'amd64',
+    Config: {
+      User: '10001:10001', WorkingDir: '/app',
+      Labels: { 'org.opencontainers.image.source': 'https://github.com/' + REPOSITORY, 'org.opencontainers.image.revision': candidateImage.testedMerge },
+      Entrypoint: ['/usr/bin/tini', '--', 'node', 'scripts/operations/entrypoint.mjs'],
+      Cmd: ['serve'], Env: ['NODE_ENV=production'],
+    },
+  };
+  const calls = [], log = [];
+  const mock = async (binary, args) => {
+    calls.push([binary, args]);
+    if (binary === '/usr/bin/prlimit') return JSON.stringify({ images: 1, configSha256: configDigest, uncompressedBytes: 4096 });
+    if (binary === 'docker' && args[1] === 'load') return 'Loaded image from tested artifact';
+    if (binary === 'docker' && args[1] === 'inspect') return JSON.stringify([loaded]);
+    throw new Error('Unexpected verification command');
+  };
+  await loadCandidateImage('/synthetic-only', candidateImage, mock, message => log.push(message));
+  assert.deepEqual(log, []);
+  assert.deepEqual(calls.filter(([binary]) => binary === 'docker').map(([, args]) => args.slice(0, 2)),
+    [['image', 'load'], ['image', 'inspect']]);
+  const rejected = [];
+  await assert.rejects(loadCandidateImage('/synthetic-only', candidateImage,
+    async (binary, args) => {
+      const value = await mock(binary, args);
+      return binary === 'docker' && args[1] === 'inspect'
+        ? JSON.stringify([{ ...loaded, Id: 'sha256:' + '0'.repeat(64) }]) : value;
+    }, message => rejected.push(message)));
+  assert.deepEqual(rejected, ['Portable image verification refused: loaded-identity']);
 });
 
 test('loaded image verification rejects root, foreign source/revision and baked runtime credentials', () => {

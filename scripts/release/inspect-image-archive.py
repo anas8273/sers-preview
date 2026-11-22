@@ -27,7 +27,6 @@ class BoundedReader:
 def inspect(source, image_id):
     if not re.fullmatch(r"sha256:[a-f0-9]{64}", image_id):
         raise ValueError("Invalid image identity")
-    expected = image_id[7:]
     manifest = None
     configs = {}
     seen = set()
@@ -44,10 +43,9 @@ def inspect(source, image_id):
                 if logical_bytes > 8 * 1024**3:
                     raise ValueError("Docker tar logical size exceeds bound")
                 seen.add(name)
-                # Docker v2/OCI stores may place the referenced config under
-                # different names. Hash only bounded small regular files and
-                # accept a config ONLY when the manifest references its exact
-                # path and its SHA-256 equals the exercised image config ID.
+                # Hash only bounded candidate metadata. The Docker/OCI index
+                # ID may differ from the config digest; the fresh-runner Docker
+                # inspect must still prove the exact tested image ID.
                 if name == "manifest.json" or (entry.isfile() and entry.size <= 1024 * 1024):
                     if not entry.isfile() or entry.size > 1024 * 1024:
                         raise ValueError("Docker image metadata exceeds bound")
@@ -68,14 +66,20 @@ def inspect(source, image_id):
     config = image.get("Config")
     if not isinstance(config, str) or config not in configs:
         raise ValueError("Docker referenced config is missing")
-    if configs[config] != expected:
+    config_digest = configs[config]
+    # Both classic Docker and OCI archives commonly encode the config's
+    # content digest in its path. Verify that independent checksum when present.
+    # A containerd image ID can instead denote an OCI index or manifest, and
+    # must not be compared to the config blob's digest here.
+    embedded = re.fullmatch(r"(?:blobs/sha256/([a-f0-9]{64})|([a-f0-9]{64})\.json)", config)
+    if embedded and (embedded.group(1) or embedded.group(2)) != config_digest:
         raise ValueError("Docker referenced config digest does not match")
     layers = image.get("Layers")
     if not isinstance(layers, list) or not layers or len(layers) > 500 or any(not isinstance(layer, str) for layer in layers):
         raise ValueError("Docker manifest layers are invalid")
     if any(layer not in seen for layer in layers):
         raise ValueError("Docker referenced layer is missing")
-    return {"images": 1, "configSha256": expected, "uncompressedBytes": reader.bytes}
+    return {"images": 1, "configSha256": config_digest, "uncompressedBytes": reader.bytes}
 
 
 if __name__ == "__main__":
