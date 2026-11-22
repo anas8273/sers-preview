@@ -15,7 +15,7 @@ concurrency:
 jobs:
   promote-tested-image:
     if: github.ref == 'refs/heads/main' && github.repository == 'anas8273/sers-preview'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 25
     permissions:
       contents: read
@@ -25,6 +25,17 @@ jobs:
       run:
         shell: bash
     steps:
+      - name: Require classic Docker image store for tested image identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          # The candidate contract requires Image ID == config digest.
+          # Docker 29's containerd store may use an OCI index/manifest ID.
+          # Fail closed instead of silently accepting a different image ID.
+          if [[ "$(docker info --format '{{.Driver}}')" != "overlay2" ]]; then
+            echo "::error::Immutable image identity requires classic Docker overlay2 on this disposable runner."
+            exit 1
+          fi
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           ref: ${{ github.sha }}
