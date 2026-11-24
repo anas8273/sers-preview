@@ -6,6 +6,7 @@ import { publicProcedure, protectedProcedure, adminProcedure, router } from "./_
 import { invokeLLM, type Message } from "./_core/llm";
 import { aiProcedure } from "./ai-admission";
 import { AI_MAX_OUTPUT_TOKENS } from "./ai-provider-policy";
+import { sanitizeCvInput } from "./ai-data-policy";
 import { aiInputs, aiResponseContent, AI_DRAFT_RULES, aiJsonFormat, boundedAiText, classificationOutput, cvOutput, examOutput, fieldsOutputSchema, gradeOutput, parseAiJson, radioOutput, validateClassification, validateExam, validateGrades } from "./ai-contracts";
 import { MAX_UPLOAD_BASE64_LENGTH } from "./upload-validation";
 import { notifyOwner } from "./_core/notification";
@@ -16,6 +17,14 @@ import { hashProtectedOutputPassword, verifyProtectedOutputPassword } from "./ou
 import { createPublicOutputRateLimiter } from "./public-output-rate-limit";
 import { TRPCError } from "@trpc/server";
 import { browserStorageKeyForUser } from "./browser-storage-key";
+import {
+  canonicalizeOnlineExamAnswers,
+  canonicalizeOnlineExamQuestions,
+  onlineExamSubmissionRateLimiter,
+  validateOnlineExamAttemptId,
+  validateOnlineExamStudentIdentity,
+  MAX_ONLINE_EXAM_QUESTIONS,
+} from "./online-exam-admission";
 import {
   createPortfolio, updatePortfolio, getPortfoliosByUser, getPortfolioById, deletePortfolio,
   getAllPortfolios, reviewPortfolio,
@@ -236,11 +245,12 @@ export const appRouter = router({
         duration: z.string().trim().max(64),
         themeId: z.string().trim().min(1).max(64),
         fontFamily: z.string().trim().min(1).max(128),
-        questions: z.array(z.record(z.string(), z.any())).min(1).max(100),
+        questions: z.array(z.unknown()).min(1).max(MAX_ONLINE_EXAM_QUESTIONS),
       }))
       .mutation(async ({ ctx, input }) => {
         const token = nanoid(24);
-        const created = await createOnlineExam({ ...input, userId: ctx.user.id, token });
+        const questions = canonicalizeOnlineExamQuestions(input.questions);
+        const created = await createOnlineExam({ ...input, questions, userId: ctx.user.id, token });
         await recordAudit({ actorUserId: ctx.user.id, action: "online_exam.created", resourceType: "online_exam", resourceId: created.id, metadata: { questionCount: input.questions.length, subject: input.subject } });
         return created;
       }),
@@ -250,7 +260,13 @@ export const appRouter = router({
       .query(async ({ input }) => {
         const exam = await getOnlineExamByToken(input.token);
         if (!exam) return null;
-        const questions = (exam.questions as Array<Record<string, unknown>>).map(({ correctAnswer, correctIndex, ...question }) => question);
+        let questions;
+        try {
+          questions = canonicalizeOnlineExamQuestions(exam.questions).map(({ correctAnswer, correctIndex, ...question }) => question);
+        } catch {
+          // A malformed legacy row is not exposed to a student.
+          return null;
+        }
         return {
           title: exam.title,
           subject: exam.subject,
@@ -268,12 +284,21 @@ export const appRouter = router({
         token: z.string().min(12).max(128),
         studentName: z.string().trim().min(2).max(255),
         studentId: z.string().trim().max(128).optional(),
-        answers: z.record(z.string(), z.union([z.string(), z.number()])),
+        answers: z.unknown(),
+        // Optional for old clients. New clients must persist this nonce for
+        // retry-safe submission; it is scoped by the exam token in DB.
+        attemptId: z.string().trim().min(16).max(128).regex(/^[A-Za-z0-9_-]+$/).optional(),
       }))
-      .mutation(async ({ input }) => {
+      .mutation(async ({ ctx, input }) => {
+        if (!onlineExamSubmissionRateLimiter.allow(ctx.req.ip, input.token)) {
+          throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: "تجاوزت محاولات التسليم المؤقتة؛ حاول لاحقًا" });
+        }
+        validateOnlineExamStudentIdentity(input.studentName, input.studentId);
+        validateOnlineExamAttemptId(input.attemptId);
         const exam = await getOnlineExamByToken(input.token);
         if (!exam) throw new TRPCError({ code: "NOT_FOUND", message: "رابط الاختبار غير صالح أو تم إيقافه" });
-        const questions = exam.questions as Array<Record<string, unknown>>;
+        const questions = canonicalizeOnlineExamQuestions(exam.questions);
+        const answers = canonicalizeOnlineExamAnswers(input.answers, questions);
         let autoScore = 0;
         let autoMaxScore = 0;
         let requiresManualReview = false;
@@ -282,7 +307,7 @@ export const appRouter = router({
           const type = String(question.type || "");
           const id = String(question.id || "");
           const points = Number(question.points || 0);
-          const answer = input.answers[id];
+          const answer = Object.prototype.hasOwnProperty.call(answers, id) ? answers[id] : undefined;
           if (type === "essay") {
             requiresManualReview = true;
             continue;
@@ -299,7 +324,8 @@ export const appRouter = router({
           onlineExamId: exam.id,
           studentName: input.studentName,
           studentId: input.studentId || null,
-          answers: input.answers,
+          attemptId: input.attemptId || null,
+          answers,
           autoScore,
           autoMaxScore,
         });
@@ -307,13 +333,18 @@ export const appRouter = router({
       }),
 
     responses: protectedProcedure
-      .input(z.object({ id: z.number() }))
+      .input(z.object({
+        id: z.number(),
+        // Omitting both fields preserves the legacy array response shape.
+        limit: z.number().int().min(1).max(100).optional(),
+        cursor: z.string().regex(/^[1-9]\d*$/).max(20).optional(),
+      }))
       .query(async ({ ctx, input }) => {
         const exam = await getOnlineExamById(input.id);
         if (!exam || (exam.userId !== ctx.user.id && ctx.user.role !== "admin")) {
           throw new TRPCError({ code: "FORBIDDEN", message: "لا تملك صلاحية مراجعة تسليمات هذا الاختبار" });
         }
-        return getOnlineExamResponses(exam.id);
+        return getOnlineExamResponses(exam.id, input.limit === undefined && input.cursor === undefined ? undefined : { limit: input.limit, cursor: input.cursor });
       }),
 
     revoke: protectedProcedure
@@ -406,7 +437,9 @@ export const appRouter = router({
         const portfolio = await getPortfolioById(link.portfolioId);
         if (!portfolio) return { error: "الملف غير موجود", portfolio: null };
 
-        const files = await getFilesByPortfolio(portfolio.id);
+        // Public links expose descriptive metadata only. Raw provider URLs and
+        // storage keys are never a public download grant.
+        const files = await getFilesByPortfolio(portfolio.id, { publicProjection: true });
         const currentLink = await getShareLinkByToken(input.token);
         if (!currentLink || !currentLink.isActive || new Date() >= currentLink.expiresAt || currentLink.id !== link.id || currentLink.portfolioId !== link.portfolioId || currentLink.hasPassword !== link.hasPassword || currentLink.passwordHash !== link.passwordHash) return { error: "الرابط لم يعد متاحًا", portfolio: null };
 
@@ -716,9 +749,12 @@ export const appRouter = router({
       return valid ? { segments: result.segments, success: true } : { segments: [], success: false };
     }),
     generateCV: aiProcedure("generateCV", aiInputs.generateCV).mutation(async ({ input }) => {
+      // Defense in depth: aiProcedure already minimizes before reservation; keep
+      // the provider payload explicitly free of local identity/contact fields.
+      const providerInput = sanitizeCvInput(input);
       const response = await invokeLLM({ maxTokens: AI_MAX_OUTPUT_TOKENS, messages: [
-        { role: "system", content: `${AI_DRAFT_RULES} حرّر مسودة سيرة ذاتية من الوقائع المقدمة فقط. لا تنشئ خبرة أو مؤهلًا أو جهة أو مدة أو دورة أو إنجازًا غير وارد. المجموعات غير الموثقة تبقى مصفوفات فارغة.` },
-        { role: "user", content: JSON.stringify(input) },
+        { role: "system", content: `${AI_DRAFT_RULES} الهوية وبيانات التواصل محجوبة محليًا؛ لا تحاول استعادتها أو اختلاقها. حرّر مسودة سيرة ذاتية من الوقائع المقدمة فقط. لا تنشئ خبرة أو مؤهلًا أو جهة أو مدة أو دورة أو إنجازًا غير وارد. المجموعات غير الموثقة تبقى مصفوفات فارغة.` },
+        { role: "user", content: JSON.stringify(providerInput) },
       ], response_format: aiJsonFormat("cv_data", cvOutput) });
       const cvData = parseAiJson(aiResponseContent(response), cvOutput);
       return { cvData, success: cvData !== null };

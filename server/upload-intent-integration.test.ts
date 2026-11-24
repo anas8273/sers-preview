@@ -13,6 +13,7 @@ import {
 } from "./upload-intent-db";
 import { receiveUploadIntentForUser, reconcileUploadIntentForUser, reconcileUploadReceptionsForScope } from "./upload-reception-service";
 import type { PrivateUploadStorage } from "./private-upload-storage";
+import { assertDisposableMySQL } from "../tests/fixtures/assert-disposable-mysql";
 
 const bytes = new Uint8Array(128).fill(7);
 const digest = createHash("sha256").update(bytes).digest("hex");
@@ -72,9 +73,7 @@ suite("upload intent scopes and reservations on real MySQL", () => {
   }
 
   beforeAll(async () => {
-    if (process.env.GITHUB_ACTIONS !== "true" || process.env.DATABASE_URL !== "mysql://root:root@127.0.0.1:3306/sers_test") {
-      throw new Error("Upload intent integration requires the disposable CI database");
-    }
+    assertDisposableMySQL();
     const db = (await getDb())!;
     const [result] = await db.execute(sql`SELECT DATABASE() AS dbName, VERSION() AS dbVersion`);
     const row = (result as unknown as Array<{ dbName: string; dbVersion: string }>)[0];

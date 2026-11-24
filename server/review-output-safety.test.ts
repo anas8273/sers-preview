@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import ts from "typescript";
 
 const schema = readFileSync(resolve(process.cwd(), "drizzle/domain-core.ts"), "utf8");
 const router = readFileSync(resolve(process.cwd(), "server/domain-router.ts"), "utf8");
@@ -28,7 +29,7 @@ describe("review/output domain invariants", () => {
     const updateSection = router.split("update: protectedProcedure")[1]?.split("createVersion: protectedProcedure")[0] ?? "";
     expect(updateSection).not.toContain('z.enum(["draft", "in_review", "approved", "archived"])');
     expect(updateSection).not.toContain("status:");
-    expect(domainService).toContain("patch: { title?: string }");
+    expect(domainService).toContain("patch: { title?: string; academicYearId?: number | null; academicTermId?: number | null }");
   });
 
   it("uses compare-and-swap retries for unique work version numbers", () => {
@@ -62,5 +63,27 @@ describe("review/output domain invariants", () => {
     expect(reviewService).toContain('eq(reviews.workVersionId, input.workVersionId)');
     expect(reviewService).toContain('eq(reviews.status, "approved")');
     expect(reviewService).toContain("Shared outputs require an approved review for this exact version");
+  });
+
+  it("keeps bearer tokens and private storage keys out of output read/list projections", () => {
+    expect(reviewService).toContain("getOutputRecordForUser");
+    expect(reviewService).toContain("projectOutputForUser");
+    // Assert the actual reader/list allowlist, not stale destructuring names.
+    const source = ts.createSourceFile("review-output-db.ts", reviewService, ts.ScriptTarget.Latest, true);
+    const projection = source.statements.find((node): node is ts.FunctionDeclaration =>
+      ts.isFunctionDeclaration(node) && node.name?.text === "projectOutputForUser");
+    const returned = projection?.body?.statements.find(ts.isReturnStatement)?.expression;
+    expect(returned && ts.isObjectLiteralExpression(returned)).toBe(true);
+    if (!returned || !ts.isObjectLiteralExpression(returned)) throw Error("Missing explicit output allowlist");
+    expect(returned.properties.every(ts.isPropertyAssignment)).toBe(true);
+    const keys = returned.properties.map(property => property.name?.getText(source));
+    expect(keys.sort()).toEqual([
+      "id", "workVersionId", "versionNumber", "workId", "workTitle", "type", "visibility",
+      "createdByUserId", "createdAt", "expiresAt", "revokedAt",
+    ].sort());
+    expect(reviewService).toContain("getPublicationReceiptForUser");
+    expect(reviewService).toContain("row.createdByUserId !== userId");
+    expect(reviewService).toContain('assertWorkAccess(userId, row.workId, "write")');
+    expect(reviewService).toContain('token: row.visibility === "private" ? null : row.token');
   });
 });

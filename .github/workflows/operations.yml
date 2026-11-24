@@ -14,7 +14,7 @@ concurrency:
 
 jobs:
   compose-backup-restore:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 55
     defaults:
       run:
@@ -38,6 +38,17 @@ jobs:
       SERS_DR_TARGET_RESTORE_SECONDS: "300"
       SERS_DR_TARGET_BACKUP_AGE_SECONDS: "900"
     steps:
+      - name: Require classic Docker image store for tested image identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          # The candidate contract requires Image ID == config digest.
+          # Docker 29's containerd store may use an OCI index/manifest ID.
+          # Fail closed instead of silently accepting a different image ID.
+          if [[ "$(docker info --format '{{.Driver}}')" != "overlay2" ]]; then
+            echo "::error::Immutable image identity requires classic Docker overlay2 on this disposable runner."
+            exit 1
+          fi
       - name: Set disposable private paths
         run: printf 'SERS_SECRETS_DIR=%s/sers-secrets\n' "$RUNNER_TEMP" >> "$GITHUB_ENV"
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -49,7 +60,7 @@ jobs:
           node-version: 22
           cache: pnpm
       - name: Install locked verification toolchain
-        run: pnpm install --frozen-lockfile --ignore-scripts
+        run: pnpm install --frozen-lockfile
       - name: Check operational scripts and refusal boundaries
         run: |
           node node_modules/typescript/bin/tsc -p scripts/operations/tsconfig.json
@@ -142,12 +153,23 @@ jobs:
   candidate-portability:
     needs: compose-backup-restore
     if: ${{ always() && github.event_name == 'pull_request' }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     defaults:
       run:
         shell: bash
     steps:
+      - name: Require classic Docker image store for tested image identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          # The candidate contract requires Image ID == config digest.
+          # Docker 29's containerd store may use an OCI index/manifest ID.
+          # Fail closed instead of silently accepting a different image ID.
+          if [[ "$(docker info --format '{{.Driver}}')" != "overlay2" ]]; then
+            echo "::error::Immutable image identity requires classic Docker overlay2 on this disposable runner."
+            exit 1
+          fi
       - name: Require a successful producer and its candidate artifact
         env:
           PRODUCER_RESULT: ${{ needs.compose-backup-restore.result }}

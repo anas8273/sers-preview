@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import express from "express";
 import { registerRuntimeObservability } from "./runtime-observability";
+import { assertDisposableMySQL } from "../tests/fixtures/assert-disposable-mysql";
 
 const suite = process.env.SERS_INTEGRATION === "1" ? describe : describe.skip;
 suite("runtime health HTTP privacy and loss/recovery", () => {
@@ -8,7 +9,7 @@ suite("runtime health HTTP privacy and loss/recovery", () => {
   let databaseDown = false;
   const logs: Record<string, unknown>[] = [], secret = "64cb8e205f1da397".repeat(4);
   beforeAll(async () => {
-    if (process.env.GITHUB_ACTIONS !== "true" || process.env.DATABASE_URL !== "mysql://root:root@127.0.0.1:3306/sers_test") throw new Error("Disposable CI only");
+    assertDisposableMySQL();
     vi.stubEnv("SERS_HEALTHCHECK_TOKEN", secret);
     const app = express();
     registerRuntimeObservability(app, { log: value => logs.push(value), checks: { database: async () => { if (databaseDown) throw new Error("PRIVATE_DATABASE_USER:PRIVATE_PASSWORD"); } } });

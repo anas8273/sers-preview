@@ -6,12 +6,13 @@ import mysql from "mysql2/promise";
 import { drizzle } from "drizzle-orm/mysql2";
 import { migrate } from "drizzle-orm/mysql2/migrator";
 import { describe, expect, it } from "vitest";
+import { disposableMySQLConnectionOptions } from "../tests/fixtures/assert-disposable-mysql";
 
 const suite = process.env.SERS_INTEGRATION === "1" ? describe : describe.skip;
 suite("0016 core journeys upgrade from populated 0015", () => {
   it("preserves existing works, outputs and upload capacity while backfilling unaccepted invitations", async () => {
-    if (process.env.GITHUB_ACTIONS !== "true" || process.env.DATABASE_URL !== "mysql://root:root@127.0.0.1:3306/sers_test") throw new Error("Core journeys migration requires disposable CI MySQL");
-    const admin = await mysql.createConnection(process.env.DATABASE_URL);
+    const connectionOptions = disposableMySQLConnectionOptions();
+    const admin = await mysql.createConnection(connectionOptions);
     const databaseName = `sers_core_upgrade_${randomUUID().replaceAll("-", "")}`;
     const folder = mkdtempSync(path.join(tmpdir(), "sers-core-upgrade-"));
     let connection: Awaited<ReturnType<typeof mysql.createConnection>> | undefined;
@@ -20,7 +21,7 @@ suite("0016 core journeys upgrade from populated 0015", () => {
       const [identityRows] = await admin.query("SELECT DATABASE() AS name, VERSION() AS version");
       expect((identityRows as Array<{ name: string; version: string }>)[0]).toMatchObject({ name: "sers_test", version: expect.stringMatching(/^8\.4\./) });
       await admin.query(`CREATE DATABASE \`${databaseName}\``); created = true;
-      connection = await mysql.createConnection({ host: "127.0.0.1", port: 3306, user: "root", password: "root", database: databaseName });
+      connection = await mysql.createConnection({ ...connectionOptions, database: databaseName });
       cpSync(path.resolve("drizzle"), folder, { recursive: true });
       const journalPath = path.join(folder, "meta/_journal.json");
       const journal = JSON.parse(readFileSync(journalPath, "utf8"));

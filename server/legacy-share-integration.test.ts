@@ -4,12 +4,13 @@ import { eq, sql } from "drizzle-orm";
 import { portfolios, shareLinks, users } from "../drizzle/schema";
 import { createShareLink, deactivateShareLink, getDb, incrementShareLinkViews } from "./db";
 import { hashProtectedOutputPassword } from "./output-password";
+import { assertDisposableMySQL } from "../tests/fixtures/assert-disposable-mysql";
 
 const suite = process.env.SERS_INTEGRATION === "1" ? describe : describe.skip;
 suite("legacy share atomic view admission on real MySQL", () => {
   let owner = 0, portfolioId = 0;
   beforeAll(async () => {
-    if (process.env.GITHUB_ACTIONS !== "true" || process.env.DATABASE_URL !== "mysql://root:root@127.0.0.1:3306/sers_test") throw new Error("Requires disposable CI database");
+    assertDisposableMySQL();
     const db = (await getDb())!;
     const [raw] = await db.execute(sql`SELECT DATABASE() AS name, VERSION() AS version`);
     const row = (raw as unknown as { name: string; version: string }[])[0];

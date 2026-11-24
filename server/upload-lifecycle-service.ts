@@ -6,6 +6,7 @@ import {
 } from "./upload-intent-db";
 import { withUploadAbort, type PrivateUploadStorage } from "./private-upload-storage";
 import type { UploadScanner } from "./upload-scanner";
+import { createAuditLog } from "./db";
 
 export type UploadLifecycleDependencies = { storage: PrivateUploadStorage; scanner: UploadScanner };
 const hash = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex");
@@ -60,6 +61,13 @@ export async function downloadReadyAssetForUser(userId: number, assetId: number,
     if (read.status !== "found" || !(read.bytes instanceof Uint8Array) || read.bytes.byteLength !== asset.bytes || hash(read.bytes) !== asset.sha256) return undefined;
     const current = await getReadyUploadAssetForUser(userId, assetId);
     if (!current || current.intentId !== asset.intentId || current.key !== asset.key || current.version !== asset.version || current.sha256 !== asset.sha256) return undefined;
+    // The audit record contains only provenance metadata, never the provider
+    // key, URL, bytes, or bearer material. A logging outage must not turn a
+    // successfully authorized private download into a data-loss error.
+    try {
+      await createAuditLog({ actorUserId: userId, action: "evidence.asset_downloaded", resourceType: "asset", resourceId: String(assetId),
+        metadata: { intentId: asset.intentId, bytes: asset.bytes, mimeType: asset.mimeType, sha256: asset.sha256 } });
+    } catch { /* best-effort audit; authorization was already rechecked */ }
     return { bytes: Buffer.from(read.bytes), fileName: asset.fileName, mimeType: asset.mimeType };
   } catch { return undefined; }
 }

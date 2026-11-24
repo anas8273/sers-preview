@@ -5,9 +5,12 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { protectedProcedure, router } from "./_core/trpc";
 import {
+  AssetDeleteConflictError,
   createAssetForUser,
   createWorkItemForUser,
   createWorkVersionForUser,
+  deleteAssetForUser,
+  getAssetUsageForUser,
   getWorkItemForUser,
   linkAssetToWorkForUser,
   listAssetsForUser,
@@ -20,11 +23,15 @@ import {
 } from "./domain-db";
 import { AccountAccessError, AccountValidationError } from "./account-db";
 import { reportDraftRouter } from "./report-draft-router";
+import { portfolioDraftRouter } from "./portfolio-draft-router";
+import { standardsRouter } from "./standards-router";
+import { commerceRouter } from "./commerce-router";
 import {
   addReviewCommentForUser,
   createOutputForUser,
   createReviewForUser,
   decideReviewForUser,
+  getPublicationReceiptForUser,
   getReviewForUser,
   listOutputsForWorkForUser,
   listReviewsForUser,
@@ -82,12 +89,28 @@ export const domainRouter = router({
     update: protectedProcedure
       .input(z.object({
         id: z.number().int().positive(),
-        title: z.string().trim().min(2).max(255),
-      }))
+        title: z.string().trim().min(2).max(255).optional(),
+        academicYearId: z.number().int().positive().nullable().optional(),
+        academicTermId: z.number().int().positive().nullable().optional(),
+      }).refine(
+        value => value.title !== undefined || value.academicYearId !== undefined || value.academicTermId !== undefined,
+        "أدخل عنوانًا أو عامًا دراسيًا للتحديث",
+      ))
       .mutation(async ({ ctx, input }) => {
-        const updated = await updateWorkItemForUser(ctx.user.id, input.id, { title: input.title });
-        if (!updated) throw forbidden("لا تملك صلاحية تعديل هذا العمل");
-        return updated;
+        try {
+          const updated = await updateWorkItemForUser(ctx.user.id, input.id, {
+            title: input.title,
+            academicYearId: input.academicYearId,
+            academicTermId: input.academicTermId,
+          });
+          if (!updated) throw forbidden("لا تملك صلاحية تعديل هذا العمل");
+          return updated;
+        } catch (error) {
+          if (error instanceof AccountAccessError) throw forbidden("السنة أو الفصل لا يتبعان مساحة ملكية العمل");
+          if (error instanceof AccountValidationError) throw badRequest(error.message);
+          if (error instanceof WorkVersionConflictError) throw conflict("لا يمكن تعديل عمل مؤرشف");
+          throw error;
+        }
       }),
 
     createVersion: protectedProcedure
@@ -98,6 +121,11 @@ export const domainRouter = router({
       }))
       .mutation(async ({ ctx, input }) => {
         try {
+          const work = await getWorkItemForUser(ctx.user.id, input.id);
+          if (!work) throw forbidden("لا تملك صلاحية إنشاء نسخة لهذا العمل");
+          if (work.type === "portfolio") {
+            throw badRequest("لا يمكن إنشاء نسخة ملف إنجاز من بيانات وصفية فقط؛ استخدم المنشئ المحلي حتى يتوفر استيراد محتوى اختياري بعقد typed");
+          }
           const version = await createWorkVersionForUser(ctx.user.id, input.id, input.snapshot, input.reason);
           if (!version) throw forbidden("لا تملك صلاحية إنشاء نسخة لهذا العمل");
           return version;
@@ -117,6 +145,9 @@ export const domainRouter = router({
   }),
 
   reportDraft: reportDraftRouter,
+  portfolioDraft: portfolioDraftRouter,
+  standards: standardsRouter,
+  commerce: commerceRouter,
 
   asset: router({
     list: protectedProcedure.query(({ ctx }) => listAssetsForUser(ctx.user.id)),
@@ -164,6 +195,27 @@ export const domainRouter = router({
         const removed = await unlinkAssetFromWorkForUser(ctx.user.id, input);
         if (!removed) throw forbidden("لا تملك صلاحية إزالة هذا الربط");
         return { success: true } as const;
+      }),
+
+    usage: protectedProcedure
+      .input(z.object({ id: z.number().int().positive() }))
+      .query(async ({ ctx, input }) => {
+        const usage = await getAssetUsageForUser(ctx.user.id, input.id);
+        if (!usage) throw notFound("الشاهد غير موجود أو لا تملك صلاحية الوصول إليه");
+        return usage;
+      }),
+
+    delete: protectedProcedure
+      .input(z.object({ id: z.number().int().positive(), unlinkActive: z.boolean().optional() }))
+      .mutation(async ({ ctx, input }) => {
+        try {
+          const result = await deleteAssetForUser(ctx.user.id, input);
+          if (!result) throw forbidden("لا تملك صلاحية حذف هذا الشاهد");
+          return result;
+        } catch (error) {
+          if (error instanceof AssetDeleteConflictError) throw conflict(error.message);
+          throw error;
+        }
       }),
   }),
 
@@ -218,6 +270,22 @@ export const domainRouter = router({
         const list = await listOutputsForWorkForUser(ctx.user.id, input.workItemId);
         if (!list) throw forbidden("لا تملك صلاحية عرض مخرجات هذا العمل");
         return list;
+      }),
+
+    publicationReceipt: protectedProcedure
+      .input(z.object({ id: z.number().int().positive() }))
+      .mutation(async ({ ctx, input }) => {
+        // Explicit publication management, never a reader/list side effect.
+        const receipt = await getPublicationReceiptForUser(ctx.user.id, input.id);
+        if (!receipt || typeof receipt.token !== "string" || !receipt.token.trim()
+          || receipt.revokedAt || (receipt.expiresAt && receipt.expiresAt.getTime() <= Date.now())) {
+          throw forbidden("لا تملك صلاحية استرجاع رابط نشر نشط لهذا المخرج");
+        }
+        return {
+          outputId: receipt.id, workVersionId: receipt.workVersionId,
+          versionNumber: receipt.versionNumber, type: receipt.type,
+          visibility: receipt.visibility, token: receipt.token, expiresAt: receipt.expiresAt,
+        };
       }),
 
     generatePrivatePdf: protectedProcedure

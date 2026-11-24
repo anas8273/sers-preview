@@ -115,6 +115,12 @@ async function extractHtmlWithStyles(element: HTMLElement): Promise<string> {
   // حذف الأزرار من النسخة
   clone.querySelectorAll("button, [data-no-print]").forEach(el => el.remove());
 
+  // Legacy pages used to be fixed at 297mm with overflow:hidden, which could
+  // silently omit long Arabic text and attachments. Refuse only when the live
+  // page is already clipped; otherwise let the PDF renderer flow content over
+  // as many A4 pages as needed.
+  preflightLegacyPageOverflow(element);
+
   // تحويل الأنماط المحسوبة إلى inline styles للعناصر الرئيسية
   await inlineComputedStyles(element, clone);
 
@@ -138,18 +144,29 @@ async function extractHtmlWithStyles(element: HTMLElement): Promise<string> {
       // إزالة box-shadow و margin-bottom
       el.style.boxShadow = 'none';
       el.style.marginBottom = '0';
-      // ضمان حجم A4 ثابت
+      // Keep the A4 width, but never impose a fixed height or clipping window.
       el.style.width = '210mm';
-      el.style.height = '297mm';
-      el.style.maxHeight = '297mm';
-      el.style.overflow = 'hidden';
+      el.style.height = 'auto';
+      el.style.maxHeight = 'none';
+      el.style.overflow = 'visible';
       el.style.pageBreakAfter = 'always';
-      el.style.pageBreakInside = 'avoid';
+      el.style.pageBreakInside = 'auto';
       el.style.boxSizing = 'border-box';
     });
   }
 
   return clone.innerHTML;
+}
+
+function preflightLegacyPageOverflow(element: HTMLElement): void {
+  const pages = Array.from(element.querySelectorAll<HTMLElement>(":scope > div"))
+    .filter(page => !page.className.toString().includes('print:hidden'));
+  for (const page of pages) {
+    const style = window.getComputedStyle(page);
+    if (style.overflow === 'hidden' && page.scrollHeight > page.clientHeight + 1) {
+      throw new Error("لا يمكن تصدير التقرير القديم بأمان: محتوى إحدى الصفحات أطول من إطارها وسيُحفظ دون قص بعد توسيع الصفحة.");
+    }
+  }
 }
 
 /**

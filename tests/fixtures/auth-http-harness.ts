@@ -6,14 +6,13 @@ import { resolve } from "node:path";
 import express from "express";
 import mysql from "mysql2/promise";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
+import { assertDisposableMySQL } from "./assert-disposable-mysql";
 
 type IssuerMode = "success" | "token_failure" | "profile_failure" | "wrong_project" | "oversized_profile";
 export type Authorization = { state: string; code: string; callback: string; openId: string; mode: IssuerMode };
 
 export async function startAuthHarness() {
-  assert.equal(process.env.GITHUB_ACTIONS, "true", "Auth proof requires disposable GitHub CI");
-  assert.equal(process.env.SERS_INTEGRATION, "1");
-  assert.equal(process.env.DATABASE_URL, "mysql://root:root@127.0.0.1:3306/sers_test");
+  assertDisposableMySQL();
   const guard = await mysql.createConnection(process.env.DATABASE_URL);
   try {
     const [rows] = await guard.query("SELECT DATABASE() AS name, VERSION() AS version");

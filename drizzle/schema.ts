@@ -1,4 +1,4 @@
-import { int, mysqlEnum, mysqlTable, text, timestamp, varchar, json, boolean } from "drizzle-orm/mysql-core";
+import { index, int, mysqlEnum, mysqlTable, text, timestamp, varchar, json, boolean, uniqueIndex } from "drizzle-orm/mysql-core";
 
 export const users = mysqlTable("users", {
   id: int("id").autoincrement().primaryKey(),
@@ -108,13 +108,19 @@ export type InsertOnlineExam = typeof onlineExams.$inferInsert;
 export const onlineExamResponses = mysqlTable("online_exam_responses", {
   id: int("id").autoincrement().primaryKey(),
   onlineExamId: int("onlineExamId").notNull(),
+  // Nullable keeps old clients compatible; only new submissions with an
+  // attemptId receive database-backed idempotency.
+  attemptId: varchar("attemptId", { length: 128 }),
   studentName: varchar("studentName", { length: 255 }).notNull(),
   studentId: varchar("studentId", { length: 128 }),
   answers: json("answers").$type<Record<string, string | number>>().notNull(),
   autoScore: int("autoScore").notNull().default(0),
   autoMaxScore: int("autoMaxScore").notNull().default(0),
   submittedAt: timestamp("submittedAt").defaultNow().notNull(),
-});
+}, table => ({
+  attemptUnique: uniqueIndex("online_exam_response_attempt_unique").on(table.onlineExamId, table.attemptId),
+  examSubmittedAt: index("online_exam_response_exam_submitted_at_idx").on(table.onlineExamId, table.submittedAt, table.id),
+}));
 
 export type OnlineExamResponse = typeof onlineExamResponses.$inferSelect;
 export type InsertOnlineExamResponse = typeof onlineExamResponses.$inferInsert;

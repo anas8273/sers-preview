@@ -7,7 +7,7 @@ import { privateLocalStorage as localStorage } from "@/lib/private-browser-stora
  * - تصدير PDF
  * - 6 ثيمات/قوالب مختلفة
  */
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import { useLocation } from "wouter";
 import {
   ArrowLeft, ClipboardCheck, Plus, Trash2, Save, Edit3,
@@ -250,15 +250,19 @@ export default function ExamBuilder() {
   const [showAnswers, setShowAnswers] = useState(false);
   const [shareUrl, setShareUrl] = useState<string | null>(null);
   const [sharedExamId, setSharedExamId] = useState<number | null>(null);
+  const [responseCursors, setResponseCursors] = useState<Array<string | undefined>>([undefined]);
+  useEffect(() => setResponseCursors([undefined]), [sharedExamId]);
 
   const { containerRef: previewContainerRef, pageRef: previewPageRef, previewScale, wrapperWidth, wrapperHeight, zoomLevel, zoomIn, zoomOut, resetZoom } = usePreviewScale();
 
   const generateExamMutation = trpc.genAI.generateExamQuestions.useMutation();
   const createOnlineExam = (trpc as any).onlineExam.create.useMutation();
   const onlineResponses = (trpc as any).onlineExam.responses.useQuery(
-    { id: sharedExamId ?? 0 },
+    { id: sharedExamId ?? 0, limit: 20, cursor: responseCursors[responseCursors.length - 1] },
     { enabled: isAuthenticated && !!sharedExamId, staleTime: 15_000 }
   );
+  const responsePage = onlineResponses.data as { items: Array<{ id: number; studentName: string; studentId: string | null; autoScore: number; autoMaxScore: number; submittedAt: string | Date }>; nextCursor: string | null } | undefined;
+  const responseRows = responsePage?.items ?? [];
   const totalPoints = useMemo(() => questions.reduce((s, q) => s + q.points, 0), [questions]);
 
   const startNew = useCallback(() => {
@@ -724,14 +728,23 @@ export default function ExamBuilder() {
                     </div>
                     {onlineResponses.isLoading ? (
                       <div className="flex items-center gap-1.5 py-2 text-[11px] text-violet-700"><Loader2 className="h-3.5 w-3.5 animate-spin" />جاري تحميل التسليمات...</div>
-                    ) : (onlineResponses.data as any[] | undefined)?.length ? (
+                    ) : onlineResponses.error ? (
+                      <p role="alert" className="py-2 text-[11px] text-rose-700">تعذر تحميل التسليمات. أعد التحديث؛ لم نعتبر القائمة الفارغة نتيجة صحيحة.</p>
+                    ) : responseRows.length ? (
                       <div className="overflow-x-auto rounded-md border border-violet-100 bg-white">
                         <table className="w-full min-w-[480px] text-right text-[11px]">
                           <thead className="bg-violet-50 text-violet-800"><tr><th className="px-3 py-2">الطالب</th><th className="px-3 py-2">المعرف</th><th className="px-3 py-2">النتيجة الآلية</th><th className="px-3 py-2">وقت التسليم</th></tr></thead>
-                          <tbody>{(onlineResponses.data as any[]).map((response) => <tr key={response.id} className="border-t border-violet-50 text-slate-700"><td className="px-3 py-2 font-medium">{response.studentName}</td><td className="px-3 py-2">{response.studentId || "—"}</td><td className="px-3 py-2 font-semibold text-emerald-700">{response.autoScore} / {response.autoMaxScore}</td><td className="px-3 py-2">{new Date(response.submittedAt).toLocaleString("ar-SA")}</td></tr>)}</tbody>
+                          <tbody>{responseRows.map((response) => <tr key={response.id} className="border-t border-violet-50 text-slate-700"><td className="px-3 py-2 font-medium">{response.studentName}</td><td className="px-3 py-2">{response.studentId || "—"}</td><td className="px-3 py-2 font-semibold text-emerald-700">{response.autoScore} / {response.autoMaxScore}</td><td className="px-3 py-2">{new Date(response.submittedAt).toLocaleString("ar-SA")}</td></tr>)}</tbody>
                         </table>
                       </div>
                     ) : <p className="py-2 text-[11px] text-violet-700">لا توجد تسليمات حتى الآن. حدّث القائمة عند وصول إجابات الطلاب.</p>}
+                    <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-[11px] text-violet-800">
+                      <span>الصفحة {responseCursors.length} — {responseRows.length} تسليمات{responsePage?.nextCursor ? "؛ توجد صفحة أخرى" : ""}</span>
+                      <div className="flex gap-2">
+                        <Button size="sm" variant="outline" disabled={responseCursors.length === 1 || onlineResponses.isFetching} onClick={() => setResponseCursors(previous => previous.slice(0, -1))}>السابق</Button>
+                        <Button size="sm" variant="outline" disabled={!responsePage?.nextCursor || onlineResponses.isFetching} onClick={() => { const nextCursor = responsePage?.nextCursor; if (nextCursor) setResponseCursors(previous => [...previous, nextCursor]); }}>التالي</Button>
+                      </div>
+                    </div>
                   </div>
                 )}
                 <div className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 pb-2 sm:pb-3 overflow-x-auto" style={{ WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none' }}>

@@ -55,4 +55,11 @@ describe("report share creation UI", () => {
     expect(shareActionsSource).not.toContain("storageKey");
     expect(shareActionsSource).not.toContain("ownerUserId");
   });
+
+  it("requires an explicit decision before sharing a stale or unverifiable version", () => {
+    expect(shareActionsSource).toContain("domain.reportDraft.get.useQuery");
+    expect(shareActionsSource).toContain("compareReportDraftToVersion");
+    expect(shareActionsSource).toContain("متابعة النسخة القديمة على أي حال");
+    expect(shareActionsSource).toContain("guarded");
+  });
 });

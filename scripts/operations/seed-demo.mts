@@ -64,14 +64,21 @@ export async function seedDemoFixtures(): Promise<{ owner: User; reviewer: User;
     let [version] = await db.select().from(workVersions).where(eq(workVersions.workItemId, work.id)).orderBy(workVersions.versionNumber).limit(1);
     if (!version) {
       const current = await getReportDraftForUser(owner.id, work.id);
-      const draft = await saveReportDraftForUser(owner.id, { workItemId: work.id, expectedRevision: current?.draft.revision ?? 0, templateId: 'initiative-report', themeId: 'formal', fontFamily: 'Cairo', fields: {
+      if (!current) throw new Error('Synthetic report draft unavailable');
+      // Preserve the server-issued frozen v2 contract; never silently downgrade.
+      const draft = await saveReportDraftForUser(owner.id, {
+        workItemId: work.id, expectedRevision: current.draft.revision,
+        schemaVersion: current.draft.schemaVersion, templateId: current.draft.templateId,
+        templateVersionId: current.draft.templateVersionId, fieldDefinitions: current.draft.fieldDefinitions,
+        themeId: 'formal', fontFamily: 'Cairo', fields: {
         summary: 'بيانات اصطناعية لشرح رحلة التقرير والشواهد والمراجعة. لا تتضمن هذه النسخة أسماء طلاب أو بيانات مدرسة حقيقية.',
         objectives: 'تجربة رفع شاهد خاص، وربطه بالتقرير، وإنشاء نسخة ثابتة، ثم مراجعتها وتصديرها.',
         audience: 'مستخدمان تجريبيان: مالك ومراجع.',
         implementation: 'ابدأ برفع ملف اصطناعي من مكتبة الشواهد، ثم أضفه إلى هذا التقرير وأنشئ نسخة جديدة للمراجعة.',
         results: 'هذه النسخة الأولية معتمدة مسبقًا لتجربة PDF وWord والمشاركة، والنسخ الجديدة تحتاج قرار المراجع.',
         recommendations: 'لا تستخدم هذا الخادم لإدخال بيانات حقيقية. أعد تشغيله لإنهاء جلسات العرض المؤقتة.',
-      }, evidenceAssetIds: [] });
+        }, evidenceAssetIds: [],
+      });
       const createdVersion = await createReportDraftVersionForUser(owner.id, { workItemId: work.id, expectedRevision: draft.revision, reason: 'Synthetic demonstration fixture' });
       [version] = await db.select().from(workVersions).where(eq(workVersions.id, createdVersion.id));
       const review = await createReviewForUser(owner.id, version.id, reviewer.id);

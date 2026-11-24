@@ -13,14 +13,13 @@ import {
   ArrowLeft, User, GraduationCap, Award, Briefcase,
   Target, Plus, Trash2, Save, Eye,
   Sparkles, FolderOpen, ChevronLeft, Loader2,
-  FileDown, Printer, Maximize2, Minimize2, Building2, Star, ZoomIn, ZoomOut, RotateCcw, ScanSearch, CircleCheck, CircleAlert, Upload, Link2, FileText
+  FileDown, Printer, Maximize2, Minimize2, Building2, Star, ZoomIn, ZoomOut, RotateCcw, ScanSearch, CircleCheck, CircleAlert, Link2, FileText
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
-import { LegacyUploadNotice, legacyUploadFailureMessage } from "@/components/LegacyUploadNotice";
+import { LegacyUploadNotice, LEGACY_UPLOAD_MESSAGE } from "@/components/LegacyUploadNotice";
 import { aiFailureMessage } from "@/lib/ai-feedback";
-import { useAuth } from "@/_core/hooks/useAuth";
 import TemplateSelector, { THEMES, type ThemeConfig } from "@/components/TemplateSelector";
 import { exportToPDF, printElement } from "@/lib/pdf-export";
 import { usePreviewScale } from "@/hooks/usePreviewScale";
@@ -345,14 +344,12 @@ function PortfolioPreview({ data, theme, fontFamily }: { data: PortfolioData; th
 
 export default function PortfolioBuilder() {
   const [, navigate] = useLocation();
-  const { isAuthenticated } = useAuth();
   const [activeTab, setActiveTab] = useState<TabId>("personal");
   const [data, setData] = useState<PortfolioData>(loadPortfolio);
   const [selectedTheme, setSelectedTheme] = useState<ThemeConfig>(THEMES[0]);
   const [selectedFont, setSelectedFont] = useState("Cairo");
   const [aiLoading, setAiLoading] = useState(false);
   const [goalProposal, setGoalProposal] = useState("");
-  const [evidenceUploading, setEvidenceUploading] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
   const readiness = useMemo(() => calculatePortfolioReadiness(data), [data]);
@@ -360,7 +357,6 @@ export default function PortfolioBuilder() {
   const { containerRef: previewContainerRef, pageRef: previewPageRef, previewScale, wrapperWidth, wrapperHeight, zoomLevel, zoomIn, zoomOut, resetZoom } = usePreviewScale();
 
   const generatePortfolioMutation = trpc.genAI.generatePortfolioContent.useMutation();
-  const uploadEvidenceMutation = trpc.file.upload.useMutation();
 
   const updateData = useCallback((updater: (prev: PortfolioData) => PortfolioData) => {
     setData((prev) => { const next = updater(prev); savePortfolioToStorage(next); return next; });
@@ -420,41 +416,6 @@ export default function PortfolioBuilder() {
   const removeEvidence = useCallback((id: string) => {
     updateData((prev) => ({ ...prev, evidences: prev.evidences.filter((item) => item.id !== id) }));
   }, [updateData]);
-
-  const handleEvidenceFileUpload = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    event.target.value = "";
-    if (!file) return;
-    if (!isAuthenticated) {
-      toast.error("سجّل الدخول أولاً لرفع الشاهد وحفظه بأمان.");
-      return;
-    }
-    if (file.size > 8 * 1024 * 1024) {
-      toast.error("حجم الملف كبير. ارفع ملفاً لا يتجاوز 8 ميغابايت.");
-      return;
-    }
-    setEvidenceUploading(true);
-    try {
-      const dataUrl = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => typeof reader.result === "string" ? resolve(reader.result) : reject(new Error("تعذر قراءة الملف."));
-        reader.onerror = () => reject(new Error("تعذر قراءة الملف."));
-        reader.readAsDataURL(file);
-      });
-      const base64Data = dataUrl.split(",")[1];
-      if (!base64Data) throw new Error("تعذر تجهيز الملف للرفع.");
-      const result = await uploadEvidenceMutation.mutateAsync({ fileName: file.name, mimeType: file.type || "application/octet-stream", base64Data });
-      updateData((prev) => ({
-        ...prev,
-        evidences: [...prev.evidences, { id: genId(), title: file.name.replace(/\.[^.]+$/, ""), description: "", url: result.url, fileName: file.name, mimeType: file.type || "application/octet-stream" }],
-      }));
-      toast.success("تم رفع الشاهد وإضافته إلى ملف الإنجاز.");
-    } catch (error) {
-      toast.error(legacyUploadFailureMessage(error));
-    } finally {
-      setEvidenceUploading(false);
-    }
-  }, [isAuthenticated, updateData, uploadEvidenceMutation]);
 
   // Goals
   const addGoal = useCallback(() => { updateData((prev) => ({ ...prev, goals: [...prev.goals, ""] })); }, [updateData]);
@@ -790,15 +751,13 @@ export default function PortfolioBuilder() {
                         <p className="mt-1 text-xs text-gray-500">ارفع ملفاً أو أضف رابطاً موثقاً؛ تحفظ الملفات في التخزين السحابي ويُحفظ رابطها مع ملف الإنجاز.</p>
                       </div>
                       <div className="flex flex-wrap gap-2">
-                        <label className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium text-white ${evidenceUploading ? "bg-teal-400" : "cursor-pointer bg-teal-600 hover:bg-teal-700"}`}>
-                          <input type="file" className="sr-only" onChange={handleEvidenceFileUpload} disabled={evidenceUploading} />
-                          {evidenceUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-                          {evidenceUploading ? "جاري الرفع..." : "رفع شاهد"}
-                        </label>
+                        <span role="status" aria-disabled="true" className="inline-flex items-center gap-1.5 rounded-lg bg-slate-100 px-3 py-2 text-sm font-medium text-slate-500">
+                          رفع شاهد متوقف
+                        </span>
                         <Button onClick={addEvidence} size="sm" variant="outline" className="gap-1"><Link2 className="h-4 w-4" />إضافة رابط</Button>
                       </div>
                     </div>
-                    {!isAuthenticated && <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">يتطلب رفع الملفات تسجيل الدخول؛ يمكنك إضافة رابط يدوي الآن.</div>}
+                    <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-6 text-amber-800">{LEGACY_UPLOAD_MESSAGE} يمكنك إضافة رابط يدوي، أو استخدام مكتبة الشواهد للرفع والفحص.</div>
                     {data.evidences.length === 0 ? (
                       <div className="rounded-xl border border-dashed border-teal-200 bg-teal-50/40 py-12 text-center text-gray-400">
                         <FileText className="mx-auto mb-2 h-10 w-10 opacity-30" />

@@ -325,6 +325,10 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
     const parsed = envelopeSchema.safeParse(await readResponse(response, controller.signal));
     if (!parsed.success || new Set(parsed.data.choices.map(choice => choice.index)).size !== parsed.data.choices.length) throw new AIProviderError("invalid_response");
     const result = parsed.data;
+    // The request is pinned to the deployment policy. A syntactically valid
+    // envelope from another model is not equivalent provenance and must not be
+    // recorded or returned as a successful draft.
+    if (result.model !== AI_MODEL) throw new AIProviderError("invalid_response");
     // Partial or filtered completions are not usable drafts. Returning them as
     // success can overwrite a user's complete text with a truncated response.
     for (const choice of result.choices) {

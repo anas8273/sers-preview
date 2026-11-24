@@ -29,7 +29,8 @@ describe("AI classification admission and output", () => {
     const caller = appRouter.createCaller(aiTestContext());
     await expect(caller.ai.classifyEvidence({ criteriaList: aiTaxonomy, fileUrl: "https://example.invalid/private.png" })).rejects.toMatchObject({ code: "BAD_REQUEST" });
     expect(model).not.toHaveBeenCalled();
-    expect((await caller.ai.classifyEvidence({ criteriaList: aiTaxonomy, fileUrl: aiPngDataUrl })).success).toBe(true);
+    expect((await caller.ai.classifyEvidence({ criteriaList: aiTaxonomy, fileUrl: aiPngDataUrl,
+      privacyConfirmation: { policyVersion: "ai-data-minimization-v1", purpose: "synthetic-grade-image-test", acknowledged: true } })).success).toBe(true);
     const user = model.mock.calls[0][0].messages.find(message => message.role === "user");
     expect(user?.content).toEqual(expect.arrayContaining([expect.objectContaining({ type: "image_url" })]));
   });

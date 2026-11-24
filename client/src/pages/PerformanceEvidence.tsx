@@ -1258,14 +1258,16 @@ export default function PerformanceEvidence() {
       setPendingEvidence(items => [...items, { id: evId, fileName: file.name, evidence, persisted, status: "unclassified", analyzing: canSuggest, reason: canSuggest ? "الملف بانتظار مراجعتك." : unavailableReason }]);
       if (!canSuggest) return { success: true };
       try {
-        const aiImageUrl = isImage ? await compressImage(originalBytes, 800, 0.5) : isVideo ? (await extractVideoFrame(file)) ?? undefined : undefined;
+        // No automatic image or video-frame transmission. The server requires
+        // explicit user consent AND an operator-approved image purpose.
+        // Until consent is implemented, only send bounded text metadata.
         const criteriaList = allCriteria.map(criterion => ({ id: criterion.id, title: criterion.title, subEvidences: [...criterion.subEvidences, ...(criteriaData[criterion.id]?.customSubEvidences ?? [])].map(sub => ({ id: sub.id, title: sub.title, isCustom: !!sub.isCustom })) }));
         let learningContext: Array<{ fileName: string; criterionId: string; criterionTitle: string; subEvidenceId: string; subEvidenceTitle: string }> = [];
         try {
           const parsed: unknown = JSON.parse(localStorage.getItem(`sers_learning_log_v2_${user?.id ?? "guest"}_${selectedJob?.id || "default"}`) ?? "[]");
           if (Array.isArray(parsed)) learningContext = parsed.filter(entry => entry?.confirmedByUser === true).slice(-10).map(({ fileName, criterionId, criterionTitle, subEvidenceId, subEvidenceTitle }) => ({ fileName, criterionId, criterionTitle, subEvidenceId, subEvidenceTitle }));
         } catch { /* Old unconfirmed suggestions are deliberately not learning examples. */ }
-        const result = await classifyMutation.mutateAsync({ fileName: file.name, fileType: file.type, description: file.name.replace(/\.[^/.]+$/, "").replace(/[-_]/g, " "), fileUrl: aiImageUrl, jobId: selectedJob?.id, jobTitle: selectedJob?.title, criteriaList, learningContext });
+        const result = await classifyMutation.mutateAsync({ fileName: file.name, fileType: file.type, description: file.name.replace(/\.[^/.]+$/, "").replace(/[-_]/g, " "), jobId: selectedJob?.id, jobTitle: selectedJob?.title, criteriaList, learningContext });
         const classification = result.success ? result.classification : null;
         const criterion = allCriteria.find(item => item.id === classification?.standardId);
         const canonicalSubId = classification && "subEvidenceId" in classification ? classification.subEvidenceId : undefined;
@@ -2297,7 +2299,7 @@ export default function PerformanceEvidence() {
                 </div>
               </div>
 
-              <p className="mb-3 text-xs leading-6 text-muted-foreground">عند طلب الاقتراح الذكي يُرسل اسم الملف ووصفه ومعاينة الصورة إلى مزود المساعدة. راجع المحتوى والبيانات الشخصية قبل اختياره. يمكنك إضافة الشاهد يدويًا من البند دون طلب اقتراح.</p>
+              <p className="mb-3 text-xs leading-6 text-muted-foreground">عند طلب الاقتراح يُرسل اسم الملف ووصفه وسياق المعايير وأمثلة التصنيف المعتمدة إلى المزود بعد تنقيح النصوص؛ لا تُرسل معاينة الصورة أو الفيديو ويبقى الأصل محليًا. راجع اسم الملف قبل اختياره؛ والتصنيف اليدوي متاح.</p>
               {aiAccess.data?.available === false && <p role="status" className="mb-3 text-sm text-amber-700">{aiAccess.data.requiresSignIn ? <>للاقتراحات الذكية <a href={getLoginUrl()} className="underline">سجّل الدخول</a>. يمكنك متابعة التصنيف والكتابة يدويًا.</> : "المساعدة الذكية غير متاحة حاليًا؛ الإدخال اليدوي وقائمة المراجعة متاحان."}</p>}
               <LegacyUploadNotice />
               <EvidenceClassificationReview

@@ -6,6 +6,7 @@ import { users, type User } from "../drizzle/schema";
 import type { TrpcContext } from "./_core/context";
 import { getDb } from "./db";
 import { notificationRouter } from "./notification-router";
+import { assertDisposableMySQL } from "../tests/fixtures/assert-disposable-mysql";
 
 const suite = process.env.SERS_INTEGRATION === "1" ? describe : describe.skip;
 
@@ -26,9 +27,7 @@ suite("notification router isolation on disposable MySQL", () => {
   }
 
   beforeAll(async () => {
-    if (process.env.GITHUB_ACTIONS !== "true" || process.env.DATABASE_URL !== "mysql://root:root@127.0.0.1:3306/sers_test") {
-      throw new Error("Notification integration requires disposable CI MySQL");
-    }
+    assertDisposableMySQL();
     const db = (await getDb())!;
     const [identity] = await db.execute(sql`SELECT DATABASE() AS dbName, VERSION() AS dbVersion`);
     expect((identity as unknown as { dbName: string; dbVersion: string }[])[0]).toMatchObject({ dbName: "sers_test", dbVersion: expect.stringMatching(/^8\.4\./) });

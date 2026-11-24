@@ -5,7 +5,7 @@ import { lstat, readdir, readFile, writeFile, mkdtemp, rm } from 'node:fs/promis
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { CANDIDATE_FILE, IMAGE_FILE, MAX_MANIFEST_BYTES, MAX_ARCHIVE_BYTES, validateCandidate } from './candidate.mjs';
+import { CANDIDATE_FILE, IMAGE_FILE, MAX_MANIFEST_BYTES, MAX_ARCHIVE_BYTES, MAX_IMAGE_TAR_BYTES, validateCandidate } from './candidate.mjs';
 import { REPOSITORY, REPOSITORY_ID, boundedJson, newPrivateDirectory, writeJson } from './github-evidence.mjs';
 
 export const root = fileURLToPath(new URL('../../', import.meta.url));
@@ -62,14 +62,50 @@ export function validateImageInspection(image, candidate) {
   return image.Id;
 }
 
-export async function loadCandidateImage(directory, candidate, run = command) {
+const SAFE_ARCHIVE_REASONS = new Set([
+  'image-identity', 'raw-size', 'member-boundary', 'logical-size', 'metadata-size',
+  'metadata-truncated', 'manifest-count', 'config-reference-missing',
+  'config-digest-mismatch', 'manifest-layers-invalid', 'manifest-layer-missing',
+  'metadata-candidates-limit', 'archive-read',
+]);
+
+export async function loadCandidateImage(directory, candidate, run = command, report = console.error) {
   const archive = path.join(directory, IMAGE_FILE);
-  const inspected = JSON.parse(await run('/usr/bin/prlimit', ['--as=536870912', '--cpu=180', '--', 'python3', path.join(root, 'scripts/release/inspect-image-archive.py'), archive, candidate.appImageId], { timeoutMs: 4 * 60_000, maxBuffer: 64 * 1024 }));
-  if (inspected.images !== 1 || inspected.configSha256 !== candidate.appImageId.slice(7)) throw new Error('Image archive identity differs');
-  await run('docker', ['image', 'load', '--input', archive], { timeoutMs: 15 * 60_000, maxBuffer: 128 * 1024 });
-  const images = JSON.parse(await run('docker', ['image', 'inspect', candidate.appImageId]));
-  if (!Array.isArray(images) || images.length !== 1) throw new Error('Loaded image is ambiguous');
-  validateImageInspection(images[0], candidate);
+  const refuse = (phase, reason) => {
+    const suffix = phase === 'archive-identity' && SAFE_ARCHIVE_REASONS.has(reason) ? `:${reason}` : '';
+    report(`Portable image verification refused: ${phase}${suffix}`);
+    throw new Error('Portable candidate image verification refused');
+  };
+  let inspected;
+  try {
+    inspected = JSON.parse(await run('/usr/bin/prlimit', [
+      '--as=536870912', '--cpu=180', '--', 'python3',
+      path.join(root, 'scripts/release/inspect-image-archive.py'),
+      archive, candidate.appImageId, '--safe-diagnostic',
+    ], { timeoutMs: 4 * 60_000, maxBuffer: 64 * 1024 }));
+  } catch { refuse('archive-command'); }
+  // Archive config digest and tested image ID are different identity layers
+  // when Docker uses containerd. The archive was already SHA256-verified by
+  // readCandidate; enforce its config/member integrity here, then require
+  // Docker on this fresh runner to resolve the EXACT tested image ID below.
+  if (inspected?.images !== 1 || typeof inspected.configSha256 !== 'string'
+      || !/^[a-f0-9]{64}$/.test(inspected.configSha256)
+      || !Number.isSafeInteger(inspected.uncompressedBytes)
+      || inspected.uncompressedBytes < 1024
+      || inspected.uncompressedBytes > MAX_IMAGE_TAR_BYTES) {
+    refuse('archive-identity', inspected?.reason);
+  }
+  try {
+    await run('docker', ['image', 'load', '--input', archive], { timeoutMs: 15 * 60_000, maxBuffer: 128 * 1024 });
+  } catch { refuse('docker-load'); }
+  let images;
+  try {
+    images = JSON.parse(await run('docker', ['image', 'inspect', candidate.appImageId]));
+  } catch { refuse('docker-inspect'); }
+  try {
+    if (!Array.isArray(images) || images.length !== 1) throw new Error('Loaded image is ambiguous');
+    validateImageInspection(images[0], candidate);
+  } catch { refuse('loaded-identity'); }
 }
 
 export function composeOverride(candidate, appReference) {

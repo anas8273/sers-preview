@@ -41,7 +41,8 @@ describe("classification uses supplied identities without fuzzy routing", () => 
     const caller = appRouter.createCaller(aiTestContext());
     await caller.ai.classifyEvidence({ criteriaList: aiTaxonomy, fileType: "video/mp4", fileName: "نشاط.mp4" });
     expect(model.mock.calls[0][0].messages.find(message => message.role === "user")?.content).toContain("مقطع فيديو");
-    await caller.ai.classifyEvidence({ criteriaList: aiTaxonomy, fileType: "video/mp4", fileName: "نشاط.mp4", fileUrl: aiPngDataUrl });
+    await caller.ai.classifyEvidence({ criteriaList: aiTaxonomy, fileType: "video/mp4", fileName: "نشاط.mp4", fileUrl: aiPngDataUrl,
+      privacyConfirmation: { acknowledged: true, policyVersion: "ai-data-minimization-v1", purpose: "synthetic-grade-image-test" } });
     expect(model.mock.calls[1][0].messages.find(message => message.role === "user")?.content).toEqual(expect.arrayContaining([expect.objectContaining({ type: "image_url" })]));
   });
 });

@@ -45,6 +45,93 @@ describe("editable immutable WorkVersion DOCX", () => {
     expect(await renderReportWorkVersionDocx(value, 2)).not.toEqual(first);
   });
 
+  it.each(["1448–1449", "١٤٤٨–١٤٤٩", "۱۴۴۸–۱۴۴۹"])("keeps the academic-year range %s in a bounded LTR run", async yearLabel => {
+    const value = { ...snapshot(), academicContext: { yearLabel, termLabel: "الفصل الدراسي الأول" } };
+    const { document } = await unpack(await renderReportWorkVersionDocx(value, 1));
+    expect(document).toContain(`\u202d${yearLabel}\u202c`);
+    const rangeRun = document.split("<w:r>").find(run => run.includes(yearLabel));
+    expect(rangeRun).toContain('<w:rtl w:val="false"/>');
+    expect(document).toContain("العام الدراسي ");
+  });
+
+  it("retains the complete long cover title while bounding the repeated running header", async () => {
+    const title = "تقرير توثيق المبادرة التعليمية وتنمية المهارات وتحسين جودة الممارسات ".repeat(5).slice(0, 255);
+    const value = { ...snapshot(), work: { title }, reportDraft: { ...snapshot().reportDraft, fontFamily: "Noto Kufi Arabic" } };
+    const { zip, document } = await unpack(await renderReportWorkVersionDocx(value, 1));
+    expect(document).toContain(title);
+    const header = (await zip.file("word/header1.xml")!.async("string")).replace(/<[^>]+>/g, "");
+    expect(Array.from(header).length).toBeLessThanOrEqual(64);
+    expect(header).toMatch(/…$/);
+    expect(header).not.toContain(title);
+    expect(await zip.file("docProps/core.xml")!.async("string")).toContain(title);
+  });
+
+  it("embeds both chosen Arabic font weights and native institutional identity from a frozen snapshot", async () => {
+    const base = snapshot(), schoolLogo = await QRCode.toBuffer("synthetic school logo", { width: 100 });
+    const legacy = {
+      ...base,
+      reportDraft: {
+        ...base.reportDraft,
+        fontFamily: "Noto Kufi Arabic",
+        fields: {
+          ...base.reportDraft.fields,
+          reportIdentityVersion: "1",
+          ministryLogo: "yes",
+          schoolLogoPng: schoolLogo.toString("base64"),
+          schoolName: "مدرسة التجربة",
+          reportPreparer: "مريم",
+          schoolPrincipal: "خالد",
+        },
+      },
+    };
+    const typed = {
+      ...base,
+      reportDraft: {
+        ...base.reportDraft,
+        fontFamily: "Noto Kufi Arabic",
+        reportIdentity: {
+          version: "1" as const,
+          ministryLogo: true,
+          schoolLogoPng: schoolLogo.toString("base64"),
+          schoolName: "مدرسة التجربة",
+          reportPreparer: "مريم",
+          schoolPrincipal: "خالد",
+        },
+      },
+    };
+    const bytes = await renderReportWorkVersionDocx(typed, 1);
+    expect(await renderReportWorkVersionDocx(legacy, 1)).toEqual(bytes);
+    const { zip, document } = await unpack(bytes);
+    const fontTable = await zip.file("word/fontTable.xml")!.async("string");
+    expect(fontTable).toContain('<w:font w:name="Noto Kufi Arabic">');
+    expect(fontTable).toContain("<w:embedRegular ");
+    expect(fontTable).toContain("<w:embedBold ");
+    expect(await zip.file("word/settings.xml")!.async("string")).toContain("<w:embedTrueTypeFonts/>");
+    expect(document).toContain('w:cs="Noto Kufi Arabic"');
+    expect(document).toContain("<w:rtl/>");
+    for (const word of ["مدرسة التجربة", "معد التقرير", "مدير المدرسة", "مريم", "خالد"]) expect(document).toContain(word);
+    expect(await zip.file("word/header1.xml")!.async("string")).toContain("مدرسة التجربة");
+    expect(document.match(/<w:drawing>/g)).toHaveLength(2);
+    expect(zip.file("word/fonts/report-regular.odttf")).toBeTruthy();
+    expect(zip.file("word/fonts/report-bold.odttf")).toBeTruthy();
+    expect(await renderReportWorkVersionDocx(typed, 1)).toEqual(bytes);
+  });
+
+  it("omits blank principal signature cells when only the preparer is populated", async () => {
+    const base = snapshot();
+    const value = {
+      ...base,
+      reportDraft: {
+        ...base.reportDraft,
+        reportIdentity: { version: "1" as const, reportPreparer: "سارة" },
+      },
+    };
+    const { document } = await unpack(await renderReportWorkVersionDocx(value, 1));
+    expect(document).toContain("معد التقرير");
+    expect(document).toContain("سارة");
+    expect(document).not.toContain("مدير المدرسة");
+  });
+
   it("treats markup and source fields as plain text without making network requests", async () => {
     const fetch = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("No network allowed"));
     try {
@@ -61,7 +148,7 @@ describe("editable immutable WorkVersion DOCX", () => {
   it("embeds only bounded sanitized selected PNG previews and an explicit share QR", async () => {
     const preview = await QRCode.toBuffer("synthetic-preview", { type: "png", width: 128 });
     const value = { ...snapshot(), shareReference: { url: "https://demo.example/output/abcdefghijklmnopqrstuvwx", label: "رابط التقرير" },
-      assets: [{ id: 1, title: "صورة ثابتة", preview: { mimeType: "image/png", dataBase64: preview.toString("base64") } },
+      assets: [{ id: 1, title: "صورة ثابتة", frozen: { referenceVersion: "fixture-version-1", digest: "a".repeat(64), bytes: preview.length, contentType: "image/png" as const, sourceAssetId: 1, sourceUploadIntentId: "fixture-intent-0000001", preview: { mimeType: "image/png" as const, dataBase64: preview.toString("base64"), width: 128, height: 128 } } },
         { id: 2, title: "غير مختارة", preview: { mimeType: "image/png", dataBase64: "not-valid" } }],
     };
     const { zip, document } = await unpack(await renderReportWorkVersionDocx(value, 1));
@@ -69,6 +156,12 @@ describe("editable immutable WorkVersion DOCX", () => {
     expect(Object.keys(zip.files).filter(path => path.startsWith("word/media/") && path.endsWith(".png"))).toHaveLength(2);
     expect(document).toContain("رابط التقرير");
     expect(await renderReportWorkVersionDocx(value, 1)).toEqual(await renderReportWorkVersionDocx(value, 1));
+  });
+
+  it("rejects a selected preview that is not frozen and permits an intentional label-only witness", async () => {
+    const value = snapshot();
+    await expect(renderReportWorkVersionDocx({ ...value, assets: [{ id: 1, title: "صورة غير موثقة", preview: { mimeType: "image/png", dataBase64: "not-valid" } }] }, 1)).rejects.toBeInstanceOf(ReportDocxValidationError);
+    await expect(renderReportWorkVersionDocx({ ...value, assets: [{ id: 1, title: "شاهد بلا صورة" }] }, 1)).resolves.toBeTruthy();
   });
 
   it.each(["file:///etc/passwd", "http://localhost/output/abcdefghijklmnopqrst", "https://demo.example/private/source", "https://demo.example/output/abcdefghijklmnopqrst?password=secret"])("rejects an invalid snapshotted share reference %s", async url => {

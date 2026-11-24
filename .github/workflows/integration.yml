@@ -61,6 +61,10 @@ jobs:
         run: pnpm exec vitest run server/domain-integration.test.ts
       - name: Server-backed report draft integration tests
         run: pnpm exec vitest run server/work-report-draft-integration.test.ts
+      - name: Immutable report revisions and stale output guards
+        run: pnpm exec vitest run server/review-support-revision-integration.test.ts
+      - name: Exam nonce concurrency and complete paginated summaries
+        run: pnpm exec vitest run server/online-exam-mysql.integration.test.ts
       - name: Immutable WorkVersion output integration tests
         run: pnpm exec vitest run server/work-version-output-integration.test.ts
       - name: Public and protected WorkVersion delivery tests

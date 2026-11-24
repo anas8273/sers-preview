@@ -226,6 +226,38 @@ export const privateLocalStorage = new PrivateBrowserVault(
 );
 
 export const AUTH_CHANGE_KEY = "sers:auth-change:v1";
+export const LEGACY_USER_STORAGE_KEY = "sers-user";
+
+/**
+ * Legacy profile data is an unowned plaintext record. These helpers expose
+ * only its presence until an authenticated user explicitly confirms import;
+ * they never parse, display, or auto-claim the record.
+ */
+export function hasLegacyPlaintextUserRecord() {
+  if (typeof window === "undefined") return false;
+  try {
+    const raw = window.localStorage.getItem(LEGACY_USER_STORAGE_KEY);
+    return typeof raw === "string" && raw.trim().length > 0;
+  } catch {
+    return false;
+  }
+}
+
+export function readLegacyPlaintextUserRecord() {
+  if (typeof window === "undefined") return null;
+  try {
+    return window.localStorage.getItem(LEGACY_USER_STORAGE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+/** Called only after an encrypted durable copy has been committed. */
+export function removeLegacyPlaintextUserRecord() {
+  if (typeof window === "undefined") throw new Error("Legacy profile is unavailable");
+  window.localStorage.removeItem(LEGACY_USER_STORAGE_KEY);
+}
+
 export function broadcastAuthChange() {
   try { window.localStorage.setItem(AUTH_CHANGE_KEY, crypto.randomUUID()); } catch { /* BroadcastChannel also reaches live tabs. */ }
   if (typeof BroadcastChannel !== "undefined") {

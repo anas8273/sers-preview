@@ -26,6 +26,43 @@ jobs:
           cache: pnpm
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+      - name: Production dependency audit gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          report="$RUNNER_TEMP/dependency-audit-prod.json"
+          set +e
+          pnpm audit --prod --json > "$report"
+          audit_status=$?
+          set -e
+          node - "$report" "$audit_status" <<'NODE'
+          const fs = require('node:fs');
+          const [reportPath, auditStatus] = process.argv.slice(2);
+          const report = JSON.parse(fs.readFileSync(reportPath, 'utf8'));
+          const blocking = Object.values(report.advisories ?? {})
+            .filter((advisory) => ['critical', 'high'].includes(advisory.severity));
+          if (blocking.length > 0) {
+            for (const advisory of blocking) {
+              console.error(`${advisory.severity}: ${advisory.module_name} — ${advisory.recommendation ?? 'no patched release listed'}`);
+            }
+            process.exit(1);
+          }
+          if (Number(auditStatus) !== 0 && !report.advisories) {
+            console.error('pnpm audit failed without a parseable advisory report.');
+            process.exit(Number(auditStatus) || 1);
+          }
+          NODE
+      - name: Full dependency audit (non-production report)
+        if: always()
+        continue-on-error: true
+        run: pnpm audit --json > "$RUNNER_TEMP/dependency-audit-all.json"
+      - name: Upload dependency audit reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dependency-audit
+          path: ${{ runner.temp }}/dependency-audit-*.json
+          if-no-files-found: ignore
       - name: TypeScript
         run: pnpm check
       - name: Drizzle schema generation

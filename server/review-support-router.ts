@@ -1,4 +1,4 @@
-import { desc, eq } from "drizzle-orm";
+import { desc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { workVersions } from "../drizzle/domain-core";
 import { protectedProcedure, router } from "./_core/trpc";
@@ -23,7 +23,13 @@ export const reviewSupportRouter = router({
       const db = await getDb();
       if (!db) return [];
       return db
-        .select({ id: workVersions.id, versionNumber: workVersions.versionNumber, reason: workVersions.reason, createdAt: workVersions.createdAt })
+        .select({
+          id: workVersions.id,
+          versionNumber: workVersions.versionNumber,
+          reason: workVersions.reason,
+          createdAt: workVersions.createdAt,
+          reportRevision: sql<number | null>`CASE WHEN JSON_TYPE(JSON_EXTRACT(${workVersions.snapshot}, '$.reportDraft.revision')) = 'INTEGER' THEN CAST(JSON_UNQUOTE(JSON_EXTRACT(${workVersions.snapshot}, '$.reportDraft.revision')) AS SIGNED) ELSE NULL END`,
+        })
         .from(workVersions)
         .where(eq(workVersions.workItemId, input.workItemId))
         .orderBy(desc(workVersions.versionNumber));

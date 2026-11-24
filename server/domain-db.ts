@@ -28,6 +28,16 @@ export class WorkVersionConflictError extends Error {
   }
 }
 
+export class AssetDeleteConflictError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "AssetDeleteConflictError";
+  }
+}
+
+/** Bounded scan limit when counting historical work_versions referencing an asset. */
+export const ASSET_USAGE_VERSION_SCAN_LIMIT = 500;
+
 function getAffectedRows(result: unknown): number {
   const candidate = Array.isArray(result) ? result[0] : result;
   if (candidate && typeof candidate === "object" && "affectedRows" in candidate) {
@@ -182,9 +192,42 @@ export async function getWorkItemForUser(userId: number, workItemId: number) {
   return { ...work, assets: visibleAssets };
 }
 
-export async function updateWorkItemForUser(userId: number, workItemId: number, patch: { title?: string }) {
-  const updated = await withWorkWrite(userId, workItemId, async tx => {
-    await tx.update(workItems).set({ title: patch.title }).where(eq(workItems.id, workItemId)); return true;
+export async function updateWorkItemForUser(
+  userId: number,
+  workItemId: number,
+  patch: { title?: string; academicYearId?: number | null; academicTermId?: number | null },
+) {
+  const updated = await withWorkWrite(userId, workItemId, async (tx, work) => {
+    if (work.status === "archived") throw new WorkVersionConflictError();
+    const updates: Partial<NewWorkItem> = {};
+    if (patch.title !== undefined) updates.title = patch.title;
+    if (patch.academicYearId !== undefined || patch.academicTermId !== undefined) {
+      const scopeKey = work.ownerType === "personal"
+        ? `personal:${work.ownerUserId}`
+        : `organization:${work.ownerOrganizationId}`;
+      const nextYearId = patch.academicYearId !== undefined ? patch.academicYearId : work.academicYearId;
+      let nextTermId: number | null;
+      if (patch.academicTermId !== undefined) {
+        nextTermId = patch.academicTermId;
+      } else if (patch.academicYearId === null || patch.academicYearId !== work.academicYearId) {
+        nextTermId = null;
+      } else {
+        nextTermId = work.academicTermId;
+      }
+      const academicContext = await captureAcademicContext(
+        tx,
+        scopeKey,
+        nextYearId ?? undefined,
+        nextTermId ?? undefined,
+      );
+      updates.academicYearId = nextYearId ?? null;
+      updates.academicTermId = nextTermId ?? null;
+      updates.academicContext = academicContext;
+    }
+    if (Object.keys(updates).length > 0) {
+      await tx.update(workItems).set(updates).where(eq(workItems.id, workItemId));
+    }
+    return true;
   });
   return updated ? getWorkItemForUser(userId, workItemId) : undefined;
 }
@@ -270,6 +313,156 @@ export async function unlinkAssetFromWorkForUser(userId: number, input: { workIt
     await tx.delete(workAssetLinks).where(and(eq(workAssetLinks.workItemId, input.workItemId), eq(workAssetLinks.assetId, input.assetId), eq(workAssetLinks.role, input.role ?? "evidence")));
     return true;
   }));
+}
+
+function snapshotReferencesAsset(snapshot: unknown, assetId: number): boolean {
+  if (!snapshot || typeof snapshot !== "object") return false;
+  const record = snapshot as Record<string, unknown>;
+  if (Array.isArray(record.assets)) {
+    for (const item of record.assets) {
+      if (item && typeof item === "object" && (item as Record<string, unknown>).id === assetId) {
+        return true;
+      }
+    }
+  }
+  const reportDraft = record.reportDraft;
+  if (reportDraft && typeof reportDraft === "object") {
+    const evidenceIds = (reportDraft as Record<string, unknown>).evidenceAssetIds;
+    if (Array.isArray(evidenceIds) && evidenceIds.includes(assetId)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+export type AssetUsageSummary = {
+  assetId: number;
+  activeLinks: Array<{
+    workItemId: number;
+    workTitle: string;
+    workType: string;
+    workStatus: string;
+    role: string;
+  }>;
+  historicalVersionCount: number;
+};
+
+export async function getAssetUsageForUser(userId: number, assetId: number): Promise<AssetUsageSummary | undefined> {
+  const asset = await assertAssetAccess(userId, assetId, "read");
+  if (!asset) return undefined;
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const memberOf = await db
+    .select({ organizationId: memberships.organizationId })
+    .from(memberships)
+    .innerJoin(organizations, eq(organizations.id, memberships.organizationId))
+    .where(and(eq(memberships.userId, userId), eq(memberships.status, "active"), eq(organizations.status, "active")));
+  const organizationIds = memberOf.map(row => row.organizationId);
+  const readableWorkScope = organizationIds.length > 0
+    ? or(
+      and(eq(workItems.ownerType, "personal"), eq(workItems.ownerUserId, userId)),
+      and(eq(workItems.ownerType, "organization"), inArray(workItems.ownerOrganizationId, organizationIds)),
+    )
+    : and(eq(workItems.ownerType, "personal"), eq(workItems.ownerUserId, userId));
+
+  const activeRows = await db
+    .select({
+      workItemId: workItems.id,
+      workTitle: workItems.title,
+      workType: workItems.type,
+      workStatus: workItems.status,
+      role: workAssetLinks.role,
+    })
+    .from(workAssetLinks)
+    .innerJoin(workItems, eq(workAssetLinks.workItemId, workItems.id))
+    .where(and(eq(workAssetLinks.assetId, assetId), isNull(workItems.deletedAt), readableWorkScope))
+    .orderBy(desc(workItems.updatedAt));
+
+  // Bounded scan (max ASSET_USAGE_VERSION_SCAN_LIMIT = 500 newest readable versions)
+  const versionRows = await db
+    .select({ snapshot: workVersions.snapshot })
+    .from(workVersions)
+    .innerJoin(workItems, eq(workVersions.workItemId, workItems.id))
+    .where(and(isNull(workItems.deletedAt), readableWorkScope))
+    .orderBy(desc(workVersions.id))
+    .limit(ASSET_USAGE_VERSION_SCAN_LIMIT);
+
+  let historicalVersionCount = 0;
+  for (const row of versionRows) {
+    if (snapshotReferencesAsset(row.snapshot, assetId)) {
+      historicalVersionCount += 1;
+    }
+  }
+
+  return {
+    assetId,
+    activeLinks: activeRows,
+    historicalVersionCount,
+  };
+}
+
+/**
+ * Soft-delete an asset after checking active work links.
+ * Never mutates immutable `work_versions` rows.
+ * Only sets `assets.deletedAt`; upload-intent tombstones/legal-hold lifecycle
+ * are intentionally left untouched so frozen references remain auditable.
+ */
+export async function deleteAssetForUser(
+  userId: number,
+  input: { id: number; unlinkActive?: boolean },
+): Promise<{ deleted: true; unlinkedCount: number } | undefined> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const [hint] = await db
+    .select()
+    .from(assets)
+    .where(and(eq(assets.id, input.id), isNull(assets.deletedAt)))
+    .limit(1);
+  if (!hint || (hint.ownerType === "personal" && hint.ownerUserId !== userId)) return undefined;
+
+  return db.transaction(async tx => {
+    if (!await lockWriteScope(tx, userId, hint.ownerType, hint.ownerOrganizationId)) return undefined;
+    const [asset] = await tx
+      .select()
+      .from(assets)
+      .where(and(eq(assets.id, input.id), isNull(assets.deletedAt)))
+      .limit(1)
+      .for("update");
+    if (!asset || asset.ownerType !== hint.ownerType || asset.ownerUserId !== hint.ownerUserId || asset.ownerOrganizationId !== hint.ownerOrganizationId) {
+      return undefined;
+    }
+
+    const activeLinks = await tx
+      .select({
+        linkId: workAssetLinks.id,
+        workItemId: workItems.id,
+        workStatus: workItems.status,
+      })
+      .from(workAssetLinks)
+      .innerJoin(workItems, eq(workAssetLinks.workItemId, workItems.id))
+      .where(and(eq(workAssetLinks.assetId, asset.id), isNull(workItems.deletedAt)))
+      .for("update");
+
+    if (activeLinks.length > 0 && !input.unlinkActive) {
+      throw new AssetDeleteConflictError("الشاهد مستخدم في أعمال أخرى. أكد فك الربط ثم الحذف.");
+    }
+
+    let unlinkedCount = 0;
+    if (activeLinks.length > 0 && input.unlinkActive) {
+      const lockedLinks = activeLinks.filter(link => link.workStatus === "approved" || link.workStatus === "archived");
+      if (lockedLinks.length > 0) {
+        throw new AssetDeleteConflictError("لا يمكن حذف الشاهد لأنه مرتبط بعمل معتمد أو مؤرشف");
+      }
+      const unlockedIds = activeLinks.map(link => link.linkId);
+      await tx.delete(workAssetLinks).where(inArray(workAssetLinks.id, unlockedIds));
+      unlinkedCount = unlockedIds.length;
+    }
+
+    await tx.update(assets).set({ deletedAt: new Date() }).where(eq(assets.id, asset.id));
+    return { deleted: true as const, unlinkedCount };
+  });
 }
 
 export async function listOrganizationsForUser(userId: number) {

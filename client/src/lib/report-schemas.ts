@@ -4,6 +4,7 @@
  * مستقبلاً: تُحمّل من API بدل الكود
  */
 import type { FormSchema } from '@/lib/form-schema';
+import { REPORT_TEMPLATE_DEFINITIONS } from '@shared/report-projection';
 
 // ═══════════════════════════════════════════════════════════════
 // 1. تقرير أداء الطلاب
@@ -174,3 +175,27 @@ export const REPORT_SCHEMAS: Record<string, FormSchema> = {
 };
 
 export const REPORT_SCHEMA_LIST = Object.values(REPORT_SCHEMAS);
+
+/**
+ * WorkReportEditor uses this registry. The older REPORT_SCHEMAS export remains
+ * available to the legacy form builder, but the WorkVersion path now has one
+ * versioned source of field identity and labels shared with the server.
+ */
+export const WORK_REPORT_SCHEMAS: Record<string, FormSchema> = Object.fromEntries(
+  Object.values(REPORT_TEMPLATE_DEFINITIONS).map(template => [template.id, {
+    id: template.id,
+    title: template.label,
+    version: template.version,
+    sections: [{
+      id: `${template.id}-fields`,
+      title: "بيانات التقرير",
+      columns: 1,
+      fields: template.fields.map(field => ({
+        id: field.key,
+        label: field.label,
+        type: field.type === "list" ? "list" : field.type,
+        placeholder: field.placeholder,
+      })),
+    }],
+  } satisfies FormSchema]),
+);

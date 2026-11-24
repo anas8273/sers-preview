@@ -1,3 +1,4 @@
+import { assertDisposableMySQL } from "../tests/fixtures/assert-disposable-mysql";
 import { createHash, randomUUID } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -17,7 +18,7 @@ suite("private output HTTP reader across PDF renderer revisions", () => {
   const workIds: number[] = [], versionIds: number[] = [];
   const previousDirectory = process.env.SERS_PRIVATE_STORAGE_DIR;
   beforeAll(async () => {
-    if (process.env.GITHUB_ACTIONS !== "true" || process.env.DATABASE_URL !== "mysql://root:root@127.0.0.1:3306/sers_test") throw new Error("Requires disposable CI database");
+    assertDisposableMySQL();
     const db = (await getDb())!;
     const [raw] = await db.execute(sql`SELECT DATABASE() AS name, VERSION() AS version`);
     const row = (raw as unknown as { name: string; version: string }[])[0];

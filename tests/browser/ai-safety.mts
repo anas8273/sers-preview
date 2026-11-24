@@ -203,6 +203,8 @@ test("AI suggestions require explicit user confirmation; low confidence, rejecti
     state = await storedState(page, userId); assert.equal(state.associations.filter(row => row.fileName === names[4]).length, 1);
     assert.equal(calledRoutes.some(url => url.includes("file.upload")), false, "Unconfirmed smart intake must not invoke legacy public storage");
     assert.equal(harness.calls.length, 5); assert.equal(harness.stats().redirects, 0);
+    assert(harness.calls.every(call => !JSON.stringify(call.messages).includes('"image_url"')),
+      "Unconfirmed intake must not send image previews to an AI provider");
     assert.equal(JSON.stringify(harness.calls).includes("OTHER_ACCOUNT_PRIVATE_LEGACY_MARKER"), false, "Old shared learning entries must not be sent as this account's confirmed examples");
     assert.equal(await page.evaluate(secret => document.body.innerText.includes(secret), harness.privateFailure), false);
     await context.close();
