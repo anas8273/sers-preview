@@ -83,12 +83,28 @@ export const domainRouter = router({
     update: protectedProcedure
       .input(z.object({
         id: z.number().int().positive(),
-        title: z.string().trim().min(2).max(255),
-      }))
+        title: z.string().trim().min(2).max(255).optional(),
+        academicYearId: z.number().int().positive().nullable().optional(),
+        academicTermId: z.number().int().positive().nullable().optional(),
+      }).refine(
+        value => value.title !== undefined || value.academicYearId !== undefined || value.academicTermId !== undefined,
+        "أدخل عنوانًا أو عامًا دراسيًا للتحديث",
+      ))
       .mutation(async ({ ctx, input }) => {
-        const updated = await updateWorkItemForUser(ctx.user.id, input.id, { title: input.title });
-        if (!updated) throw forbidden("لا تملك صلاحية تعديل هذا العمل");
-        return updated;
+        try {
+          const updated = await updateWorkItemForUser(ctx.user.id, input.id, {
+            title: input.title,
+            academicYearId: input.academicYearId,
+            academicTermId: input.academicTermId,
+          });
+          if (!updated) throw forbidden("لا تملك صلاحية تعديل هذا العمل");
+          return updated;
+        } catch (error) {
+          if (error instanceof AccountAccessError) throw forbidden("السنة أو الفصل لا يتبعان مساحة ملكية العمل");
+          if (error instanceof AccountValidationError) throw badRequest(error.message);
+          if (error instanceof WorkVersionConflictError) throw conflict("لا يمكن تعديل عمل مؤرشف");
+          throw error;
+        }
       }),
 
     createVersion: protectedProcedure

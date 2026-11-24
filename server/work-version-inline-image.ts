@@ -101,12 +101,15 @@ function resizeRgba(data: Buffer, sourceWidth: number, sourceHeight: number) {
 /** A deliberately small, bounded inline preview format. Parse and reconstruct a
  * static 8-bit RGBA PNG, discarding metadata/extra chunks; never dereference URLs.
  * This does not authorize an original Asset or replace its malware scan. */
-export function sanitizeInlinePng(base64: string) {
+export function sanitizeInlinePng(base64: string, maximumDimension = MAX_PREVIEW_DIMENSION) {
+  if (!Number.isSafeInteger(maximumDimension) || maximumDimension < 1 || maximumDimension > MAX_PREVIEW_DIMENSION) {
+    throw new Error("Unsupported inline PNG dimension limit");
+  }
   if (base64.length > 1_400_000 || !/^[A-Za-z0-9+/]*={0,2}$/.test(base64)) throw new Error("Invalid inline PNG");
   const input = Buffer.from(base64, "base64");
   if (input.toString("base64") !== base64) throw new Error("Invalid inline PNG");
   const bounds = validatePngSourceBounds(input);
-  if (bounds.colorType !== 6 || bounds.width > MAX_PREVIEW_DIMENSION || bounds.height > MAX_PREVIEW_DIMENSION || bounds.width * bounds.height > MAX_PREVIEW_PIXELS) throw new Error("Unsupported inline PNG dimensions or encoding");
+  if (bounds.colorType !== 6 || bounds.width > maximumDimension || bounds.height > maximumDimension || bounds.width * bounds.height > MAX_PREVIEW_PIXELS) throw new Error("Unsupported inline PNG dimensions or encoding");
   const pixels = inflateSync(Buffer.concat(readIdatChunks(input)), { maxOutputLength: bounds.inflatedBytes });
   if (pixels.length !== bounds.inflatedBytes) throw new Error("Invalid inline PNG pixels");
   for (let y = 0; y < bounds.height; y++) if (pixels[y * (bounds.width * 4 + 1)] > 4) throw new Error("Invalid inline PNG filter");

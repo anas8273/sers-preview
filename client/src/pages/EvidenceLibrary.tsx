@@ -1,9 +1,10 @@
-import { useState } from "react";
-import { Building2, ExternalLink, FileText, Library, Link2, Loader2, Plus, UserRound, X } from "lucide-react";
+import { useRef, useState, type MouseEvent } from "react";
+import { Building2, ExternalLink, FileText, Library, Link2, Loader2, Plus, RefreshCw, ShieldCheck, UserRound, X } from "lucide-react";
 import AppSidebar from "@/components/AppSidebar";
 import { trpc } from "@/lib/trpc";
 import { useLocation } from "wouter";
 import PrivateEvidenceUpload from "@/components/PrivateEvidenceUpload";
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 
 export default function EvidenceLibrary() {
   const [location] = useLocation();
@@ -14,6 +15,11 @@ export default function EvidenceLibrary() {
   const [text, setText] = useState("");
   const [ownerType, setOwnerType] = useState<"personal" | "organization">("personal");
   const [organizationId, setOrganizationId] = useState<number | undefined>();
+  const createTrigger = useRef<HTMLButtonElement | null>(null);
+  const openCreate = (event: MouseEvent<HTMLButtonElement>) => {
+    createTrigger.current = event.currentTarget;
+    setShowCreate(true);
+  };
 
   const utils = trpc.useUtils();
   const assetsQuery = trpc.domain.asset.list.useQuery(undefined, { retry: false });
@@ -54,28 +60,38 @@ export default function EvidenceLibrary() {
       <main className="lg:mr-72">
         <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 sm:py-10">
           <header className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
-            <div>
+            <div className="mr-12 lg:mr-0">
               <p className="text-xs font-bold text-teal-700">مكتبة قابلة لإعادة الاستخدام</p>
               <h1 className="mt-1 text-2xl font-black text-slate-950 sm:text-3xl" style={{ fontFamily: "'Tajawal', sans-serif" }}>الشواهد والأصول</h1>
-              <p className="mt-2 max-w-2xl text-sm leading-7 text-slate-500">الأصل مستقل عن التقرير وملف الإنجاز. أضفه مرة واحدة ثم اربطه بالأعمال التي تحتاجه دون نسخ مكررة.</p>
+              <p className="mt-2 max-w-2xl text-sm leading-7 text-slate-600">الأصل مستقل عن التقرير وملف الإنجاز. أضفه مرة واحدة ثم اربطه بالأعمال التي تحتاجه دون نسخ مكررة.</p>
             </div>
-            <button onClick={() => setShowCreate(true)} className="inline-flex items-center justify-center gap-2 rounded-xl bg-teal-600 px-4 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-teal-700"><Plus className="h-4 w-4" />إضافة شاهد</button>
+            <button type="button" onClick={openCreate} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-teal-700 px-4 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-teal-800"><Plus className="h-4 w-4" />إضافة شاهد</button>
           </header>
 
           <PrivateEvidenceUpload />
 
-          {assetsQuery.isLoading && <div className="mt-8 flex items-center justify-center rounded-2xl border border-slate-200 bg-white py-16 text-sm text-slate-500"><Loader2 className="ml-2 h-4 w-4 animate-spin" />جاري تحميل مكتبتك...</div>}
+          {assetsQuery.isLoading && <div role="status" className="mt-8 flex items-center justify-center rounded-2xl border border-slate-200 bg-white py-16 text-sm text-slate-600"><Loader2 className="ml-2 h-4 w-4 animate-spin" />جاري تحميل مكتبتك...</div>}
 
           {assetsQuery.error && (
-            <div className="mt-8 rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm leading-7 text-amber-900">تعذر تحميل مكتبة الشواهد. تأكد من تسجيل الدخول ثم أعد المحاولة.</div>
+            <div role="alert" className="mt-8 rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm leading-7 text-amber-950">
+              <p>تعذر تحميل مكتبة الشواهد. تأكد من تسجيل الدخول ثم أعد المحاولة.</p>
+              <button
+                type="button"
+                disabled={assetsQuery.isFetching}
+                onClick={() => void assetsQuery.refetch()}
+                className="mt-3 inline-flex min-h-11 items-center gap-2 rounded-xl border border-amber-300 bg-white px-4 py-2 text-xs font-bold text-amber-950 hover:bg-amber-100 disabled:opacity-50"
+              >
+                <RefreshCw className="h-4 w-4" /> إعادة المحاولة
+              </button>
+            </div>
           )}
 
           {assetsQuery.data && assetsQuery.data.length === 0 && (
             <section className="mt-8 rounded-2xl border border-dashed border-slate-200 bg-white px-6 py-16 text-center">
-              <Library className="mx-auto h-9 w-9 text-slate-300" />
+              <Library className="mx-auto h-9 w-9 text-slate-400" />
               <h2 className="mt-4 text-base font-bold text-slate-900">مكتبة الشواهد فارغة</h2>
-              <p className="mx-auto mt-2 max-w-lg text-sm leading-7 text-slate-500">أضف أول أصل. لن يرتبط بتقرير واحد فقط؛ سيظل في مكتبتك ويمكن استخدامه في عدة أعمال.</p>
-              <button onClick={() => setShowCreate(true)} className="mt-5 inline-flex items-center gap-2 rounded-xl bg-teal-600 px-4 py-2.5 text-sm font-bold text-white"><Plus className="h-4 w-4" />إضافة أول شاهد</button>
+              <p className="mx-auto mt-2 max-w-lg text-sm leading-7 text-slate-600">أضف أول أصل. لن يرتبط بتقرير واحد فقط؛ سيظل في مكتبتك ويمكن استخدامه في عدة أعمال.</p>
+              <button type="button" onClick={openCreate} className="mt-5 inline-flex min-h-11 items-center gap-2 rounded-xl bg-teal-700 px-4 py-2.5 text-sm font-bold text-white hover:bg-teal-800"><Plus className="h-4 w-4" />إضافة أول شاهد</button>
             </section>
           )}
 
@@ -84,18 +100,26 @@ export default function EvidenceLibrary() {
               {assetsQuery.data.map(asset => {
                 const Icon = asset.kind === "link" ? Link2 : asset.kind === "text" ? FileText : Library;
                 const textPreview = asset.kind === "text" && asset.metadata && typeof asset.metadata === "object" && "text" in asset.metadata ? String((asset.metadata as { text?: unknown }).text ?? "") : "";
+                const isVerifiedFile = asset.kind === "file";
                 return (
                   <article key={asset.id} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:border-teal-200 hover:shadow-md">
                     <div className="flex items-start gap-3">
-                      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-cyan-50 text-cyan-700"><Icon className="h-5 w-5" /></div>
+                      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-cyan-50 text-cyan-800"><Icon className="h-5 w-5" /></div>
                       <div className="min-w-0 flex-1">
-                        <div className="flex items-center justify-between gap-2"><span className="text-[10px] font-bold text-slate-400">{asset.kind === "link" ? "رابط" : asset.kind === "text" ? "نص" : "ملف"}</span><span className="inline-flex items-center gap-1 text-[10px] text-slate-400">{asset.ownerType === "personal" ? <UserRound className="h-3 w-3" /> : <Building2 className="h-3 w-3" />}{asset.ownerType === "personal" ? "شخصي" : "مدرسي"}</span></div>
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <span className="text-[11px] font-bold text-slate-600">{asset.kind === "link" ? "رابط" : asset.kind === "text" ? "نص" : "ملف"}</span>
+                          <span className="inline-flex items-center gap-1 text-[11px] text-slate-600">{asset.ownerType === "personal" ? <UserRound className="h-3 w-3" /> : <Building2 className="h-3 w-3" />}{asset.ownerType === "personal" ? "شخصي" : "مدرسي"}</span>
+                        </div>
                         <h2 className="mt-2 truncate text-sm font-bold text-slate-900">{asset.title}</h2>
+                        <span className={`mt-2 inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[11px] font-bold ${isVerifiedFile ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-slate-200 bg-slate-100 text-slate-700"}`}>
+                          {isVerifiedFile && <ShieldCheck className="h-3 w-3" />}
+                          {isVerifiedFile ? "أصلي موثّق" : "مادة مساعدة"}
+                        </span>
                       </div>
                     </div>
-                    {asset.kind === "link" && asset.externalUrl && <a href={asset.externalUrl} target="_blank" rel="noreferrer" className="mt-4 flex items-center gap-2 truncate rounded-xl bg-slate-50 px-3 py-2.5 text-xs font-semibold text-teal-700 hover:bg-teal-50"><ExternalLink className="h-3.5 w-3.5 shrink-0" /><span className="truncate">{asset.externalUrl}</span></a>}
-                    {textPreview && <p className="mt-4 line-clamp-3 rounded-xl bg-slate-50 px-3 py-2.5 text-xs leading-6 text-slate-600">{textPreview}</p>}
-                    {asset.kind === "file" && <a href={`/api/evidence/assets/${asset.id}/download`} className="mt-4 inline-flex items-center gap-2 rounded-xl bg-teal-50 px-3 py-2.5 text-xs font-bold text-teal-800"><FileText className="h-4 w-4" />تنزيل الملف</a>}
+                    {asset.kind === "link" && asset.externalUrl && <a href={asset.externalUrl} target="_blank" rel="noreferrer" className="mt-4 flex min-h-11 items-center gap-2 truncate rounded-xl bg-slate-50 px-3 py-2.5 text-xs font-semibold text-teal-800 hover:bg-teal-50"><ExternalLink className="h-3.5 w-3.5 shrink-0" /><span className="truncate" dir="ltr">{asset.externalUrl}</span></a>}
+                    {textPreview && <p className="mt-4 line-clamp-3 rounded-xl bg-slate-50 px-3 py-2.5 text-xs leading-6 text-slate-700">{textPreview}</p>}
+                    {asset.kind === "file" && <a href={`/api/evidence/assets/${asset.id}/download`} className="mt-4 inline-flex min-h-11 items-center gap-2 rounded-xl bg-teal-50 px-3 py-2.5 text-xs font-bold text-teal-900 hover:bg-teal-100"><FileText className="h-4 w-4" />تنزيل الملف</a>}
                   </article>
                 );
               })}
@@ -104,40 +128,50 @@ export default function EvidenceLibrary() {
         </div>
       </main>
 
-      {showCreate && (
-        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/40 p-4 backdrop-blur-sm" onMouseDown={event => event.target === event.currentTarget && setShowCreate(false)}>
-          <div className="w-full max-w-lg rounded-2xl bg-white p-5 shadow-2xl" dir="rtl">
-            <div className="flex items-start justify-between gap-4">
-              <div><h2 className="text-lg font-bold text-slate-950">إضافة شاهد</h2><p className="mt-1 text-xs leading-6 text-slate-500">أضف رابطًا أو نصًا الآن. سيبقى الأصل مستقلًا وقابلًا للربط بأكثر من عمل.</p></div>
-              <button onClick={() => setShowCreate(false)} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100" aria-label="إغلاق"><X className="h-4 w-4" /></button>
+      <Dialog open={showCreate} onOpenChange={setShowCreate}>
+        <DialogContent
+          showCloseButton={false}
+          className="z-[80] block max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-2xl bg-white p-5 shadow-2xl"
+          dir="rtl"
+          onOpenAutoFocus={event => { event.preventDefault(); document.getElementById("evidence-title")?.focus(); }}
+          onCloseAutoFocus={event => { event.preventDefault(); createTrigger.current?.focus(); }}
+        >
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <DialogTitle className="text-lg font-bold text-slate-950">إضافة شاهد</DialogTitle>
+              <DialogDescription className="mt-1 text-xs leading-6 text-slate-600">أضف رابطًا أو نصًا الآن. سيبقى الأصل مستقلًا وقابلًا للربط بأكثر من عمل.</DialogDescription>
             </div>
-
-            <label className="mt-5 block text-xs font-bold text-slate-700">عنوان الشاهد</label>
-            <input value={title} onChange={event => setTitle(event.target.value)} maxLength={255} placeholder="مثال: محضر تنفيذ البرنامج" className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-teal-400 focus:ring-2 focus:ring-teal-100" />
-
-            <div className="mt-4 grid grid-cols-2 gap-2">
-              <button onClick={() => setKind("link")} className={`rounded-xl border p-3 text-right ${kind === "link" ? "border-teal-300 bg-teal-50" : "border-slate-200"}`}><Link2 className="mb-2 h-4 w-4" /><span className="text-xs font-bold">رابط</span></button>
-              <button onClick={() => setKind("text")} className={`rounded-xl border p-3 text-right ${kind === "text" ? "border-teal-300 bg-teal-50" : "border-slate-200"}`}><FileText className="mb-2 h-4 w-4" /><span className="text-xs font-bold">نص</span></button>
-            </div>
-
-            {kind === "link" ? <input value={externalUrl} onChange={event => setExternalUrl(event.target.value)} placeholder="https://..." dir="ltr" className="mt-3 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-teal-400" /> : <textarea value={text} onChange={event => setText(event.target.value)} rows={5} maxLength={10000} placeholder="اكتب نص الشاهد..." className="mt-3 w-full resize-none rounded-xl border border-slate-200 px-3 py-2.5 text-sm leading-7 outline-none focus:border-teal-400" />}
-
-            <label className="mt-4 block text-xs font-bold text-slate-700">الملكية</label>
-            <div className="mt-2 grid grid-cols-2 gap-2">
-              <button onClick={() => { setOwnerType("personal"); setOrganizationId(undefined); }} className={`rounded-xl border p-3 text-right ${ownerType === "personal" ? "border-teal-300 bg-teal-50" : "border-slate-200"}`}><UserRound className="mb-2 h-4 w-4" /><span className="text-xs font-bold">شخصي</span></button>
-              <button onClick={() => setOwnerType("organization")} disabled={organizations.length === 0} className={`rounded-xl border p-3 text-right disabled:cursor-not-allowed disabled:opacity-50 ${ownerType === "organization" ? "border-teal-300 bg-teal-50" : "border-slate-200"}`}><Building2 className="mb-2 h-4 w-4" /><span className="text-xs font-bold">مدرسي</span></button>
-            </div>
-
-            {ownerType === "organization" && <select value={organizationId ?? ""} onChange={event => setOrganizationId(Number(event.target.value) || undefined)} className="mt-3 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm"><option value="">اختر المدرسة</option>{organizations.map(org => <option key={org.id} value={org.id}>{org.name} — {org.role}</option>)}</select>}
-            {createAsset.error && <p className="mt-3 text-xs leading-6 text-red-600">{createAsset.error.message}</p>}
-
-            <div className="mt-5 flex justify-end gap-2 border-t border-slate-100 pt-4">
-              <button onClick={() => setShowCreate(false)} className="rounded-xl px-4 py-2.5 text-sm font-bold text-slate-600 hover:bg-slate-100">إلغاء</button>
-              <button onClick={submit} disabled={!canSubmit || createAsset.isPending} className="inline-flex items-center gap-2 rounded-xl bg-teal-600 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50">{createAsset.isPending && <Loader2 className="h-4 w-4 animate-spin" />}إضافة</button>
-            </div>
+            <button type="button" onClick={() => setShowCreate(false)} className="inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-lg text-slate-600 hover:bg-slate-100" aria-label="إغلاق"><X className="h-5 w-5" /></button>
           </div>
-        </div>
-      )}
+
+          <label htmlFor="evidence-title" className="mt-5 block text-xs font-bold text-slate-700">عنوان الشاهد</label>
+          <input id="evidence-title" value={title} onChange={event => setTitle(event.target.value)} maxLength={255} placeholder="مثال: محضر تنفيذ البرنامج" className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100" />
+
+          <div className="mt-4 grid grid-cols-2 gap-2" role="group" aria-label="نوع الشاهد">
+            <button type="button" aria-pressed={kind === "link"} onClick={() => setKind("link")} className={`min-h-11 rounded-xl border p-3 text-right ${kind === "link" ? "border-teal-600 bg-teal-50" : "border-slate-200 hover:bg-slate-50"}`}><Link2 className="mb-2 h-4 w-4" /><span className="text-xs font-bold text-slate-900">رابط</span></button>
+            <button type="button" aria-pressed={kind === "text"} onClick={() => setKind("text")} className={`min-h-11 rounded-xl border p-3 text-right ${kind === "text" ? "border-teal-600 bg-teal-50" : "border-slate-200 hover:bg-slate-50"}`}><FileText className="mb-2 h-4 w-4" /><span className="text-xs font-bold text-slate-900">نص</span></button>
+          </div>
+
+          <label htmlFor="evidence-content" className="mt-3 block text-xs font-bold text-slate-700">{kind === "link" ? "رابط الشاهد" : "نص الشاهد"}</label>
+          {kind === "link"
+            ? <input id="evidence-content" value={externalUrl} onChange={event => setExternalUrl(event.target.value)} placeholder="https://..." dir="ltr" className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-teal-500" />
+            : <textarea id="evidence-content" value={text} onChange={event => setText(event.target.value)} rows={5} maxLength={10000} placeholder="اكتب نص الشاهد..." className="mt-2 w-full resize-none rounded-xl border border-slate-200 px-3 py-2.5 text-sm leading-7 outline-none focus:border-teal-500" />}
+
+          <p id="evidence-owner-label" className="mt-4 block text-xs font-bold text-slate-700">الملكية</p>
+          <div role="group" aria-labelledby="evidence-owner-label" className="mt-2 grid grid-cols-2 gap-2">
+            <button type="button" aria-pressed={ownerType === "personal"} onClick={() => { setOwnerType("personal"); setOrganizationId(undefined); }} className={`min-h-11 rounded-xl border p-3 text-right ${ownerType === "personal" ? "border-teal-600 bg-teal-50" : "border-slate-200 hover:bg-slate-50"}`}><UserRound className="mb-2 h-4 w-4" /><span className="text-xs font-bold text-slate-900">شخصي</span></button>
+            <button type="button" aria-pressed={ownerType === "organization"} onClick={() => setOwnerType("organization")} disabled={organizations.length === 0} className={`min-h-11 rounded-xl border p-3 text-right disabled:cursor-not-allowed disabled:opacity-50 ${ownerType === "organization" ? "border-teal-600 bg-teal-50" : "border-slate-200 hover:bg-slate-50"}`}><Building2 className="mb-2 h-4 w-4" /><span className="text-xs font-bold text-slate-900">مدرسي</span></button>
+          </div>
+
+          {ownerType === "organization" && <select aria-label="مدرسة الشاهد" value={organizationId ?? ""} onChange={event => setOrganizationId(Number(event.target.value) || undefined)} className="mt-3 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm"><option value="">اختر المدرسة</option>{organizations.map(org => <option key={org.id} value={org.id}>{org.name} — {org.role}</option>)}</select>}
+          {createAsset.error && <p role="alert" className="mt-3 text-xs leading-6 text-red-700">{createAsset.error.message}</p>}
+
+          <div className="mt-5 flex justify-end gap-2 border-t border-slate-100 pt-4">
+            <button type="button" onClick={() => setShowCreate(false)} className="min-h-11 rounded-xl px-4 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-100">إلغاء</button>
+            <button type="button" onClick={submit} disabled={!canSubmit || createAsset.isPending} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-teal-700 px-4 py-2.5 text-sm font-bold text-white hover:bg-teal-800 disabled:opacity-50">{createAsset.isPending && <Loader2 className="h-4 w-4 animate-spin" />}إضافة</button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

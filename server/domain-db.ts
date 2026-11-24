@@ -182,9 +182,42 @@ export async function getWorkItemForUser(userId: number, workItemId: number) {
   return { ...work, assets: visibleAssets };
 }
 
-export async function updateWorkItemForUser(userId: number, workItemId: number, patch: { title?: string }) {
-  const updated = await withWorkWrite(userId, workItemId, async tx => {
-    await tx.update(workItems).set({ title: patch.title }).where(eq(workItems.id, workItemId)); return true;
+export async function updateWorkItemForUser(
+  userId: number,
+  workItemId: number,
+  patch: { title?: string; academicYearId?: number | null; academicTermId?: number | null },
+) {
+  const updated = await withWorkWrite(userId, workItemId, async (tx, work) => {
+    if (work.status === "archived") throw new WorkVersionConflictError();
+    const updates: Partial<NewWorkItem> = {};
+    if (patch.title !== undefined) updates.title = patch.title;
+    if (patch.academicYearId !== undefined || patch.academicTermId !== undefined) {
+      const scopeKey = work.ownerType === "personal"
+        ? `personal:${work.ownerUserId}`
+        : `organization:${work.ownerOrganizationId}`;
+      const nextYearId = patch.academicYearId !== undefined ? patch.academicYearId : work.academicYearId;
+      let nextTermId: number | null;
+      if (patch.academicTermId !== undefined) {
+        nextTermId = patch.academicTermId;
+      } else if (patch.academicYearId === null || patch.academicYearId !== work.academicYearId) {
+        nextTermId = null;
+      } else {
+        nextTermId = work.academicTermId;
+      }
+      const academicContext = await captureAcademicContext(
+        tx,
+        scopeKey,
+        nextYearId ?? undefined,
+        nextTermId ?? undefined,
+      );
+      updates.academicYearId = nextYearId ?? null;
+      updates.academicTermId = nextTermId ?? null;
+      updates.academicContext = academicContext;
+    }
+    if (Object.keys(updates).length > 0) {
+      await tx.update(workItems).set(updates).where(eq(workItems.id, workItemId));
+    }
+    return true;
   });
   return updated ? getWorkItemForUser(userId, workItemId) : undefined;
 }

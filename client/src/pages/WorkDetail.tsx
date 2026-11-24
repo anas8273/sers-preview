@@ -8,6 +8,7 @@ import {
   Loader2,
   PencilLine,
   Plus,
+  RefreshCw,
   Send,
   Trash2,
   UserRound,
@@ -92,15 +93,25 @@ export default function WorkDetail() {
       <AppSidebar currentPath={location} />
       <main className="lg:mr-72">
         <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 sm:py-10">
-          <button onClick={() => setLocation("/work")} className="inline-flex items-center gap-2 text-sm font-bold text-slate-600 hover:text-teal-700">
+          <button type="button" onClick={() => setLocation("/work")} className="mr-12 inline-flex min-h-11 items-center gap-2 text-sm font-bold text-slate-700 hover:text-teal-700 lg:mr-0">
             <ArrowRight className="h-4 w-4" /> العودة إلى أعمالي
           </button>
 
           {workQuery.isLoading && (
-            <div className="mt-8 flex items-center justify-center rounded-2xl border border-slate-200 bg-white py-16 text-sm text-slate-500"><Loader2 className="ml-2 h-4 w-4 animate-spin" />جاري تحميل العمل...</div>
+            <div role="status" className="mt-8 flex items-center justify-center rounded-2xl border border-slate-200 bg-white py-16 text-sm text-slate-600"><Loader2 className="ml-2 h-4 w-4 animate-spin" />جاري تحميل العمل...</div>
           )}
           {workQuery.error && (
-            <div className="mt-8 rounded-2xl border border-red-200 bg-red-50 p-5 text-sm text-red-700">{workQuery.error.message}</div>
+            <div role="alert" className="mt-8 rounded-2xl border border-red-200 bg-red-50 p-5 text-sm text-red-800">
+              <p>{workQuery.error.message}</p>
+              <button
+                type="button"
+                disabled={workQuery.isFetching}
+                onClick={() => void workQuery.refetch()}
+                className="mt-3 inline-flex min-h-11 items-center gap-2 rounded-xl border border-red-300 bg-white px-4 py-2 text-xs font-bold text-red-800 hover:bg-red-50 disabled:opacity-50"
+              >
+                <RefreshCw className="h-4 w-4" /> إعادة المحاولة
+              </button>
+            </div>
           )}
 
           {workQuery.data && (
@@ -108,16 +119,16 @@ export default function WorkDetail() {
               <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
                 <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
                   <div className="flex items-start gap-3">
-                    <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-teal-50 text-teal-700">
+                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-teal-50 text-teal-700">
                       {workQuery.data.type === "report" ? <FileText className="h-5 w-5" /> : <FolderKanban className="h-5 w-5" />}
                     </div>
-                    <div>
+                    <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
-                        <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-bold text-slate-600">{statusLabel[workQuery.data.status]}</span>
-                        <span className="rounded-full bg-teal-50 px-2.5 py-1 text-[10px] font-bold text-teal-700">نسخة {workQuery.data.currentVersionNumber}</span>
+                        <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-bold text-slate-700">{statusLabel[workQuery.data.status]}</span>
+                        <span className="rounded-full bg-teal-50 px-2.5 py-1 text-[11px] font-bold text-teal-800">نسخة {workQuery.data.currentVersionNumber}</span>
                       </div>
-                      <h1 className="mt-3 text-2xl font-black text-slate-950" style={{ fontFamily: "'Tajawal', sans-serif" }}>{workQuery.data.title}</h1>
-                      <div className="mt-2 flex items-center gap-2 text-xs text-slate-500">
+                      <h1 className="mt-3 text-2xl font-black text-slate-950 [overflow-wrap:anywhere]" style={{ fontFamily: "'Tajawal', sans-serif" }}>{workQuery.data.title}</h1>
+                      <div className="mt-2 flex items-center gap-2 text-xs text-slate-600">
                         {workQuery.data.ownerType === "personal" ? <UserRound className="h-3.5 w-3.5" /> : <Building2 className="h-3.5 w-3.5" />}
                         {workQuery.data.ownerType === "personal" ? "ملكية شخصية" : "ملكية مدرسية"}
                       </div>
@@ -125,7 +136,7 @@ export default function WorkDetail() {
                   </div>
                   <div className="flex flex-col gap-3 sm:items-end">
                     {workQuery.data.type === "report" && (
-                      <button onClick={() => setLocation(`/work/${workId}/report`)} className="inline-flex items-center justify-center gap-2 rounded-xl bg-teal-600 px-5 py-3 text-sm font-bold text-white shadow-sm hover:bg-teal-700">
+                      <button type="button" onClick={() => setLocation(`/work/${workId}/report`)} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-teal-700 px-5 py-3 text-sm font-bold text-white shadow-sm hover:bg-teal-800">
                         <PencilLine className="h-4 w-4" /> فتح محرر التقرير
                       </button>
                     )}
@@ -140,29 +151,29 @@ export default function WorkDetail() {
                 <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
                   <div className="flex items-center justify-between gap-3">
                     <div><p className="text-xs font-bold text-teal-700">إعادة الاستخدام</p><h2 className="mt-1 text-lg font-bold text-slate-950">الشواهد المرتبطة</h2></div>
-                    <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-bold text-slate-600">{workQuery.data.assets.length} شاهد</span>
+                    <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-bold text-slate-700">{workQuery.data.assets.length} شاهد</span>
                   </div>
 
                   <div className="mt-4 flex flex-col gap-2 sm:flex-row">
-                    <select value={selectedAssetId ?? ""} onChange={event => setSelectedAssetId(Number(event.target.value) || undefined)} className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm">
+                    <select aria-label="اختر شاهدًا من المكتبة" value={selectedAssetId ?? ""} onChange={event => setSelectedAssetId(Number(event.target.value) || undefined)} className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm">
                       <option value="">اختر شاهدًا من المكتبة</option>
                       {availableAssets.map(asset => <option key={asset.id} value={asset.id}>{asset.title} — {asset.kind}</option>)}
                     </select>
-                    <button onClick={() => selectedAssetId && linkAsset.mutate({ workItemId: workId, assetId: selectedAssetId, role: "evidence" })} disabled={!selectedAssetId || linkAsset.isPending} className="inline-flex items-center justify-center gap-2 rounded-xl bg-teal-600 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50">
+                    <button type="button" onClick={() => selectedAssetId && linkAsset.mutate({ workItemId: workId, assetId: selectedAssetId, role: "evidence" })} disabled={!selectedAssetId || linkAsset.isPending} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-teal-700 px-4 py-2.5 text-sm font-bold text-white hover:bg-teal-800 disabled:opacity-50">
                       {linkAsset.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />} ربط الشاهد
                     </button>
                   </div>
-                  {linkAsset.error && <p className="mt-2 text-xs text-red-600">{linkAsset.error.message}</p>}
+                  {linkAsset.error && <p role="alert" className="mt-2 text-xs text-red-700">{linkAsset.error.message}</p>}
 
                   {workQuery.data.assets.length === 0 ? (
-                    <div className="mt-5 rounded-xl border border-dashed border-slate-200 px-4 py-10 text-center text-sm text-slate-500">لا توجد شواهد مرتبطة. أضفها من المكتبة بدل إعادة الرفع.</div>
+                    <div className="mt-5 rounded-xl border border-dashed border-slate-200 px-4 py-10 text-center text-sm text-slate-600">لا توجد شواهد مرتبطة. أضفها من المكتبة بدل إعادة الرفع.</div>
                   ) : (
                     <div className="mt-5 space-y-3">
                       {workQuery.data.assets.map(asset => (
                         <div key={`${asset.id}-${asset.role}`} className="flex items-center gap-3 rounded-xl border border-slate-200 p-3">
-                          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-slate-50 text-slate-600"><Link2 className="h-4 w-4" /></div>
-                          <div className="min-w-0 flex-1"><p className="truncate text-sm font-bold text-slate-900">{asset.title}</p><p className="mt-0.5 text-[11px] text-slate-500">{asset.kind} · {asset.role}</p></div>
-                          <button onClick={() => unlinkAsset.mutate({ workItemId: workId, assetId: asset.id, role: asset.role })} disabled={unlinkAsset.isPending} className="rounded-lg p-2 text-slate-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-50" aria-label={`إزالة ربط ${asset.title}`}><Trash2 className="h-4 w-4" /></button>
+                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-50 text-slate-600"><Link2 className="h-4 w-4" /></div>
+                          <div className="min-w-0 flex-1"><p className="truncate text-sm font-bold text-slate-900">{asset.title}</p><p className="mt-0.5 text-xs text-slate-600">{asset.kind} · {asset.role}</p></div>
+                          <button type="button" onClick={() => unlinkAsset.mutate({ workItemId: workId, assetId: asset.id, role: asset.role })} disabled={unlinkAsset.isPending} className="inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-lg text-slate-600 hover:bg-red-50 hover:text-red-700 disabled:opacity-50" aria-label={`إزالة ربط ${asset.title}`}><Trash2 className="h-4 w-4" /></button>
                         </div>
                       ))}
                     </div>
@@ -172,10 +183,10 @@ export default function WorkDetail() {
                 <div className="space-y-6">
                   {workQuery.data.type === "report" ? (
                     <section className="rounded-2xl border border-teal-200 bg-teal-50 p-5 shadow-sm sm:p-6">
-                      <p className="text-xs font-bold text-teal-700">مصدر الحقيقة</p>
+                      <p className="text-xs font-bold text-teal-800">مصدر الحقيقة</p>
                       <h2 className="mt-1 text-lg font-bold text-slate-950">أنشئ النسخة من محرر التقرير</h2>
-                      <p className="mt-2 text-xs leading-6 text-slate-600">حتى تحتوي النسخة على النص والقالب والشواهد معًا، لا يسمح هذا المسار بإنشاء لقطة تقرير ناقصة. افتح المحرر واحفظ التقرير ثم أنشئ النسخة هناك.</p>
-                      <button onClick={() => setLocation(`/work/${workId}/report`)} className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-teal-700 px-4 py-2.5 text-sm font-bold text-white hover:bg-teal-800">
+                      <p className="mt-2 text-xs leading-6 text-slate-700">حتى تحتوي النسخة على النص والقالب والشواهد معًا، لا يسمح هذا المسار بإنشاء لقطة تقرير ناقصة. افتح المحرر واحفظ التقرير ثم أنشئ النسخة هناك.</p>
+                      <button type="button" onClick={() => setLocation(`/work/${workId}/report`)} className="mt-4 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-teal-700 px-4 py-2.5 text-sm font-bold text-white hover:bg-teal-800">
                         <PencilLine className="h-4 w-4" /> تحرير التقرير وإنشاء نسخة
                       </button>
                     </section>
@@ -184,18 +195,18 @@ export default function WorkDetail() {
                       <p className="text-xs font-bold text-teal-700">ملف الإنجاز المحلي</p>
                       <h2 className="mt-1 text-lg font-bold text-slate-950">المحتوى غير مرتبط بهذه النسخة السحابية</h2>
                       <p className="mt-2 text-xs leading-6 text-slate-600">هذا العمل يحتفظ حاليًا ببيانات وصفية وشواهد فقط، وليس نسخة مكتملة من محتوى ملف الإنجاز المحلي. لن ننشئ نسخة ناقصة أو نكتب إلى قاعدة البيانات تلقائيًا.</p>
-                      <button onClick={() => setLocation("/portfolio")} className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-teal-200 bg-teal-50 px-4 py-2.5 text-sm font-bold text-teal-800 hover:bg-teal-100">
+                      <button type="button" onClick={() => setLocation("/portfolio")} className="mt-4 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-teal-200 bg-teal-50 px-4 py-2.5 text-sm font-bold text-teal-900 hover:bg-teal-100">
                         فتح منشئ ملف الإنجاز المحلي
                       </button>
-                      <p className="mt-3 text-[11px] leading-5 text-slate-500">الاستيراد إلى Work سيكون اختياريًا لاحقًا بعد اعتماد عقد محتوى typed مع معاينة ومقارنة وتراجع، وليس تلقائيًا الآن.</p>
+                      <p className="mt-3 text-xs leading-5 text-slate-600">الاستيراد إلى Work سيكون اختياريًا لاحقًا بعد اعتماد عقد محتوى typed مع معاينة ومقارنة وتراجع، وليس تلقائيًا الآن.</p>
                     </section>
                   )}
 
-                  {workQuery.data.ownerType === "organization" && (
+                  {workQuery.data.ownerType === "organization" && !(workQuery.data.type === "portfolio" && versions.length === 0) && (
                     <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
                       <p className="text-xs font-bold text-teal-700">مراجعة مدرسية</p>
                       <h2 className="mt-1 text-lg font-bold text-slate-950">إرسال نسخة للمراجعة</h2>
-                      <p className="mt-2 text-xs leading-6 text-slate-500">اختر نسخة محفوظة ومراجعًا مؤهلًا من نفس المدرسة. لن تتغير النسخة إذا عدّلت العمل بعد الإرسال.</p>
+                      <p className="mt-2 text-xs leading-6 text-slate-600">اختر نسخة محفوظة ومراجعًا مؤهلًا من نفس المدرسة. لن تتغير النسخة إذا عدّلت العمل بعد الإرسال.</p>
 
                       <label className="mt-4 block text-xs font-bold text-slate-700">النسخة</label>
                       <select value={selectedVersionId ?? ""} onChange={event => setSelectedVersionId(Number(event.target.value) || undefined)} className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm">
@@ -209,11 +220,11 @@ export default function WorkDetail() {
                         {reviewers.map(reviewer => <option key={reviewer.userId} value={reviewer.userId}>{reviewer.name || `مستخدم ${reviewer.userId}`} — {reviewer.role}</option>)}
                       </select>
 
-                      {reviewersQuery.data && reviewers.length === 0 && <p className="mt-3 text-xs leading-6 text-amber-700">لا يوجد مراجع مؤهل حاليًا في هذه المدرسة. يلزم عضو بدور reviewer أو admin أو owner.</p>}
-                      <button onClick={() => selectedVersionId && selectedReviewerId && requestReview.mutate({ workVersionId: selectedVersionId, reviewerUserId: selectedReviewerId })} disabled={!selectedVersionId || !selectedReviewerId || requestReview.isPending} className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-teal-600 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50">
+                      {reviewersQuery.data && reviewers.length === 0 && <p className="mt-3 text-xs leading-6 text-amber-800">لا يوجد مراجع مؤهل حاليًا في هذه المدرسة. يلزم عضو بدور reviewer أو admin أو owner.</p>}
+                      <button type="button" onClick={() => selectedVersionId && selectedReviewerId && requestReview.mutate({ workVersionId: selectedVersionId, reviewerUserId: selectedReviewerId })} disabled={!selectedVersionId || !selectedReviewerId || requestReview.isPending} className="mt-4 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-teal-700 px-4 py-2.5 text-sm font-bold text-white hover:bg-teal-800 disabled:opacity-50">
                         {requestReview.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />} إرسال للمراجعة
                       </button>
-                      {requestReview.error && <p className="mt-3 text-xs text-red-600">{requestReview.error.message}</p>}
+                      {requestReview.error && <p role="alert" className="mt-3 text-xs text-red-700">{requestReview.error.message}</p>}
                     </section>
                   )}
                 </div>

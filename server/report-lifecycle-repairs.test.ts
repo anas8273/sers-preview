@@ -57,7 +57,8 @@ describe("report lifecycle repairs", () => {
   it("uses an allowlisted Noto Kufi font instead of silently replacing it", async () => {
     const snapshot = frozenSnapshot();
     const html = renderReportWorkVersionHtml(snapshot, 1);
-    expect(html).toContain("font-family: 'Noto Kufi Arabic'");
+    expect(html).toContain("@font-face { font-family: 'SERS Noto Kufi Arabic'");
+    expect(html).toContain(".work-version-document { font-family: 'SERS Noto Kufi Arabic'");
     const docx = await renderReportWorkVersionDocx(snapshot, 1);
     const zip = await JSZip.loadAsync(docx);
     expect(await zip.file("word/document.xml")!.async("string")).toContain("Noto Kufi Arabic");

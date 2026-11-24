@@ -1,3 +1,13 @@
+import {
+  isReportIdentityFieldKey,
+  normalizeReportIdentity,
+  REPORT_IDENTITY_KEYS,
+  REPORT_IDENTITY_VERSION,
+  reportInstitution,
+  type ReportIdentity,
+  type ReportInstitutionIdentity,
+} from "./report-appearance";
+
 export const REPORT_SCHEMA_VERSION = 2 as const;
 export const REPORT_SCHEMA_COMPATIBILITY_KEY = "work-report-v2" as const;
 
@@ -110,6 +120,7 @@ export type ReportDraftContent = {
   fontFamily: string;
   fields: Record<string, ReportFieldValue>;
   evidenceAssetIds: number[];
+  reportIdentity?: ReportIdentity;
 };
 
 export type NormalizedReportDraft = Omit<ReportDraftContent, "schemaVersion" | "templateVersionId"> & {
@@ -159,6 +170,7 @@ function frozenFieldDefinitions(value: unknown): readonly ReportFieldDefinition[
     if (!item || typeof item !== "object") throw new ReportDocumentValidationError("Schema v2 contains an invalid frozen field definition");
     const field = item as Record<string, unknown>;
     if (typeof field.key !== "string" || !/^[A-Za-z][A-Za-z0-9_-]{0,127}$/.test(field.key)
+      || isReportIdentityFieldKey(field.key)
       || keys.has(field.key) || typeof field.label !== "string" || !field.label.trim() || field.label.length > 255
       || !["text", "textarea", "number", "date", "select", "list"].includes(String(field.type))) {
       throw new ReportDocumentValidationError("Schema v2 contains an invalid frozen field definition");
@@ -227,7 +239,40 @@ export function normalizeReportDraft(value: unknown, options: { allowLegacy?: bo
   if (!REPORT_THEME_OPTIONS.some(option => option.id === themeId)) throw new ReportDocumentValidationError(`Unknown report theme: ${themeId}`);
   const fontFamily = typeof input.fontFamily === "string" ? input.fontFamily : "Cairo";
   if (!REPORT_FONT_OPTIONS.includes(fontFamily as typeof REPORT_FONT_OPTIONS[number])) throw new ReportDocumentValidationError(`Unknown report font: ${fontFamily}`);
-  const rawFields = input.fields && typeof input.fields === "object" && !Array.isArray(input.fields) ? input.fields as Record<string, unknown> : {};
+  const rawFields = input.fields && typeof input.fields === "object" && !Array.isArray(input.fields)
+    ? { ...(input.fields as Record<string, unknown>) }
+    : {};
+  const cleanFields: Record<string, unknown> = { ...rawFields };
+  const presentIdentityKeys = Object.keys(cleanFields).filter(
+    key => isReportIdentityFieldKey(key) && cleanFields[key] !== undefined,
+  );
+  let reportIdentity: ReportIdentity | undefined;
+  if (input.reportIdentity !== undefined) {
+    if (presentIdentityKeys.length > 0) {
+      throw new ReportDocumentValidationError("Report identity cannot be supplied in both reportIdentity and fields");
+    }
+    try {
+      reportIdentity = normalizeReportIdentity(input.reportIdentity);
+    } catch (error) {
+      throw new ReportDocumentValidationError(error instanceof Error ? error.message : "Invalid report identity");
+    }
+  } else if (presentIdentityKeys.length > 0) {
+    if (cleanFields.reportIdentityVersion !== REPORT_IDENTITY_VERSION) {
+      throw new ReportDocumentValidationError(
+        cleanFields.reportIdentityVersion !== undefined
+          ? `Unsupported report identity version: ${String(cleanFields.reportIdentityVersion)}`
+          : `Identity fields require reportIdentityVersion "${REPORT_IDENTITY_VERSION}"`,
+      );
+    }
+    try {
+      reportIdentity = normalizeReportIdentity(cleanFields);
+    } catch (error) {
+      throw new ReportDocumentValidationError(error instanceof Error ? error.message : "Invalid report identity");
+    }
+    for (const key of REPORT_IDENTITY_KEYS) {
+      delete cleanFields[key];
+    }
+  }
   // Runtime definitions are a deliberate migration path for schema v1 only.
   // A v2 snapshot is historical data and must carry its own complete contract.
   const definitionsList = sourceSchemaVersion === REPORT_SCHEMA_VERSION
@@ -235,7 +280,7 @@ export function normalizeReportDraft(value: unknown, options: { allowLegacy?: bo
     : template!.fields;
   const definitions = new Map(definitionsList.map(field => [field.key, field]));
   const fields: Record<string, ReportFieldValue> = {};
-  for (const [key, raw] of Object.entries(rawFields)) {
+  for (const [key, raw] of Object.entries(cleanFields)) {
     const field = definitions.get(key);
     if (!field) throw new ReportDocumentValidationError(`Unknown report field: ${key}`);
     const normalized = normalizeFieldValue(raw, field);
@@ -252,6 +297,7 @@ export function normalizeReportDraft(value: unknown, options: { allowLegacy?: bo
     fontFamily,
     fields,
     evidenceAssetIds,
+    ...(reportIdentity ? { reportIdentity } : {}),
     fieldDefinitions: definitionsList,
     ...(sourceSchemaVersion === 1 ? { migratedFromSchemaVersion: 1 } : {}),
   };
@@ -280,6 +326,8 @@ export type ReportDocumentModel = {
   template: ReportTemplateDefinition;
   fields: Array<{ key: string; label: string; type: ReportFieldType; value: ReportFieldValue }>;
   evidence: ReportProjectionAsset[];
+  reportIdentity?: ReportIdentity;
+  identity: ReportInstitutionIdentity;
 };
 
 function assertFrozenEvidence(asset: ReportProjectionAsset) {
@@ -317,7 +365,15 @@ export function projectReportDocument(input: { reportDraft: unknown; assets?: Re
     : frozenTemplate(draft.templateId, draft.fieldDefinitions);
   const evidence = (input.assets ?? []).filter(asset => selected.has(asset.id));
   for (const asset of evidence) assertFrozenEvidence(asset);
-  return { schemaVersion: REPORT_SCHEMA_VERSION, template: { ...template, fields: draft.fieldDefinitions }, fields, evidence };
+  const identity = reportInstitution(draft.reportIdentity);
+  return {
+    schemaVersion: REPORT_SCHEMA_VERSION,
+    template: { ...template, fields: draft.fieldDefinitions },
+    fields,
+    evidence,
+    ...(draft.reportIdentity ? { reportIdentity: draft.reportIdentity } : {}),
+    identity,
+  };
 }
 
 export function formatReportFieldValue(value: ReportFieldValue): string {

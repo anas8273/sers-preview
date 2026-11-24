@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { ArrowLeft, BookOpen, CheckCircle2, Clock3, Database, Laptop, Search, SlidersHorizontal, Wrench } from "lucide-react";
+import { ArrowRight, BookOpen, CheckCircle2, Clock3, Database, Laptop, Search, SlidersHorizontal, Wrench } from "lucide-react";
 import { useLocation } from "wouter";
 import {
   getServiceAvailability,
@@ -54,8 +54,8 @@ export default function CatalogPage() {
     <div className="min-h-screen bg-[#F8FAFC]" dir="rtl">
       <header className="bg-gradient-to-l from-teal-800 via-teal-700 to-emerald-700 text-white">
         <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6">
-          <button type="button" onClick={() => navigate("/")} className="mb-4 flex items-center gap-2 text-sm text-white/75 hover:text-white">
-            <ArrowLeft className="h-4 w-4" /> العودة للرئيسية
+          <button type="button" onClick={() => navigate("/")} className="mb-4 inline-flex min-h-11 items-center gap-2 text-sm font-semibold text-white/90 hover:text-white">
+            <ArrowRight className="h-4 w-4" /> العودة للرئيسية
           </button>
           <div className="flex items-start gap-4">
             <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-white/15"><Wrench className="h-7 w-7" /></div>
@@ -126,9 +126,9 @@ export default function CatalogPage() {
                   <div className="mt-4 flex items-center justify-between gap-3 border-t border-slate-100 pt-3">
                     <span className="text-xs text-slate-500">{service.price > 0 ? `${service.price} ر.س — ${meta.label}` : meta.label}</span>
                     {interactive ? (
-                      <button type="button" onClick={() => navigate(route!)} className="rounded-lg bg-teal-700 px-3 py-2 text-xs font-bold text-white hover:bg-teal-800">فتح الأداة</button>
+                      <button type="button" onClick={() => navigate(route!)} className="min-h-11 rounded-lg bg-teal-700 px-3 py-2 text-xs font-bold text-white hover:bg-teal-800">فتح الأداة</button>
                     ) : (
-                      <span className="text-xs font-semibold text-slate-400">لا يوجد فتح منشور</span>
+                      <span className="text-xs font-semibold text-slate-600">لا يوجد فتح منشور</span>
                     )}
                   </div>
                 </article>

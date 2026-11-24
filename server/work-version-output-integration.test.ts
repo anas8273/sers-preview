@@ -24,6 +24,7 @@ import {
   generatePrivatePdfForWorkVersion,
   getPrivatePdfDownloadForUser,
   OutputArtifactUnavailableError,
+  REPORT_PDF_RENDERER_VERSION,
 } from "./work-version-output-service";
 
 const integrationEnabled = process.env.SERS_INTEGRATION === "1";
@@ -115,7 +116,7 @@ suite("immutable WorkVersion PDF output pipeline against real MySQL", () => {
     const first = await generatePrivatePdfForWorkVersion(ownerId, version.id, dependencies);
     expect(first?.reused).toBe(false);
     const firstRecord = (await getOutputRecordForUser(ownerId, first!.outputId))!;
-    expect(firstRecord.token).toBe(`artifact:v${version.id}:pdf:r2`);
+    expect(firstRecord.token).toBe(`artifact:v${version.id}:pdf:r${REPORT_PDF_RENDERER_VERSION}`);
     expect(firstRecord.storageKey).toContain(`/version-${version.id}/${expectedHash}.pdf`);
     expect(first).not.toHaveProperty("storageKey");
     expect(first).not.toHaveProperty("contentHash");
@@ -208,7 +209,7 @@ suite("immutable WorkVersion PDF output pipeline against real MySQL", () => {
     expect(oldRecord.storageKey).toContain(`${oldHash}.pdf`);
     const current = (await generatePrivatePdfForWorkVersion(ownerId, version.id, dependencies))!;
     expect(current).toMatchObject({ reused: false });
-    expect((await getOutputRecordForUser(ownerId, current.outputId))!.token).toBe(`artifact:v${version.id}:pdf:r2`);
+    expect((await getOutputRecordForUser(ownerId, current.outputId))!.token).toBe(`artifact:v${version.id}:pdf:r${REPORT_PDF_RENDERER_VERSION}`);
     expect(current.outputId).not.toBe(old.id);
     expect(await getPrivatePdfDownloadForUser(ownerId, old.id, dependencies)).toMatchObject({ outputId: old.id, reused: true });
     await revokeOutputForUser(ownerId, old.id);

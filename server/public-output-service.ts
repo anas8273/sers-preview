@@ -3,6 +3,7 @@ import { outputs, reviews, workItems, workVersions } from "../drizzle/domain-cor
 import { getDb } from "./db";
 import { verifyProtectedOutputPassword } from "./output-password";
 import { projectReportDocument, type ReportProjectionAsset } from "../shared/report-projection";
+import { sanitizeReportSchoolLogo } from "./work-version-report-assets";
 
 export class PublicOutputNotFoundError extends Error {
   constructor() {
@@ -38,6 +39,7 @@ type ReportSnapshot = {
   reportDraft?: {
     templateId?: string;
     fields?: Record<string, unknown>;
+    reportIdentity?: unknown;
     evidenceAssetIds?: unknown[];
     updatedAt?: string;
   };
@@ -74,6 +76,31 @@ export function projectReportSnapshot(value: unknown) {
       caption: typeof asset.caption === "string" && asset.caption.trim() ? asset.caption.trim() : undefined,
     }));
 
+  const rawInstitution = model.identity;
+  let sanitizedSchoolLogo = "";
+  if (rawInstitution.schoolLogo) {
+    try {
+      sanitizedSchoolLogo = sanitizeReportSchoolLogo(rawInstitution.schoolLogo).bytes.toString("base64");
+    } catch {
+      sanitizedSchoolLogo = "";
+    }
+  }
+  const institutionVisible = Boolean(
+    rawInstitution.schoolName
+    || rawInstitution.ministryLogo
+    || sanitizedSchoolLogo
+    || rawInstitution.signers.length > 0,
+  );
+  const institution = institutionVisible
+    ? {
+        schoolName: rawInstitution.schoolName,
+        ministryLogo: rawInstitution.ministryLogo,
+        ...(sanitizedSchoolLogo ? { schoolLogo: sanitizedSchoolLogo } : {}),
+        signers: rawInstitution.signers,
+        visible: true as const,
+      }
+    : undefined;
+
   return {
     title: typeof snapshot.work.title === "string" && snapshot.work.title.trim()
       ? snapshot.work.title.trim()
@@ -87,6 +114,7 @@ export function projectReportSnapshot(value: unknown) {
         : undefined,
     fields: model.fields.map(field => ({ key: field.key, label: field.label, type: field.type, value: field.value })),
     evidence,
+    ...(institution ? { institution } : {}),
   };
 }
 

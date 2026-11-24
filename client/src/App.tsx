@@ -6,7 +6,7 @@ import ErrorBoundary from "./components/ErrorBoundary";
 import ReportPdfActions from "./components/ReportPdfActions";
 import ReportShareActions from "./components/ReportShareActions";
 import { ThemeProvider } from "./contexts/ThemeContext";
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useEffect } from "react";
 import BottomNav from "./components/BottomNav";
 import PrivateWorkspace from "./components/PrivateWorkspace";
 
@@ -43,8 +43,8 @@ function LoadingFallback() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-[#F8FAFC]" dir="rtl">
       <div className="text-center">
-        <div className="w-10 h-10 border-4 border-teal-200 border-t-teal-600 rounded-full animate-spin mx-auto mb-3" />
-        <p className="text-sm text-gray-500" style={{ fontFamily: "'Tajawal', sans-serif" }}>جاري التحميل...</p>
+        <div className="w-10 h-10 border-4 border-teal-200 border-t-teal-700 rounded-full animate-spin mx-auto mb-3" />
+        <p className="text-sm text-slate-600" style={{ fontFamily: "'Tajawal', sans-serif" }}>جاري التحميل...</p>
       </div>
     </div>
   );
@@ -94,13 +94,17 @@ function Router() {
 
 function AppChrome() {
   const [location] = useLocation();
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.dispatchEvent(new CustomEvent("sers:report-action-panel-open", { detail: { panel: "none" } }));
+  }, [location]);
   if (location.startsWith("/output/")) return null;
   return (
-    <>
+    <div className="no-print">
       <ReportShareActions />
       <ReportPdfActions />
       <BottomNav />
-    </>
+    </div>
   );
 }
 

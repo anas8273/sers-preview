@@ -1,3 +1,4 @@
+import type { ReportIdentity } from "@shared/report-appearance";
 import type { ReportFieldDefinition, ReportFieldValue } from "@shared/report-projection";
 
 export type ReportDraftContent = {
@@ -8,6 +9,7 @@ export type ReportDraftContent = {
   fontFamily: string;
   fields: Record<string, string>;
   evidenceAssetIds: number[];
+  reportIdentity?: ReportIdentity;
   /** Historical v2 reports own this contract; never replace it from the live registry. */
   fieldDefinitions?: ReportFieldDefinition[];
 };

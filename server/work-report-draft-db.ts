@@ -17,10 +17,12 @@ import {
   type ReportFieldValue,
   ReportDocumentValidationError,
 } from "../shared/report-projection";
+import type { ReportIdentity } from "../shared/report-appearance";
 import { downloadReadyAssetForUser } from "./upload-lifecycle-service";
 import { getReadyUploadAssetForUser } from "./upload-intent-db";
 import { getConfiguredPrivateStorage } from "./upload-runtime";
 import { sanitizeEvidenceImage } from "./work-version-inline-image";
+import { sanitizeReportSchoolLogo } from "./work-version-report-assets";
 
 export const REPORT_DOCUMENT_BLOCK = "report_document";
 
@@ -33,6 +35,7 @@ export type ReportDraftData = {
   fontFamily: string;
   fields: Record<string, ReportFieldValue>;
   evidenceAssetIds: number[];
+  reportIdentity?: ReportIdentity;
   updatedAt: string;
   fieldDefinitions: NormalizedReportDraft["fieldDefinitions"];
   migratedFromSchemaVersion?: number;
@@ -170,6 +173,20 @@ export async function getReportDraftForUser(userId: number, workItemId: number) 
   };
 }
 
+function sanitizeDraftIdentityLogo(draft: ReportDraftData): ReportDraftData {
+  const logo = draft.reportIdentity?.schoolLogoPng;
+  if (!logo) return draft;
+  try {
+    const sanitized = sanitizeReportSchoolLogo(logo).bytes.toString("base64");
+    return {
+      ...draft,
+      reportIdentity: { ...draft.reportIdentity!, schoolLogoPng: sanitized },
+    };
+  } catch {
+    throw new ReportDraftValidationError("تعذّر حفظ شعار المدرسة. اختر صورة PNG صالحة ضمن الحجم المسموح.");
+  }
+}
+
 export async function saveReportDraftForUser(userId: number, input: {
   workItemId: number;
   expectedRevision: number;
@@ -179,6 +196,7 @@ export async function saveReportDraftForUser(userId: number, input: {
   themeId: string;
   fontFamily: string;
   fields: Record<string, ReportFieldValue>;
+  reportIdentity?: ReportIdentity;
   evidenceAssetIds: number[];
   fieldDefinitions?: unknown;
 }) {
@@ -217,9 +235,11 @@ export async function saveReportDraftForUser(userId: number, input: {
     const linkedAssetIds = new Set(linkedAssetRows.map((row: { assetId: number }) => row.assetId));
     const evidenceAssetIds = Array.from(new Set(input.evidenceAssetIds)).filter(id => linkedAssetIds.has(id));
 
-    let normalized: NormalizedReportDraft;
+    let normalized: ReportDraftData;
     try {
-      normalized = normalizeDraft({ ...input, revision: current.revision + 1, updatedAt: new Date().toISOString() });
+      normalized = sanitizeDraftIdentityLogo(
+        normalizeDraft({ ...input, revision: current.revision + 1, updatedAt: new Date().toISOString() }),
+      );
     } catch (error) {
       if (error instanceof ReportDocumentValidationError) throw new ReportDraftValidationError(error.message);
       throw error;
@@ -336,7 +356,7 @@ export async function createReportDraftVersionForUser(userId: number, input: {
     .where(and(eq(contentBlocks.workItemId, input.workItemId), eq(contentBlocks.blockType, REPORT_DOCUMENT_BLOCK)))
     .orderBy(asc(contentBlocks.id)).limit(1);
   if (!hint) throw new ReportDraftConflictError("Save the report before creating a version");
-  const preparedDraft = normalizeDraft(hint.data);
+  const preparedDraft = sanitizeDraftIdentityLogo(normalizeDraft(hint.data));
   if (preparedDraft.revision !== input.expectedRevision) throw new ReportDraftConflictError();
   const preparedEvidence = await prepareEvidenceOutsideTransaction(userId, input.workItemId, new Set(preparedDraft.evidenceAssetIds));
 
@@ -353,7 +373,7 @@ export async function createReportDraftVersionForUser(userId: number, input: {
       .orderBy(asc(contentBlocks.id))
       .limit(1).for("update");
     if (!block) throw new ReportDraftConflictError("Save the report before creating a version");
-    const draft = normalizeDraft(block.data);
+    const draft = sanitizeDraftIdentityLogo(normalizeDraft(block.data));
     if (draft.revision !== input.expectedRevision) throw new ReportDraftConflictError();
 
     const linkedAssets = await tx

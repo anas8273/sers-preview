@@ -1,25 +1,43 @@
 import { privateLocalStorage as localStorage } from "@/lib/private-browser-storage";
 import { ReportDraftSession, type ReportDraftContent } from "@/lib/report-draft-session";
-import { WORK_REPORT_SCHEMAS } from "@/lib/report-schemas";
+import {
+  REPORT_FONT_FAMILIES,
+  REPORT_IDENTITY_FIELDS,
+  REPORT_IDENTITY_TEXT_LIMIT,
+  REPORT_IDENTITY_VERSION,
+  REPORT_MINISTRY_LOGO_ALT,
+  REPORT_SCHOOL_LOGO_ALT,
+  REPORT_SCHOOL_LOGO_MAX_BASE64,
+  REPORT_SCHOOL_LOGO_MAX_DIMENSION,
+  normalizeReportIdentity,
+  reportFontFamily,
+  reportInstitution,
+  type ReportIdentity,
+} from "@shared/report-appearance";
 import {
   REPORT_TEMPLATE_DEFINITIONS,
   REPORT_TEMPLATE_OPTIONS,
   REPORT_THEME_OPTIONS,
-  REPORT_FONT_OPTIONS,
   projectReportDocument,
   type ReportFieldDefinition,
   type ReportFieldValue,
 } from "@shared/report-projection";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import ministryLogoUrl from "@shared/report-assets/ministry-logo.png";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   AlertTriangle,
   ArrowRight,
+  Check,
   CheckCircle2,
   Cloud,
   CloudOff,
+  Copy,
+  Eye,
   FileCheck2,
   FileText,
+  Info,
   Loader2,
+  PencilLine,
   RefreshCw,
   Save,
   Send,
@@ -28,18 +46,58 @@ import {
 import { useLocation, useRoute } from "wouter";
 import AppSidebar from "@/components/AppSidebar";
 import { trpc } from "@/lib/trpc";
+import "./work-report-fonts.css";
 
 const templateOptions = REPORT_TEMPLATE_OPTIONS;
 const themeOptions = REPORT_THEME_OPTIONS;
-const fontOptions = REPORT_FONT_OPTIONS;
+const evidenceKindLabels = { file: "ملف", link: "رابط", text: "نص" } as const;
 
 type SaveState = "idle" | "dirty" | "saving" | "saved" | "offline" | "conflict" | "error";
+type MobileView = "edit" | "preview";
 
 type LocalBackup = ReportDraftContent & { baseRevision: number; updatedAt: string };
 const emptyDraft: ReportDraftContent = { templateId: "custom", themeId: "classic", fontFamily: "Cairo", fields: {}, evidenceAssetIds: [] };
 
-function contentOf({ schemaVersion, templateId, templateVersionId, themeId, fontFamily, fields, evidenceAssetIds, fieldDefinitions }: ReportDraftContent): ReportDraftContent {
-  return { schemaVersion, templateId, templateVersionId, themeId, fontFamily, fields, evidenceAssetIds, fieldDefinitions };
+const BIDI_RANGE_PATTERN = /([0-9٠-٩۰-۹]+(?:[-–—/][0-9٠-٩۰-۹]+)+)/g;
+
+function renderBidiText(text: string): ReactNode {
+  const parts = text.split(BIDI_RANGE_PATTERN);
+  if (parts.length === 1) return text;
+  return parts.map((part, index) => (
+    index % 2 === 1 ? <bdo dir="ltr" key={index}>{part}</bdo> : part
+  ));
+}
+
+function safeNormalizeIdentity(value: unknown): ReportIdentity | undefined {
+  try {
+    return normalizeReportIdentity(value);
+  } catch {
+    return undefined;
+  }
+}
+
+function contentOf({
+  schemaVersion,
+  templateId,
+  templateVersionId,
+  themeId,
+  fontFamily,
+  fields,
+  evidenceAssetIds,
+  fieldDefinitions,
+  reportIdentity,
+}: ReportDraftContent): ReportDraftContent {
+  return {
+    schemaVersion,
+    templateId,
+    templateVersionId,
+    themeId,
+    fontFamily,
+    fields,
+    evidenceAssetIds,
+    fieldDefinitions,
+    reportIdentity: safeNormalizeIdentity(reportIdentity),
+  };
 }
 
 function editorFields(content: Pick<ReportDraftContent, "templateId" | "schemaVersion" | "fieldDefinitions">): readonly ReportFieldDefinition[] {
@@ -78,6 +136,7 @@ function sameContent(a: ReportDraftContent, b: ReportDraftContent) {
   return a.templateId === b.templateId && a.themeId === b.themeId && a.fontFamily === b.fontFamily
     && a.schemaVersion === b.schemaVersion && a.templateVersionId === b.templateVersionId
     && JSON.stringify(a.fieldDefinitions ?? []) === JSON.stringify(b.fieldDefinitions ?? [])
+    && JSON.stringify(safeNormalizeIdentity(a.reportIdentity) ?? null) === JSON.stringify(safeNormalizeIdentity(b.reportIdentity) ?? null)
     && Object.keys(a.fields).length === Object.keys(b.fields).length
     && Object.entries(a.fields).every(([key, value]) => b.fields[key] === value)
     && a.evidenceAssetIds.length === b.evidenceAssetIds.length
@@ -88,6 +147,28 @@ function backupKey(workId: number) {
   return `sers:report-draft:${workId}`;
 }
 
+async function prepareSchoolLogo(file: File) {
+  if (file.type !== "image/png" || file.size > 2 * 1024 * 1024) throw new Error("Choose a PNG up to 2 MiB");
+  const header = new DataView(await file.slice(0, 24).arrayBuffer());
+  if (header.byteLength !== 24 || header.getUint32(0) !== 0x89504e47 || header.getUint32(4) !== 0x0d0a1a0a || header.getUint32(12) !== 0x49484452
+    || header.getUint32(16) > 4096 || header.getUint32(20) > 4096) throw new Error("Unsupported PNG");
+  const image = await createImageBitmap(file);
+  try {
+    const canvas = document.createElement("canvas");
+    const context = canvas.getContext("2d");
+    if (!context) throw new Error("Image processing is unavailable");
+    for (const max of [REPORT_SCHOOL_LOGO_MAX_DIMENSION, 224, 160]) {
+      const scale = Math.min(1, max / Math.max(image.width, image.height));
+      canvas.width = Math.max(1, Math.round(image.width * scale));
+      canvas.height = Math.max(1, Math.round(image.height * scale));
+      context.drawImage(image, 0, 0, canvas.width, canvas.height);
+      const base64 = canvas.toDataURL("image/png").slice("data:image/png;base64,".length);
+      if (base64 && base64.length <= REPORT_SCHOOL_LOGO_MAX_BASE64) return base64;
+    }
+    throw new Error("School logo exceeds the report limit");
+  } finally { image.close(); }
+}
+
 function parseBackup(workId: number): LocalBackup | undefined {
   if (typeof window === "undefined") return undefined;
   try {
@@ -96,21 +177,29 @@ function parseBackup(workId: number): LocalBackup | undefined {
     const parsed = JSON.parse(raw) as Partial<LocalBackup>;
     if (!Number.isInteger(parsed.baseRevision) || typeof parsed.updatedAt !== "string") return undefined;
     if (!parsed.fields || typeof parsed.fields !== "object") return undefined;
+    const rawFields = parsed.fields as Record<string, unknown>;
+    const legacyIdentity = parsed.reportIdentity === undefined && rawFields.reportIdentityVersion === REPORT_IDENTITY_VERSION
+      ? safeNormalizeIdentity(rawFields)
+      : undefined;
+    const fieldDefinitions = parsed.schemaVersion === 2 && Array.isArray(parsed.fieldDefinitions)
+      ? parsed.fieldDefinitions as ReportFieldDefinition[]
+      : undefined;
+    const templateId = typeof parsed.templateId === "string" ? parsed.templateId : "custom";
+    const contract = { templateId, schemaVersion: parsed.schemaVersion, fieldDefinitions };
     return {
       baseRevision: Number(parsed.baseRevision),
       updatedAt: parsed.updatedAt,
       schemaVersion: parsed.schemaVersion,
       templateVersionId: typeof parsed.templateVersionId === "string" ? parsed.templateVersionId : undefined,
-      templateId: typeof parsed.templateId === "string" ? parsed.templateId : "custom",
+      templateId,
       themeId: typeof parsed.themeId === "string" ? parsed.themeId : "classic",
       fontFamily: typeof parsed.fontFamily === "string" ? parsed.fontFamily : "Cairo",
-      fields: Object.fromEntries(Object.entries(parsed.fields).filter(([, value]) => typeof value === "string")) as Record<string, string>,
+      fields: editorFieldValues(contract, rawFields),
       evidenceAssetIds: Array.isArray(parsed.evidenceAssetIds)
         ? parsed.evidenceAssetIds.filter((id): id is number => Number.isInteger(id) && Number(id) > 0)
         : [],
-      fieldDefinitions: parsed.schemaVersion === 2 && Array.isArray(parsed.fieldDefinitions)
-        ? parsed.fieldDefinitions as ReportFieldDefinition[]
-        : undefined,
+      reportIdentity: safeNormalizeIdentity(parsed.reportIdentity) ?? legacyIdentity,
+      fieldDefinitions,
     };
   } catch {
     return undefined;
@@ -143,12 +232,24 @@ function ReportEditor({ workId }: { workId: number }) {
   const conflict = useRef(false);
   const backupRevision = useRef(0);
   const versionPending = useRef(false);
+  const logoRequest = useRef(0);
+  const logoPending = useRef(false);
+
   const [creatingVersion, setCreatingVersion] = useState(false);
+  const [processingLogo, setProcessingLogo] = useState(false);
+  const [logoError, setLogoError] = useState(false);
   const [revision, setRevision] = useState(0);
   const [draft, setDraft] = useState(emptyDraft);
-  const { templateId, themeId, fontFamily, fields, evidenceAssetIds } = draft;
+  const { templateId, themeId, fontFamily, fields, evidenceAssetIds, reportIdentity } = draft;
+  const institution = reportInstitution(reportIdentity);
+  const nonEmptySigners = institution.signers.filter(signer => signer.name.trim().length > 0);
+  const selectedFont = reportFontFamily(fontFamily);
+
+  const [mobileView, setMobileView] = useState<MobileView>("edit");
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [backupError, setBackupError] = useState(false);
+  const [copiedLocalEdits, setCopiedLocalEdits] = useState(false);
+  const [copyLocalError, setCopyLocalError] = useState(false);
   const [lastSavedAt, setLastSavedAt] = useState<string | undefined>();
   const [versionReason, setVersionReason] = useState("");
   const [templateError, setTemplateError] = useState<string | undefined>();
@@ -196,8 +297,23 @@ function ReportEditor({ workId }: { workId: number }) {
   }, [workId]);
 
   const applyServerDraft = useCallback((data: NonNullable<typeof reportQuery.data>, recover: boolean) => {
-    const contract = { templateId: data.draft.templateId, schemaVersion: data.draft.schemaVersion, fieldDefinitions: data.draft.fieldDefinitions ? [...data.draft.fieldDefinitions] : undefined };
-    const confirmed = contentOf({ ...data.draft, fieldDefinitions: contract.fieldDefinitions, fields: editorFieldValues(contract, data.draft.fields) });
+    logoRequest.current++;
+    logoPending.current = false;
+    setProcessingLogo(false);
+    setLogoError(false);
+    setCopiedLocalEdits(false);
+    setCopyLocalError(false);
+    const contract = {
+      templateId: data.draft.templateId,
+      schemaVersion: data.draft.schemaVersion,
+      fieldDefinitions: data.draft.fieldDefinitions ? [...data.draft.fieldDefinitions] : undefined,
+    };
+    const confirmed = contentOf({
+      ...data.draft,
+      fieldDefinitions: contract.fieldDefinitions,
+      fields: editorFieldValues(contract, data.draft.fields),
+      reportIdentity: safeNormalizeIdentity(data.draft.reportIdentity),
+    });
     const backup = recover ? parseBackup(workId) : undefined;
     const unsaved = backup && !sameContent(confirmed, backup) ? backup : undefined;
     const session = new ReportDraftSession(data.draft.revision, confirmed, unsaved && contentOf(unsaved));
@@ -232,6 +348,42 @@ function ReportEditor({ workId }: { workId: number }) {
     // user chooses to discard it. Editing it must never unlock an overwrite.
     updateBackup({ content: session.content, baseRevision: backupRevision.current });
     if (!conflict.current) setSaveState(navigator.onLine ? "dirty" : "offline");
+  };
+
+  const editIdentity = (patch: Partial<Omit<ReportIdentity, "version">>) => editDraft(current => {
+    const next: ReportIdentity = {
+      version: REPORT_IDENTITY_VERSION,
+      ...(current.reportIdentity ?? {}),
+      ...patch,
+    };
+    const hasAny = Boolean(
+      next.schoolName ||
+      next.reportPreparer ||
+      next.schoolPrincipal ||
+      next.ministryLogo ||
+      next.schoolLogoPng,
+    );
+    return { reportIdentity: hasAny ? next : undefined };
+  });
+
+  const changeSchoolLogo = async (file: File) => {
+    const session = sessionRef.current;
+    if (!session || !isCurrent(session) || versionPending.current) return;
+    const request = ++logoRequest.current;
+    logoPending.current = true;
+    setProcessingLogo(true);
+    setLogoError(false);
+    try {
+      const logo = await prepareSchoolLogo(file);
+      if (isCurrent(session) && request === logoRequest.current) editIdentity({ schoolLogoPng: logo });
+    } catch {
+      if (isCurrent(session) && request === logoRequest.current) setLogoError(true);
+    } finally {
+      if (isCurrent(session) && request === logoRequest.current) {
+        logoPending.current = false;
+        setProcessingLogo(false);
+      }
+    }
   };
 
   const changeTemplate = (nextTemplateId: string) => {
@@ -269,7 +421,19 @@ function ReportEditor({ workId }: { workId: number }) {
           ...(field.maxLength !== undefined ? { maxLength: field.maxLength } : {}),
           ...(field.rows !== undefined ? { rows: field.rows } : {}),
         }));
-        return writeDraft({ workItemId: workId, expectedRevision, ...content, fieldDefinitions, fields: serverFieldValues(content, content.fields) });
+        return writeDraft({
+          workItemId: workId,
+          expectedRevision,
+          schemaVersion: content.schemaVersion,
+          templateId: content.templateId,
+          templateVersionId: content.templateVersionId,
+          themeId: content.themeId,
+          fontFamily: content.fontFamily,
+          fieldDefinitions,
+          fields: serverFieldValues(content, content.fields),
+          evidenceAssetIds: content.evidenceAssetIds,
+          reportIdentity: safeNormalizeIdentity(content.reportIdentity),
+        });
       }, receipt => {
         if (!isCurrent(session)) return;
         backupRevision.current = receipt.revision;
@@ -316,9 +480,32 @@ function ReportEditor({ workId }: { workId: number }) {
     }
   };
 
+  const copyLocalEdits = async () => {
+    setCopyLocalError(false);
+    const definitions = editorFields(draft);
+    const lines: string[] = [];
+    if (workQuery.data?.title) lines.push(`العنوان: ${workQuery.data.title}`);
+    if (institution.schoolName) lines.push(`اسم المدرسة: ${institution.schoolName}`);
+    for (const signer of nonEmptySigners) {
+      lines.push(`${signer.label}: ${signer.name}`);
+    }
+    for (const field of definitions) {
+      const value = fields[field.key]?.trim();
+      if (value) lines.push(`\n## ${field.label}\n${value}`);
+    }
+    const textPayload = lines.join("\n").trim() || JSON.stringify({ fields, reportIdentity: safeNormalizeIdentity(reportIdentity) }, null, 2);
+    try {
+      await navigator.clipboard.writeText(textPayload);
+      setCopiedLocalEdits(true);
+      window.setTimeout(() => setCopiedLocalEdits(false), 2500);
+    } catch {
+      setCopyLocalError(true);
+    }
+  };
+
   const handleCreateVersion = async () => {
     const session = sessionRef.current;
-    if (!session || versionPending.current || conflict.current || !navigator.onLine) return;
+    if (!session || versionPending.current || logoPending.current || conflict.current || !navigator.onLine) return;
     versionPending.current = true;
     setCreatingVersion(true);
     try {
@@ -376,29 +563,35 @@ function ReportEditor({ workId }: { workId: number }) {
   const previewModel = useMemo(() => {
     try {
       return projectReportDocument({
-        reportDraft: { ...draft, fields: serverFieldValues(draft, fields) },
+        reportDraft: {
+          ...draft,
+          fields: serverFieldValues(draft, fields),
+          reportIdentity: safeNormalizeIdentity(reportIdentity),
+        },
         assets: selectedEvidence.map(asset => ({ id: asset.id, title: asset.title, kind: asset.kind, role: asset.role, caption: asset.caption })),
       });
     } catch {
       return undefined;
     }
-  }, [draft, fields, selectedEvidence, templateId]);
+  }, [draft, fields, reportIdentity, selectedEvidence, templateId]);
+
+  const inputClassName = "mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-normal outline-none transition focus:border-teal-500 focus:ring-2 focus:ring-teal-100";
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] pb-20 lg:pb-0" dir="rtl">
+    <div className="min-h-screen bg-[#F8FAFC] pb-24 lg:pb-8" dir="rtl">
       <AppSidebar currentPath={location} />
       <main className="lg:mr-72">
         <div className="mx-auto max-w-[1500px] px-4 py-6 sm:px-6 sm:py-8">
           <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-            <div>
-              <button onClick={() => setLocation(`/work/${workId}`)} className="inline-flex items-center gap-2 text-sm font-bold text-slate-600 hover:text-teal-700">
+            <div className="min-w-0">
+              <button type="button" onClick={() => setLocation(`/work/${workId}`)} className="mr-12 inline-flex min-h-11 items-center gap-2 text-sm font-bold text-slate-700 hover:text-teal-700 lg:mr-0">
                 <ArrowRight className="h-4 w-4" /> العودة إلى العمل
               </button>
-              <div className="mt-3 flex items-center gap-3">
-                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-teal-50 text-teal-700"><FileText className="h-5 w-5" /></div>
-                <div>
+              <div className="mt-3 flex min-w-0 items-center gap-3">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-teal-50 text-teal-700"><FileText className="h-5 w-5" /></div>
+                <div className="min-w-0">
                   <p className="text-xs font-bold text-teal-700">محرر التقرير المرتبط بالعمل</p>
-                  <h1 className="text-xl font-black text-slate-950 sm:text-2xl" style={{ fontFamily: "'Tajawal', sans-serif" }}>
+                  <h1 className="text-xl font-black text-slate-950 [overflow-wrap:anywhere] sm:text-2xl" style={{ fontFamily: "'Tajawal', sans-serif" }}>
                     {reportQuery.data?.work.title || workQuery.data?.title || "جاري تحميل التقرير..."}
                   </h1>
                 </div>
@@ -406,13 +599,18 @@ function ReportEditor({ workId }: { workId: number }) {
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
-              <div className={`inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-xs font-bold ${
-                saveState === "saved" ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                  : saveState === "conflict" ? "border-amber-200 bg-amber-50 text-amber-800"
-                    : saveState === "error" ? "border-red-200 bg-red-50 text-red-700"
-                      : saveState === "offline" ? "border-slate-300 bg-slate-100 text-slate-700"
-                        : "border-teal-200 bg-teal-50 text-teal-700"
-              }`}>
+              <div
+                role="status"
+                aria-live="polite"
+                aria-atomic="true"
+                className={`inline-flex min-h-11 items-center gap-2 rounded-xl border px-3 py-2 text-xs font-bold ${
+                  saveState === "saved" ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                    : saveState === "conflict" ? "border-amber-200 bg-amber-50 text-amber-900"
+                      : saveState === "error" ? "border-red-200 bg-red-50 text-red-700"
+                        : saveState === "offline" ? "border-slate-300 bg-slate-100 text-slate-700"
+                          : "border-teal-200 bg-teal-50 text-teal-800"
+                }`}
+              >
                 {saveState === "saving" ? <Loader2 className="h-4 w-4 animate-spin" />
                   : saveState === "offline" ? <CloudOff className="h-4 w-4" />
                     : saveState === "saved" ? <CheckCircle2 className="h-4 w-4" />
@@ -420,184 +618,413 @@ function ReportEditor({ workId }: { workId: number }) {
                         : <Cloud className="h-4 w-4" />}
                 {saveStateText[saveState]}
               </div>
-              <button onClick={() => void saveDraft()} disabled={saveState === "saving" || saveState === "saved" || saveState === "conflict" || saveState === "idle"} className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-50">
+              <button
+                type="button"
+                onClick={() => void saveDraft()}
+                disabled={saveState === "saving" || saveState === "saved" || saveState === "conflict" || saveState === "idle"}
+                className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-bold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+              >
                 {saveState === "saving" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} حفظ الآن
               </button>
             </div>
           </div>
 
           {(workQuery.isLoading || (saveState === "idle" && !reportQuery.error && !workQuery.error)) && (
-            <div className="mt-8 flex items-center justify-center rounded-2xl border border-slate-200 bg-white py-20 text-sm text-slate-500"><Loader2 className="ml-2 h-4 w-4 animate-spin" />جاري تحميل بيانات التقرير...</div>
+            <div role="status" className="mt-8 flex items-center justify-center rounded-2xl border border-slate-200 bg-white py-20 text-sm text-slate-600"><Loader2 className="ml-2 h-4 w-4 animate-spin" />جاري تحميل بيانات التقرير...</div>
           )}
 
           {(reportQuery.error || workQuery.error) && (
-            <div className="mt-8 rounded-2xl border border-red-200 bg-red-50 p-5 text-sm text-red-700">
-              {reportQuery.error?.message || workQuery.error?.message}
+            <div role="alert" className="mt-8 rounded-2xl border border-red-200 bg-red-50 p-5 text-sm text-red-800">
+              <p>{reportQuery.error?.message || workQuery.error?.message}</p>
+              <button
+                type="button"
+                disabled={reportQuery.isFetching || workQuery.isFetching}
+                onClick={() => void Promise.all([reportQuery.refetch(), workQuery.refetch()])}
+                className="mt-3 inline-flex min-h-11 items-center gap-2 rounded-xl border border-red-300 bg-white px-4 py-2 font-bold text-red-800 hover:bg-red-50 disabled:opacity-50"
+              >
+                <RefreshCw className="h-4 w-4" />إعادة تحميل التقرير
+              </button>
             </div>
           )}
 
           {backupError && (
-            <p role="alert" className="mt-4 text-sm text-amber-800">تعذّر تحديث نسخة الاسترداد على هذا الجهاز. أبقِ التقرير مفتوحًا حتى يكتمل الحفظ في الخادم.</p>
+            <p role="alert" className="mt-4 text-sm text-amber-900">تعذّر تحديث نسخة الاسترداد على هذا الجهاز. أبقِ التقرير مفتوحًا حتى يكتمل الحفظ في الخادم.</p>
           )}
 
           {saveState === "conflict" && (
-            <div className="mt-5 flex flex-col gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex items-start gap-2"><AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" /><p>تختلف مراجعة الخادم عن مسودتك. يمكنك نسخ نصك قبل استبداله بنسخة الخادم.</p></div>
-              <button onClick={() => void reloadFromServer()} className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-amber-900 px-4 py-2 text-xs font-bold text-white"><RefreshCw className="h-4 w-4" />استبدال المسودة بنسخة الخادم</button>
+            <div role="alert" className="mt-5 flex flex-col gap-3 rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950 lg:flex-row lg:items-center lg:justify-between">
+              <div className="flex items-start gap-2">
+                <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" />
+                <div>
+                  <p className="font-bold">تختلف مراجعة الخادم عن مسودتك المحلية.</p>
+                  <p className="mt-1 text-xs leading-6 text-amber-900">انسخ تعديلاتك المحلية أولًا لتفادي فقدان أي نص، ثم اعتمد نسخة الخادم الأحدث.</p>
+                  {copiedLocalEdits && <p role="status" className="mt-1 text-xs font-bold text-emerald-800">تم نسخ تعديلاتك المحلية إلى الحافظة.</p>}
+                  {copyLocalError && <p role="alert" className="mt-1 text-xs font-bold text-red-700">تعذّر النسخ التلقائي. يمكنك تحديد النص يدويًا من الحقول أدناه قبل اعتماد نسخة الخادم.</p>}
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => void copyLocalEdits()}
+                  className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-xl border border-amber-400 bg-white px-4 py-2 text-xs font-bold text-amber-950 hover:bg-amber-100"
+                >
+                  {copiedLocalEdits ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                  نسخ تعديلاتي المحلية
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void reloadFromServer()}
+                  className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-xl bg-amber-900 px-4 py-2 text-xs font-bold text-white hover:bg-amber-950"
+                >
+                  <RefreshCw className="h-4 w-4" />اعتماد نسخة الخادم
+                </button>
+              </div>
             </div>
           )}
 
           {saveState !== "idle" && reportQuery.data && workQuery.data && (
-            <div className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(420px,0.78fr)]">
-              <div className="space-y-6">
-                <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
-                  <div className="grid gap-4 md:grid-cols-3">
-                    <label className="text-xs font-bold text-slate-700">نوع التقرير
-                      <select value={templateId} onChange={event => changeTemplate(event.target.value)} className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-normal">
-                        {!templateOptions.some(option => option.id === templateId) && <option value={templateId}>القالب التاريخي ({templateId})</option>}
-                        {templateOptions.map(option => <option key={option.id} value={option.id}>{option.label}</option>)}
-                      </select>
-                    </label>
-                    <label className="text-xs font-bold text-slate-700">الطابع البصري
-                      <select value={themeId} onChange={event => editDraft({ themeId: event.target.value })} className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-normal">
-                        {themeOptions.map(option => <option key={option.id} value={option.id}>{option.label}</option>)}
-                      </select>
-                    </label>
-                    <label className="text-xs font-bold text-slate-700">الخط
-                      <select value={fontFamily} onChange={event => editDraft({ fontFamily: event.target.value })} className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-normal">
-                        {fontOptions.map(option => <option key={option} value={option}>{option}</option>)}
-                      </select>
-                    </label>
-                  </div>
-                  <p className="mt-4 text-xs leading-6 text-slate-500">المحرر يعرض عقد الحقول المحفوظ مع التقرير. تغيير قالب schema مختلف موقوف حتى يتم تعيين الحقول صراحة، لذلك لا تُستبدل البيانات بصمت.</p>
-                  {templateError && <p role="alert" className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800">{templateError}</p>}
-                </section>
+            <>
+              {workQuery.data.ownerType === "personal" && (
+                <aside className="mt-5 flex items-start gap-3 rounded-2xl border border-teal-200 bg-teal-50/70 p-4 text-xs leading-6 text-teal-950" aria-label="توضيح مساحة التقرير الشخصي">
+                  <Info className="mt-0.5 h-4 w-4 shrink-0 text-teal-700" />
+                  <p>
+                    هذا تقرير شخصي محفوظ في حسابك: يمكنك التحرير والحفظ التلقائي وإنشاء نسخ ثابتة وتنزيل PDF وWord بشكل خاص مباشرة، دون الحاجة للانضمام إلى مدرسة أو إرسال للمراجعة.
+                  </p>
+                </aside>
+              )}
 
-                <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
-                  <div className="flex items-center justify-between gap-3">
-                    <div><p className="text-xs font-bold text-teal-700">محتوى التقرير</p><h2 className="mt-1 text-lg font-bold text-slate-950">البيانات الأساسية</h2></div>
-                    <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-bold text-slate-600">مراجعة {revision}</span>
-                  </div>
-                  <div className="mt-5 space-y-5">
-                    {fieldDefinitions.map(field => (
-                      <label key={field.key} className="block text-xs font-bold text-slate-700">{field.label}
-                        {field.type === "select" ? (
-                          <select value={fields[field.key] ?? ""} onChange={event => editDraft(current => ({ fields: { ...current.fields, [field.key]: event.target.value } }))} className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-normal">
-                            <option value="">اختر قيمة</option>{(field.options ?? []).map(option => <option key={option} value={option}>{option}</option>)}
-                          </select>
-                        ) : (
-                          <textarea
-                            value={fields[field.key] ?? ""}
-                            onChange={event => editDraft(current => ({ fields: { ...current.fields, [field.key]: event.target.value } }))}
-                            rows={field.rows ?? (field.type === "list" ? 4 : 3)}
-                            maxLength={field.maxLength ?? 20_000}
-                            inputMode={field.type === "number" ? "numeric" : undefined}
-                            placeholder={field.placeholder || (field.type === "list" ? "عنصر في كل سطر" : undefined)}
-                            className="mt-2 w-full resize-y rounded-xl border border-slate-200 px-3 py-3 text-sm font-normal leading-7 outline-none transition focus:border-teal-400 focus:ring-2 focus:ring-teal-100"
-                          />
-                        )}
+              <div className="sticky top-2 z-30 mt-5 xl:hidden" role="group" aria-label="تبديل العرض بين التحرير والمعاينة">
+                <div className="grid grid-cols-2 gap-1.5 rounded-2xl border border-slate-200 bg-white/95 p-1.5 shadow-sm backdrop-blur">
+                  <button
+                    type="button"
+                    aria-pressed={mobileView === "edit"}
+                    onClick={() => setMobileView("edit")}
+                    className={`inline-flex min-h-11 items-center justify-center gap-2 rounded-xl px-3 py-2 text-xs font-bold transition ${mobileView === "edit" ? "bg-teal-700 text-white shadow-sm" : "text-slate-700 hover:bg-slate-100"}`}
+                  >
+                    <PencilLine className="h-4 w-4" /> التحرير
+                  </button>
+                  <button
+                    type="button"
+                    aria-pressed={mobileView === "preview"}
+                    onClick={() => setMobileView("preview")}
+                    className={`inline-flex min-h-11 items-center justify-center gap-2 rounded-xl px-3 py-2 text-xs font-bold transition ${mobileView === "preview" ? "bg-teal-700 text-white shadow-sm" : "text-slate-700 hover:bg-slate-100"}`}
+                  >
+                    <Eye className="h-4 w-4" /> معاينة A4
+                  </button>
+                </div>
+              </div>
+
+              <div className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(420px,0.78fr)]">
+                <div className={`space-y-6 ${mobileView === "preview" ? "hidden xl:block" : "block"}`}>
+                  <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+                    <div className="grid gap-4 md:grid-cols-3">
+                      <label className="text-xs font-bold text-slate-700">نوع التقرير
+                        <select value={templateId} onChange={event => changeTemplate(event.target.value)} className={inputClassName}>
+                          {!templateOptions.some(option => option.id === templateId) && <option value={templateId}>القالب التاريخي ({templateId})</option>}
+                          {templateOptions.map(option => <option key={option.id} value={option.id}>{option.label}</option>)}
+                        </select>
                       </label>
-                    ))}
-                  </div>
-                </section>
+                      <label className="text-xs font-bold text-slate-700">الطابع البصري
+                        <select value={themeId} onChange={event => editDraft({ themeId: event.target.value })} className={inputClassName}>
+                          {themeOptions.map(option => <option key={option.id} value={option.id}>{option.label}</option>)}
+                        </select>
+                      </label>
+                      <label className="text-xs font-bold text-slate-700">الخط
+                        <select value={selectedFont} onChange={event => editDraft({ fontFamily: event.target.value })} className={inputClassName}>
+                          {selectedFont === "Arial" && <option value="Arial">Arial</option>}
+                          {REPORT_FONT_FAMILIES.map(option => <option key={option} value={option}>{option}</option>)}
+                        </select>
+                      </label>
+                    </div>
+                    <p className="mt-4 text-xs leading-6 text-slate-600">المحرر يعرض عقد الحقول المحفوظ مع التقرير. تغيير قالب schema مختلف موقوف حتى يتم تعيين الحقول صراحة، لذلك لا تُستبدل البيانات بصمت.</p>
+                    {templateError && <p role="alert" className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-xs font-bold text-amber-900">{templateError}</p>}
+                  </section>
 
-                <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
-                  <div className="flex items-center justify-between gap-3">
-                    <div><p className="text-xs font-bold text-teal-700">الشواهد</p><h2 className="mt-1 text-lg font-bold text-slate-950">تحديد الشواهد المستخدمة داخل التقرير</h2></div>
-                    <span className="rounded-full bg-teal-50 px-2.5 py-1 text-[10px] font-bold text-teal-700">{evidenceAssetIds.length} محدد</span>
-                  </div>
-                  {linkedAssets.length === 0 ? (
-                    <div className="mt-5 rounded-xl border border-dashed border-slate-200 px-4 py-10 text-center text-sm text-slate-500">اربط الشواهد بالعمل أولًا من صفحة تفاصيل العمل، ثم اختر ما يظهر في التقرير.</div>
-                  ) : (
-                    <div className="mt-5 grid gap-3 sm:grid-cols-2">
-                      {linkedAssets.map(asset => {
-                        const checked = evidenceAssetIds.includes(asset.id);
+                  <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <h2 className="text-lg font-bold text-slate-950">هوية التقرير والتوقيعات (اختياري)</h2>
+                      <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-bold text-slate-700">اختياري</span>
+                    </div>
+                    <p className="mt-1 text-xs leading-6 text-slate-600">اترك هذه الحقول فارغة للتقارير الفردية، أو أضف اسم المدرسة والشعارات والتوقيعات للنسخ الرسمية.</p>
+                    <div className="mt-4 grid gap-4 md:grid-cols-3">
+                      {REPORT_IDENTITY_FIELDS.map(({ key, label }) => (
+                        <label key={key} className="text-xs font-bold text-slate-700">{label}
+                          <input
+                            name={key}
+                            value={reportIdentity?.[key] ?? ""}
+                            maxLength={REPORT_IDENTITY_TEXT_LIMIT}
+                            onChange={event => editIdentity({ [key]: event.target.value || undefined })}
+                            className={inputClassName}
+                          />
+                        </label>
+                      ))}
+                    </div>
+                    <div className="mt-4 flex flex-wrap items-center gap-4 text-xs text-slate-700">
+                      <label className="inline-flex min-h-11 cursor-pointer items-center gap-2">
+                        <input
+                          name="ministryLogo"
+                          type="checkbox"
+                          className="h-4 w-4 accent-teal-700"
+                          checked={Boolean(reportIdentity?.ministryLogo)}
+                          onChange={event => editIdentity({ ministryLogo: event.target.checked ? true : undefined })}
+                        />
+                        إظهار شعار وزارة التعليم
+                      </label>
+                      <label className="relative inline-flex min-h-11 cursor-pointer items-center rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 font-bold text-slate-800 hover:bg-slate-100 focus-within:outline-none focus-within:ring-2 focus-within:ring-teal-600 focus-within:ring-offset-2">
+                        اختيار شعار المدرسة
+                        <input
+                          name="schoolLogoPng"
+                          type="file"
+                          accept="image/png"
+                          aria-label="اختيار شعار المدرسة"
+                          aria-describedby="school-logo-help"
+                          className="sr-only"
+                          disabled={creatingVersion}
+                          onChange={event => {
+                            const file = event.currentTarget.files?.[0];
+                            event.currentTarget.value = "";
+                            if (file) void changeSchoolLogo(file);
+                          }}
+                        />
+                      </label>
+                      {institution.schoolLogo && (
+                        <div className="flex items-center gap-3">
+                          <img
+                            src={`data:image/png;base64,${institution.schoolLogo}`}
+                            alt="معاينة مصغرة لشعار المدرسة"
+                            className="h-10 w-10 rounded-lg border border-slate-200 bg-white object-contain p-1"
+                          />
+                          <button
+                            type="button"
+                            disabled={creatingVersion || processingLogo}
+                            className="min-h-11 rounded-lg px-2 text-xs font-bold text-red-700 hover:bg-red-50 disabled:opacity-50"
+                            onClick={() => { setLogoError(false); editIdentity({ schoolLogoPng: undefined }); }}
+                          >
+                            إزالة شعار المدرسة
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                    <p id="school-logo-help" className="mt-2 text-xs leading-6 text-slate-600">شعار المدرسة: صورة PNG حتى ٢ ميغابايت، تُحفظ مع مسودة التقرير.</p>
+                    {institution.schoolLogo && !processingLogo && <p role="status" className="mt-2 text-xs font-semibold text-teal-800">أُضيف شعار المدرسة إلى المسودة.</p>}
+                    {processingLogo && <p role="status" className="mt-3 text-xs text-slate-700">جارٍ تجهيز شعار المدرسة...</p>}
+                    {logoError && <p role="alert" className="mt-3 text-xs font-semibold text-red-700">تعذّرت قراءة شعار المدرسة. اختر ملف PNG صالحًا حتى 2 ميغابايت.</p>}
+                  </section>
+
+                  <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+                    <div className="flex items-center justify-between gap-3">
+                      <div><p className="text-xs font-bold text-teal-700">محتوى التقرير</p><h2 className="mt-1 text-lg font-bold text-slate-950">البيانات الأساسية</h2></div>
+                      <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-bold text-slate-700">مراجعة {revision}</span>
+                    </div>
+                    <div className="mt-5 space-y-5">
+                      {fieldDefinitions.map(field => {
+                        const value = fields[field.key] ?? "";
+                        const onFieldChange = (nextValue: string) => editDraft(current => ({ fields: { ...current.fields, [field.key]: nextValue } }));
                         return (
-                          <label key={`${asset.id}-${asset.role}`} className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3 transition ${checked ? "border-teal-300 bg-teal-50" : "border-slate-200 bg-white hover:border-slate-300"}`}>
-                            <input
-                              type="checkbox"
-                              checked={checked}
-                              onChange={() => editDraft(current => ({ evidenceAssetIds: current.evidenceAssetIds.includes(asset.id)
-                                ? current.evidenceAssetIds.filter(id => id !== asset.id) : [...current.evidenceAssetIds, asset.id] }))}
-                              className="mt-1 h-4 w-4 accent-teal-600"
-                            />
-                            <span className="min-w-0"><span className="block truncate text-sm font-bold text-slate-900">{asset.title}</span><span className="mt-1 block text-[11px] text-slate-500">{asset.kind} · {asset.role}</span></span>
+                          <label key={field.key} className="block text-xs font-bold text-slate-700">
+                            {field.label}
+                            {field.type === "select" ? (
+                              <select value={value} onChange={event => onFieldChange(event.target.value)} className={inputClassName}>
+                                <option value="">اختر قيمة</option>
+                                {(field.options ?? []).map(option => <option key={option} value={option}>{option}</option>)}
+                              </select>
+                            ) : field.type === "date" ? (
+                              <input
+                                type="date"
+                                dir="ltr"
+                                value={value}
+                                onChange={event => onFieldChange(event.target.value)}
+                                className={`${inputClassName} text-right`}
+                              />
+                            ) : field.type === "number" ? (
+                              <input
+                                type="number"
+                                inputMode="numeric"
+                                value={value}
+                                onChange={event => onFieldChange(event.target.value)}
+                                placeholder={field.placeholder}
+                                className={inputClassName}
+                              />
+                            ) : field.type === "text" ? (
+                              <input
+                                type="text"
+                                value={value}
+                                maxLength={field.maxLength ?? 2_000}
+                                placeholder={field.placeholder}
+                                onChange={event => onFieldChange(event.target.value)}
+                                className={inputClassName}
+                              />
+                            ) : (
+                              <>
+                                <textarea
+                                  value={value}
+                                  onChange={event => onFieldChange(event.target.value)}
+                                  rows={field.rows ?? (field.type === "list" ? 4 : 3)}
+                                  maxLength={field.maxLength ?? 20_000}
+                                  placeholder={field.placeholder || (field.type === "list" ? "عنصر في كل سطر" : undefined)}
+                                  className="mt-2 w-full resize-y rounded-xl border border-slate-200 px-3 py-3 text-sm font-normal leading-7 outline-none transition focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
+                                />
+                                {field.type === "list" && (
+                                  <span className="mt-1 block text-[11px] font-normal text-slate-600">أدخل كل عنصر في سطر مستقل.</span>
+                                )}
+                              </>
+                            )}
                           </label>
                         );
                       })}
                     </div>
-                  )}
-                </section>
+                  </section>
 
-                <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
-                  <p className="text-xs font-bold text-teal-700">نسخة غير قابلة للتغيير</p>
-                  <h2 className="mt-1 text-lg font-bold text-slate-950">حفظ نسخة للمراجعة أو الإخراج</h2>
-                  <p className="mt-2 text-xs leading-6 text-slate-500">ينشئ النظام نسخة من المسودة المحفوظة في الخادم والشواهد المرتبطة، لا من الصفحة المعروضة في المتصفح.</p>
-                  <textarea value={versionReason} onChange={event => setVersionReason(event.target.value)} rows={2} maxLength={255} placeholder="سبب إنشاء النسخة، مثل: جاهزة للمراجعة" className="mt-4 w-full resize-none rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-teal-400 focus:ring-2 focus:ring-teal-100" />
-                  <button onClick={() => void handleCreateVersion()} disabled={creatingVersion || saveState === "conflict" || saveState === "offline" || (saveState === "saved" && revision === 0)} className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-50">
-                    {creatingVersion ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileCheck2 className="h-4 w-4" />} إنشاء نسخة ثابتة
-                  </button>
-                  {createVersionMutation.error && <p className="mt-3 text-xs text-red-600">{createVersionMutation.error.message}</p>}
-                  {createdVersion && <p className="mt-3 rounded-xl bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700">تم إنشاء النسخة {createdVersion.versionNumber} من مراجعة التقرير {createdVersion.revision}.</p>}
-
-                  {createdVersion && organizationId && (
-                    <div className="mt-5 border-t border-slate-100 pt-5">
-                      <label className="block text-xs font-bold text-slate-700">المراجع
-                        <select aria-label="مراجع التقرير" value={selectedReviewerId ?? ""} onChange={event => setSelectedReviewerId(Number(event.target.value) || undefined)} className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-normal">
-                          <option value="">اختر مراجعًا من المدرسة</option>
-                          {(reviewersQuery.data ?? []).map(reviewer => <option key={reviewer.userId} value={reviewer.userId}>{reviewer.name || `مستخدم ${reviewer.userId}`} — {reviewer.role}</option>)}
-                        </select>
-                      </label>
-                      <button onClick={() => void handleRequestReview()} disabled={!selectedReviewerId || requestReviewMutation.isPending} className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-teal-600 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50">
-                        {requestReviewMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />} إرسال النسخة للمراجعة
-                      </button>
-                      {requestReviewMutation.error && <p className="mt-3 text-xs text-red-600">{requestReviewMutation.error.message}</p>}
+                  <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+                    <div className="flex items-center justify-between gap-3">
+                      <div><p className="text-xs font-bold text-teal-700">الشواهد</p><h2 className="mt-1 text-lg font-bold text-slate-950">تحديد الشواهد المستخدمة داخل التقرير</h2></div>
+                      <span className="rounded-full bg-teal-50 px-2.5 py-1 text-[11px] font-bold text-teal-800">{evidenceAssetIds.length} محدد</span>
                     </div>
-                  )}
-                </section>
-              </div>
+                    {linkedAssets.length === 0 ? (
+                      <div className="mt-5 rounded-xl border border-dashed border-slate-200 px-4 py-10 text-center text-sm text-slate-600">اربط الشواهد بالعمل أولًا من صفحة تفاصيل العمل، ثم اختر ما يظهر في التقرير.</div>
+                    ) : (
+                      <div className="mt-5 grid gap-3 sm:grid-cols-2">
+                        {linkedAssets.map(asset => {
+                          const checked = evidenceAssetIds.includes(asset.id);
+                          return (
+                            <label key={`${asset.id}-${asset.role}`} className={`flex min-h-11 cursor-pointer items-start gap-3 rounded-xl border p-3 transition ${checked ? "border-teal-500 bg-teal-50" : "border-slate-200 bg-white hover:border-slate-300"}`}>
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                onChange={() => editDraft(current => ({
+                                  evidenceAssetIds: current.evidenceAssetIds.includes(asset.id)
+                                    ? current.evidenceAssetIds.filter(id => id !== asset.id)
+                                    : [...current.evidenceAssetIds, asset.id],
+                                }))}
+                                className="mt-1 h-4 w-4 accent-teal-700"
+                              />
+                              <span className="min-w-0">
+                                <span className="block truncate text-sm font-bold text-slate-900">{asset.title}</span>
+                                <span className="mt-1 block text-xs text-slate-600">{evidenceKindLabels[asset.kind]} · شاهد مرتبط</span>
+                              </span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </section>
 
-              <aside className="xl:sticky xl:top-6 xl:h-fit">
-                <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-                  <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
-                    <div><p className="text-xs font-bold text-teal-700">معاينة لحظية</p><h2 className="mt-1 text-base font-bold text-slate-950">شكل المحتوى قبل إنشاء النسخة</h2></div>
-                    <span className="text-[10px] font-bold text-slate-500">ليست مخرجًا معتمدًا</span>
-                  </div>
-                  <div className="bg-slate-100 p-4 sm:p-6">
-                    <article className={`mx-auto min-h-[720px] max-w-[620px] bg-white p-7 shadow-sm sm:p-10 ${themeId === "formal" ? "border-t-8 border-teal-700" : themeId === "minimal" ? "border border-slate-200" : "border-t-8 border-slate-800"}`} style={{ fontFamily }}>
-                      <div className="border-b border-slate-200 pb-5 text-center">
-                        <p className="text-xs font-bold text-teal-700">SERS</p>
-                        <h2 className="mt-2 text-xl font-black text-slate-950">{workQuery.data.title}</h2>
-                        <p className="mt-2 text-xs text-slate-500">{previewModel?.template.label || templateOptions.find(option => option.id === templateId)?.label || templateId}</p>
-                      </div>
-                      <div className="mt-6 space-y-6">
-                        {!previewModel || previewModel.fields.length === 0 ? (
-                          <div className="rounded-xl border border-dashed border-slate-200 px-4 py-16 text-center text-sm text-slate-400">ابدأ بإدخال بيانات التقرير لتظهر المعاينة هنا.</div>
-                        ) : previewModel.fields.map(field => (
-                          <section key={field.key}>
-                            <h3 className="text-sm font-black text-slate-900">{field.label}</h3>
-                            <p className="mt-2 whitespace-pre-wrap text-sm leading-8 text-slate-700">{Array.isArray(field.value) ? field.value.join("\n") : String(field.value)}</p>
-                          </section>
-                        ))}
-                        {selectedEvidence.length > 0 && (
-                          <section>
-                            <h3 className="text-sm font-black text-slate-900">الشواهد المرفقة</h3>
-                            <div className="mt-3 space-y-2">
-                              {selectedEvidence.map(asset => <div key={asset.id} className="rounded-lg border border-slate-200 px-3 py-2 text-xs text-slate-700">
-                                <div>{asset.title} · {asset.kind}</div>
-                                {asset.kind === "file" && <div className="mt-1 rounded border border-dashed border-amber-200 bg-amber-50 px-2 py-1 text-[10px] text-amber-800">الصورة لا تُقرأ من رابط أو مصدر متغير؛ ستظهر هنا فقط بعد تثبيتها داخل النسخة.</div>}
-                              </div>)}
-                            </div>
-                          </section>
+                  <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+                    <p className="text-xs font-bold text-teal-700">نسخة غير قابلة للتغيير</p>
+                    <h2 className="mt-1 text-lg font-bold text-slate-950">حفظ نسخة للمراجعة أو الإخراج</h2>
+                    <p className="mt-2 text-xs leading-6 text-slate-600">ينشئ النظام نسخة من المسودة المحفوظة في الخادم والشواهد المرتبطة، لا من الصفحة المعروضة في المتصفح.</p>
+                    <textarea value={versionReason} onChange={event => setVersionReason(event.target.value)} rows={2} maxLength={255} placeholder="سبب إنشاء النسخة، مثل: جاهزة للمراجعة" className="mt-4 w-full resize-none rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100" />
+                    <button
+                      type="button"
+                      onClick={() => void handleCreateVersion()}
+                      disabled={creatingVersion || processingLogo || saveState === "conflict" || saveState === "offline" || (saveState === "saved" && revision === 0)}
+                      className="mt-3 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-bold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {creatingVersion ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileCheck2 className="h-4 w-4" />} إنشاء نسخة ثابتة
+                    </button>
+                    {createVersionMutation.error && <p role="alert" className="mt-3 text-xs text-red-700">{createVersionMutation.error.message}</p>}
+                    {createdVersion && <p role="status" className="mt-3 rounded-xl bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-800">تم إنشاء النسخة {createdVersion.versionNumber} من مراجعة التقرير {createdVersion.revision}.</p>}
+
+                    {createdVersion && organizationId && (
+                      <div className="mt-5 border-t border-slate-100 pt-5">
+                        <label className="block text-xs font-bold text-slate-700">المراجع
+                          <select aria-label="مراجع التقرير" value={selectedReviewerId ?? ""} onChange={event => setSelectedReviewerId(Number(event.target.value) || undefined)} className={inputClassName}>
+                            <option value="">اختر مراجعًا من المدرسة</option>
+                            {(reviewersQuery.data ?? []).map(reviewer => <option key={reviewer.userId} value={reviewer.userId}>{reviewer.name || `مستخدم ${reviewer.userId}`} — {reviewer.role}</option>)}
+                          </select>
+                        </label>
+                        {reviewersQuery.isLoading && <p role="status" className="mt-2 text-xs text-slate-600">جارٍ تحميل المراجعين...</p>}
+                        {reviewersQuery.error && (
+                          <div role="alert" className="mt-2 text-xs text-red-700">
+                            <p>تعذر تحميل المراجعين.</p>
+                            <button type="button" onClick={() => void reviewersQuery.refetch()} className="mt-1 inline-flex min-h-11 items-center gap-1 font-bold underline">إعادة تحميل المراجعين</button>
+                          </div>
                         )}
+                        {reviewersQuery.isSuccess && reviewersQuery.data.length === 0 && <p className="mt-2 text-xs leading-6 text-slate-600">لا يوجد مراجع مؤهل في المدرسة حاليًا. أضف عضوية بدور مراجع قبل الإرسال.</p>}
+                        <button
+                          type="button"
+                          onClick={() => void handleRequestReview().catch(() => undefined)}
+                          disabled={!selectedReviewerId || requestReviewMutation.isPending}
+                          className="mt-3 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-teal-700 px-4 py-2.5 text-sm font-bold text-white hover:bg-teal-800 disabled:opacity-50"
+                        >
+                          {requestReviewMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />} إرسال النسخة للمراجعة
+                        </button>
+                        {requestReviewMutation.error && <p role="alert" className="mt-3 text-xs text-red-700">{requestReviewMutation.error.message}</p>}
                       </div>
-                    </article>
-                  </div>
-                </section>
-                <p className="mt-3 text-center text-[11px] leading-5 text-slate-500">المعاينة مبنية من نفس ReportDocumentModel، لكنها ليست parity كاملة مع PDF/Word: الصور غير المثبتة والفواصل تُعرض كعلامات صريحة، والمخرج النهائي قد يضيف صفحات.</p>
-                {lastSavedAt && <p className="mt-1 text-center text-[10px] text-slate-400">آخر حفظ خادمي: {new Date(lastSavedAt).toLocaleString("ar-SA")}</p>}
-              </aside>
-            </div>
+                    )}
+                  </section>
+                </div>
+
+                <aside className={`${mobileView === "edit" ? "hidden xl:block" : "block"} xl:sticky xl:top-6 xl:h-fit`}>
+                  <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+                    <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+                      <div><p className="text-xs font-bold text-teal-700">معاينة لحظية</p><h2 className="mt-1 text-base font-bold text-slate-950">شكل المحتوى قبل إنشاء النسخة</h2></div>
+                      <span className="text-[11px] font-bold text-slate-600">ليست مخرجًا معتمدًا</span>
+                    </div>
+                    <div className="bg-slate-100 p-4 sm:p-6">
+                      <article
+                        className={`mx-auto min-h-[720px] max-w-[620px] bg-white p-5 shadow-sm [overflow-wrap:anywhere] sm:p-10 ${themeId === "formal" ? "border-t-8 border-teal-700" : themeId === "minimal" ? "border border-slate-200" : "border-t-8 border-slate-800"}`}
+                        style={{ fontFamily: selectedFont === "Arial" ? "Arial, sans-serif" : `'SERS ${selectedFont}', sans-serif` }}
+                      >
+                        <div className="border-b border-slate-200 pb-5 text-center">
+                          {(institution.ministryLogo || institution.schoolLogo) && (
+                            <div className="mb-4 flex items-center justify-center gap-6">
+                              {institution.ministryLogo && <img className="h-16 max-w-[40%] object-contain" src={ministryLogoUrl} alt={REPORT_MINISTRY_LOGO_ALT} />}
+                              {institution.schoolLogo && <img className="h-16 max-w-[40%] object-contain" src={`data:image/png;base64,${institution.schoolLogo}`} alt={REPORT_SCHOOL_LOGO_ALT} />}
+                            </div>
+                          )}
+                          {institution.schoolName && <p className="mb-2 break-words text-sm font-bold text-slate-800">{renderBidiText(institution.schoolName)}</p>}
+                          <h2 className="mt-1 text-xl font-black text-slate-950">{renderBidiText(workQuery.data.title)}</h2>
+                          <p className="mt-2 text-xs text-slate-600">{previewModel?.template.label || templateOptions.find(option => option.id === templateId)?.label || templateId}</p>
+                        </div>
+                        <div className="mt-6 space-y-6">
+                          {!previewModel || previewModel.fields.length === 0 ? (
+                            <div className="rounded-xl border border-dashed border-slate-200 px-4 py-16 text-center text-sm text-slate-600">ابدأ بإدخال بيانات التقرير لتظهر المعاينة هنا.</div>
+                          ) : previewModel.fields.map(field => (
+                            <section key={field.key}>
+                              <h3 className="text-sm font-black text-slate-900">{field.label}</h3>
+                              {Array.isArray(field.value) ? (
+                                <ul className="mt-2 list-disc space-y-1 pr-5 text-sm leading-7 text-slate-700">
+                                  {field.value.map((item, idx) => <li key={idx}>{renderBidiText(item)}</li>)}
+                                </ul>
+                              ) : (
+                                <p className="mt-2 whitespace-pre-wrap text-sm leading-8 text-slate-700">{renderBidiText(String(field.value))}</p>
+                              )}
+                            </section>
+                          ))}
+                          {selectedEvidence.length > 0 && (
+                            <section>
+                              <h3 className="text-sm font-black text-slate-900">الشواهد المرفقة</h3>
+                              <div className="mt-3 space-y-2">
+                                {selectedEvidence.map(asset => (
+                                  <div key={asset.id} className="rounded-lg border border-slate-200 px-3 py-2 text-xs text-slate-700">
+                                    <div>{renderBidiText(asset.title)} · {evidenceKindLabels[asset.kind]}</div>
+                                    {asset.kind === "file" && <div className="mt-1 rounded border border-dashed border-amber-300 bg-amber-50 px-2 py-1 text-[11px] text-amber-900">الصورة لا تُقرأ من رابط أو مصدر متغير؛ ستظهر هنا فقط بعد تثبيتها داخل النسخة.</div>}
+                                  </div>
+                                ))}
+                              </div>
+                            </section>
+                          )}
+                          {nonEmptySigners.length > 0 && (
+                            <div className={`grid gap-4 border-t border-slate-200 pt-5 text-center ${nonEmptySigners.length > 1 ? "grid-cols-2" : "grid-cols-1"}`}>
+                              {nonEmptySigners.map(({ label, name }) => (
+                                <div key={label} className="min-w-0 break-words">
+                                  <p className="text-xs font-bold text-slate-800">{label}</p>
+                                  <p className="mt-2 text-sm text-slate-900">{renderBidiText(name)}</p>
+                                  <div className="mx-auto mt-5 w-3/4 border-b border-slate-400" />
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </article>
+                    </div>
+                  </section>
+                  <p className="mt-3 text-center text-xs leading-5 text-slate-600">المعاينة مبنية من نفس ReportDocumentModel، لكنها ليست parity كاملة مع PDF/Word: الصور غير المثبتة والفواصل تُعرض كعلامات صريحة، والمخرج النهائي قد يضيف صفحات.</p>
+                  {lastSavedAt && <p className="mt-1 text-center text-[11px] text-slate-600">آخر حفظ خادمي: {renderBidiText(new Date(lastSavedAt).toLocaleString("ar-SA"))}</p>}
+                </aside>
+              </div>
+            </>
           )}
         </div>
       </main>

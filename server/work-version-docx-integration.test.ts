@@ -92,14 +92,16 @@ suite("immutable editable WorkVersion DOCX on disposable MySQL", () => {
     expect(second).toMatchObject({ outputId: first.outputId, reused: true });
     const secondRecord = (await getOutputRecordForUser(owner, second.outputId))!;
     expect(secondRecord.storageKey).toBe(firstRecord.storageKey);
-    expect(secondRecord.metadata).toEqual(firstRecord.metadata);
+    expect(secondRecord.token).toBe(firstRecord.token);
     expect(blobs.get(secondRecord.storageKey!)).toEqual(buffer);
   });
 
   it("deduplicates concurrent DOCX requests and keeps PDF and Word artifacts distinct", async () => {
     const { frozen } = await version();
     const [a, b] = await Promise.all([generatePrivateDocxForWorkVersion(owner, frozen.id, dependencies), generatePrivateDocxForWorkVersion(owner, frozen.id, dependencies)]);
-    expect(a!.outputId).toBe(b!.outputId); expect(a!.storageKey).toBe(b!.storageKey);
+    expect(a!.outputId).toBe(b!.outputId);
+    expect(a).not.toHaveProperty("storageKey");
+    expect(b).not.toHaveProperty("storageKey");
     const pdf = (await generatePrivatePdfForWorkVersion(owner, frozen.id, { ...storage, renderPdf: async () => Buffer.from("%PDF-1.4\ntest\n%%EOF") }))!;
     expect(pdf.outputId).not.toBe(a!.outputId);
     const db = (await getDb())!;

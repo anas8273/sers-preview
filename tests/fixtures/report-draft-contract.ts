@@ -7,11 +7,13 @@ export function reportDraftSaveInput(
     workItemId: number;
     expectedRevision: number;
     fields: ReportDraftData["fields"];
+    reportIdentity?: ReportDraftData["reportIdentity"];
     evidenceAssetIds?: number[];
     themeId?: string;
     fontFamily?: string;
   },
 ) {
+  const reportIdentity = overrides.reportIdentity !== undefined ? overrides.reportIdentity : draft.reportIdentity;
   return {
     workItemId: overrides.workItemId,
     expectedRevision: overrides.expectedRevision,
@@ -21,6 +23,7 @@ export function reportDraftSaveInput(
     themeId: overrides.themeId ?? draft.themeId,
     fontFamily: overrides.fontFamily ?? draft.fontFamily,
     fields: overrides.fields,
+    ...(reportIdentity !== undefined ? { reportIdentity } : {}),
     evidenceAssetIds: overrides.evidenceAssetIds ?? draft.evidenceAssetIds,
     fieldDefinitions: draft.fieldDefinitions,
   };

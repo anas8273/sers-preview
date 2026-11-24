@@ -29,7 +29,7 @@ describe("review/output domain invariants", () => {
     const updateSection = router.split("update: protectedProcedure")[1]?.split("createVersion: protectedProcedure")[0] ?? "";
     expect(updateSection).not.toContain('z.enum(["draft", "in_review", "approved", "archived"])');
     expect(updateSection).not.toContain("status:");
-    expect(domainService).toContain("patch: { title?: string }");
+    expect(domainService).toContain("patch: { title?: string; academicYearId?: number | null; academicTermId?: number | null }");
   });
 
   it("uses compare-and-swap retries for unique work version numbers", () => {
