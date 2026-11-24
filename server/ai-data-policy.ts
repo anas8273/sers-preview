@@ -1,5 +1,6 @@
 import { AI_PROVIDER_ID } from "./ai-provider-policy";
 import type { AiOperation } from "./ai-policy";
+import { isReportIdentityFieldKey } from "../shared/report-appearance";
 
 /**
  * This is a processing gate, not a claim about a provider's legal status,
@@ -112,8 +113,8 @@ export function sanitizeAiTextInput(value: unknown, key?: string): unknown {
   if (value && typeof value === "object") {
     const output: Record<string, unknown> = {};
     for (const [childKey, childValue] of Object.entries(value)) {
-      // Consent is an admission fact, never provider content.
-      if (childKey === "privacyConfirmation") continue;
+      // Consent and institutional report identity/logos are never provider content.
+      if (childKey === "privacyConfirmation" || childKey === "reportIdentity" || isReportIdentityFieldKey(childKey)) continue;
       output[childKey] = sanitizeAiTextInput(childValue, childKey);
     }
     return output;

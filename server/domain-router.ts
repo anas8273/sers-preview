@@ -24,6 +24,8 @@ import {
 import { AccountAccessError, AccountValidationError } from "./account-db";
 import { reportDraftRouter } from "./report-draft-router";
 import { portfolioDraftRouter } from "./portfolio-draft-router";
+import { standardsRouter } from "./standards-router";
+import { commerceRouter } from "./commerce-router";
 import {
   addReviewCommentForUser,
   createOutputForUser,
@@ -144,6 +146,8 @@ export const domainRouter = router({
 
   reportDraft: reportDraftRouter,
   portfolioDraft: portfolioDraftRouter,
+  standards: standardsRouter,
+  commerce: commerceRouter,
 
   asset: router({
     list: protectedProcedure.query(({ ctx }) => listAssetsForUser(ctx.user.id)),

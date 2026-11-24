@@ -713,9 +713,19 @@ export async function rollbackReportTemplateForUser(
     }
 
     const restoredBase = normalizeDraft(targetEntry.snapshot);
+    const linkedAssetRows = restoredBase.evidenceAssetIds.length > 0
+      ? await tx
+        .select({ assetId: workAssetLinks.assetId })
+        .from(workAssetLinks)
+        .innerJoin(assets, eq(workAssetLinks.assetId, assets.id))
+        .where(and(eq(workAssetLinks.workItemId, input.workItemId), isNull(assets.deletedAt)))
+      : [];
+    const linkedIds = new Set(linkedAssetRows.map((row: { assetId: number }) => row.assetId));
+    const safeEvidenceIds = restoredBase.evidenceAssetIds.filter(id => linkedIds.has(id));
     const updatedAt = new Date().toISOString();
     const restoredDraft: ReportDraftData = sanitizeDraftIdentityLogo({
       ...restoredBase,
+      evidenceAssetIds: safeEvidenceIds,
       revision: current.revision + 1,
       updatedAt,
     });
