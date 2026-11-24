@@ -5,6 +5,8 @@
  */
 import { useState, useMemo } from "react";
 import { useLocation } from "wouter";
+import { useAuth } from "@/_core/hooks/useAuth";
+import { trpc } from "@/lib/trpc";
 import {
   ArrowLeft, Search, X, ShoppingBag, Filter, Star,
   Download, FileText, ShoppingCart, Tag, Eye, Clock,
@@ -53,10 +55,24 @@ const roleIconMap: Record<string, React.ComponentType<any>> = {
 
 export default function Store() {
   const [, navigate] = useLocation();
+  const { isAuthenticated } = useAuth();
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [selectedRole, setSelectedRole] = useState<UserRole>("all");
   const [sortBy, setSortBy] = useState<"default" | "price-low" | "price-high" | "free-first">("default");
+
+  const commerceStatusQuery = trpc.domain.commerce.status.useQuery(undefined, {
+    enabled: isAuthenticated,
+    retry: false,
+  });
+  const commerceProductsQuery = trpc.domain.commerce.listProducts.useQuery(undefined, {
+    enabled: isAuthenticated,
+    retry: false,
+  });
+  const myEntitlementsQuery = trpc.domain.commerce.myEntitlements.useQuery(undefined, {
+    enabled: isAuthenticated,
+    retry: false,
+  });
 
   const allItems = useMemo(() => getAllStoreItems(), []);
 
@@ -145,6 +161,34 @@ export default function Store() {
       </div>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
+        <section aria-label="حالة المتجر والصلاحيات" className="mb-6 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-xs leading-6 text-amber-950">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="font-bold">
+              بانتظار اعتماد مزود الدفع O001 — الدفع والشراء الحقيقي معطلان في هذه المرحلة.
+            </p>
+            {isAuthenticated && commerceStatusQuery.data && (
+              <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-bold text-amber-900 border border-amber-200">
+                {commerceStatusQuery.data.sandboxEnabled ? "وضع الاختبار المعزول (Sandbox)" : "وضع العرض فقط"}
+              </span>
+            )}
+          </div>
+          {isAuthenticated && (
+            <div className="mt-2 flex flex-wrap gap-4 text-[11px] text-amber-900">
+              <span>المنتجات المسجلة في الخادم: <strong>{commerceProductsQuery.data?.length ?? 0}</strong></span>
+              <span>صلاحياتي النشطة: <strong>{myEntitlementsQuery.data?.length ?? 0}</strong></span>
+            </div>
+          )}
+          {isAuthenticated && (myEntitlementsQuery.data?.length ?? 0) > 0 && (
+            <ul className="mt-2 flex flex-wrap gap-2">
+              {myEntitlementsQuery.data?.map(item => (
+                <li key={item.id} className="rounded-lg border border-amber-200 bg-white px-2.5 py-1 text-[11px] font-semibold">
+                  {item.productName} ({item.productType})
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+
         {/* Search + Sort */}
         <div className="flex flex-col sm:flex-row gap-3 mb-6">
           <div className="relative flex-1">

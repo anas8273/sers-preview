@@ -48,6 +48,7 @@ import AppSidebar from "@/components/AppSidebar";
 import LegacyReportImportDialog from "@/components/LegacyReportImportDialog";
 import TemplateSwitchDialog from "@/components/TemplateSwitchDialog";
 import { trpc } from "@/lib/trpc";
+import { useUserStore } from "@/stores/userStore";
 import "./work-report-fonts.css";
 
 const templateOptions = REPORT_TEMPLATE_OPTIONS;
@@ -266,6 +267,7 @@ function ReportEditor({ workId }: { workId: number }) {
   const templateSelectRef = useRef<HTMLSelectElement | null>(null);
   const [createdVersion, setCreatedVersion] = useState<{ id: number; versionNumber: number; revision: number } | undefined>();
   const [selectedReviewerId, setSelectedReviewerId] = useState<number | undefined>();
+  const [identityAutoFillNotice, setIdentityAutoFillNotice] = useState<string | undefined>();
 
   const utils = trpc.useUtils();
   const reportQuery = trpc.domain.reportDraft.get.useQuery(
@@ -279,6 +281,10 @@ function ReportEditor({ workId }: { workId: number }) {
   const organizationId = workQuery.data?.ownerType === "organization"
     ? workQuery.data.ownerOrganizationId ?? undefined
     : undefined;
+  const organizationsQuery = trpc.domain.organization.listMine.useQuery(undefined, {
+    enabled: Boolean(organizationId),
+    retry: false,
+  });
   const reviewersQuery = trpc.reviewSupport.reviewers.useQuery(
     { organizationId: organizationId ?? 0 },
     { enabled: Boolean(organizationId), retry: false },
@@ -391,6 +397,31 @@ function ReportEditor({ workId }: { workId: number }) {
     );
     return { reportIdentity: hasAny ? next : undefined };
   });
+
+  const handleAutoFillIdentity = () => {
+    const { personalInfo, profile } = useUserStore.getState();
+    const orgName = organizationsQuery.data?.find(org => org.id === organizationId)?.name?.trim();
+    const deptLines = personalInfo.department
+      .split(/\r?\n/)
+      .map(line => line.trim())
+      .filter(line => line && line !== "مدرسة..." && line !== "المملكة العربية السعودية" && line !== "وزارة التعليم" && !line.startsWith("الإدارة العامة للتعليم بمنطقة..."));
+    const schoolCandidate = (orgName || deptLines[deptLines.length - 1] || "").slice(0, REPORT_IDENTITY_TEXT_LIMIT);
+    const preparerCandidate = (profile.fullName.trim() || personalInfo.preparer.trim()).slice(0, REPORT_IDENTITY_TEXT_LIMIT);
+
+    const patch: Partial<Omit<ReportIdentity, "version">> = {};
+    if (!reportIdentity?.schoolName && schoolCandidate) {
+      patch.schoolName = schoolCandidate;
+    }
+    if (!reportIdentity?.reportPreparer && preparerCandidate) {
+      patch.reportPreparer = preparerCandidate;
+    }
+    if (Object.keys(patch).length === 0) {
+      setIdentityAutoFillNotice("لم تُعدل الحقول المملوءة يدويًا أو لا توجد بيانات حساب/مدرسة محفوظة للتعبئة.");
+      return;
+    }
+    editIdentity(patch);
+    setIdentityAutoFillNotice("تمت تعبئة الحقول الفارغة من بيانات الحساب/المدرسة دون تعديل أي إدخال يدوي.");
+  };
 
   const changeSchoolLogo = async (file: File) => {
     const session = sessionRef.current;
@@ -973,9 +1004,22 @@ function ReportEditor({ workId }: { workId: number }) {
                   <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <h2 className="text-lg font-bold text-slate-950">هوية التقرير والتوقيعات (اختياري)</h2>
-                      <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-bold text-slate-700">اختياري</span>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={handleAutoFillIdentity}
+                          disabled={creatingVersion}
+                          className="inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-teal-200 bg-teal-50 px-3 py-1.5 text-xs font-bold text-teal-900 hover:bg-teal-100 disabled:opacity-50"
+                        >
+                          تعبئة من بيانات الحساب/المدرسة
+                        </button>
+                        <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-bold text-slate-700">اختياري</span>
+                      </div>
                     </div>
                     <p className="mt-1 text-xs leading-6 text-slate-600">اترك هذه الحقول فارغة للتقارير الفردية، أو أضف اسم المدرسة والشعارات والتوقيعات للنسخ الرسمية.</p>
+                    {identityAutoFillNotice && (
+                      <p role="status" className="mt-2 text-xs font-semibold text-teal-800">{identityAutoFillNotice}</p>
+                    )}
                     <div className="mt-4 grid gap-4 md:grid-cols-3">
                       {REPORT_IDENTITY_FIELDS.map(({ key, label }) => (
                         <label key={key} className="text-xs font-bold text-slate-700">{label}

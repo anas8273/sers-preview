@@ -1,7 +1,8 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ArrowRight,
   Building2,
+  CalendarDays,
   FileText,
   FolderKanban,
   Link2,
@@ -33,12 +34,16 @@ export default function WorkDetail() {
   const [selectedAssetId, setSelectedAssetId] = useState<number | undefined>();
   const [selectedVersionId, setSelectedVersionId] = useState<number | undefined>();
   const [selectedReviewerId, setSelectedReviewerId] = useState<number | undefined>();
+  const [editYearId, setEditYearId] = useState<number | undefined>();
+  const [editTermId, setEditTermId] = useState<number | undefined>();
+  const [yearSavedNotice, setYearSavedNotice] = useState(false);
 
   const utils = trpc.useUtils();
   const workQuery = trpc.domain.work.get.useQuery(
     { id: workId },
     { enabled: validWorkId, retry: false },
   );
+  const yearsQuery = trpc.account.academicYears.useQuery(undefined, { retry: false });
   const assetsQuery = trpc.domain.asset.list.useQuery(undefined, { retry: false });
   const versionsQuery = trpc.reviewSupport.versions.useQuery(
     { workItemId: workId },
@@ -63,6 +68,15 @@ export default function WorkDetail() {
       await utils.domain.work.get.invalidate({ id: workId });
     },
   });
+  const updateWork = trpc.domain.work.update.useMutation({
+    onSuccess: async () => {
+      setYearSavedNotice(true);
+      await Promise.all([
+        utils.domain.work.get.invalidate({ id: workId }),
+        utils.domain.work.list.invalidate(),
+      ]);
+    },
+  });
   const requestReview = trpc.domain.review.request.useMutation({
     onSuccess: async () => {
       await Promise.all([
@@ -84,6 +98,24 @@ export default function WorkDetail() {
   );
   const versions = versionsQuery.data ?? [];
   const reviewers = reviewersQuery.data ?? [];
+  const scopeYears = useMemo(
+    () => (yearsQuery.data ?? []).filter(year =>
+      workQuery.data?.ownerType === "personal"
+        ? year.ownerUserId !== null
+        : year.organizationId === workQuery.data?.ownerOrganizationId,
+    ),
+    [yearsQuery.data, workQuery.data?.ownerType, workQuery.data?.ownerOrganizationId],
+  );
+  const chosenYear = useMemo(
+    () => scopeYears.find(year => year.id === editYearId),
+    [scopeYears, editYearId],
+  );
+
+  useEffect(() => {
+    if (!workQuery.data) return;
+    setEditYearId(workQuery.data.academicYearId ?? undefined);
+    setEditTermId(workQuery.data.academicTermId ?? undefined);
+  }, [workQuery.data?.academicYearId, workQuery.data?.academicTermId]);
 
   if (!validWorkId) {
     return <div className="min-h-screen bg-[#F8FAFC] p-8 text-sm text-red-700" dir="rtl">معرّف العمل غير صالح.</div>;
@@ -235,6 +267,82 @@ export default function WorkDetail() {
                       {requestReview.error && <p role="alert" className="mt-3 text-xs text-red-700">{requestReview.error.message}</p>}
                     </section>
                   )}
+
+                  <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+                    <div className="flex items-center gap-2">
+                      <CalendarDays className="h-4 w-4 text-teal-700" />
+                      <h2 className="text-base font-bold text-slate-950">السنة والفصل الدراسي</h2>
+                    </div>
+                    <p className="mt-1 text-xs leading-6 text-slate-600">
+                      السياق الحالي:{" "}
+                      <span className="font-bold text-teal-800">
+                        {workQuery.data.academicContext
+                          ? `${workQuery.data.academicContext.yearLabel}${workQuery.data.academicContext.termLabel ? ` · ${workQuery.data.academicContext.termLabel}` : ""}`
+                          : "دون سنة دراسية محددة"}
+                      </span>
+                    </p>
+                    <div className="mt-4 space-y-3">
+                      <label className="block text-xs font-bold text-slate-700">
+                        السنة الدراسية
+                        <select
+                          aria-label="ربط العمل بسنة دراسية"
+                          value={editYearId ?? ""}
+                          disabled={workQuery.data.status === "archived" || updateWork.isPending}
+                          onChange={event => {
+                            setYearSavedNotice(false);
+                            setEditYearId(Number(event.target.value) || undefined);
+                            setEditTermId(undefined);
+                          }}
+                          className="mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-normal disabled:opacity-50"
+                        >
+                          <option value="">دون سنة دراسية</option>
+                          {scopeYears.map(year => (
+                            <option key={year.id} value={year.id}>{year.label}</option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className="block text-xs font-bold text-slate-700">
+                        الفصل الدراسي
+                        <select
+                          aria-label="ربط العمل بفصل دراسي"
+                          value={editTermId ?? ""}
+                          disabled={!chosenYear || workQuery.data.status === "archived" || updateWork.isPending}
+                          onChange={event => {
+                            setYearSavedNotice(false);
+                            setEditTermId(Number(event.target.value) || undefined);
+                          }}
+                          className="mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-normal disabled:opacity-50"
+                        >
+                          <option value="">دون فصل محدد</option>
+                          {chosenYear?.terms.map(term => (
+                            <option key={term.id} value={term.id}>{term.label}</option>
+                          ))}
+                        </select>
+                      </label>
+                      <button
+                        type="button"
+                        disabled={workQuery.data.status === "archived" || updateWork.isPending}
+                        onClick={() => {
+                          setYearSavedNotice(false);
+                          updateWork.mutate({
+                            id: workId,
+                            academicYearId: editYearId ?? null,
+                            academicTermId: editYearId ? (editTermId ?? null) : null,
+                          });
+                        }}
+                        className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-teal-200 bg-teal-50 px-4 py-2.5 text-sm font-bold text-teal-900 hover:bg-teal-100 disabled:opacity-50"
+                      >
+                        {updateWork.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+                        حفظ السنة والفصل
+                      </button>
+                      {yearSavedNotice && !updateWork.error && (
+                        <p role="status" className="text-xs font-semibold text-teal-800">تم تحديث السنة والفصل الدراسي.</p>
+                      )}
+                      {updateWork.error && (
+                        <p role="alert" className="text-xs text-red-700">{updateWork.error.message}</p>
+                      )}
+                    </div>
+                  </section>
                 </div>
               </div>
             </>

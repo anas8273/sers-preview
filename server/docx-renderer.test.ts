@@ -82,8 +82,9 @@ describe('DOCX Export', () => {
 
 describe('DOCX Export API endpoint', () => {
   it('should validate that /api/export-docx endpoint exists in server config', async () => {
-    // Verify the endpoint is registered by checking the import
+    // Verify the endpoint module exports startServer without auto-listening under Vitest
     const indexModule = await import('./_core/index');
     expect(indexModule).toBeDefined();
+    expect(typeof indexModule.startServer).toBe('function');
   });
 });

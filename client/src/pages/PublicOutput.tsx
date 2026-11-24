@@ -13,6 +13,9 @@ import {
 } from "lucide-react";
 import { useRoute } from "wouter";
 import { trpc } from "@/lib/trpc";
+import { safeImageSrc } from "@/lib/safe-url";
+import { REPORT_MINISTRY_LOGO_ALT, REPORT_SCHOOL_LOGO_ALT } from "@shared/report-appearance";
+import ministryLogoUrl from "@shared/report-assets/ministry-logo.png";
 
 export default function PublicOutput() {
   const [, params] = useRoute<{ token: string }>("/output/:token");
@@ -69,6 +72,10 @@ function PublicOutputSession({ token }: { token: string }) {
   const unavailable = resolveMutation.error
     && resolveMutation.error.data?.code !== "UNAUTHORIZED"
     && !resolveMutation.isPending;
+  const institution = data?.report.institution;
+  const schoolLogoSrc = institution?.visible && institution.schoolLogo
+    ? safeImageSrc(`data:image/png;base64,${institution.schoolLogo}`)
+    : null;
 
   return (
     <main className="min-h-screen bg-[#F5F8FA] px-4 py-8 sm:px-6 sm:py-12" dir="rtl">
@@ -149,6 +156,25 @@ function PublicOutputSession({ token }: { token: string }) {
           <article className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-xl">
             <div className="h-3 bg-slate-950" />
             <div className="p-6 sm:p-10">
+              {institution?.visible && (
+                <section aria-label="الهوية المؤسسية" className="mb-6 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-3">
+                  <div className="flex items-center gap-3">
+                    {institution.ministryLogo && (
+                      <img src={ministryLogoUrl} alt={REPORT_MINISTRY_LOGO_ALT} className="h-11 w-auto object-contain" />
+                    )}
+                    {institution.schoolName && (
+                      <div>
+                        <p className="text-[11px] font-bold text-slate-500">الجهة / المدرسة</p>
+                        <p className="text-sm font-black text-slate-900">{institution.schoolName}</p>
+                      </div>
+                    )}
+                  </div>
+                  {schoolLogoSrc && (
+                    <img src={schoolLogoSrc} alt={REPORT_SCHOOL_LOGO_ALT} className="h-12 w-12 rounded-xl border border-slate-200 bg-white object-contain p-1" />
+                  )}
+                </section>
+              )}
+
               <div className="flex flex-col gap-5 border-b border-slate-200 pb-7 sm:flex-row sm:items-start sm:justify-between">
                 <div>
                   <p className="text-xs font-black text-teal-700">{data.report.templateLabel}</p>
@@ -185,6 +211,17 @@ function PublicOutputSession({ token }: { token: string }) {
                       ))}
                     </div>
                     <p className="mt-3 text-[11px] leading-6 text-amber-800">عرض اسم الشاهد ووصفه لا يمنح وصولًا إلى الملف الأصلي أو الرابط الداخلي.</p>
+                  </section>
+                )}
+
+                {institution?.visible && institution.signers.length > 0 && (
+                  <section aria-label="الاعتماد والتوقيعات" className="grid gap-3 border-t border-slate-100 pt-6 sm:grid-cols-2">
+                    {institution.signers.map(signer => (
+                      <div key={`${signer.label}-${signer.name}`} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                        <p className="text-[11px] font-bold text-slate-500">{signer.label}</p>
+                        <p className="mt-1 text-sm font-black text-slate-900">{signer.name}</p>
+                      </div>
+                    ))}
                   </section>
                 )}
               </div>

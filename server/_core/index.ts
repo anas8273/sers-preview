@@ -141,7 +141,7 @@ function sendRouteError(res: Response, error: unknown, context: string) {
   res.status(500).json({ error: `${context} failed` });
 }
 
-async function startServer() {
+export async function startServer() {
   if (ENV.isProduction) getAuthConfig();
   const app = express();
   const server = createServer(app);
@@ -283,4 +283,6 @@ async function startServer() {
   });
 }
 
-startServer().catch(console.error);
+if (process.env.NODE_ENV !== "test" && !process.env.VITEST) {
+  startServer().catch(console.error);
+}

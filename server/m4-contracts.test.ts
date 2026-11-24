@@ -5,8 +5,8 @@ import { sanitizeAiTextInput } from "./ai-data-policy";
 import { isCommerceSandboxEnabled } from "./commerce-sandbox";
 import { commerceRouter } from "./commerce-router";
 
-const standardsDbSource = readFileSync(resolve(import.meta.dirname, "standards-db.ts"), "utf8");
-const commerceDbSource = readFileSync(resolve(import.meta.dirname, "commerce-sandbox.ts"), "utf8");
+const standardsDbSource = readFileSync(resolve(import.meta.dirname, "standards-db.ts"), "utf8").replace(/\r\n/g, "\n");
+const commerceDbSource = readFileSync(resolve(import.meta.dirname, "commerce-sandbox.ts"), "utf8").replace(/\r\n/g, "\n");
 
 describe("M4 AI privacy stripping of reportIdentity (R20)", () => {
   it("strips reportIdentity object and top-level/nested identity keys before AI provider I/O", () => {

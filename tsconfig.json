@@ -16,7 +16,11 @@
     "client/src/pages/LoginPage.tsx",
     "client/src/pages/RegisterPage.tsx",
     "client/src/pages/UserDashboard.tsx",
-    "client/src/stores/**/*"
+    "client/src/stores/cartStore.ts",
+    "client/src/stores/editorStore.ts",
+    "client/src/stores/index.ts",
+    "client/src/stores/templateStore.ts",
+    "client/src/stores/wishlistStore.ts"
   ],
   "compilerOptions": {
     "incremental": true,
