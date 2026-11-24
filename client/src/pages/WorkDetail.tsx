@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { useLocation, useRoute } from "wouter";
 import AppSidebar from "@/components/AppSidebar";
+import PortfolioReferencePanel from "@/components/PortfolioReferencePanel";
 import { trpc } from "@/lib/trpc";
 
 const statusLabel = {
@@ -191,15 +192,22 @@ export default function WorkDetail() {
                       </button>
                     </section>
                   ) : (
-                    <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
-                      <p className="text-xs font-bold text-teal-700">ملف الإنجاز المحلي</p>
-                      <h2 className="mt-1 text-lg font-bold text-slate-950">المحتوى غير مرتبط بهذه النسخة السحابية</h2>
-                      <p className="mt-2 text-xs leading-6 text-slate-600">هذا العمل يحتفظ حاليًا ببيانات وصفية وشواهد فقط، وليس نسخة مكتملة من محتوى ملف الإنجاز المحلي. لن ننشئ نسخة ناقصة أو نكتب إلى قاعدة البيانات تلقائيًا.</p>
-                      <button type="button" onClick={() => setLocation("/portfolio")} className="mt-4 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-teal-200 bg-teal-50 px-4 py-2.5 text-sm font-bold text-teal-900 hover:bg-teal-100">
-                        فتح منشئ ملف الإنجاز المحلي
-                      </button>
-                      <p className="mt-3 text-xs leading-5 text-slate-600">الاستيراد إلى Work سيكون اختياريًا لاحقًا بعد اعتماد عقد محتوى typed مع معاينة ومقارنة وتراجع، وليس تلقائيًا الآن.</p>
-                    </section>
+                    <>
+                      <PortfolioReferencePanel
+                        workId={workId}
+                        ownerType={workQuery.data.ownerType}
+                        ownerOrganizationId={workQuery.data.ownerOrganizationId ?? null}
+                      />
+                      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+                        <p className="text-xs font-bold text-teal-700">ملف الإنجاز المحلي</p>
+                        <h2 className="mt-1 text-lg font-bold text-slate-950">المحتوى غير مرتبط بهذه النسخة السحابية</h2>
+                        <p className="mt-2 text-xs leading-6 text-slate-600">هذا العمل يحتفظ حاليًا ببيانات وصفية وشواهد فقط، وليس نسخة مكتملة من محتوى ملف الإنجاز المحلي. لن ننشئ نسخة ناقصة أو نكتب إلى قاعدة البيانات تلقائيًا.</p>
+                        <button type="button" onClick={() => setLocation("/portfolio")} className="mt-4 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-teal-200 bg-teal-50 px-4 py-2.5 text-sm font-bold text-teal-900 hover:bg-teal-100">
+                          فتح منشئ ملف الإنجاز المحلي
+                        </button>
+                        <p className="mt-3 text-xs leading-5 text-slate-600">الاستيراد إلى Work سيكون اختياريًا لاحقًا بعد اعتماد عقد محتوى typed مع معاينة ومقارنة وتراجع، وليس تلقائيًا الآن.</p>
+                      </section>
+                    </>
                   )}
 
                   {workQuery.data.ownerType === "organization" && !(workQuery.data.type === "portfolio" && versions.length === 0) && (

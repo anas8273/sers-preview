@@ -18,6 +18,7 @@ import {
   ReportDraftNotFoundError,
   ReportDraftValidationError,
   ReportEvidenceFreezeError,
+  restoreReportVersionAsDraftForUser,
   rollbackReportTemplateForUser,
   saveReportDraftForUser,
   switchReportTemplateForUser,
@@ -243,6 +244,30 @@ export const reportDraftRouter = router({
         if (error instanceof ReportDraftAccessError) throw forbidden(error.message);
         if (error instanceof ReportDraftNotFoundError) throw notFound(error.message);
         if (error instanceof ReportDraftValidationError) throw badRequest(error.message);
+        throw error;
+      }
+    }),
+
+  restoreVersion: protectedProcedure
+    .input(z.object({
+      workItemId: z.number().int().positive(),
+      expectedRevision: z.number().int().min(0),
+      versionId: z.number().int().positive(),
+    }).strict())
+    .mutation(async ({ ctx, input }) => {
+      try {
+        return await restoreReportVersionAsDraftForUser(ctx.user.id, input);
+      } catch (error) {
+        if (error instanceof ReportDraftAccessError) throw forbidden(error.message);
+        if (error instanceof ReportDraftConflictError) {
+          throw conflict(
+            error.message === "Report draft changed"
+              ? "تغير التقرير في جلسة أخرى؛ حدّث الصفحة قبل استعادة النسخة"
+              : error.message,
+          );
+        }
+        if (error instanceof ReportDraftValidationError) throw badRequest(error.message);
+        if (error instanceof ReportDraftNotFoundError) throw notFound(error.message);
         throw error;
       }
     }),

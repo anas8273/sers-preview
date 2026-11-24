@@ -45,6 +45,7 @@ import {
 } from "lucide-react";
 import { useLocation, useRoute } from "wouter";
 import AppSidebar from "@/components/AppSidebar";
+import LegacyReportImportDialog from "@/components/LegacyReportImportDialog";
 import TemplateSwitchDialog from "@/components/TemplateSwitchDialog";
 import { trpc } from "@/lib/trpc";
 import "./work-report-fonts.css";
@@ -258,6 +259,10 @@ function ReportEditor({ workId }: { workId: number }) {
   const [templateSwitchError, setTemplateSwitchError] = useState<string | undefined>();
   const [templateSwitchNotice, setTemplateSwitchNotice] = useState<{ historyId: string; revision: number } | null>(null);
   const [confirmRestoreHistoryId, setConfirmRestoreHistoryId] = useState<string | null>(null);
+  const [confirmRestoreVersionId, setConfirmRestoreVersionId] = useState<number | null>(null);
+  const [versionRestoreNotice, setVersionRestoreNotice] = useState<string | undefined>();
+  const [showLegacyImport, setShowLegacyImport] = useState(false);
+  const legacyImportTriggerRef = useRef<HTMLButtonElement | null>(null);
   const templateSelectRef = useRef<HTMLSelectElement | null>(null);
   const [createdVersion, setCreatedVersion] = useState<{ id: number; versionNumber: number; revision: number } | undefined>();
   const [selectedReviewerId, setSelectedReviewerId] = useState<number | undefined>();
@@ -278,6 +283,10 @@ function ReportEditor({ workId }: { workId: number }) {
     { organizationId: organizationId ?? 0 },
     { enabled: Boolean(organizationId), retry: false },
   );
+  const versionsQuery = trpc.reviewSupport.versions.useQuery(
+    { workItemId: workId },
+    { enabled: Boolean(reportQuery.data), retry: false, refetchOnWindowFocus: false },
+  );
   const templateHistoryQuery = trpc.domain.reportDraft.templateHistory.useQuery(
     { workItemId: workId },
     { enabled: Boolean(reportQuery.data), retry: false, refetchOnWindowFocus: false },
@@ -290,6 +299,7 @@ function ReportEditor({ workId }: { workId: number }) {
   const { mutateAsync: writeDraft } = trpc.domain.reportDraft.save.useMutation();
   const switchTemplateMutation = trpc.domain.reportDraft.switchTemplate.useMutation();
   const rollbackTemplateMutation = trpc.domain.reportDraft.rollbackTemplate.useMutation();
+  const restoreVersionMutation = trpc.domain.reportDraft.restoreVersion.useMutation();
   const createVersionMutation = trpc.domain.reportDraft.createVersion.useMutation();
   const requestReviewMutation = trpc.domain.review.request.useMutation();
 
@@ -644,6 +654,56 @@ function ReportEditor({ workId }: { workId: number }) {
     }
   };
 
+  const handleRestoreVersionAsDraft = async (versionId: number) => {
+    const session = sessionRef.current;
+    if (!session || !isCurrent(session) || conflict.current) return;
+    setTemplateError(undefined);
+    setVersionRestoreNotice(undefined);
+    try {
+      let currentRevision = session.revision;
+      if (session.dirty) {
+        const flushed = await saveDraft();
+        if (!isCurrent(session) || conflict.current || flushed === undefined) return;
+        currentRevision = flushed;
+      }
+      const result = await restoreVersionMutation.mutateAsync({
+        workItemId: workId,
+        expectedRevision: currentRevision,
+        versionId,
+      });
+      if (!isCurrent(session)) return;
+      setConfirmRestoreVersionId(null);
+      await utils.domain.reportDraft.get.invalidate({ workItemId: workId });
+      const refreshed = await reportQuery.refetch();
+      if (isCurrent(session) && refreshed.isSuccess) {
+        updateBackup();
+        applyServerDraft(refreshed.data, false);
+        setVersionRestoreNotice(`تمت استعادة النسخة ${result.restoredFromVersionNumber} كمسودة قابلة للتعديل دون تعديل النسخ السابقة.`);
+      }
+      await utils.domain.reportDraft.templateHistory.invalidate({ workItemId: workId });
+    } catch (error) {
+      if (!isCurrent(session)) return;
+      const code = (error as { data?: { code?: string } })?.data?.code;
+      if (code === "CONFLICT") {
+        conflict.current = true;
+        setSaveState("conflict");
+        return;
+      }
+      setTemplateError(error instanceof Error ? error.message : "تعذر استعادة النسخة.");
+    }
+  };
+
+  const handleLegacyImport = (importedFields: Record<string, string>) => {
+    editDraft(current => {
+      const merged = { ...current.fields };
+      for (const [key, value] of Object.entries(importedFields)) {
+        if (!value) continue;
+        merged[key] = merged[key]?.trim() ? `${merged[key]}\n\n${value}` : value;
+      }
+      return { fields: merged };
+    });
+  };
+
   const handleRequestReview = async () => {
     if (!createdVersion || !selectedReviewerId) return;
     await requestReviewMutation.mutateAsync({
@@ -840,7 +900,17 @@ function ReportEditor({ workId }: { workId: number }) {
                         </select>
                       </label>
                     </div>
-                    <p className="mt-4 text-xs leading-6 text-slate-600">عند تغيير القالب يعرض المحرر معاينة توافق الحقول قبل التطبيق، ويحفظ نسخة من القالب السابق لإمكانية التراجع دون فقدان أي نص.</p>
+                    <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
+                      <p className="text-xs leading-6 text-slate-600">عند تغيير القالب يعرض المحرر معاينة توافق الحقول قبل التطبيق، ويحفظ نسخة من القالب السابق لإمكانية التراجع دون فقدان أي نص.</p>
+                      <button
+                        ref={legacyImportTriggerRef}
+                        type="button"
+                        onClick={() => setShowLegacyImport(true)}
+                        className="inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-xl border border-slate-300 bg-slate-50 px-3 py-2 text-xs font-bold text-slate-800 hover:bg-slate-100"
+                      >
+                        استيراد مسودة قديمة
+                      </button>
+                    </div>
                     {templateSwitchNotice && (
                       <div role="status" className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3.5 py-2.5 text-xs font-bold text-emerald-900">
                         <span>تم تبديل القالب</span>
@@ -1084,6 +1154,50 @@ function ReportEditor({ workId }: { workId: number }) {
                     </button>
                     {createVersionMutation.error && <p role="alert" className="mt-3 text-xs text-red-700">{createVersionMutation.error.message}</p>}
                     {createdVersion && <p role="status" className="mt-3 rounded-xl bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-800">تم إنشاء النسخة {createdVersion.versionNumber} من مراجعة التقرير {createdVersion.revision}.</p>}
+                    {versionRestoreNotice && <p role="status" className="mt-3 rounded-xl bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-800">{versionRestoreNotice}</p>}
+
+                    {(versionsQuery.data?.length ?? 0) > 0 && (
+                      <div className="mt-5 border-t border-slate-100 pt-4">
+                        <p className="text-xs font-bold text-slate-800">النسخ الثابتة السابقة</p>
+                        <ul className="mt-2 space-y-2">
+                          {(versionsQuery.data ?? []).map(version => (
+                            <li key={version.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs">
+                              <span className="font-semibold text-slate-800">
+                                نسخة {version.versionNumber}{version.reason ? ` — ${version.reason}` : ""}
+                              </span>
+                              {confirmRestoreVersionId === version.id ? (
+                                <span className="flex items-center gap-1.5">
+                                  <button
+                                    type="button"
+                                    disabled={restoreVersionMutation.isPending}
+                                    onClick={() => void handleRestoreVersionAsDraft(version.id)}
+                                    className="min-h-11 rounded-lg bg-teal-700 px-3 py-1.5 text-xs font-bold text-white hover:bg-teal-800 disabled:opacity-50"
+                                  >
+                                    تأكيد الاستعادة
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setConfirmRestoreVersionId(null)}
+                                    className="min-h-11 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-200"
+                                  >
+                                    إلغاء
+                                  </button>
+                                </span>
+                              ) : (
+                                <button
+                                  type="button"
+                                  disabled={restoreVersionMutation.isPending || saveState === "conflict"}
+                                  onClick={() => setConfirmRestoreVersionId(version.id)}
+                                  className="min-h-11 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-800 hover:bg-slate-100 disabled:opacity-50"
+                                >
+                                  استعادة كمسودة قابلة للتعديل
+                                </button>
+                              )}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
 
                     {createdVersion && organizationId && (
                       <div className="mt-5 border-t border-slate-100 pt-5">
@@ -1204,6 +1318,14 @@ function ReportEditor({ workId }: { workId: number }) {
         errorMessage={templateSwitchError || previewSwitchQuery.error?.message}
         onApply={strategy => void handleApplyTemplateSwitch(strategy)}
         returnFocusRef={templateSelectRef}
+      />
+
+      <LegacyReportImportDialog
+        open={showLegacyImport}
+        onOpenChange={setShowLegacyImport}
+        allowedFieldKeys={fieldDefinitions.map(field => field.key)}
+        onImport={handleLegacyImport}
+        returnFocusRef={legacyImportTriggerRef}
       />
     </div>
   );

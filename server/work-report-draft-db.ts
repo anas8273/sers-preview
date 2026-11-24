@@ -758,3 +758,122 @@ export async function listReportTemplateHistoryForUser(
     fromTemplateLabel,
   }));
 }
+
+export async function restoreReportVersionAsDraftForUser(
+  userId: number,
+  input: {
+    workItemId: number;
+    expectedRevision: number;
+    versionId: number;
+  },
+): Promise<{ revision: number; updatedAt: string; restoredFromVersionNumber: number }> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  return db.transaction(async tx => {
+    const work = await assertWriteAccessInTransaction(tx, userId, input.workItemId);
+    if (!work) throw new ReportDraftAccessError("لا تملك صلاحية تعديل هذا التقرير");
+    if (work.type !== "report") throw new ReportDraftAccessError("استعادة النسخ متاحة لأعمال التقارير فقط");
+    if (work.status === "archived") throw new ReportDraftConflictError("لا يمكن تعديل عمل مؤرشف");
+
+    const [block] = await tx
+      .select()
+      .from(contentBlocks)
+      .where(and(eq(contentBlocks.workItemId, input.workItemId), eq(contentBlocks.blockType, REPORT_DOCUMENT_BLOCK)))
+      .orderBy(asc(contentBlocks.id))
+      .limit(1)
+      .for("update");
+
+    const current = block ? normalizeDraft(block.data) : normalizeDraft(undefined);
+    if (current.revision !== input.expectedRevision) throw new ReportDraftConflictError();
+
+    const [versionRow] = await tx
+      .select()
+      .from(workVersions)
+      .where(and(eq(workVersions.id, input.versionId), eq(workVersions.workItemId, input.workItemId)))
+      .limit(1);
+    if (!versionRow) {
+      throw new ReportDraftNotFoundError("النسخة المطلوبة غير موجودة لهذا العمل");
+    }
+
+    const snapshot = versionRow.snapshot && typeof versionRow.snapshot === "object"
+      ? versionRow.snapshot as Record<string, unknown>
+      : undefined;
+    if (!snapshot?.reportDraft) {
+      throw new ReportDraftValidationError("النسخة المحددة لا تحتوي على مسودة تقرير قابلة للاستعادة");
+    }
+
+    const restoredBase = normalizeDraft(snapshot.reportDraft);
+    const linkedAssetRows = restoredBase.evidenceAssetIds.length > 0
+      ? await tx
+        .select({ assetId: workAssetLinks.assetId })
+        .from(workAssetLinks)
+        .innerJoin(assets, eq(workAssetLinks.assetId, assets.id))
+        .where(and(eq(workAssetLinks.workItemId, input.workItemId), isNull(assets.deletedAt)))
+      : [];
+    const linkedIds = new Set(linkedAssetRows.map((row: { assetId: number }) => row.assetId));
+    const safeEvidenceIds = restoredBase.evidenceAssetIds.filter(id => linkedIds.has(id));
+
+    // Save current head into template history so the restore itself is undoable
+    if (block) {
+      const [historyBlock] = await tx
+        .select()
+        .from(contentBlocks)
+        .where(and(eq(contentBlocks.workItemId, input.workItemId), eq(contentBlocks.blockType, REPORT_TEMPLATE_HISTORY_BLOCK)))
+        .orderBy(asc(contentBlocks.id))
+        .limit(1)
+        .for("update");
+      const existingHistory = historyBlock ? parseTemplateHistoryEntries(historyBlock.data) : [];
+      const historyId = randomBytes(12).toString("hex");
+      const switchedAt = new Date().toISOString();
+      const fromTemplateLabel = REPORT_TEMPLATE_DEFINITIONS[current.templateId]?.label ?? current.templateId;
+      const nextHistory: ReportTemplateHistoryEntry[] = [
+        { historyId, switchedAt, fromTemplateId: current.templateId, fromTemplateLabel, snapshot: current },
+        ...existingHistory,
+      ].slice(0, REPORT_TEMPLATE_HISTORY_MAX_ENTRIES);
+
+      if (historyBlock) {
+        await tx
+          .update(contentBlocks)
+          .set({ data: { entries: nextHistory }, updatedAt: new Date() })
+          .where(and(eq(contentBlocks.id, historyBlock.id), eq(contentBlocks.workItemId, input.workItemId)));
+      } else {
+        await tx.insert(contentBlocks).values({
+          workItemId: input.workItemId,
+          blockType: REPORT_TEMPLATE_HISTORY_BLOCK,
+          sortOrder: 1,
+          data: { entries: nextHistory },
+        });
+      }
+    }
+
+    const updatedAt = new Date().toISOString();
+    const restoredDraft: ReportDraftData = sanitizeDraftIdentityLogo({
+      ...restoredBase,
+      evidenceAssetIds: safeEvidenceIds,
+      revision: current.revision + 1,
+      updatedAt,
+    });
+
+    if (block) {
+      await tx
+        .update(contentBlocks)
+        .set({ data: restoredDraft, updatedAt: new Date() })
+        .where(and(eq(contentBlocks.id, block.id), eq(contentBlocks.workItemId, input.workItemId)));
+    } else {
+      await tx.insert(contentBlocks).values({
+        workItemId: input.workItemId,
+        blockType: REPORT_DOCUMENT_BLOCK,
+        sortOrder: 0,
+        data: restoredDraft,
+      });
+    }
+    await tx.update(workItems).set({ updatedAt: new Date() }).where(eq(workItems.id, input.workItemId));
+
+    return {
+      revision: restoredDraft.revision,
+      updatedAt: restoredDraft.updatedAt,
+      restoredFromVersionNumber: versionRow.versionNumber,
+    };
+  });
+}

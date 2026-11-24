@@ -23,6 +23,7 @@ import {
 } from "./domain-db";
 import { AccountAccessError, AccountValidationError } from "./account-db";
 import { reportDraftRouter } from "./report-draft-router";
+import { portfolioDraftRouter } from "./portfolio-draft-router";
 import {
   addReviewCommentForUser,
   createOutputForUser,
@@ -142,6 +143,7 @@ export const domainRouter = router({
   }),
 
   reportDraft: reportDraftRouter,
+  portfolioDraft: portfolioDraftRouter,
 
   asset: router({
     list: protectedProcedure.query(({ ctx }) => listAssetsForUser(ctx.user.id)),
