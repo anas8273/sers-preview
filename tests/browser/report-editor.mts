@@ -8,7 +8,14 @@ import { resolve } from "node:path";
 import express from "express";
 import puppeteer from "puppeteer";
 import superjson from "superjson";
-import { getReportTemplate, REPORT_SCHEMA_VERSION } from "../../shared/report-projection";
+import {
+  applyTemplateSwitch,
+  getReportTemplate,
+  normalizeReportDraft,
+  previewTemplateSwitch,
+  REPORT_SCHEMA_VERSION,
+  REPORT_TEMPLATE_DEFINITIONS,
+} from "../../shared/report-projection";
 import type { ReportIdentity } from "../../shared/report-appearance";
 
 const ok = (data: unknown) => ({ result: { data: superjson.serialize(data) } });
@@ -49,7 +56,7 @@ test("report editor mobile layout, recovery, reportIdentity v2 and personal onbo
     schemaVersion: REPORT_SCHEMA_VERSION,
     revision: 1,
     templateId: "program-report",
-    templateVersionId: programTemplate.versionId,
+    templateVersionId: `${programTemplate.id}@${programTemplate.version}`,
     themeId: "formal",
     fontFamily: "Cairo",
     fields: { summary: longText },
@@ -59,6 +66,32 @@ test("report editor mobile layout, recovery, reportIdentity v2 and personal onbo
   };
   const versions: { id: number; versionNumber: number; reason: string; reportRevision?: number }[] = [];
   const saved: Array<typeof draft> = [];
+  const templateHistory: Array<{
+    historyId: string;
+    switchedAt: string;
+    fromTemplateId: string;
+    fromTemplateLabel: string;
+    snapshot: typeof draft;
+  }> = [];
+  const switchCalls: Array<{ expectedRevision: number; targetTemplateId: string; unmappedStrategy: string }> = [];
+  const rollbackCalls: Array<{ expectedRevision: number; historyId: string }> = [];
+  let fixtureAssets = [
+    {
+      id: 11,
+      title: "شاهد مرتبط بعمل نشط",
+      kind: "text" as const,
+      ownerType: "personal" as const,
+      ownerUserId: 1,
+      ownerOrganizationId: null,
+      mimeType: null,
+      fileSize: null,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      externalUrl: null,
+      metadata: { text: "نص الشاهد التجريبي" },
+    },
+  ];
+  const deleteAssetCalls: Array<{ id: number; unlinkActive?: boolean }> = [];
   app.all("/api/trpc/:paths", async (req, res) => {
     const paths = req.params.paths.split(",");
     const batched = req.query.batch === "1";
@@ -75,6 +108,72 @@ test("report editor mobile layout, recovery, reportIdentity v2 and personal onbo
         }
         case "domain.work.get": return ok(work);
         case "domain.reportDraft.get": return loadFailure ? failure(path, "تعذر تحميل التقرير التجريبي") : ok({ work, draft, blockId: 1 });
+        case "domain.reportDraft.previewTemplateSwitch": {
+          const normalized = normalizeReportDraft(draft, { allowLegacy: false });
+          return ok(previewTemplateSwitch(normalized, input.targetTemplateId));
+        }
+        case "domain.reportDraft.switchTemplate": {
+          assert.equal(input.expectedRevision, draft.revision);
+          switchCalls.push({
+            expectedRevision: input.expectedRevision,
+            targetTemplateId: input.targetTemplateId,
+            unmappedStrategy: input.unmappedStrategy,
+          });
+          const normalized = normalizeReportDraft(draft, { allowLegacy: false });
+          const switched = applyTemplateSwitch(normalized, input.targetTemplateId, input.unmappedStrategy);
+          const historyId = `hist-${templateHistory.length + 1}`;
+          const switchedAt = new Date().toISOString();
+          templateHistory.unshift({
+            historyId,
+            switchedAt,
+            fromTemplateId: draft.templateId,
+            fromTemplateLabel: REPORT_TEMPLATE_DEFINITIONS[draft.templateId]?.label ?? draft.templateId,
+            snapshot: structuredClone(draft),
+          });
+          draft = {
+            ...switched,
+            revision: draft.revision + 1,
+            updatedAt: switchedAt,
+          };
+          return ok({ revision: draft.revision, updatedAt: draft.updatedAt, historyId });
+        }
+        case "domain.reportDraft.rollbackTemplate": {
+          assert.equal(input.expectedRevision, draft.revision);
+          rollbackCalls.push({ expectedRevision: input.expectedRevision, historyId: input.historyId });
+          const entry = templateHistory.find(item => item.historyId === input.historyId);
+          assert(entry, "history entry must exist for rollback");
+          draft = {
+            ...structuredClone(entry.snapshot),
+            revision: draft.revision + 1,
+            updatedAt: new Date().toISOString(),
+          };
+          return ok({ revision: draft.revision, updatedAt: draft.updatedAt });
+        }
+        case "domain.reportDraft.templateHistory":
+          return ok(templateHistory.map(({ historyId, switchedAt, fromTemplateId, fromTemplateLabel }) => ({
+            historyId, switchedAt, fromTemplateId, fromTemplateLabel,
+          })));
+        case "domain.asset.list": return ok(fixtureAssets);
+        case "domain.asset.usage":
+          return ok({
+            assetId: input.id,
+            activeLinks: [{ workItemId: 1, workTitle: "تقرير البرنامج الرئيسي", workType: "report", workStatus: "draft", role: "evidence" }],
+            historicalVersionCount: 2,
+          });
+        case "domain.asset.delete": {
+          deleteAssetCalls.push({ id: input.id, unlinkActive: input.unlinkActive });
+          if (!input.unlinkActive) {
+            return {
+              error: superjson.serialize({
+                message: "الشاهد مستخدم في أعمال أخرى. أكد فك الربط ثم الحذف.",
+                code: -32009,
+                data: { code: "CONFLICT", httpStatus: 409, path },
+              }),
+            };
+          }
+          fixtureAssets = fixtureAssets.filter(asset => asset.id !== input.id);
+          return ok({ deleted: true, unlinkedCount: 1 });
+        }
         case "reviewSupport.reviewers": return ok([{ userId: 2, name: "المراجع التجريبي", role: "reviewer" }]);
         case "reviewSupport.versions": return ok(versions);
         case "domain.reportDraft.save": {
@@ -247,6 +346,59 @@ test("report editor mobile layout, recovery, reportIdentity v2 and personal onbo
       assert.equal(await page.evaluate(() => document.querySelector('[role="dialog"]')?.contains(document.activeElement)), true);
       await page.keyboard.press("Escape"); await page.waitForSelector('[role="dialog"]', { hidden: true });
       assert.equal(await page.evaluate(() => document.activeElement?.textContent?.trim()), "إضافة شاهد");
+    });
+    await t.test("evidence delete with active links requires explicit unlink checkbox confirmation (R04)", async () => {
+      await visible("شاهد مرتبط بعمل نشط");
+      const deleteButton = await page.waitForSelector('button[aria-label="حذف الشاهد شاهد مرتبط بعمل نشط"]');
+      assert(deleteButton);
+      await deleteButton.evaluate(node => node.scrollIntoView({ block: "center" }));
+      await deleteButton.click();
+      await page.waitForSelector('[role="dialog"]');
+      await visible("النسخ الثابتة المحفوظة سابقًا لا تتأثر بالحذف");
+      await visible("مستخدم في 2 نسخة ثابتة محفوظة");
+      await visible("تقرير البرنامج الرئيسي");
+      const disabledBeforeCheck = await page.evaluate(() => {
+        const btn = Array.from(document.querySelectorAll('[role="dialog"] button')).find(node => node.textContent?.trim() === "حذف الشاهد") as HTMLButtonElement | undefined;
+        return Boolean(btn?.disabled);
+      });
+      assert.equal(disabledBeforeCheck, true, "delete confirm button must stay disabled until checkbox is ticked");
+      await page.click('[role="dialog"] input[type="checkbox"]');
+      await click("حذف الشاهد");
+      await page.waitForSelector('[role="dialog"]', { hidden: true });
+      assert.deepEqual(deleteAssetCalls, [{ id: 11, unlinkActive: true }]);
+      await visible("مكتبة الشواهد فارغة");
+    });
+    await t.test("non-destructive v2 template switch previews mappings, appends unmapped fields, and supports rollback (R12)", async () => {
+      // Seed an unmapped program-report field before switching to initiative-report
+      draft = {
+        ...draft,
+        fields: {
+          ...draft.fields,
+          subject: "برنامج التفوق العلمي",
+        },
+      };
+      await page.goto(`${base}/work/1/report`);
+      await page.waitForSelector('input[name="schoolName"]');
+      const revisionBeforeSwitch = draft.revision;
+      await page.select("section select", "initiative-report");
+      await page.waitForSelector('[role="dialog"]');
+      await visible("تبديل قالب التقرير بأمان");
+      await visible("الحقول المنقولة تلقائيًا");
+      await visible("حقول ممتلئة غير موجودة في القالب الجديد");
+      await visible("برنامج التفوق العلمي");
+      await click("تطبيق القالب بأمان");
+      await page.waitForSelector('[role="dialog"]', { hidden: true });
+      await visible("تم تبديل القالب");
+      assert.equal(switchCalls.length, 1);
+      assert.equal(switchCalls[0].expectedRevision, revisionBeforeSwitch);
+      assert.equal(switchCalls[0].targetTemplateId, "initiative-report");
+      assert.equal(switchCalls[0].unmappedStrategy, "append_to_summary");
+      assert.equal(draft.templateId, "initiative-report");
+      assert(String(draft.fields.summary).includes("برنامج التفوق العلمي"));
+      await click("تراجع");
+      await page.waitForFunction(() => !document.body.innerText.includes("تم تبديل القالب"));
+      assert.equal(rollbackCalls.length, 1);
+      assert.equal(draft.templateId, "program-report");
     });
     assert.deepEqual(errors, []);
   } finally {

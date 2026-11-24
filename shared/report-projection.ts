@@ -383,3 +383,231 @@ export function formatReportFieldValue(value: ReportFieldValue): string {
 export function reportFieldValueToEditorString(value: ReportFieldValue | undefined): string {
   return value === undefined ? "" : Array.isArray(value) ? value.join("\n") : String(value);
 }
+
+export type TemplateSwitchCompatibility = "exact" | "coerced_to_text" | "alias" | "unmapped";
+
+export type TemplateSwitchMapping = {
+  sourceKey: string;
+  sourceLabel: string;
+  targetKey: string | null;
+  targetLabel: string | null;
+  compatibility: TemplateSwitchCompatibility;
+};
+
+export type TemplateSwitchPreview = {
+  fromTemplateId: string;
+  toTemplateId: string;
+  toTemplateLabel: string;
+  toTemplateVersionId: string;
+  mappings: TemplateSwitchMapping[];
+  unmappedFields: Array<{ key: string; label: string; text: string }>;
+  newEmptyFields: Array<{ key: string; label: string }>;
+  appendToSummaryFits: boolean;
+};
+
+const TEMPLATE_SWITCH_ALIASES: Readonly<Record<string, readonly string[]>> = {
+  goals: ["objectives"],
+  objectives: ["goals"],
+  steps: ["implementation"],
+  implementation: ["steps"],
+  outcomes: ["results"],
+  results: ["outcomes"],
+  generalNotes: ["summary"],
+  decisions: ["summary"],
+};
+
+function isNonEmptyFieldValue(value: ReportFieldValue | undefined): value is ReportFieldValue {
+  if (value === undefined || value === "") return false;
+  if (Array.isArray(value)) return value.length > 0;
+  return true;
+}
+
+function coerceValueForTarget(
+  value: ReportFieldValue,
+  sourceField: ReportFieldDefinition,
+  targetField: ReportFieldDefinition,
+): { ok: true; value: ReportFieldValue; coerced: boolean } | { ok: false } {
+  const maxLength = targetField.maxLength ?? 20_000;
+  if (sourceField.type === targetField.type) {
+    if (targetField.type === "select") {
+      const text = String(value);
+      if (targetField.options && !targetField.options.includes(text)) return { ok: false };
+      if (text.length > maxLength) return { ok: false };
+      return { ok: true, value: text, coerced: false };
+    }
+    if (targetField.type === "list") {
+      if (!Array.isArray(value)) return { ok: false };
+      const items = value.map(item => item.trim()).filter(Boolean);
+      if (!items.length || items.length > 100 || items.some(item => item.length > maxLength)) return { ok: false };
+      return { ok: true, value: items, coerced: false };
+    }
+    if (targetField.type === "number") {
+      if (typeof value !== "number" || !Number.isFinite(value) || !Number.isSafeInteger(value)) return { ok: false };
+      return { ok: true, value, coerced: false };
+    }
+    const text = String(value);
+    if (text.length > maxLength) return { ok: false };
+    return { ok: true, value: text, coerced: false };
+  }
+
+  if (targetField.type === "text" || targetField.type === "textarea") {
+    const text = formatReportFieldValue(value);
+    if (text.length > maxLength) return { ok: false };
+    return { ok: true, value: text, coerced: true };
+  }
+
+  if (targetField.type === "list" && (sourceField.type === "text" || sourceField.type === "textarea")) {
+    const items = String(value).split(/\r?\n/).map(item => item.trim()).filter(Boolean);
+    if (!items.length || items.length > 100 || items.some(item => item.length > maxLength)) return { ok: false };
+    return { ok: true, value: items, coerced: true };
+  }
+
+  return { ok: false };
+}
+
+function buildUnmappedAppendix(unmappedFields: Array<{ key: string; label: string; text: string }>): string {
+  const body = unmappedFields.map(field => `${field.label}: ${field.text}`).join("\n");
+  return `\n\n— حقول من القالب السابق —\n${body}`;
+}
+
+function computeTemplateSwitch(draft: NormalizedReportDraft, targetTemplateId: string) {
+  const targetTemplate = getReportTemplate(targetTemplateId);
+  const targetVersionId = `${targetTemplate.id}@${targetTemplate.version}`;
+  const targetByKey = new Map(targetTemplate.fields.map(field => [field.key, field]));
+  const nextFields: Record<string, ReportFieldValue> = {};
+  const mappingsByKey = new Map<string, TemplateSwitchMapping>();
+  const remainingSources: Array<{ def: ReportFieldDefinition; value: ReportFieldValue }> = [];
+
+  // Pass 1: exact or coerced same-key mappings
+  for (const sourceDef of draft.fieldDefinitions) {
+    const value = draft.fields[sourceDef.key];
+    if (!isNonEmptyFieldValue(value)) continue;
+    const targetDef = targetByKey.get(sourceDef.key);
+    if (targetDef) {
+      const converted = coerceValueForTarget(value, sourceDef, targetDef);
+      if (converted.ok) {
+        nextFields[targetDef.key] = converted.value;
+        mappingsByKey.set(sourceDef.key, {
+          sourceKey: sourceDef.key,
+          sourceLabel: sourceDef.label,
+          targetKey: targetDef.key,
+          targetLabel: targetDef.label,
+          compatibility: converted.coerced ? "coerced_to_text" : "exact",
+        });
+        continue;
+      }
+    }
+    remainingSources.push({ def: sourceDef, value });
+  }
+
+  // Pass 2: alias mappings (only when target key exists and is currently empty)
+  const unmappedFields: Array<{ key: string; label: string; text: string }> = [];
+  for (const { def: sourceDef, value } of remainingSources) {
+    const aliasCandidates = TEMPLATE_SWITCH_ALIASES[sourceDef.key] ?? [];
+    let mapped = false;
+    for (const candidateKey of aliasCandidates) {
+      const targetDef = targetByKey.get(candidateKey);
+      if (!targetDef || nextFields[targetDef.key] !== undefined) continue;
+      const converted = coerceValueForTarget(value, sourceDef, targetDef);
+      if (converted.ok) {
+        nextFields[targetDef.key] = converted.value;
+        mappingsByKey.set(sourceDef.key, {
+          sourceKey: sourceDef.key,
+          sourceLabel: sourceDef.label,
+          targetKey: targetDef.key,
+          targetLabel: targetDef.label,
+          compatibility: "alias",
+        });
+        mapped = true;
+        break;
+      }
+    }
+    if (!mapped) {
+      mappingsByKey.set(sourceDef.key, {
+        sourceKey: sourceDef.key,
+        sourceLabel: sourceDef.label,
+        targetKey: null,
+        targetLabel: null,
+        compatibility: "unmapped",
+      });
+      unmappedFields.push({
+        key: sourceDef.key,
+        label: sourceDef.label,
+        text: formatReportFieldValue(value),
+      });
+    }
+  }
+
+  // Preserve source definition order for mappings
+  const mappings: TemplateSwitchMapping[] = [];
+  for (const sourceDef of draft.fieldDefinitions) {
+    const entry = mappingsByKey.get(sourceDef.key);
+    if (entry) mappings.push(entry);
+  }
+
+  const newEmptyFields = targetTemplate.fields
+    .filter(field => nextFields[field.key] === undefined)
+    .map(field => ({ key: field.key, label: field.label }));
+
+  const summaryDef = targetByKey.get("summary");
+  let appendToSummaryFits = true;
+  let appendedSummaryValue: string | undefined;
+  if (unmappedFields.length > 0) {
+    if (!summaryDef || (summaryDef.type !== "textarea" && summaryDef.type !== "text")) {
+      appendToSummaryFits = false;
+    } else {
+      const existingSummary = typeof nextFields.summary === "string" ? nextFields.summary : "";
+      const appendix = buildUnmappedAppendix(unmappedFields);
+      const combined = existingSummary ? `${existingSummary}${appendix}` : appendix.trimStart();
+      const maxLength = summaryDef.maxLength ?? 20_000;
+      if (combined.length > maxLength) {
+        appendToSummaryFits = false;
+      } else {
+        appendedSummaryValue = combined;
+      }
+    }
+  }
+
+  const preview: TemplateSwitchPreview = {
+    fromTemplateId: draft.templateId,
+    toTemplateId: targetTemplate.id,
+    toTemplateLabel: targetTemplate.label,
+    toTemplateVersionId: targetVersionId,
+    mappings,
+    unmappedFields,
+    newEmptyFields,
+    appendToSummaryFits,
+  };
+
+  return { targetTemplate, targetVersionId, nextFields, preview, appendedSummaryValue };
+}
+
+export function previewTemplateSwitch(draft: NormalizedReportDraft, targetTemplateId: string): TemplateSwitchPreview {
+  return computeTemplateSwitch(draft, targetTemplateId).preview;
+}
+
+export function applyTemplateSwitch(
+  draft: NormalizedReportDraft,
+  targetTemplateId: string,
+  strategy: "append_to_summary" | "discard",
+): NormalizedReportDraft {
+  const { targetTemplate, targetVersionId, nextFields, preview, appendedSummaryValue } = computeTemplateSwitch(draft, targetTemplateId);
+  const fields: Record<string, ReportFieldValue> = { ...nextFields };
+  if (strategy === "append_to_summary" && preview.unmappedFields.length > 0) {
+    if (!preview.appendToSummaryFits || appendedSummaryValue === undefined) {
+      throw new ReportDocumentValidationError("تعذر إلحاق الحقول غير المطابقة بملخص التقرير لأن القالب الهدف لا يدعم ذلك أو يتجاوز الحد المسموح");
+    }
+    fields.summary = appendedSummaryValue;
+  }
+  return normalizeReportDraft({
+    schemaVersion: REPORT_SCHEMA_VERSION,
+    templateId: targetTemplate.id,
+    templateVersionId: targetVersionId,
+    themeId: draft.themeId,
+    fontFamily: draft.fontFamily,
+    fields,
+    evidenceAssetIds: [...draft.evidenceAssetIds],
+    ...(draft.reportIdentity ? { reportIdentity: draft.reportIdentity } : {}),
+    fieldDefinitions: targetTemplate.fields,
+  }, { allowLegacy: false });
+}

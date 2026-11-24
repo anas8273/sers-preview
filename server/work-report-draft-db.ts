@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { and, asc, eq, isNull } from "drizzle-orm";
 import {
   assets,
@@ -12,9 +13,13 @@ import { uploadIntents } from "../drizzle/upload-intents";
 import { getDb } from "./db";
 import { users } from "../drizzle/schema";
 import {
+  applyTemplateSwitch,
   normalizeReportDraft,
+  previewTemplateSwitch,
+  REPORT_TEMPLATE_DEFINITIONS,
   type NormalizedReportDraft,
   type ReportFieldValue,
+  type TemplateSwitchPreview,
   ReportDocumentValidationError,
 } from "../shared/report-projection";
 import type { ReportIdentity } from "../shared/report-appearance";
@@ -25,6 +30,23 @@ import { sanitizeEvidenceImage } from "./work-version-inline-image";
 import { sanitizeReportSchoolLogo } from "./work-version-report-assets";
 
 export const REPORT_DOCUMENT_BLOCK = "report_document";
+export const REPORT_TEMPLATE_HISTORY_BLOCK = "report_template_history";
+const REPORT_TEMPLATE_HISTORY_MAX_ENTRIES = 5;
+
+export type ReportTemplateHistoryEntry = {
+  historyId: string;
+  switchedAt: string;
+  fromTemplateId: string;
+  fromTemplateLabel: string;
+  snapshot: ReportDraftData;
+};
+
+export type ReportTemplateHistorySummary = {
+  historyId: string;
+  switchedAt: string;
+  fromTemplateId: string;
+  fromTemplateLabel: string;
+};
 
 export type ReportDraftData = {
   schemaVersion: 2;
@@ -66,6 +88,13 @@ export class ReportDraftAccessError extends Error {
   constructor(message = "Report draft access denied") {
     super(message);
     this.name = "ReportDraftAccessError";
+  }
+}
+
+export class ReportDraftNotFoundError extends Error {
+  constructor(message = "Report draft resource not found") {
+    super(message);
+    this.name = "ReportDraftNotFoundError";
   }
 }
 
@@ -482,4 +511,250 @@ export async function createReportDraftVersionForUser(userId: number, input: {
       reportRevision: draft.revision,
     };
   });
+}
+
+function parseTemplateHistoryEntries(value: unknown): ReportTemplateHistoryEntry[] {
+  const rawList = Array.isArray(value)
+    ? value
+    : value && typeof value === "object" && Array.isArray((value as Record<string, unknown>).entries)
+      ? (value as Record<string, unknown>).entries as unknown[]
+      : [];
+  const entries: ReportTemplateHistoryEntry[] = [];
+  for (const item of rawList) {
+    if (!item || typeof item !== "object") continue;
+    const record = item as Record<string, unknown>;
+    if (
+      typeof record.historyId === "string"
+      && typeof record.switchedAt === "string"
+      && typeof record.fromTemplateId === "string"
+      && typeof record.fromTemplateLabel === "string"
+      && record.snapshot
+      && typeof record.snapshot === "object"
+    ) {
+      entries.push({
+        historyId: record.historyId,
+        switchedAt: record.switchedAt,
+        fromTemplateId: record.fromTemplateId,
+        fromTemplateLabel: record.fromTemplateLabel,
+        snapshot: record.snapshot as ReportDraftData,
+      });
+    }
+  }
+  return entries.slice(0, REPORT_TEMPLATE_HISTORY_MAX_ENTRIES);
+}
+
+function assertStoredDraftIsV2(block: { data: unknown } | undefined): ReportDraftData {
+  if (!block || !block.data || typeof block.data !== "object" || (block.data as Record<string, unknown>).schemaVersion !== 2) {
+    throw new ReportDraftValidationError("تبديل القالب غير التدميري متاح لمسودات إصدار المخطط 2 فقط؛ احفظ المسودة أولًا");
+  }
+  return normalizeDraft(block.data);
+}
+
+export async function previewReportTemplateSwitchForUser(
+  userId: number,
+  input: { workItemId: number; targetTemplateId: string },
+): Promise<TemplateSwitchPreview> {
+  const work = await assertReadAccess(userId, input.workItemId);
+  if (!work) throw new ReportDraftAccessError("لا تملك صلاحية الوصول إلى هذا التقرير");
+  if (work.type !== "report") throw new ReportDraftAccessError("تبديل القوالب متاح لأعمال التقارير فقط");
+
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const [block] = await db
+    .select()
+    .from(contentBlocks)
+    .where(and(eq(contentBlocks.workItemId, input.workItemId), eq(contentBlocks.blockType, REPORT_DOCUMENT_BLOCK)))
+    .orderBy(asc(contentBlocks.id))
+    .limit(1);
+
+  const current = assertStoredDraftIsV2(block);
+  try {
+    return previewTemplateSwitch(current, input.targetTemplateId);
+  } catch (error) {
+    if (error instanceof ReportDocumentValidationError) throw new ReportDraftValidationError(error.message);
+    throw error;
+  }
+}
+
+export async function switchReportTemplateForUser(
+  userId: number,
+  input: {
+    workItemId: number;
+    expectedRevision: number;
+    targetTemplateId: string;
+    unmappedStrategy: "append_to_summary" | "discard";
+  },
+): Promise<{ revision: number; updatedAt: string; historyId: string }> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  return db.transaction(async tx => {
+    const work = await assertWriteAccessInTransaction(tx, userId, input.workItemId);
+    if (!work) throw new ReportDraftAccessError("لا تملك صلاحية تعديل هذا التقرير");
+    if (work.type !== "report") throw new ReportDraftAccessError("تبديل القوالب متاح لأعمال التقارير فقط");
+    if (work.status === "archived") throw new ReportDraftConflictError("لا يمكن تعديل عمل مؤرشف");
+
+    const [block] = await tx
+      .select()
+      .from(contentBlocks)
+      .where(and(eq(contentBlocks.workItemId, input.workItemId), eq(contentBlocks.blockType, REPORT_DOCUMENT_BLOCK)))
+      .orderBy(asc(contentBlocks.id))
+      .limit(1)
+      .for("update");
+
+    const current = assertStoredDraftIsV2(block);
+    if (current.revision !== input.expectedRevision) throw new ReportDraftConflictError();
+
+    let switched: NormalizedReportDraft;
+    try {
+      switched = applyTemplateSwitch(current, input.targetTemplateId, input.unmappedStrategy);
+    } catch (error) {
+      if (error instanceof ReportDocumentValidationError) throw new ReportDraftValidationError(error.message);
+      throw error;
+    }
+
+    const [historyBlock] = await tx
+      .select()
+      .from(contentBlocks)
+      .where(and(eq(contentBlocks.workItemId, input.workItemId), eq(contentBlocks.blockType, REPORT_TEMPLATE_HISTORY_BLOCK)))
+      .orderBy(asc(contentBlocks.id))
+      .limit(1)
+      .for("update");
+
+    const existingHistory = historyBlock ? parseTemplateHistoryEntries(historyBlock.data) : [];
+    const historyId = randomBytes(12).toString("hex");
+    const switchedAt = new Date().toISOString();
+    const fromTemplateLabel = REPORT_TEMPLATE_DEFINITIONS[current.templateId]?.label ?? current.templateId;
+    const nextHistory: ReportTemplateHistoryEntry[] = [
+      {
+        historyId,
+        switchedAt,
+        fromTemplateId: current.templateId,
+        fromTemplateLabel,
+        snapshot: current,
+      },
+      ...existingHistory,
+    ].slice(0, REPORT_TEMPLATE_HISTORY_MAX_ENTRIES);
+
+    if (historyBlock) {
+      await tx
+        .update(contentBlocks)
+        .set({ data: { entries: nextHistory }, updatedAt: new Date() })
+        .where(and(eq(contentBlocks.id, historyBlock.id), eq(contentBlocks.workItemId, input.workItemId)));
+    } else {
+      await tx.insert(contentBlocks).values({
+        workItemId: input.workItemId,
+        blockType: REPORT_TEMPLATE_HISTORY_BLOCK,
+        sortOrder: 1,
+        data: { entries: nextHistory },
+      });
+    }
+
+    const nextDraft: ReportDraftData = sanitizeDraftIdentityLogo({
+      ...switched,
+      revision: current.revision + 1,
+      updatedAt: switchedAt,
+    });
+
+    await tx
+      .update(contentBlocks)
+      .set({ data: nextDraft, updatedAt: new Date() })
+      .where(and(eq(contentBlocks.id, block!.id), eq(contentBlocks.workItemId, input.workItemId)));
+    await tx.update(workItems).set({ updatedAt: new Date() }).where(eq(workItems.id, input.workItemId));
+
+    return {
+      revision: nextDraft.revision,
+      updatedAt: nextDraft.updatedAt,
+      historyId,
+    };
+  });
+}
+
+export async function rollbackReportTemplateForUser(
+  userId: number,
+  input: {
+    workItemId: number;
+    expectedRevision: number;
+    historyId: string;
+  },
+): Promise<{ revision: number; updatedAt: string }> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  return db.transaction(async tx => {
+    const work = await assertWriteAccessInTransaction(tx, userId, input.workItemId);
+    if (!work) throw new ReportDraftAccessError("لا تملك صلاحية تعديل هذا التقرير");
+    if (work.type !== "report") throw new ReportDraftAccessError("تبديل القوالب متاح لأعمال التقارير فقط");
+    if (work.status === "archived") throw new ReportDraftConflictError("لا يمكن تعديل عمل مؤرشف");
+
+    const [block] = await tx
+      .select()
+      .from(contentBlocks)
+      .where(and(eq(contentBlocks.workItemId, input.workItemId), eq(contentBlocks.blockType, REPORT_DOCUMENT_BLOCK)))
+      .orderBy(asc(contentBlocks.id))
+      .limit(1)
+      .for("update");
+
+    const current = assertStoredDraftIsV2(block);
+    if (current.revision !== input.expectedRevision) throw new ReportDraftConflictError();
+
+    const [historyBlock] = await tx
+      .select()
+      .from(contentBlocks)
+      .where(and(eq(contentBlocks.workItemId, input.workItemId), eq(contentBlocks.blockType, REPORT_TEMPLATE_HISTORY_BLOCK)))
+      .orderBy(asc(contentBlocks.id))
+      .limit(1)
+      .for("update");
+
+    const entries = historyBlock ? parseTemplateHistoryEntries(historyBlock.data) : [];
+    const targetEntry = entries.find(entry => entry.historyId === input.historyId);
+    if (!targetEntry) {
+      throw new ReportDraftNotFoundError("سجل القالب المطلوب غير موجود أو تمت إزالته");
+    }
+
+    const restoredBase = normalizeDraft(targetEntry.snapshot);
+    const updatedAt = new Date().toISOString();
+    const restoredDraft: ReportDraftData = sanitizeDraftIdentityLogo({
+      ...restoredBase,
+      revision: current.revision + 1,
+      updatedAt,
+    });
+
+    await tx
+      .update(contentBlocks)
+      .set({ data: restoredDraft, updatedAt: new Date() })
+      .where(and(eq(contentBlocks.id, block!.id), eq(contentBlocks.workItemId, input.workItemId)));
+    await tx.update(workItems).set({ updatedAt: new Date() }).where(eq(workItems.id, input.workItemId));
+
+    return {
+      revision: restoredDraft.revision,
+      updatedAt: restoredDraft.updatedAt,
+    };
+  });
+}
+
+export async function listReportTemplateHistoryForUser(
+  userId: number,
+  workItemId: number,
+): Promise<ReportTemplateHistorySummary[]> {
+  const work = await assertReadAccess(userId, workItemId);
+  if (!work) throw new ReportDraftAccessError("لا تملك صلاحية الوصول إلى هذا التقرير");
+  if (work.type !== "report") throw new ReportDraftAccessError("سجل القوالب متاح لأعمال التقارير فقط");
+
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const [historyBlock] = await db
+    .select()
+    .from(contentBlocks)
+    .where(and(eq(contentBlocks.workItemId, workItemId), eq(contentBlocks.blockType, REPORT_TEMPLATE_HISTORY_BLOCK)))
+    .orderBy(asc(contentBlocks.id))
+    .limit(1);
+
+  if (!historyBlock) return [];
+  return parseTemplateHistoryEntries(historyBlock.data).map(({ historyId, switchedAt, fromTemplateId, fromTemplateLabel }) => ({
+    historyId,
+    switchedAt,
+    fromTemplateId,
+    fromTemplateLabel,
+  }));
 }

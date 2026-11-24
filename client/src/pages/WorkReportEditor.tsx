@@ -45,6 +45,7 @@ import {
 } from "lucide-react";
 import { useLocation, useRoute } from "wouter";
 import AppSidebar from "@/components/AppSidebar";
+import TemplateSwitchDialog from "@/components/TemplateSwitchDialog";
 import { trpc } from "@/lib/trpc";
 import "./work-report-fonts.css";
 
@@ -253,6 +254,11 @@ function ReportEditor({ workId }: { workId: number }) {
   const [lastSavedAt, setLastSavedAt] = useState<string | undefined>();
   const [versionReason, setVersionReason] = useState("");
   const [templateError, setTemplateError] = useState<string | undefined>();
+  const [pendingTargetTemplateId, setPendingTargetTemplateId] = useState<string | null>(null);
+  const [templateSwitchError, setTemplateSwitchError] = useState<string | undefined>();
+  const [templateSwitchNotice, setTemplateSwitchNotice] = useState<{ historyId: string; revision: number } | null>(null);
+  const [confirmRestoreHistoryId, setConfirmRestoreHistoryId] = useState<string | null>(null);
+  const templateSelectRef = useRef<HTMLSelectElement | null>(null);
   const [createdVersion, setCreatedVersion] = useState<{ id: number; versionNumber: number; revision: number } | undefined>();
   const [selectedReviewerId, setSelectedReviewerId] = useState<number | undefined>();
 
@@ -272,8 +278,18 @@ function ReportEditor({ workId }: { workId: number }) {
     { organizationId: organizationId ?? 0 },
     { enabled: Boolean(organizationId), retry: false },
   );
+  const templateHistoryQuery = trpc.domain.reportDraft.templateHistory.useQuery(
+    { workItemId: workId },
+    { enabled: Boolean(reportQuery.data), retry: false, refetchOnWindowFocus: false },
+  );
+  const previewSwitchQuery = trpc.domain.reportDraft.previewTemplateSwitch.useQuery(
+    { workItemId: workId, targetTemplateId: pendingTargetTemplateId ?? "custom" },
+    { enabled: Boolean(pendingTargetTemplateId), retry: false, refetchOnWindowFocus: false },
+  );
 
   const { mutateAsync: writeDraft } = trpc.domain.reportDraft.save.useMutation();
+  const switchTemplateMutation = trpc.domain.reportDraft.switchTemplate.useMutation();
+  const rollbackTemplateMutation = trpc.domain.reportDraft.rollbackTemplate.useMutation();
   const createVersionMutation = trpc.domain.reportDraft.createVersion.useMutation();
   const requestReviewMutation = trpc.domain.review.request.useMutation();
 
@@ -386,13 +402,28 @@ function ReportEditor({ workId }: { workId: number }) {
     }
   };
 
-  const changeTemplate = (nextTemplateId: string) => {
+  const changeTemplate = async (nextTemplateId: string) => {
     const session = sessionRef.current;
     if (!session || !isCurrent(session) || nextTemplateId === session.content.templateId) return;
-    // Historical v2 data is immutable. A mapping UI is deliberately not
-    // implicit: rejecting here is safer than relabelling or dropping fields.
     if (session.content.schemaVersion === 2) {
-      setTemplateError("لا يمكن تبديل قالب تقرير مجمّد دون تعيين حقول صريح؛ لم تتغير البيانات.");
+      if (conflict.current) {
+        setTemplateError("حل تعارض المسودة أولًا قبل تبديل القالب.");
+        return;
+      }
+      if (!navigator.onLine) {
+        setTemplateError("تبديل القالب يتطلب اتصالًا بالخادم لحفظ تعديلاتك أولًا.");
+        return;
+      }
+      setTemplateError(undefined);
+      setTemplateSwitchError(undefined);
+      const flushedRevision = await saveDraft();
+      if (!isCurrent(session) || conflict.current || session.dirty || flushedRevision === undefined) {
+        if (!conflict.current) {
+          setTemplateError("تعذر حفظ التعديلات المعلقة قبل تبديل القالب. حاول مرة أخرى.");
+        }
+        return;
+      }
+      setPendingTargetTemplateId(nextTemplateId);
       return;
     }
     const next = REPORT_TEMPLATE_DEFINITIONS[nextTemplateId];
@@ -402,6 +433,79 @@ function ReportEditor({ workId }: { workId: number }) {
     }
     setTemplateError(undefined);
     editDraft({ templateId: next.id, templateVersionId: `${next.id}@${next.version}`, fieldDefinitions: [...next.fields] });
+  };
+
+  const handleApplyTemplateSwitch = async (strategy: "append_to_summary" | "discard") => {
+    const session = sessionRef.current;
+    if (!session || !isCurrent(session) || !pendingTargetTemplateId) return;
+    setTemplateSwitchError(undefined);
+    try {
+      const result = await switchTemplateMutation.mutateAsync({
+        workItemId: workId,
+        expectedRevision: session.revision,
+        targetTemplateId: pendingTargetTemplateId,
+        unmappedStrategy: strategy,
+      });
+      if (!isCurrent(session)) return;
+      setPendingTargetTemplateId(null);
+      setConfirmRestoreHistoryId(null);
+      await utils.domain.reportDraft.get.invalidate({ workItemId: workId });
+      const refreshed = await reportQuery.refetch();
+      if (isCurrent(session) && refreshed.isSuccess) {
+        updateBackup();
+        applyServerDraft(refreshed.data, false);
+        setTemplateSwitchNotice({ historyId: result.historyId, revision: result.revision });
+      }
+      await utils.domain.reportDraft.templateHistory.invalidate({ workItemId: workId });
+    } catch (error) {
+      if (!isCurrent(session)) return;
+      const code = (error as { data?: { code?: string } })?.data?.code;
+      if (code === "CONFLICT") {
+        conflict.current = true;
+        setSaveState("conflict");
+        setPendingTargetTemplateId(null);
+        return;
+      }
+      setTemplateSwitchError(error instanceof Error ? error.message : "تعذر تبديل القالب.");
+    }
+  };
+
+  const handleRollbackTemplate = async (historyId: string, expectedRev?: number) => {
+    const session = sessionRef.current;
+    if (!session || !isCurrent(session) || conflict.current) return;
+    setTemplateError(undefined);
+    try {
+      let currentRevision = expectedRev ?? session.revision;
+      if (session.dirty) {
+        const flushed = await saveDraft();
+        if (!isCurrent(session) || conflict.current || flushed === undefined) return;
+        currentRevision = flushed;
+      }
+      await rollbackTemplateMutation.mutateAsync({
+        workItemId: workId,
+        expectedRevision: currentRevision,
+        historyId,
+      });
+      if (!isCurrent(session)) return;
+      setTemplateSwitchNotice(null);
+      setConfirmRestoreHistoryId(null);
+      await utils.domain.reportDraft.get.invalidate({ workItemId: workId });
+      const refreshed = await reportQuery.refetch();
+      if (isCurrent(session) && refreshed.isSuccess) {
+        updateBackup();
+        applyServerDraft(refreshed.data, false);
+      }
+      await utils.domain.reportDraft.templateHistory.invalidate({ workItemId: workId });
+    } catch (error) {
+      if (!isCurrent(session)) return;
+      const code = (error as { data?: { code?: string } })?.data?.code;
+      if (code === "CONFLICT") {
+        conflict.current = true;
+        setSaveState("conflict");
+        return;
+      }
+      setTemplateError(error instanceof Error ? error.message : "تعذر التراجع عن القالب.");
+    }
   };
 
   const saveDraft = useCallback(async (): Promise<number | undefined> => {
@@ -719,7 +823,7 @@ function ReportEditor({ workId }: { workId: number }) {
                   <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
                     <div className="grid gap-4 md:grid-cols-3">
                       <label className="text-xs font-bold text-slate-700">نوع التقرير
-                        <select value={templateId} onChange={event => changeTemplate(event.target.value)} className={inputClassName}>
+                        <select ref={templateSelectRef} value={templateId} onChange={event => void changeTemplate(event.target.value)} className={inputClassName}>
                           {!templateOptions.some(option => option.id === templateId) && <option value={templateId}>القالب التاريخي ({templateId})</option>}
                           {templateOptions.map(option => <option key={option.id} value={option.id}>{option.label}</option>)}
                         </select>
@@ -736,8 +840,64 @@ function ReportEditor({ workId }: { workId: number }) {
                         </select>
                       </label>
                     </div>
-                    <p className="mt-4 text-xs leading-6 text-slate-600">المحرر يعرض عقد الحقول المحفوظ مع التقرير. تغيير قالب schema مختلف موقوف حتى يتم تعيين الحقول صراحة، لذلك لا تُستبدل البيانات بصمت.</p>
+                    <p className="mt-4 text-xs leading-6 text-slate-600">عند تغيير القالب يعرض المحرر معاينة توافق الحقول قبل التطبيق، ويحفظ نسخة من القالب السابق لإمكانية التراجع دون فقدان أي نص.</p>
+                    {templateSwitchNotice && (
+                      <div role="status" className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3.5 py-2.5 text-xs font-bold text-emerald-900">
+                        <span>تم تبديل القالب</span>
+                        <button
+                          type="button"
+                          disabled={rollbackTemplateMutation.isPending}
+                          onClick={() => void handleRollbackTemplate(templateSwitchNotice.historyId, templateSwitchNotice.revision)}
+                          className="inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-emerald-400 bg-white px-3 py-1.5 text-xs font-bold text-emerald-900 hover:bg-emerald-100 disabled:opacity-50"
+                        >
+                          {rollbackTemplateMutation.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                          تراجع
+                        </button>
+                      </div>
+                    )}
                     {templateError && <p role="alert" className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-xs font-bold text-amber-900">{templateError}</p>}
+                    {(templateHistoryQuery.data?.length ?? 0) > 0 && (
+                      <div className="mt-4 border-t border-slate-100 pt-3">
+                        <p className="text-xs font-bold text-slate-800">سجل القوالب</p>
+                        <ul className="mt-2 space-y-1.5">
+                          {(templateHistoryQuery.data ?? []).map(entry => (
+                            <li key={entry.historyId} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs">
+                              <span className="font-semibold text-slate-800">
+                                {entry.fromTemplateLabel} · <span className="font-normal text-slate-600">{renderBidiText(new Date(entry.switchedAt).toLocaleString("ar-SA"))}</span>
+                              </span>
+                              {confirmRestoreHistoryId === entry.historyId ? (
+                                <span className="flex items-center gap-1.5">
+                                  <button
+                                    type="button"
+                                    disabled={rollbackTemplateMutation.isPending}
+                                    onClick={() => void handleRollbackTemplate(entry.historyId)}
+                                    className="min-h-11 rounded-lg bg-teal-700 px-3 py-1.5 text-xs font-bold text-white hover:bg-teal-800 disabled:opacity-50"
+                                  >
+                                    تأكيد الاستعادة
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setConfirmRestoreHistoryId(null)}
+                                    className="min-h-11 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-200"
+                                  >
+                                    إلغاء
+                                  </button>
+                                </span>
+                              ) : (
+                                <button
+                                  type="button"
+                                  disabled={rollbackTemplateMutation.isPending}
+                                  onClick={() => setConfirmRestoreHistoryId(entry.historyId)}
+                                  className="min-h-11 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-800 hover:bg-slate-100 disabled:opacity-50"
+                                >
+                                  استعادة
+                                </button>
+                              )}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
                   </section>
 
                   <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
@@ -1028,6 +1188,23 @@ function ReportEditor({ workId }: { workId: number }) {
           )}
         </div>
       </main>
+
+      <TemplateSwitchDialog
+        open={Boolean(pendingTargetTemplateId)}
+        onOpenChange={open => {
+          if (!open) {
+            setPendingTargetTemplateId(null);
+            setTemplateSwitchError(undefined);
+          }
+        }}
+        currentTemplateLabel={templateOptions.find(option => option.id === templateId)?.label ?? templateId}
+        preview={previewSwitchQuery.data}
+        isLoading={previewSwitchQuery.isLoading}
+        isSubmitting={switchTemplateMutation.isPending}
+        errorMessage={templateSwitchError || previewSwitchQuery.error?.message}
+        onApply={strategy => void handleApplyTemplateSwitch(strategy)}
+        returnFocusRef={templateSelectRef}
+      />
     </div>
   );
 }

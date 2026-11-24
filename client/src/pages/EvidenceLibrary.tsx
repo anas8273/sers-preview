@@ -1,10 +1,55 @@
 import { useRef, useState, type MouseEvent } from "react";
-import { Building2, ExternalLink, FileText, Library, Link2, Loader2, Plus, RefreshCw, ShieldCheck, UserRound, X } from "lucide-react";
+import { Building2, ChevronDown, ChevronUp, ExternalLink, FileText, Library, Link2, Loader2, Plus, RefreshCw, ShieldCheck, Trash2, UserRound, X } from "lucide-react";
 import AppSidebar from "@/components/AppSidebar";
+import AssetDeleteDialog from "@/components/AssetDeleteDialog";
 import { trpc } from "@/lib/trpc";
-import { useLocation } from "wouter";
+import { Link, useLocation } from "wouter";
 import PrivateEvidenceUpload from "@/components/PrivateEvidenceUpload";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
+
+function AssetUsageDetails({ assetId }: { assetId: number }) {
+  const usageQuery = trpc.domain.asset.usage.useQuery({ id: assetId }, { retry: false });
+
+  if (usageQuery.isLoading) {
+    return (
+      <div role="status" className="mt-3 flex items-center gap-2 rounded-xl bg-slate-50 px-3 py-2 text-xs text-slate-600">
+        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+        جارٍ تحميل الاستخدام...
+      </div>
+    );
+  }
+
+  if (usageQuery.error) {
+    return (
+      <p role="alert" className="mt-3 rounded-xl bg-red-50 px-3 py-2 text-xs text-red-700">
+        {usageQuery.error.message}
+      </p>
+    );
+  }
+
+  const activeLinks = usageQuery.data?.activeLinks ?? [];
+  const historicalCount = usageQuery.data?.historicalVersionCount ?? 0;
+
+  return (
+    <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50/80 p-3 text-xs">
+      <p className="font-bold text-slate-900">مستخدم في {activeLinks.length} عمل</p>
+      {activeLinks.length > 0 && (
+        <ul className="mt-2 space-y-1">
+          {activeLinks.map(link => (
+            <li key={`${link.workItemId}-${link.role}`}>
+              <Link href={`/work/${link.workItemId}`} className="font-semibold text-teal-800 hover:underline">
+                {link.workTitle}
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
+      {historicalCount > 0 && (
+        <p className="mt-2 text-[11px] font-semibold text-slate-600">مستخدم في {historicalCount} نسخة ثابتة محفوظة</p>
+      )}
+    </div>
+  );
+}
 
 export default function EvidenceLibrary() {
   const [location] = useLocation();
@@ -15,10 +60,16 @@ export default function EvidenceLibrary() {
   const [text, setText] = useState("");
   const [ownerType, setOwnerType] = useState<"personal" | "organization">("personal");
   const [organizationId, setOrganizationId] = useState<number | undefined>();
+  const [expandedUsageIds, setExpandedUsageIds] = useState<Record<number, boolean>>({});
+  const [deleteTarget, setDeleteTarget] = useState<{ id: number; title: string } | null>(null);
   const createTrigger = useRef<HTMLButtonElement | null>(null);
+  const deleteTrigger = useRef<HTMLButtonElement | null>(null);
   const openCreate = (event: MouseEvent<HTMLButtonElement>) => {
     createTrigger.current = event.currentTarget;
     setShowCreate(true);
+  };
+  const toggleUsage = (assetId: number) => {
+    setExpandedUsageIds(current => ({ ...current, [assetId]: !current[assetId] }));
   };
 
   const utils = trpc.useUtils();
@@ -120,6 +171,29 @@ export default function EvidenceLibrary() {
                     {asset.kind === "link" && asset.externalUrl && <a href={asset.externalUrl} target="_blank" rel="noreferrer" className="mt-4 flex min-h-11 items-center gap-2 truncate rounded-xl bg-slate-50 px-3 py-2.5 text-xs font-semibold text-teal-800 hover:bg-teal-50"><ExternalLink className="h-3.5 w-3.5 shrink-0" /><span className="truncate" dir="ltr">{asset.externalUrl}</span></a>}
                     {textPreview && <p className="mt-4 line-clamp-3 rounded-xl bg-slate-50 px-3 py-2.5 text-xs leading-6 text-slate-700">{textPreview}</p>}
                     {asset.kind === "file" && <a href={`/api/evidence/assets/${asset.id}/download`} className="mt-4 inline-flex min-h-11 items-center gap-2 rounded-xl bg-teal-50 px-3 py-2.5 text-xs font-bold text-teal-900 hover:bg-teal-100"><FileText className="h-4 w-4" />تنزيل الملف</a>}
+                    <div className="mt-4 flex items-center justify-between gap-2 border-t border-slate-100 pt-3">
+                      <button
+                        type="button"
+                        aria-expanded={Boolean(expandedUsageIds[asset.id])}
+                        onClick={() => toggleUsage(asset.id)}
+                        className="inline-flex min-h-11 items-center gap-1.5 rounded-xl px-2.5 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100"
+                      >
+                        {expandedUsageIds[asset.id] ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                        عرض الاستخدام
+                      </button>
+                      <button
+                        type="button"
+                        aria-label={`حذف الشاهد ${asset.title}`}
+                        onClick={event => {
+                          deleteTrigger.current = event.currentTarget;
+                          setDeleteTarget({ id: asset.id, title: asset.title });
+                        }}
+                        className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl text-red-700 hover:bg-red-50"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                    {expandedUsageIds[asset.id] && <AssetUsageDetails assetId={asset.id} />}
                   </article>
                 );
               })}
@@ -172,6 +246,13 @@ export default function EvidenceLibrary() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <AssetDeleteDialog
+        asset={deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onDeleted={() => void utils.domain.asset.list.invalidate()}
+        returnFocusRef={deleteTrigger}
+      />
     </div>
   );
 }

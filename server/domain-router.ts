@@ -5,9 +5,12 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { protectedProcedure, router } from "./_core/trpc";
 import {
+  AssetDeleteConflictError,
   createAssetForUser,
   createWorkItemForUser,
   createWorkVersionForUser,
+  deleteAssetForUser,
+  getAssetUsageForUser,
   getWorkItemForUser,
   linkAssetToWorkForUser,
   listAssetsForUser,
@@ -186,6 +189,27 @@ export const domainRouter = router({
         const removed = await unlinkAssetFromWorkForUser(ctx.user.id, input);
         if (!removed) throw forbidden("لا تملك صلاحية إزالة هذا الربط");
         return { success: true } as const;
+      }),
+
+    usage: protectedProcedure
+      .input(z.object({ id: z.number().int().positive() }))
+      .query(async ({ ctx, input }) => {
+        const usage = await getAssetUsageForUser(ctx.user.id, input.id);
+        if (!usage) throw notFound("الشاهد غير موجود أو لا تملك صلاحية الوصول إليه");
+        return usage;
+      }),
+
+    delete: protectedProcedure
+      .input(z.object({ id: z.number().int().positive(), unlinkActive: z.boolean().optional() }))
+      .mutation(async ({ ctx, input }) => {
+        try {
+          const result = await deleteAssetForUser(ctx.user.id, input);
+          if (!result) throw forbidden("لا تملك صلاحية حذف هذا الشاهد");
+          return result;
+        } catch (error) {
+          if (error instanceof AssetDeleteConflictError) throw conflict(error.message);
+          throw error;
+        }
       }),
   }),
 

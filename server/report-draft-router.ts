@@ -11,11 +11,16 @@ import { sanitizeReportSchoolLogo } from "./work-version-report-assets";
 import {
   createReportDraftVersionForUser,
   getReportDraftForUser,
+  listReportTemplateHistoryForUser,
+  previewReportTemplateSwitchForUser,
   ReportDraftAccessError,
   ReportDraftConflictError,
+  ReportDraftNotFoundError,
   ReportDraftValidationError,
   ReportEvidenceFreezeError,
+  rollbackReportTemplateForUser,
   saveReportDraftForUser,
+  switchReportTemplateForUser,
 } from "./work-report-draft-db";
 
 const forbidden = (message: string) => new TRPCError({ code: "FORBIDDEN", message });
@@ -158,6 +163,86 @@ export const reportDraftRouter = router({
         if (error instanceof ReportDraftConflictError) throw conflict(error.message);
         if (error instanceof ReportDraftValidationError) throw badRequest(error.message);
         if (error instanceof ReportEvidenceFreezeError) throw conflict(error.message);
+        throw error;
+      }
+    }),
+
+  previewTemplateSwitch: protectedProcedure
+    .input(z.object({
+      workItemId: z.number().int().positive(),
+      targetTemplateId: z.string().trim().min(1).max(128),
+    }).strict())
+    .query(async ({ ctx, input }) => {
+      try {
+        return await previewReportTemplateSwitchForUser(ctx.user.id, input);
+      } catch (error) {
+        if (error instanceof ReportDraftAccessError) throw forbidden(error.message);
+        if (error instanceof ReportDraftNotFoundError) throw notFound(error.message);
+        if (error instanceof ReportDraftValidationError) throw badRequest(error.message);
+        throw error;
+      }
+    }),
+
+  switchTemplate: protectedProcedure
+    .input(z.object({
+      workItemId: z.number().int().positive(),
+      expectedRevision: z.number().int().min(0),
+      targetTemplateId: z.string().trim().min(1).max(128),
+      unmappedStrategy: z.enum(["append_to_summary", "discard"]),
+    }).strict())
+    .mutation(async ({ ctx, input }) => {
+      try {
+        return await switchReportTemplateForUser(ctx.user.id, input);
+      } catch (error) {
+        if (error instanceof ReportDraftAccessError) throw forbidden(error.message);
+        if (error instanceof ReportDraftConflictError) {
+          throw conflict(
+            error.message === "Report draft changed"
+              ? "تغير التقرير في جلسة أخرى؛ حدّث الصفحة ثم راجع التغييرات قبل تبديل القالب"
+              : error.message,
+          );
+        }
+        if (error instanceof ReportDraftValidationError) throw badRequest(error.message);
+        if (error instanceof ReportDraftNotFoundError) throw notFound(error.message);
+        throw error;
+      }
+    }),
+
+  rollbackTemplate: protectedProcedure
+    .input(z.object({
+      workItemId: z.number().int().positive(),
+      expectedRevision: z.number().int().min(0),
+      historyId: z.string().trim().min(1).max(128),
+    }).strict())
+    .mutation(async ({ ctx, input }) => {
+      try {
+        return await rollbackReportTemplateForUser(ctx.user.id, input);
+      } catch (error) {
+        if (error instanceof ReportDraftAccessError) throw forbidden(error.message);
+        if (error instanceof ReportDraftConflictError) {
+          throw conflict(
+            error.message === "Report draft changed"
+              ? "تغير التقرير في جلسة أخرى؛ حدّث الصفحة قبل التراجع عن القالب"
+              : error.message,
+          );
+        }
+        if (error instanceof ReportDraftValidationError) throw badRequest(error.message);
+        if (error instanceof ReportDraftNotFoundError) throw notFound(error.message);
+        throw error;
+      }
+    }),
+
+  templateHistory: protectedProcedure
+    .input(z.object({
+      workItemId: z.number().int().positive(),
+    }).strict())
+    .query(async ({ ctx, input }) => {
+      try {
+        return await listReportTemplateHistoryForUser(ctx.user.id, input.workItemId);
+      } catch (error) {
+        if (error instanceof ReportDraftAccessError) throw forbidden(error.message);
+        if (error instanceof ReportDraftNotFoundError) throw notFound(error.message);
+        if (error instanceof ReportDraftValidationError) throw badRequest(error.message);
         throw error;
       }
     }),
