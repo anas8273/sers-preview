@@ -5,6 +5,7 @@ import { useState, useMemo, lazy, Suspense } from "react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
+import { safeExternalHttpUrl } from "@/lib/safe-url";
 import { toast } from "sonner";
 import {
   ArrowLeft, CheckCircle, XCircle, Clock, Eye, FileText,
@@ -675,13 +676,24 @@ function PortfoliosPanel() {
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {(p as any).files.map((file: any) => (
-                  <a key={file.id} href={file.url} target="_blank" rel="noopener noreferrer"
-                    className="flex items-center gap-2 p-3 rounded-lg border hover:bg-gray-50">
-                    <FileText className="w-4 h-4 text-gray-400" />
-                    <span className="text-sm truncate">{file.originalName}</span>
-                  </a>
-                ))}
+                {(p as any).files.map((file: any) => {
+                  const safeFileUrl = safeExternalHttpUrl(file.url);
+                  if (!safeFileUrl) {
+                    return (
+                      <div key={file.id} className="flex items-center gap-2 p-3 rounded-lg border bg-gray-50 text-gray-500">
+                        <FileText className="w-4 h-4 text-gray-400" />
+                        <span className="text-sm truncate">{file.originalName} (رابط غير صالح)</span>
+                      </div>
+                    );
+                  }
+                  return (
+                    <a key={file.id} href={safeFileUrl} target="_blank" rel="noopener noreferrer"
+                      className="flex items-center gap-2 p-3 rounded-lg border hover:bg-gray-50">
+                      <FileText className="w-4 h-4 text-gray-400" />
+                      <span className="text-sm truncate">{file.originalName}</span>
+                    </a>
+                  );
+                })}
               </div>
             </CardContent>
           </Card>

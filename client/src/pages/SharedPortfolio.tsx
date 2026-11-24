@@ -6,6 +6,7 @@
 import { useState, useMemo, useRef, useEffect } from "react";
 import { useParams } from "wouter";
 import { trpc } from "@/lib/trpc";
+import { safeExternalHttpUrl, safeImageSrc } from "@/lib/safe-url";
 import { STANDARDS } from "@/lib/standards-data";
 import { getStandardsForJob } from "@/lib/all-jobs-standards";
 import {
@@ -73,6 +74,8 @@ function getStandardTitle(criterionId: string, jobId: string): string {
 function EvidenceCard({ ev }: { ev: any }) {
   const priority = ev.priority || "essential";
   const pc = PRIORITY_CONFIG[priority] || PRIORITY_CONFIG.essential;
+  const safeLink = safeExternalHttpUrl(ev.link);
+  const safeFileImage = safeImageSrc(ev.fileData);
 
   return (
     <div className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm hover:shadow-md transition-all" style={{ borderRightWidth: "4px", borderRightColor: pc.color }}>
@@ -93,13 +96,21 @@ function EvidenceCard({ ev }: { ev: any }) {
       {ev.type === "link" && ev.link && (
         <div className="flex items-center gap-2 bg-purple-50 rounded-lg p-3">
           <LinkIcon className="w-4 h-4 text-purple-500 shrink-0" />
-          <a href={ev.link} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-600 hover:underline truncate">
-            {ev.link}
-          </a>
+          {safeLink ? (
+            <a href={safeLink} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-600 hover:underline truncate">
+              {ev.link}
+            </a>
+          ) : (
+            <span className="text-xs text-gray-500">رابط غير صالح للعرض</span>
+          )}
         </div>
       )}
       {ev.type === "image" && ev.fileData && (
-        <img src={ev.fileData} alt="" className="max-h-64 rounded-lg border border-gray-100 mx-auto" />
+        safeFileImage ? (
+          <img src={safeFileImage} alt="" className="max-h-64 rounded-lg border border-gray-100 mx-auto" />
+        ) : (
+          <p className="text-xs text-gray-500 bg-gray-50 rounded-lg p-3 text-center">صورة غير صالحة للعرض</p>
+        )
       )}
       {(ev.type === "video" || ev.type === "file") && (
         <div className="flex items-center gap-3 bg-gray-50 rounded-lg p-3">

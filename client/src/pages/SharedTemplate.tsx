@@ -5,6 +5,8 @@ import { useState } from "react";
 import { useRoute, useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
+import { getLoginUrl } from "@/const";
+import { safeImageSrc } from "@/lib/safe-url";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -68,6 +70,8 @@ export default function SharedTemplate() {
   }
 
   const layout = template.templateLayout as { headerStyle?: number; fieldStyle?: string } | null;
+  const safeCoverImageUrl = safeImageSrc(template.coverImageUrl);
+  const safeLogoUrl = safeImageSrc(template.logoUrl);
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] py-8 px-4" dir="rtl">
@@ -149,7 +153,6 @@ export default function SharedTemplate() {
                 <div className="text-center p-4 bg-amber-50 rounded-lg border border-amber-200">
                   <p className="text-sm text-amber-700 mb-3">سجّل دخولك لاستيراد هذا القالب</p>
                   <Button onClick={() => {
-                    const { getLoginUrl } = require("@/const");
                     window.location.href = getLoginUrl(`/shared-template/${token}`);
                   }}>
                     تسجيل الدخول
@@ -179,8 +182,8 @@ export default function SharedTemplate() {
                 }}>
                   {/* Header */}
                   <div style={{ backgroundColor: template.headerBg, padding: '8px 12px', position: 'relative' }}>
-                    {template.coverImageUrl && (
-                      <img src={template.coverImageUrl} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', opacity: 0.15 }} />
+                    {safeCoverImageUrl && (
+                      <img src={safeCoverImageUrl} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', opacity: 0.15 }} />
                     )}
                     <div style={{ position: 'relative', zIndex: 1, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                       <div style={{ textAlign: 'right' }}>
@@ -188,8 +191,8 @@ export default function SharedTemplate() {
                         <div style={{ fontSize: '6px', color: template.headerText + 'CC' }}>وزارة التعليم</div>
                       </div>
                       <div>
-                        {template.logoUrl ? (
-                          <img src={template.logoUrl} alt="" style={{ width: '32px', height: '32px', objectFit: 'contain', borderRadius: '4px' }} />
+                        {safeLogoUrl ? (
+                          <img src={safeLogoUrl} alt="" style={{ width: '32px', height: '32px', objectFit: 'contain', borderRadius: '4px' }} />
                         ) : (
                           <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: 'rgba(255,255,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                             <FileText style={{ width: '16px', height: '16px', color: template.headerText }} />
