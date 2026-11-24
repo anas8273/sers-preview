@@ -33,6 +33,8 @@ describe("public WorkVersion output UI", () => {
     expect(publicOutputSource).toContain("data.report.fields.map");
     expect(publicOutputSource).toContain("data.report.evidence.map");
     expect(publicOutputSource).toContain("لا يعرض هذا المسار الملفات الأصلية");
+    expect(publicOutputSource).toContain("PrintQrCardDialog");
+    expect(publicOutputSource).toContain("بطاقة QR للطباعة");
   });
 });
 
@@ -42,11 +44,13 @@ describe("report share creation UI", () => {
     expect(shareActionsSource).not.toContain("trpc.domain.output.create.useMutation");
   });
 
-  it("requires immutable versions and exposes expiry, password, QR, and revoke controls", () => {
+  it("requires immutable versions and exposes expiry, password, QR, printable card, and revoke controls", () => {
     expect(shareActionsSource).toContain("reviewSupport.versions.useQuery");
     expect(shareActionsSource).toContain('visibility === "protected" ? password : undefined');
     expect(shareActionsSource).toContain("expiresAt:");
     expect(shareActionsSource).toContain("QRCode.toDataURL");
+    expect(shareActionsSource).toContain("PrintQrCardDialog");
+    expect(shareActionsSource).toContain("بطاقة QR للطباعة");
     expect(shareActionsSource).toContain("domain.output.revoke.useMutation");
   });
 

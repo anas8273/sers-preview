@@ -32,4 +32,12 @@ describe("explicit reverse proxy boundary", () => {
     expect((await fetch(url, { method: "POST", headers: { Origin: "https://evil.invalid" } })).status).toBe(403);
     expect((await fetch(url, { method: "POST", headers: { Origin: "https://sers.example" } })).status).toBe(200);
   });
+  it("rejects cross-site Sec-Fetch-Site mutations and allows GET or same-origin", async () => {
+    const url = await start();
+    expect((await fetch(url, { method: "POST", headers: { "Sec-Fetch-Site": "cross-site" } })).status).toBe(403);
+    expect((await fetch(url, { method: "PUT", headers: { "Sec-Fetch-Site": "cross-site" } })).status).toBe(403);
+    expect((await fetch(url, { method: "DELETE", headers: { "Sec-Fetch-Site": "cross-site" } })).status).toBe(403);
+    expect((await fetch(url, { method: "POST", headers: { "Sec-Fetch-Site": "same-origin" } })).status).toBe(200);
+    expect((await fetch(url, { method: "GET", headers: { "Sec-Fetch-Site": "cross-site" } })).status).toBe(200);
+  });
 });

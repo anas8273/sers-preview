@@ -18,6 +18,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
+import { safeExternalHttpUrl } from "@/lib/safe-url";
 import { LegacyUploadNotice, LEGACY_UPLOAD_MESSAGE } from "@/components/LegacyUploadNotice";
 import { aiFailureMessage } from "@/lib/ai-feedback";
 import TemplateSelector, { THEMES, type ThemeConfig } from "@/components/TemplateSelector";
@@ -765,12 +766,18 @@ export default function PortfolioBuilder() {
                       </div>
                     ) : (
                       <div className="space-y-3">
-                        {data.evidences.map((evidence, index) => (
+                        {data.evidences.map((evidence, index) => {
+                          const safeEvidenceUrl = safeExternalHttpUrl(evidence.url);
+                          return (
                           <div key={evidence.id} className="rounded-xl border border-gray-100 p-4 transition-colors hover:border-teal-200">
                             <div className="mb-3 flex items-center justify-between">
                               <span className="text-xs font-bold text-gray-400">شاهد #{index + 1}</span>
                               <div className="flex items-center gap-1">
-                                {evidence.url && <a href={evidence.url} target="_blank" rel="noreferrer" className="rounded-md p-1 text-teal-600 hover:bg-teal-50" title="فتح الشاهد"><Link2 className="h-4 w-4" /></a>}
+                                {safeEvidenceUrl ? (
+                                  <a href={safeEvidenceUrl} target="_blank" rel="noopener noreferrer" className="rounded-md p-1 text-teal-600 hover:bg-teal-50" title="فتح الشاهد"><Link2 className="h-4 w-4" /></a>
+                                ) : evidence.url ? (
+                                  <span className="rounded-md px-1.5 py-0.5 text-[10px] font-medium text-amber-700 bg-amber-50">رابط غير صالح</span>
+                                ) : null}
                                 <button type="button" onClick={() => removeEvidence(evidence.id)} className="rounded-md p-1 text-red-400 hover:bg-red-50 hover:text-red-600"><Trash2 className="h-4 w-4" /></button>
                               </div>
                             </div>
@@ -781,7 +788,8 @@ export default function PortfolioBuilder() {
                             </div>
                             {evidence.fileName && <p className="mt-2 text-[11px] text-gray-500">الملف المرفوع: {evidence.fileName}</p>}
                           </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     )}
                   </div>

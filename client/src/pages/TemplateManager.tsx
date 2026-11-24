@@ -7,6 +7,7 @@ import { useState, useRef, useCallback } from "react";
 import { useLocation } from "wouter";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
+import { safeImageSrc } from "@/lib/safe-url";
 import { LegacyUploadNotice, LEGACY_TEMPLATE_UPLOAD_MESSAGE } from "@/components/LegacyUploadNotice";
 import { useAuth } from "@/_core/hooks/useAuth";
 import {
@@ -362,17 +363,19 @@ export default function TemplateManager() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {templatesQuery.data.map((template: any) => {
               const layout = template.templateLayout as TemplateLayoutConfig | null;
+              const safeCoverUrl = safeImageSrc(template.coverImageUrl);
+              const safeLogoUrl = safeImageSrc(template.logoUrl);
               return (
                 <div key={template.id}>
                   <Card className={`overflow-hidden transition-all hover:shadow-lg ${!template.isActive ? 'opacity-60' : ''}`}>
                     {/* Preview Header */}
                     <div className="h-24 relative" style={{ backgroundColor: template.headerBg }}>
-                      {template.coverImageUrl && (
-                        <img src={template.coverImageUrl} alt="" className="absolute inset-0 w-full h-full object-cover opacity-30" />
+                      {safeCoverUrl && (
+                        <img src={safeCoverUrl} alt="" className="absolute inset-0 w-full h-full object-cover opacity-30" />
                       )}
                       <div className="absolute inset-0 flex items-center justify-center">
-                        {template.logoUrl ? (
-                          <img src={template.logoUrl} alt="" className="w-12 h-12 rounded-lg object-contain bg-white/20 p-1" />
+                        {safeLogoUrl ? (
+                          <img src={safeLogoUrl} alt="" className="w-12 h-12 rounded-lg object-contain bg-white/20 p-1" />
                         ) : (
                           <FileText className="w-10 h-10" style={{ color: template.headerText }} />
                         )}
@@ -505,6 +508,8 @@ function ImageUploadField({
     if (fileRef.current) fileRef.current.value = '';
   }, [onUpload, imageType, onChange]);
 
+  const safePreviewSrc = safeImageSrc(value);
+
   return (
     <div>
       <label className="text-xs font-medium text-muted-foreground mb-1 block">{label}</label>
@@ -527,9 +532,9 @@ function ImageUploadField({
         >
           {isUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
         </Button>
-        {value && (
+        {safePreviewSrc && (
           <div className="w-9 h-9 rounded-lg border border-border overflow-hidden shrink-0">
-            <img src={value} alt="" className="w-full h-full object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+            <img src={safePreviewSrc} alt="" className="w-full h-full object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
           </div>
         )}
       </div>
@@ -950,8 +955,8 @@ function TemplateEditor({
 
               {/* === الترويسة === */}
               <div style={{ backgroundColor: form.headerBg, position: 'relative' }}>
-                {form.coverImageUrl && (
-                  <img src={form.coverImageUrl} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', opacity: 0.15 }} />
+                {safeImageSrc(form.coverImageUrl) && (
+                  <img src={safeImageSrc(form.coverImageUrl)!} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', opacity: 0.15 }} />
                 )}
 
                 {layout.headerStyle === 1 && (
@@ -963,8 +968,8 @@ function TemplateEditor({
                       <div style={{ fontSize: '5px', color: form.headerText + 'AA' }}>مدرسة ...</div>
                     </div>
                     <div style={{ textAlign: 'center' }}>
-                      {form.logoUrl ? (
-                        <img src={form.logoUrl} alt="" style={{ width: '28px', height: '28px', objectFit: 'contain', borderRadius: '4px', background: 'rgba(255,255,255,0.2)', padding: '2px' }} />
+                      {safeImageSrc(form.logoUrl) ? (
+                        <img src={safeImageSrc(form.logoUrl)!} alt="" style={{ width: '28px', height: '28px', objectFit: 'contain', borderRadius: '4px', background: 'rgba(255,255,255,0.2)', padding: '2px' }} />
                       ) : (
                         <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: 'rgba(255,255,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                           <FileText style={{ width: '14px', height: '14px', color: form.headerText }} />
@@ -986,8 +991,8 @@ function TemplateEditor({
                       <div style={{ fontSize: '5px', color: form.headerText + 'AA' }}>الإدارة العامة للتعليم</div>
                     </div>
                     <div>
-                      {form.logoUrl ? (
-                        <img src={form.logoUrl} alt="" style={{ width: '28px', height: '28px', objectFit: 'contain', borderRadius: '4px', background: 'rgba(255,255,255,0.2)', padding: '2px' }} />
+                      {safeImageSrc(form.logoUrl) ? (
+                        <img src={safeImageSrc(form.logoUrl)!} alt="" style={{ width: '28px', height: '28px', objectFit: 'contain', borderRadius: '4px', background: 'rgba(255,255,255,0.2)', padding: '2px' }} />
                       ) : (
                         <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: 'rgba(255,255,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                           <FileText style={{ width: '14px', height: '14px', color: form.headerText }} />
@@ -999,8 +1004,8 @@ function TemplateEditor({
 
                 {layout.headerStyle === 3 && (
                   <div style={{ position: 'relative', zIndex: 1, textAlign: 'center', padding: '8px 10px' }}>
-                    {form.logoUrl ? (
-                      <img src={form.logoUrl} alt="" style={{ width: '28px', height: '28px', objectFit: 'contain', borderRadius: '4px', background: 'rgba(255,255,255,0.2)', padding: '2px', margin: '0 auto 3px' }} />
+                    {safeImageSrc(form.logoUrl) ? (
+                      <img src={safeImageSrc(form.logoUrl)!} alt="" style={{ width: '28px', height: '28px', objectFit: 'contain', borderRadius: '4px', background: 'rgba(255,255,255,0.2)', padding: '2px', margin: '0 auto 3px' }} />
                     ) : (
                       <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: 'rgba(255,255,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 3px' }}>
                         <FileText style={{ width: '14px', height: '14px', color: form.headerText }} />
@@ -1018,7 +1023,7 @@ function TemplateEditor({
                       <div style={{ fontSize: '5.5px', fontWeight: 700, color: form.headerText }}>الفصل الدراسي: ...</div>
                     </div>
                     <div style={{ textAlign: 'center' }}>
-                      {form.logoUrl && <img src={form.logoUrl} alt="" style={{ width: '22px', height: '22px', objectFit: 'contain', borderRadius: '3px', background: 'rgba(255,255,255,0.2)', padding: '1px', margin: '0 auto' }} />}
+                      {safeImageSrc(form.logoUrl) && <img src={safeImageSrc(form.logoUrl)!} alt="" style={{ width: '22px', height: '22px', objectFit: 'contain', borderRadius: '3px', background: 'rgba(255,255,255,0.2)', padding: '1px', margin: '0 auto' }} />}
                       <div style={{ fontSize: '5px', color: form.headerText + 'CC', marginTop: '2px' }}>وزارة التعليم</div>
                     </div>
                   </div>

@@ -1,15 +1,20 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
+  AlertTriangle,
   ArrowRight,
   Building2,
+  CalendarDays,
+  CheckCircle2,
   FileText,
   FolderKanban,
+  Info,
   Link2,
   Loader2,
   PencilLine,
   Plus,
   RefreshCw,
   Send,
+  ShieldCheck,
   Trash2,
   UserRound,
 } from "lucide-react";
@@ -17,6 +22,7 @@ import { useLocation, useRoute } from "wouter";
 import AppSidebar from "@/components/AppSidebar";
 import PortfolioReferencePanel from "@/components/PortfolioReferencePanel";
 import { trpc } from "@/lib/trpc";
+import { evaluateWorkReadiness } from "@shared/evidence-readiness";
 
 const statusLabel = {
   draft: "مسودة",
@@ -33,16 +39,33 @@ export default function WorkDetail() {
   const [selectedAssetId, setSelectedAssetId] = useState<number | undefined>();
   const [selectedVersionId, setSelectedVersionId] = useState<number | undefined>();
   const [selectedReviewerId, setSelectedReviewerId] = useState<number | undefined>();
+  const [editYearId, setEditYearId] = useState<number | undefined>();
+  const [editTermId, setEditTermId] = useState<number | undefined>();
+  const [yearSavedNotice, setYearSavedNotice] = useState(false);
 
   const utils = trpc.useUtils();
   const workQuery = trpc.domain.work.get.useQuery(
     { id: workId },
     { enabled: validWorkId, retry: false },
   );
+  const yearsQuery = trpc.account.academicYears.useQuery(undefined, { retry: false });
   const assetsQuery = trpc.domain.asset.list.useQuery(undefined, { retry: false });
   const versionsQuery = trpc.reviewSupport.versions.useQuery(
     { workItemId: workId },
     { enabled: validWorkId, retry: false },
+  );
+  const reportDraftQuery = trpc.domain.reportDraft.get.useQuery(
+    { workItemId: workId },
+    { enabled: validWorkId && workQuery.data?.type === "report", retry: false },
+  );
+  const portfolioDraftQuery = trpc.domain.portfolioDraft.get.useQuery(
+    { workItemId: workId },
+    { enabled: validWorkId && workQuery.data?.type === "portfolio", retry: false },
+  );
+  const firstAssetId = workQuery.data?.assets[0]?.id;
+  const firstAssetStandardsQuery = trpc.domain.standards.listForAsset.useQuery(
+    { assetId: firstAssetId ?? 0 },
+    { enabled: Boolean(firstAssetId), retry: false },
   );
   const organizationId = workQuery.data?.ownerType === "organization"
     ? workQuery.data.ownerOrganizationId ?? undefined
@@ -61,6 +84,15 @@ export default function WorkDetail() {
   const unlinkAsset = trpc.domain.asset.unlinkFromWork.useMutation({
     onSuccess: async () => {
       await utils.domain.work.get.invalidate({ id: workId });
+    },
+  });
+  const updateWork = trpc.domain.work.update.useMutation({
+    onSuccess: async () => {
+      setYearSavedNotice(true);
+      await Promise.all([
+        utils.domain.work.get.invalidate({ id: workId }),
+        utils.domain.work.list.invalidate(),
+      ]);
     },
   });
   const requestReview = trpc.domain.review.request.useMutation({
@@ -84,6 +116,63 @@ export default function WorkDetail() {
   );
   const versions = versionsQuery.data ?? [];
   const reviewers = reviewersQuery.data ?? [];
+  const scopeYears = useMemo(
+    () => (yearsQuery.data ?? []).filter(year =>
+      workQuery.data?.ownerType === "personal"
+        ? year.ownerUserId !== null
+        : year.organizationId === workQuery.data?.ownerOrganizationId,
+    ),
+    [yearsQuery.data, workQuery.data?.ownerType, workQuery.data?.ownerOrganizationId],
+  );
+  const chosenYear = useMemo(
+    () => scopeYears.find(year => year.id === editYearId),
+    [scopeYears, editYearId],
+  );
+  const readiness = useMemo(() => {
+    const work = workQuery.data;
+    if (!work) return undefined;
+    const hasReportFields = Object.values(reportDraftQuery.data?.draft.fields ?? {}).some(value =>
+      typeof value === "string"
+        ? value.trim().length > 0
+        : Array.isArray(value)
+          ? value.length > 0
+          : value !== undefined && value !== null,
+    );
+    const hasPortfolioContent = Boolean(
+      portfolioDraftQuery.data?.draft.introduction?.trim() ||
+        (portfolioDraftQuery.data?.draft.entries?.length ?? 0) > 0,
+    );
+    const hasSubstantiveContent =
+      versions.length > 0 ||
+      work.currentVersionNumber > 0 ||
+      (work.type === "report" ? hasReportFields : hasPortfolioContent);
+
+    return evaluateWorkReadiness({
+      workType: work.type === "portfolio" ? "portfolio" : "report",
+      linkedAssets: work.assets.map(asset => ({
+        id: asset.id,
+        kind: asset.kind === "file" || asset.kind === "link" || asset.kind === "text" ? asset.kind : "text",
+        title: asset.title,
+      })),
+      hasAcademicContext: Boolean(work.academicYearId || work.academicContext?.yearLabel),
+      hasSubstantiveContent,
+      versionCount: versions.length || work.currentVersionNumber,
+      linkedStandardsCount: firstAssetStandardsQuery.data?.length ?? 0,
+    });
+  }, [
+    workQuery.data,
+    versions.length,
+    reportDraftQuery.data?.draft.fields,
+    portfolioDraftQuery.data?.draft.introduction,
+    portfolioDraftQuery.data?.draft.entries,
+    firstAssetStandardsQuery.data?.length,
+  ]);
+
+  useEffect(() => {
+    if (!workQuery.data) return;
+    setEditYearId(workQuery.data.academicYearId ?? undefined);
+    setEditTermId(workQuery.data.academicTermId ?? undefined);
+  }, [workQuery.data?.academicYearId, workQuery.data?.academicTermId]);
 
   if (!validWorkId) {
     return <div className="min-h-screen bg-[#F8FAFC] p-8 text-sm text-red-700" dir="rtl">معرّف العمل غير صالح.</div>;
@@ -182,6 +271,68 @@ export default function WorkDetail() {
                 </section>
 
                 <div className="space-y-6">
+                  {readiness && (
+                    <section
+                      aria-label="فحص جاهزية الشواهد قبل التقديم"
+                      className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6"
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div>
+                          <p className="text-xs font-bold text-teal-700">فحص استرشادي غير مانع</p>
+                          <h2 className="mt-1 text-base font-bold text-slate-950">فحص جاهزية الشواهد قبل التقديم</h2>
+                        </div>
+                        <span
+                          className={`rounded-full border px-2.5 py-1 text-[11px] font-bold ${
+                            readiness.status === "ready"
+                              ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                              : readiness.status === "needs_attention"
+                                ? "border-amber-200 bg-amber-50 text-amber-900"
+                                : "border-slate-200 bg-slate-100 text-slate-700"
+                          }`}
+                        >
+                          {readiness.summaryLabel}
+                        </span>
+                      </div>
+
+                      <div className="mt-3 flex flex-wrap items-center gap-2">
+                        <span
+                          className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[11px] font-bold ${
+                            readiness.verifiedFileCount > 0
+                              ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                              : "border-amber-200 bg-amber-50 text-amber-900"
+                          }`}
+                        >
+                          <ShieldCheck className="h-3 w-3" />
+                          {readiness.proofBadge}
+                        </span>
+                        <span className="text-[11px] text-slate-600">
+                          ملفات موثّقة: {readiness.verifiedFileCount} · روابط/نصوص: {readiness.supportingAssetCount}
+                        </span>
+                      </div>
+
+                      <ul className="mt-4 space-y-2">
+                        {readiness.checks.map(check => (
+                          <li
+                            key={check.key}
+                            className="flex items-start gap-2 rounded-xl border border-slate-100 bg-slate-50 px-3 py-2.5 text-xs"
+                          >
+                            {check.status === "pass" ? (
+                              <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
+                            ) : check.status === "advisory" ? (
+                              <Info className="mt-0.5 h-4 w-4 shrink-0 text-slate-500" />
+                            ) : (
+                              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+                            )}
+                            <div>
+                              <p className="font-bold text-slate-900">{check.label}</p>
+                              <p className="mt-0.5 leading-5 text-slate-600">{check.detail}</p>
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    </section>
+                  )}
+
                   {workQuery.data.type === "report" ? (
                     <section className="rounded-2xl border border-teal-200 bg-teal-50 p-5 shadow-sm sm:p-6">
                       <p className="text-xs font-bold text-teal-800">مصدر الحقيقة</p>
@@ -235,6 +386,82 @@ export default function WorkDetail() {
                       {requestReview.error && <p role="alert" className="mt-3 text-xs text-red-700">{requestReview.error.message}</p>}
                     </section>
                   )}
+
+                  <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+                    <div className="flex items-center gap-2">
+                      <CalendarDays className="h-4 w-4 text-teal-700" />
+                      <h2 className="text-base font-bold text-slate-950">السنة والفصل الدراسي</h2>
+                    </div>
+                    <p className="mt-1 text-xs leading-6 text-slate-600">
+                      السياق الحالي:{" "}
+                      <span className="font-bold text-teal-800">
+                        {workQuery.data.academicContext
+                          ? `${workQuery.data.academicContext.yearLabel}${workQuery.data.academicContext.termLabel ? ` · ${workQuery.data.academicContext.termLabel}` : ""}`
+                          : "دون سنة دراسية محددة"}
+                      </span>
+                    </p>
+                    <div className="mt-4 space-y-3">
+                      <label className="block text-xs font-bold text-slate-700">
+                        السنة الدراسية
+                        <select
+                          aria-label="ربط العمل بسنة دراسية"
+                          value={editYearId ?? ""}
+                          disabled={workQuery.data.status === "archived" || updateWork.isPending}
+                          onChange={event => {
+                            setYearSavedNotice(false);
+                            setEditYearId(Number(event.target.value) || undefined);
+                            setEditTermId(undefined);
+                          }}
+                          className="mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-normal disabled:opacity-50"
+                        >
+                          <option value="">دون سنة دراسية</option>
+                          {scopeYears.map(year => (
+                            <option key={year.id} value={year.id}>{year.label}</option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className="block text-xs font-bold text-slate-700">
+                        الفصل الدراسي
+                        <select
+                          aria-label="ربط العمل بفصل دراسي"
+                          value={editTermId ?? ""}
+                          disabled={!chosenYear || workQuery.data.status === "archived" || updateWork.isPending}
+                          onChange={event => {
+                            setYearSavedNotice(false);
+                            setEditTermId(Number(event.target.value) || undefined);
+                          }}
+                          className="mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-normal disabled:opacity-50"
+                        >
+                          <option value="">دون فصل محدد</option>
+                          {chosenYear?.terms.map(term => (
+                            <option key={term.id} value={term.id}>{term.label}</option>
+                          ))}
+                        </select>
+                      </label>
+                      <button
+                        type="button"
+                        disabled={workQuery.data.status === "archived" || updateWork.isPending}
+                        onClick={() => {
+                          setYearSavedNotice(false);
+                          updateWork.mutate({
+                            id: workId,
+                            academicYearId: editYearId ?? null,
+                            academicTermId: editYearId ? (editTermId ?? null) : null,
+                          });
+                        }}
+                        className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-teal-200 bg-teal-50 px-4 py-2.5 text-sm font-bold text-teal-900 hover:bg-teal-100 disabled:opacity-50"
+                      >
+                        {updateWork.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+                        حفظ السنة والفصل
+                      </button>
+                      {yearSavedNotice && !updateWork.error && (
+                        <p role="status" className="text-xs font-semibold text-teal-800">تم تحديث السنة والفصل الدراسي.</p>
+                      )}
+                      {updateWork.error && (
+                        <p role="alert" className="text-xs text-red-700">{updateWork.error.message}</p>
+                      )}
+                    </div>
+                  </section>
                 </div>
               </div>
             </>

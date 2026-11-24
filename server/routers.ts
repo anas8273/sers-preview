@@ -32,12 +32,22 @@ import {
   createEvidenceComment, getEvidenceComments, deleteEvidenceComment,
   createOnlineExam, getOnlineExamByToken, getOnlineExamById, deactivateOnlineExam, createOnlineExamResponse, getOnlineExamResponses,
   createShareLink, getShareLinkByToken, incrementShareLinkViews, getShareLinksByPortfolio, deactivateShareLink,
-  createPdfTemplate, updatePdfTemplate, deletePdfTemplate, getActivePdfTemplates, getAllPdfTemplates, seedDefaultTemplates,
+  createPdfTemplate, updatePdfTemplate, deletePdfTemplate, getActivePdfTemplates, getAllPdfTemplates, getSharedPdfTemplateByToken, seedDefaultTemplates,
   createUserTheme, updateUserTheme, deleteUserTheme, getUserThemes,
   createAuditLog, getAuditLogs,
 } from "./db";
+import {
+  legacyCriteriaDataSchema,
+  legacyCustomCriteriaSchema,
+  legacyTemplateLayoutSchema,
+  legacyUserThemeDataSchema,
+  optionalSafeLegacyImageSchema,
+  sanitizeCriteriaDataForShareView,
+} from "./legacy-input-validation";
 
 const legacyShareViewLimiter = createPublicOutputRateLimiter();
+const templateShareLimiter = createPublicOutputRateLimiter();
+const LEGACY_SHARE_UNAVAILABLE_ERROR = "الرابط غير صالح أو منتهي الصلاحية";
 const hashShareAccessCode = hashProtectedOutputPassword;
 
 const verifyShareAccessCode = (storedValue: string | null, suppliedValue: string | undefined) => {
@@ -142,8 +152,8 @@ export const appRouter = router({
         jobId: z.string(),
         jobTitle: z.string(),
         personalInfo: z.record(z.string(), z.string()),
-        criteriaData: z.record(z.string(), z.any()),
-        customCriteria: z.array(z.any()).optional(),
+        criteriaData: legacyCriteriaDataSchema,
+        customCriteria: legacyCustomCriteriaSchema.optional(),
         themeId: z.string().optional(),
         completionPercentage: z.number().optional(),
       }))
@@ -166,8 +176,8 @@ export const appRouter = router({
     update: protectedProcedure
       .input(z.object({
         id: z.number(),
-        criteriaData: z.record(z.string(), z.any()).optional(),
-        customCriteria: z.array(z.any()).optional(),
+        criteriaData: legacyCriteriaDataSchema.optional(),
+        customCriteria: legacyCustomCriteriaSchema.optional(),
         personalInfo: z.record(z.string(), z.string()).optional(),
         themeId: z.string().optional(),
         completionPercentage: z.number().optional(),
@@ -424,24 +434,22 @@ export const appRouter = router({
         password: z.string().max(64).optional(),
       }))
       .query(async ({ ctx, input }) => {
-        // The direct connection address is authoritative; X-Forwarded-* cannot
-        // reset this process-local budget, even if a proxy header is supplied.
-        if (!legacyShareViewLimiter.allow(ctx.req.socket?.remoteAddress, input.token)) return { error: "محاولات كثيرة؛ حاول لاحقًا", portfolio: null };
+        const clientIp = ctx.req.ip || ctx.req.socket?.remoteAddress;
+        if (!legacyShareViewLimiter.allow(clientIp, input.token)) return { error: "محاولات كثيرة؛ حاول لاحقًا", portfolio: null };
         const link = await getShareLinkByToken(input.token);
-        if (!link) return { error: "رابط غير صالح", portfolio: null };
-        if (!link.isActive || new Date() >= link.expiresAt) return { error: "انتهت صلاحية الرابط", portfolio: null };
-        if ((link.maxViews ?? 0) > 0 && (link.viewCount ?? 0) >= (link.maxViews ?? 0)) return { error: "تم تجاوز الحد الأقصى للمشاهدات", portfolio: null };
+        if (!link || !link.isActive || new Date() >= link.expiresAt) return { error: LEGACY_SHARE_UNAVAILABLE_ERROR, portfolio: null };
+        if ((link.maxViews ?? 0) > 0 && (link.viewCount ?? 0) >= (link.maxViews ?? 0)) return { error: LEGACY_SHARE_UNAVAILABLE_ERROR, portfolio: null };
         if (link.hasPassword && !verifyShareAccessCode(link.passwordHash, input.password)) return { error: "رمز الوصول غير صحيح", portfolio: null, requiresPassword: true };
 
-        if (!await incrementShareLinkViews(link.id, link.passwordHash ?? null)) return { error: "الرابط غير متاح أو تم تجاوز الحد الأقصى للمشاهدات", portfolio: null };
+        if (!await incrementShareLinkViews(link.id, link.passwordHash ?? null)) return { error: LEGACY_SHARE_UNAVAILABLE_ERROR, portfolio: null };
         const portfolio = await getPortfolioById(link.portfolioId);
-        if (!portfolio) return { error: "الملف غير موجود", portfolio: null };
+        if (!portfolio) return { error: LEGACY_SHARE_UNAVAILABLE_ERROR, portfolio: null };
 
         // Public links expose descriptive metadata only. Raw provider URLs and
         // storage keys are never a public download grant.
         const files = await getFilesByPortfolio(portfolio.id, { publicProjection: true });
         const currentLink = await getShareLinkByToken(input.token);
-        if (!currentLink || !currentLink.isActive || new Date() >= currentLink.expiresAt || currentLink.id !== link.id || currentLink.portfolioId !== link.portfolioId || currentLink.hasPassword !== link.hasPassword || currentLink.passwordHash !== link.passwordHash) return { error: "الرابط لم يعد متاحًا", portfolio: null };
+        if (!currentLink || !currentLink.isActive || new Date() >= currentLink.expiresAt || currentLink.id !== link.id || currentLink.portfolioId !== link.portfolioId || currentLink.hasPassword !== link.hasPassword || currentLink.passwordHash !== link.passwordHash) return { error: LEGACY_SHARE_UNAVAILABLE_ERROR, portfolio: null };
 
         // إشعار المالك عند مشاهدة رابط المشاركة
         const newViewCount = (link.viewCount ?? 0) + 1;
@@ -453,7 +461,18 @@ export const appRouter = router({
           }).catch(() => {}); // لا نوقف العملية إذا فشل الإشعار
         }
 
-        return { error: null, portfolio, files };
+        const safePortfolio = {
+          id: portfolio.id,
+          jobId: portfolio.jobId,
+          jobTitle: portfolio.jobTitle,
+          personalInfo: portfolio.personalInfo,
+          criteriaData: sanitizeCriteriaDataForShareView(portfolio.criteriaData),
+          customCriteria: portfolio.customCriteria,
+          themeId: portfolio.themeId,
+          completionPercentage: portfolio.completionPercentage,
+        };
+
+        return { error: null, portfolio: safePortfolio, files };
       }),
 
     listByPortfolio: protectedProcedure
@@ -516,46 +535,46 @@ export const appRouter = router({
 
     create: adminProcedure
       .input(z.object({
-        name: z.string(),
-        description: z.string().optional(),
-        headerBg: z.string(),
-        headerText: z.string(),
-        accent: z.string(),
-        borderColor: z.string(),
-        bodyBg: z.string(),
-        fontFamily: z.string().optional(),
-        coverImageUrl: z.string().optional(),
-        logoUrl: z.string().optional(),
-        templateLayout: z.any().optional(),
+        name: z.string().min(1).max(255),
+        description: z.string().max(2000).optional(),
+        headerBg: z.string().max(128),
+        headerText: z.string().max(32),
+        accent: z.string().max(32),
+        borderColor: z.string().max(32),
+        bodyBg: z.string().max(32),
+        fontFamily: z.string().max(128).optional(),
+        coverImageUrl: optionalSafeLegacyImageSchema,
+        logoUrl: optionalSafeLegacyImageSchema,
+        templateLayout: legacyTemplateLayoutSchema.nullable().optional(),
         isDefault: z.boolean().optional(),
         isActive: z.boolean().optional(),
         sortOrder: z.number().optional(),
       }))
       .mutation(async ({ ctx, input }) => {
-        return createPdfTemplate({ ...input, createdBy: ctx.user.id });
+        return createPdfTemplate({ ...input, templateLayout: input.templateLayout as any, createdBy: ctx.user.id });
       }),
 
     update: adminProcedure
       .input(z.object({
         id: z.number(),
-        name: z.string().optional(),
-        description: z.string().optional(),
-        headerBg: z.string().optional(),
-        headerText: z.string().optional(),
-        accent: z.string().optional(),
-        borderColor: z.string().optional(),
-        bodyBg: z.string().optional(),
-        fontFamily: z.string().optional(),
-        coverImageUrl: z.string().optional(),
-        logoUrl: z.string().optional(),
-        templateLayout: z.any().optional(),
+        name: z.string().min(1).max(255).optional(),
+        description: z.string().max(2000).optional(),
+        headerBg: z.string().max(128).optional(),
+        headerText: z.string().max(32).optional(),
+        accent: z.string().max(32).optional(),
+        borderColor: z.string().max(32).optional(),
+        bodyBg: z.string().max(32).optional(),
+        fontFamily: z.string().max(128).optional(),
+        coverImageUrl: optionalSafeLegacyImageSchema,
+        logoUrl: optionalSafeLegacyImageSchema,
+        templateLayout: legacyTemplateLayoutSchema.nullable().optional(),
         isDefault: z.boolean().optional(),
         isActive: z.boolean().optional(),
         sortOrder: z.number().optional(),
       }))
       .mutation(async ({ input }) => {
         const { id, ...data } = input;
-        return updatePdfTemplate(id, data);
+        return updatePdfTemplate(id, { ...data, templateLayout: data.templateLayout as any });
       }),
 
     delete: adminProcedure
@@ -597,20 +616,36 @@ export const appRouter = router({
       }),
 
     getByShareToken: publicProcedure
-      .input(z.object({ token: z.string() }))
-      .query(async ({ input }) => {
-        const all = await getAllPdfTemplates();
-        const template = all.find((t: any) => t.shareToken === input.token && t.isShared);
+      .input(z.object({ token: z.string().trim().min(12).max(128).regex(/^[A-Za-z0-9_-]+$/) }))
+      .query(async ({ ctx, input }) => {
+        const clientIp = ctx.req.ip || ctx.req.socket?.remoteAddress;
+        if (!templateShareLimiter.allow(clientIp, input.token)) {
+          throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: "محاولات كثيرة؛ حاول لاحقًا" });
+        }
+        const template = await getSharedPdfTemplateByToken(input.token);
         if (!template) return null;
-        return template;
+        return {
+          name: template.name,
+          description: template.description,
+          headerBg: template.headerBg,
+          headerText: template.headerText,
+          accent: template.accent,
+          borderColor: template.borderColor,
+          bodyBg: template.bodyBg,
+          fontFamily: template.fontFamily,
+          coverImageUrl: template.coverImageUrl,
+          logoUrl: template.logoUrl,
+          templateLayout: template.templateLayout,
+        };
       }),
 
     importFromShare: protectedProcedure
-      .input(z.object({ token: z.string() }))
+      .input(z.object({ token: z.string().trim().min(12).max(128).regex(/^[A-Za-z0-9_-]+$/) }))
       .mutation(async ({ ctx, input }) => {
-        const all = await getAllPdfTemplates();
-        const source = all.find((t: any) => t.shareToken === input.token && t.isShared);
-        if (!source) throw new Error('القالب غير موجود أو تم إلغاء المشاركة');
+        const source = await getSharedPdfTemplateByToken(input.token);
+        if (!source) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "القالب غير موجود أو تم إلغاء المشاركة" });
+        }
         // حفظ كثيم مخصص للمستخدم
         return createUserTheme({
           userId: ctx.user.id,
@@ -640,8 +675,8 @@ export const appRouter = router({
     create: protectedProcedure
       .input(z.object({
         name: z.string().min(1).max(255),
-        description: z.string().optional(),
-        themeData: z.record(z.string(), z.any()),
+        description: z.string().max(2000).optional(),
+        themeData: legacyUserThemeDataSchema,
       }))
       .mutation(async ({ ctx, input }) => {
         return createUserTheme({
@@ -656,8 +691,8 @@ export const appRouter = router({
       .input(z.object({
         id: z.number(),
         name: z.string().min(1).max(255).optional(),
-        description: z.string().optional(),
-        themeData: z.record(z.string(), z.any()).optional(),
+        description: z.string().max(2000).optional(),
+        themeData: legacyUserThemeDataSchema.optional(),
         isDefault: z.boolean().optional(),
       }))
       .mutation(async ({ ctx, input }) => {

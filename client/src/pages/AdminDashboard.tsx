@@ -5,6 +5,7 @@ import { useState, useMemo, lazy, Suspense } from "react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
+import { safeExternalHttpUrl, safeImageSrc } from "@/lib/safe-url";
 import { toast } from "sonner";
 import {
   ArrowLeft, CheckCircle, XCircle, Clock, Eye, FileText,
@@ -218,12 +219,21 @@ function TemplatesPanel() {
               }} />
             </label>
           </div>
-          {formData.coverImageUrl && (
-            <div className="mt-2 relative">
-              <img src={formData.coverImageUrl} alt="غلاف" className="w-full h-20 object-cover rounded-lg border" />
-              <button onClick={() => setFormData(p => ({ ...p, coverImageUrl: '' }))} className="absolute top-1 left-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs hover:bg-red-600">×</button>
-            </div>
-          )}
+          {formData.coverImageUrl && (() => {
+            const safeCoverPreview = safeImageSrc(formData.coverImageUrl);
+            return (
+              <div className="mt-2 relative">
+                {safeCoverPreview ? (
+                  <img src={safeCoverPreview} alt="غلاف" className="w-full h-20 object-cover rounded-lg border" />
+                ) : (
+                  <p role="alert" className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                    رابط صورة الغلاف غير آمن أو غير صالح؛ لن تُعرض المعاينة.
+                  </p>
+                )}
+                <button type="button" onClick={() => setFormData(p => ({ ...p, coverImageUrl: '' }))} className="absolute top-1 left-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs hover:bg-red-600">×</button>
+              </div>
+            );
+          })()}
         </div>
         {/* رفع الشعار */}
         <div>
@@ -252,12 +262,21 @@ function TemplatesPanel() {
               }} />
             </label>
           </div>
-          {formData.logoUrl && (
-            <div className="mt-2 flex items-center gap-2">
-              <img src={formData.logoUrl} alt="شعار" className="w-12 h-12 object-contain rounded-lg border p-1" />
-              <button onClick={() => setFormData(p => ({ ...p, logoUrl: '' }))} className="text-red-500 hover:text-red-700 text-xs">إزالة</button>
-            </div>
-          )}
+          {formData.logoUrl && (() => {
+            const safeLogoPreview = safeImageSrc(formData.logoUrl);
+            return (
+              <div className="mt-2 flex items-center gap-2">
+                {safeLogoPreview ? (
+                  <img src={safeLogoPreview} alt="شعار" className="w-12 h-12 object-contain rounded-lg border p-1" />
+                ) : (
+                  <span role="alert" className="rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs text-amber-800">
+                    رابط الشعار غير آمن أو غير صالح
+                  </span>
+                )}
+                <button type="button" onClick={() => setFormData(p => ({ ...p, logoUrl: '' }))} className="text-red-500 hover:text-red-700 text-xs">إزالة</button>
+              </div>
+            );
+          })()}
         </div>
       </div>
 
@@ -675,13 +694,24 @@ function PortfoliosPanel() {
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {(p as any).files.map((file: any) => (
-                  <a key={file.id} href={file.url} target="_blank" rel="noopener noreferrer"
-                    className="flex items-center gap-2 p-3 rounded-lg border hover:bg-gray-50">
-                    <FileText className="w-4 h-4 text-gray-400" />
-                    <span className="text-sm truncate">{file.originalName}</span>
-                  </a>
-                ))}
+                {(p as any).files.map((file: any) => {
+                  const safeFileUrl = safeExternalHttpUrl(file.url);
+                  if (!safeFileUrl) {
+                    return (
+                      <div key={file.id} className="flex items-center gap-2 p-3 rounded-lg border bg-gray-50 text-gray-500">
+                        <FileText className="w-4 h-4 text-gray-400" />
+                        <span className="text-sm truncate">{file.originalName} (رابط غير صالح)</span>
+                      </div>
+                    );
+                  }
+                  return (
+                    <a key={file.id} href={safeFileUrl} target="_blank" rel="noopener noreferrer"
+                      className="flex items-center gap-2 p-3 rounded-lg border hover:bg-gray-50">
+                      <FileText className="w-4 h-4 text-gray-400" />
+                      <span className="text-sm truncate">{file.originalName}</span>
+                    </a>
+                  );
+                })}
               </div>
             </CardContent>
           </Card>

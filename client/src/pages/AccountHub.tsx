@@ -12,6 +12,15 @@ import {
   privateLocalStorage,
 } from "@/lib/private-browser-storage";
 import { useUserStore } from "@/stores/userStore";
+import {
+  EDUCATOR_ROLE_KEYS,
+  formatBeneficiaryPlural,
+  formatEducatorRoleLabel,
+  normalizeEducatorGender,
+  normalizeEducatorRoleKey,
+  type EducatorGender,
+  type EducatorRoleKey,
+} from "@shared/arabic-grammar";
 
 type Role = "owner" | "admin" | "reviewer" | "member";
 const roleLabels: Record<Role, string> = { owner: "مالك", admin: "مدير", reviewer: "مراجع", member: "عضو" };
@@ -85,6 +94,13 @@ export default function AccountHub() {
   const [startsOn, setStartsOn] = useState("");
   const [endsOn, setEndsOn] = useState("");
   const [terms, setTerms] = useState([{ label: "الفصل الأول", startsOn: "", endsOn: "" }]);
+  const personalInfo = useUserStore(state => state.personalInfo);
+  const profile = useUserStore(state => state.profile);
+  const setPersonalInfo = useUserStore(state => state.setPersonalInfo);
+  const setProfile = useUserStore(state => state.setProfile);
+  const activeGender = normalizeEducatorGender(personalInfo.gender);
+  const activeRoleKey = normalizeEducatorRoleKey(personalInfo.roleKey);
+  const [profileSavedNotice, setProfileSavedNotice] = useState(false);
   const refresh = async () => { await Promise.all([utils.account.overview.invalidate(), utils.domain.organization.listMine.invalidate(), utils.account.academicYears.invalidate()]); };
   const createSchool = trpc.account.createSchool.useMutation({ onSuccess: async () => { setSchoolName(""); await refresh(); } });
   const accept = trpc.account.acceptInvitation.useMutation({ onSuccess: refresh });
@@ -126,6 +142,101 @@ export default function AccountHub() {
       {overview.isLoading && <Loader2 aria-label="جارٍ التحميل" className="animate-spin" />}
       {overview.error && <p role="alert" className="rounded-xl bg-amber-50 p-4 text-amber-900">تعذر تحميل الحساب. سجل الدخول ثم أعد المحاولة.</p>}
       {overview.data && <section className="rounded-2xl border border-slate-200 bg-white p-5"><div className="flex items-center gap-3"><UserRound className="h-7 w-7 text-teal-700" /><div><h2 className="font-bold">{overview.data.user.name || "حسابي"}</h2><p className="mt-1 text-sm text-slate-600">معرّف حسابك: <strong>{overview.data.user.id}</strong></p>{overview.data.user.email && <p className="mt-1 text-xs text-slate-500" dir="ltr">{overview.data.user.email}</p>}</div></div></section>}
+      <section className="rounded-2xl border border-slate-200 bg-white p-5" aria-label="تفضيلات الصياغة والتعبئة الافتراضية">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h2 className="font-bold text-slate-950">الصياغة العربية والتعبئة الافتراضية للتقارير</h2>
+            <p className="mt-1 text-xs leading-6 text-slate-500">تُحفظ هذه التفضيلات في خزنة جهازك الخاصة وتُستخدم فقط عند الضغط على زر التعبئة الاختياري داخل المحرر.</p>
+          </div>
+          <span className="rounded-full bg-teal-50 px-3 py-1 text-xs font-bold text-teal-800">
+            {formatEducatorRoleLabel(activeRoleKey, activeGender)} · {formatBeneficiaryPlural(activeGender)}
+          </span>
+        </div>
+        <div className="mt-4 grid gap-4 sm:grid-cols-2">
+          <label className="text-xs font-bold text-slate-700">
+            الصيغة اللغوية
+            <select
+              aria-label="الصيغة اللغوية العربية"
+              value={activeGender}
+              onChange={e => {
+                setProfileSavedNotice(false);
+                setPersonalInfo({ gender: e.target.value as EducatorGender });
+              }}
+              className={field}
+            >
+              <option value="male">مذكر (معلم / الطلاب)</option>
+              <option value="female">مؤنث (معلمة / الطالبات)</option>
+            </select>
+          </label>
+          <label className="text-xs font-bold text-slate-700">
+            الدور التربوي الافتراضي
+            <select
+              aria-label="الدور التربوي الافتراضي"
+              value={activeRoleKey}
+              onChange={e => {
+                setProfileSavedNotice(false);
+                setPersonalInfo({ roleKey: e.target.value as EducatorRoleKey });
+              }}
+              className={field}
+            >
+              {EDUCATOR_ROLE_KEYS.map(key => (
+                <option key={key} value={key}>{formatEducatorRoleLabel(key, activeGender)}</option>
+              ))}
+            </select>
+          </label>
+          <label className="text-xs font-bold text-slate-700">
+            اسم مُعدّ التقرير الافتراضي
+            <input
+              aria-label="اسم معد التقرير الافتراضي"
+              value={profile.fullName || personalInfo.preparer}
+              onChange={e => {
+                setProfileSavedNotice(false);
+                setProfile({ fullName: e.target.value });
+                setPersonalInfo({ preparer: e.target.value });
+              }}
+              placeholder="مثال: أمل عبدالله العتيبي"
+              className={field}
+            />
+          </label>
+          <label className="text-xs font-bold text-slate-700">
+            اسم {formatEducatorRoleLabel("principal", activeGender)} (اختياري)
+            <input
+              aria-label="اسم قائد أو قائدة المدرسة الافتراضي"
+              value={personalInfo.principalName ?? ""}
+              onChange={e => {
+                setProfileSavedNotice(false);
+                setPersonalInfo({ principalName: e.target.value });
+              }}
+              placeholder={`مثال: اسم ${formatEducatorRoleLabel("principal", activeGender)}`}
+              className={field}
+            />
+          </label>
+        </div>
+        <label className="mt-4 block text-xs font-bold text-slate-700">
+          ترويسة الجهة / المدرسة الافتراضية
+          <textarea
+            aria-label="ترويسة المدرسة الافتراضية"
+            rows={3}
+            value={personalInfo.department}
+            onChange={e => {
+              setProfileSavedNotice(false);
+              setPersonalInfo({ department: e.target.value });
+            }}
+            className={field}
+          />
+        </label>
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+          <p className="text-[11px] text-slate-500">المسمى المعتمد للتعبئة: <strong>{formatEducatorRoleLabel(activeRoleKey, activeGender)}</strong> · الفئة المستفيدة: <strong>{formatBeneficiaryPlural(activeGender)}</strong></p>
+          <button
+            type="button"
+            onClick={() => setProfileSavedNotice(true)}
+            className="rounded-xl border border-teal-200 bg-teal-50 px-3.5 py-2 text-xs font-bold text-teal-900 hover:bg-teal-100"
+          >
+            تأكيد حفظ التفضيلات محليًا
+          </button>
+        </div>
+        {profileSavedNotice && <p role="status" className="mt-2 text-xs font-semibold text-teal-800">تم حفظ تفضيلات الصياغة والتعبئة في خزنة جهازك.</p>}
+      </section>
       {overview.data?.schools.filter(s => s.status === "invited").map(school => <section key={school.id} className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-teal-200 bg-teal-50 p-5"><div><h2 className="font-bold">دعوة إلى {school.name}</h2><p className="mt-2 text-sm">الدور المقترح: {roleLabels[school.role]}</p></div><button className={button} disabled={accept.isPending} onClick={() => accept.mutate({ organizationId: school.id })}>قبول الدعوة</button></section>)}
       {accept.error && <p role="alert" className="text-sm text-red-700">{accept.error.message}</p>}
       {overview.data?.schools.filter(s => s.status === "active").map(school => <section key={school.id} className="rounded-2xl border border-slate-200 bg-white p-5"><div className="flex items-center gap-3"><Building2 className="h-7 w-7 text-teal-700" /><div><h2 className="font-bold">{school.name}</h2><p className="mt-1 text-xs text-slate-500">دورك: {roleLabels[school.role]}</p></div></div>{["owner", "admin"].includes(school.role) && <SchoolMembers organizationId={school.id} owner={school.role === "owner"} />}</section>)}

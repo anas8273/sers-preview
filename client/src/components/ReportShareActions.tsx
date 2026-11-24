@@ -7,6 +7,7 @@ import {
   Link2,
   Loader2,
   LockKeyhole,
+  Printer,
   QrCode,
   RefreshCw,
   Share2,
@@ -16,6 +17,7 @@ import {
 } from "lucide-react";
 import QRCode from "qrcode";
 import { useRoute } from "wouter";
+import PrintQrCardDialog from "@/components/PrintQrCardDialog";
 import { trpc } from "@/lib/trpc";
 import { compareReportDraftToVersion } from "@shared/report-stale";
 import { useAuth } from "@/_core/hooks/useAuth";
@@ -58,6 +60,7 @@ function ReportShareSession({ workId }: { workId: number }) {
   const [copied, setCopied] = useState(false);
   const [copyError, setCopyError] = useState(false);
   const [continueWithOldVersion, setContinueWithOldVersion] = useState(false);
+  const [printCardOpen, setPrintCardOpen] = useState(false);
 
   const versionsQuery = trpc.reviewSupport.versions.useQuery(
     { workItemId: workId },
@@ -342,6 +345,13 @@ function ReportShareSession({ workId }: { workId: number }) {
                   <button type="button" onClick={() => void copyShareUrl()} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-emerald-700 px-3 py-2.5 text-xs font-bold text-white hover:bg-emerald-800">{copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}{copied ? "تم النسخ" : "نسخ الرابط"}</button>
                   <a href={shareUrl} target="_blank" rel="noreferrer" className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-emerald-300 bg-white px-3 py-2.5 text-xs font-bold text-emerald-900 hover:bg-emerald-50"><Link2 className="h-4 w-4" /> فتح للاختبار</a>
                 </div>
+                <button
+                  type="button"
+                  onClick={() => setPrintCardOpen(true)}
+                  className="mt-2 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-teal-300 bg-white px-3 py-2.5 text-xs font-bold text-teal-900 hover:bg-teal-50"
+                >
+                  <Printer className="h-4 w-4" /> بطاقة QR للطباعة
+                </button>
                 {copyError && <p role="alert" className="mt-2 text-xs leading-6 text-red-700">تعذّر نسخ الرابط تلقائيًا. يمكنك تحديد الرابط أعلاه ونسخه يدويًا.</p>}
                 <button type="button" onClick={() => void revokeShare().catch(() => undefined)} disabled={revokeMutation.isPending} className="mt-3 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-red-200 bg-white px-3 py-2.5 text-xs font-bold text-red-700 hover:bg-red-50 disabled:opacity-50">{revokeMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />} إلغاء المخرج</button>
                 {revokeMutation.error && <p role="alert" className="mt-2 text-xs text-red-700">{revokeMutation.error.message}</p>}
@@ -397,6 +407,18 @@ function ReportShareSession({ workId }: { workId: number }) {
         <Share2 className="h-5 w-5" />
         <span>مشاركة النسخة</span>
       </button>
+
+      {created && shareUrl && (
+        <PrintQrCardDialog
+          open={printCardOpen}
+          onOpenChange={setPrintCardOpen}
+          title={workQuery.data?.title || "تقرير موثق"}
+          outputTypeLabel="مخرج تقرير معتمد"
+          verificationUrl={shareUrl}
+          versionNumber={selectedVersion?.versionNumber}
+          visibility={created.visibility}
+        />
+      )}
     </div>
   );
 }

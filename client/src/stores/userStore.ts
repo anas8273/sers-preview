@@ -6,6 +6,12 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { privateLocalStorage } from '@/lib/private-browser-storage';
+import {
+  normalizeEducatorGender,
+  normalizeEducatorRoleKey,
+  type EducatorGender,
+  type EducatorRoleKey,
+} from '@shared/arabic-grammar';
 
 // ─── Types ───────────────────────────────────────────────
 export interface PersonalInfo {
@@ -15,6 +21,12 @@ export interface PersonalInfo {
   year: string;
   /** اسم مُعدّ التقرير */
   preparer: string;
+  /** اسم قائد/قائدة المدرسة الافتراضي */
+  principalName?: string;
+  /** الصيغة اللغوية العربية للمستخدم */
+  gender?: EducatorGender;
+  /** الدور التربوي الافتراضي لصياغة المسمى */
+  roleKey?: EducatorRoleKey;
 }
 
 export interface UserProfile {
@@ -46,6 +58,9 @@ export const DEFAULT_PERSONAL_INFO: PersonalInfo = {
   department: 'المملكة العربية السعودية\nوزارة التعليم\nالإدارة العامة للتعليم بمنطقة...\nمدرسة...',
   year: '',
   preparer: '',
+  principalName: '',
+  gender: 'male',
+  roleKey: 'teacher',
 };
 
 const DEFAULT_PROFILE: UserProfile = {
@@ -99,6 +114,25 @@ export const useUserStore = create<UserState>()(
     {
       name: 'sers-user',
       storage: privateUserStorage,
+      merge: (persistedState, currentState) => {
+        const persisted = (persistedState && typeof persistedState === 'object' ? persistedState : {}) as Partial<PersistedUserState>;
+        const rawInfo = (persisted.personalInfo && typeof persisted.personalInfo === 'object' ? persisted.personalInfo : {}) as Partial<PersonalInfo>;
+        const rawProfile = (persisted.profile && typeof persisted.profile === 'object' ? persisted.profile : {}) as Partial<UserProfile>;
+        return {
+          ...currentState,
+          personalInfo: {
+            ...DEFAULT_PERSONAL_INFO,
+            ...rawInfo,
+            gender: normalizeEducatorGender(rawInfo.gender),
+            roleKey: normalizeEducatorRoleKey(rawInfo.roleKey),
+            principalName: typeof rawInfo.principalName === 'string' ? rawInfo.principalName : '',
+          },
+          profile: {
+            ...DEFAULT_PROFILE,
+            ...rawProfile,
+          },
+        };
+      },
       // Only persist these fields
       partialize: (state) => ({
         personalInfo: state.personalInfo,

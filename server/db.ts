@@ -7,6 +7,16 @@ import { isMySqlDuplicateEntryError } from "./mysql-errors";
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
+function assertAffectedRows(result: unknown, message = "العنصر غير موجود أو لا تملك صلاحية تعديله") {
+  const candidate = Array.isArray(result) ? result[0] : result;
+  const affected = candidate && typeof candidate === "object" && "affectedRows" in candidate
+    ? Number((candidate as { affectedRows?: number }).affectedRows ?? 0)
+    : 0;
+  if (affected === 0) {
+    throw new TRPCError({ code: "NOT_FOUND", message });
+  }
+}
+
 export async function getDb() {
   if (!_db && process.env.DATABASE_URL) {
     try {
@@ -188,7 +198,8 @@ export async function deleteEvidenceComment(id: number, userId: number, isAdmin 
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   const where = isAdmin ? eq(evidenceComments.id, id) : and(eq(evidenceComments.id, id), eq(evidenceComments.userId, userId));
-  await db.delete(evidenceComments).where(where);
+  const result = await db.delete(evidenceComments).where(where);
+  assertAffectedRows(result, "التعليق غير موجود أو لا تملك صلاحية حذفه");
   return { success: true };
 }
 
@@ -217,7 +228,8 @@ export async function getOnlineExamById(id: number) {
 export async function deactivateOnlineExam(id: number, userId: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  await db.update(onlineExams).set({ isActive: false }).where(and(eq(onlineExams.id, id), eq(onlineExams.userId, userId)));
+  const result = await db.update(onlineExams).set({ isActive: false }).where(and(eq(onlineExams.id, id), eq(onlineExams.userId, userId)));
+  assertAffectedRows(result, "الاختبار غير موجود أو لا تملك صلاحية إيقافه");
   return { success: true };
 }
 
@@ -358,12 +370,13 @@ export async function getAllPortfolios(page = 1, limit = 20, status?: string) {
 export async function reviewPortfolio(id: number, reviewerId: number, status: string, notes: string) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  await db.update(portfolios).set({
+  const result = await db.update(portfolios).set({
     status: status as any,
     reviewNotes: notes,
     reviewedBy: reviewerId,
     reviewedAt: new Date(),
   }).where(eq(portfolios.id, id));
+  assertAffectedRows(result, "ملف الإنجاز غير موجود");
   return { success: true };
 }
 
@@ -407,7 +420,8 @@ export async function getFilesByPortfolio(portfolioId: number, options?: { publi
 export async function deleteUploadedFile(id: number, userId: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  await db.delete(uploadedFiles).where(and(eq(uploadedFiles.id, id), eq(uploadedFiles.userId, userId)));
+  const result = await db.delete(uploadedFiles).where(and(eq(uploadedFiles.id, id), eq(uploadedFiles.userId, userId)));
+  assertAffectedRows(result, "الملف غير موجود أو لا تملك صلاحية حذفه");
   return { success: true };
 }
 
@@ -459,7 +473,8 @@ export async function getShareLinksByPortfolio(portfolioId: number) {
 export async function deactivateShareLink(id: number, userId: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  await db.update(shareLinks).set({ isActive: false }).where(and(eq(shareLinks.id, id), eq(shareLinks.userId, userId)));
+  const result = await db.update(shareLinks).set({ isActive: false }).where(and(eq(shareLinks.id, id), eq(shareLinks.userId, userId)));
+  assertAffectedRows(result, "رابط المشاركة غير موجود أو لا تملك صلاحية إيقافه");
   return { success: true };
 }
 
@@ -474,14 +489,16 @@ export async function createPdfTemplate(data: InsertPdfTemplate) {
 export async function updatePdfTemplate(id: number, data: Partial<InsertPdfTemplate>) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  await db.update(pdfTemplates).set(data).where(eq(pdfTemplates.id, id));
+  const result = await db.update(pdfTemplates).set(data).where(eq(pdfTemplates.id, id));
+  assertAffectedRows(result, "القالب غير موجود");
   return { success: true };
 }
 
 export async function deletePdfTemplate(id: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  await db.delete(pdfTemplates).where(eq(pdfTemplates.id, id));
+  const result = await db.delete(pdfTemplates).where(eq(pdfTemplates.id, id));
+  assertAffectedRows(result, "القالب غير موجود");
   return { success: true };
 }
 
@@ -497,6 +514,17 @@ export async function getAllPdfTemplates() {
   return db.select().from(pdfTemplates).orderBy(pdfTemplates.sortOrder);
 }
 
+export async function getSharedPdfTemplateByToken(token: string) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db
+    .select()
+    .from(pdfTemplates)
+    .where(and(eq(pdfTemplates.shareToken, token), eq(pdfTemplates.isShared, true)))
+    .limit(1);
+  return result[0];
+}
+
 // ─── User Custom Themes ──────────────────────────────────────
 export async function createUserTheme(data: InsertUserTheme) {
   const db = await getDb();
@@ -508,14 +536,16 @@ export async function createUserTheme(data: InsertUserTheme) {
 export async function updateUserTheme(id: number, userId: number, data: Partial<InsertUserTheme>) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  await db.update(userThemes).set(data).where(and(eq(userThemes.id, id), eq(userThemes.userId, userId)));
+  const result = await db.update(userThemes).set(data).where(and(eq(userThemes.id, id), eq(userThemes.userId, userId)));
+  assertAffectedRows(result, "الثيم غير موجود أو لا تملك صلاحية تعديله");
   return { success: true };
 }
 
 export async function deleteUserTheme(id: number, userId: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  await db.delete(userThemes).where(and(eq(userThemes.id, id), eq(userThemes.userId, userId)));
+  const result = await db.delete(userThemes).where(and(eq(userThemes.id, id), eq(userThemes.userId, userId)));
+  assertAffectedRows(result, "الثيم غير موجود أو لا تملك صلاحية حذفه");
   return { success: true };
 }
 

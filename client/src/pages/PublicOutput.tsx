@@ -8,11 +8,16 @@ import {
   KeyRound,
   Loader2,
   LockKeyhole,
+  Printer,
   RefreshCw,
   ShieldCheck,
 } from "lucide-react";
 import { useRoute } from "wouter";
+import PrintQrCardDialog from "@/components/PrintQrCardDialog";
 import { trpc } from "@/lib/trpc";
+import { safeImageSrc } from "@/lib/safe-url";
+import { REPORT_MINISTRY_LOGO_ALT, REPORT_SCHOOL_LOGO_ALT } from "@shared/report-appearance";
+import ministryLogoUrl from "@shared/report-assets/ministry-logo.png";
 
 export default function PublicOutput() {
   const [, params] = useRoute<{ token: string }>("/output/:token");
@@ -26,6 +31,7 @@ function PublicOutputSession({ token }: { token: string }) {
   const [password, setPassword] = useState("");
   const [requiresPassword, setRequiresPassword] = useState(false);
   const [passwordError, setPasswordError] = useState<string | undefined>();
+  const [printCardOpen, setPrintCardOpen] = useState(false);
 
   const resolveMutation = trpc.publicOutput.resolve.useMutation({
     onSuccess: () => {
@@ -69,6 +75,13 @@ function PublicOutputSession({ token }: { token: string }) {
   const unavailable = resolveMutation.error
     && resolveMutation.error.data?.code !== "UNAUTHORIZED"
     && !resolveMutation.isPending;
+  const institution = data?.report.institution;
+  const schoolLogoSrc = institution?.visible && institution.schoolLogo
+    ? safeImageSrc(`data:image/png;base64,${institution.schoolLogo}`)
+    : null;
+  const verificationUrl = typeof window !== "undefined"
+    ? `${window.location.origin}/output/${token}`
+    : `/output/${token}`;
 
   return (
     <main className="min-h-screen bg-[#F5F8FA] px-4 py-8 sm:px-6 sm:py-12" dir="rtl">
@@ -149,6 +162,25 @@ function PublicOutputSession({ token }: { token: string }) {
           <article className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-xl">
             <div className="h-3 bg-slate-950" />
             <div className="p-6 sm:p-10">
+              {institution?.visible && (
+                <section aria-label="الهوية المؤسسية" className="mb-6 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-3">
+                  <div className="flex items-center gap-3">
+                    {institution.ministryLogo && (
+                      <img src={ministryLogoUrl} alt={REPORT_MINISTRY_LOGO_ALT} className="h-11 w-auto object-contain" />
+                    )}
+                    {institution.schoolName && (
+                      <div>
+                        <p className="text-[11px] font-bold text-slate-500">الجهة / المدرسة</p>
+                        <p className="text-sm font-black text-slate-900">{institution.schoolName}</p>
+                      </div>
+                    )}
+                  </div>
+                  {schoolLogoSrc && (
+                    <img src={schoolLogoSrc} alt={REPORT_SCHOOL_LOGO_ALT} className="h-12 w-12 rounded-xl border border-slate-200 bg-white object-contain p-1" />
+                  )}
+                </section>
+              )}
+
               <div className="flex flex-col gap-5 border-b border-slate-200 pb-7 sm:flex-row sm:items-start sm:justify-between">
                 <div>
                   <p className="text-xs font-black text-teal-700">{data.report.templateLabel}</p>
@@ -159,8 +191,18 @@ function PublicOutputSession({ token }: { token: string }) {
                     <span className="rounded-full bg-slate-100 px-3 py-1.5 font-bold">{data.type === "qr" ? "QR" : "رابط"}</span>
                   </div>
                 </div>
-                <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs leading-6 text-emerald-800">
-                  <div className="flex items-start gap-2"><CheckCircle2 className="mt-1 h-4 w-4 shrink-0" /><span>المحتوى المعروض مأخوذ من نسخة ثابتة معتمدة، وليس من مسودة متغيرة.</span></div>
+                <div className="flex flex-col items-start gap-2 sm:items-end">
+                  <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs leading-6 text-emerald-800">
+                    <div className="flex items-start gap-2"><CheckCircle2 className="mt-1 h-4 w-4 shrink-0" /><span>المحتوى المعروض مأخوذ من نسخة ثابتة معتمدة، وليس من مسودة متغيرة.</span></div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setPrintCardOpen(true)}
+                    className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-teal-200 bg-teal-50 px-4 py-2 text-xs font-bold text-teal-900 hover:bg-teal-100"
+                  >
+                    <Printer className="h-4 w-4" />
+                    بطاقة QR للطباعة
+                  </button>
                 </div>
               </div>
 
@@ -187,6 +229,17 @@ function PublicOutputSession({ token }: { token: string }) {
                     <p className="mt-3 text-[11px] leading-6 text-amber-800">عرض اسم الشاهد ووصفه لا يمنح وصولًا إلى الملف الأصلي أو الرابط الداخلي.</p>
                   </section>
                 )}
+
+                {institution?.visible && institution.signers.length > 0 && (
+                  <section aria-label="الاعتماد والتوقيعات" className="grid gap-3 border-t border-slate-100 pt-6 sm:grid-cols-2">
+                    {institution.signers.map(signer => (
+                      <div key={`${signer.label}-${signer.name}`} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                        <p className="text-[11px] font-bold text-slate-500">{signer.label}</p>
+                        <p className="mt-1 text-sm font-black text-slate-900">{signer.name}</p>
+                      </div>
+                    ))}
+                  </section>
+                )}
               </div>
 
               <footer className="mt-10 flex flex-col gap-3 border-t border-slate-200 pt-6 text-[11px] leading-6 text-slate-500 sm:flex-row sm:items-center sm:justify-between">
@@ -199,6 +252,20 @@ function PublicOutputSession({ token }: { token: string }) {
 
         <p className="mt-6 text-center text-[11px] leading-6 text-slate-500">لا يعرض هذا المسار الملفات الأصلية أو بيانات الملكية أو روابط التخزين الداخلية.</p>
       </div>
+
+      {data && (
+        <PrintQrCardDialog
+          open={printCardOpen}
+          onOpenChange={setPrintCardOpen}
+          title={data.report.title}
+          outputTypeLabel={data.report.templateLabel}
+          verificationUrl={verificationUrl}
+          schoolName={institution?.visible ? institution.schoolName || undefined : undefined}
+          versionNumber={data.versionNumber}
+          visibility={data.visibility === "protected" ? "protected" : "public"}
+          verifiedAtLabel={data.report.capturedAt ? new Date(data.report.capturedAt).toLocaleString("ar-SA") : undefined}
+        />
+      )}
     </main>
   );
 }

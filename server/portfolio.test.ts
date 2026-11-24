@@ -222,7 +222,7 @@ describe("share", () => {
       const ctx = createPublicContext();
       const caller = appRouter.createCaller(ctx);
       const result = await caller.share.view({ token: "expired-token" });
-      expect(result.error).toBe("انتهت صلاحية الرابط");
+      expect(result.error).toBe("الرابط غير صالح أو منتهي الصلاحية");
       expect(result.portfolio).toBeNull();
     });
 
@@ -230,7 +230,7 @@ describe("share", () => {
       const ctx = createPublicContext();
       const caller = appRouter.createCaller(ctx);
       const result = await caller.share.view({ token: "nonexistent" });
-      expect(result.error).toBe("رابط غير صالح");
+      expect(result.error).toBe("الرابط غير صالح أو منتهي الصلاحية");
     });
 
     it("requires an access code for protected links", async () => {

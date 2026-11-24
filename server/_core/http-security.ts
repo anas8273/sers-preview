@@ -26,10 +26,18 @@ export function registerHttpSecurity(app: Express, options: { proxies?: string; 
     if (!req.path.startsWith("/assets/")) {
       res.setHeader("Cache-Control", "private, no-store"); res.vary("Cookie");
     }
-    // Browser mutation requests with a foreign origin are rejected before body
-    // parsing. CLI clients without Origin still require normal authorization.
-    if (canonicalOrigin && !["GET", "HEAD", "OPTIONS"].includes(req.method) && req.headers.origin && req.headers.origin !== canonicalOrigin) {
-      res.status(403).json({ error: "Foreign origin is not permitted" }); return;
+    // Browser mutation requests with a foreign origin or cross-site fetch metadata
+    // are rejected before body parsing. CLI clients without Origin still require normal authorization.
+    if (!["GET", "HEAD", "OPTIONS"].includes(req.method)) {
+      const secFetchSite = typeof req.headers["sec-fetch-site"] === "string"
+        ? req.headers["sec-fetch-site"].trim().toLowerCase()
+        : undefined;
+      if (secFetchSite === "cross-site") {
+        res.status(403).json({ error: "Cross-site request is not permitted" }); return;
+      }
+      if (canonicalOrigin && req.headers.origin && req.headers.origin !== canonicalOrigin) {
+        res.status(403).json({ error: "Foreign origin is not permitted" }); return;
+      }
     }
     next();
   });

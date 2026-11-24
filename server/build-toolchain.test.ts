@@ -26,7 +26,11 @@ describe("locked build toolchain", () => {
   it("pins the patched Vitest line and exposes supported serial worker controls", () => {
     expect(pkg.devDependencies.vitest).toBe("4.1.12");
     expect(JSON.parse(readFileSync(resolve("node_modules/vite/package.json"), "utf8")).version).toBe("7.3.7");
-    const help = execFileSync("pnpm", ["exec", "vitest", "--help"], { encoding: "utf8" });
+    const pnpmCmd = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
+    const help = execFileSync(pnpmCmd, ["exec", "vitest", "--help"], {
+      encoding: "utf8",
+      shell: process.platform === "win32",
+    });
     expect(help).toContain("--maxWorkers");
     expect(help).toContain("--fileParallelism");
     expect(help).not.toContain("--minWorkers");
