@@ -16,7 +16,7 @@
 | **فرع العمل الحالي** | `chore/sync-audit-2026-11-24` (متفرع من `origin/main` `6a9954d`؛ اكتملت عليه حزم M1 وM2 وM3 وM4 دون أي `git push` وببقاء `main` المحلي و`SERS_*` و`.env` دون مساس) |
 | حالة `.worktrees/` | أُزيلت مجلدات العمل المؤقتة `.worktrees/reconcile` و`.worktrees/pr40-ref` بعد حفظ `RESUME.md` في `85dd741` |
 | حالة `TODO.md` / `todo.md` | حُلّ تعارض حالة الأحرف على NTFS بحذف `todo.md` من فهرس Git واستعادة `TODO.md` في `9c04e99` |
-| تنظيف الجذر | أُرشف 44 ملف ملاحظات جذرية قديمة إلى `docs/archive/root-notes/` وأُزيل `package-lock.json` غير المستخدم في `47baf5e` |
+| تنظيف الجذر | أُرشف 44 ملف ملاحظات جذرية قديمة إلى `docs/archive/legacy-root-notes/` وأُزيل `package-lock.json` غير المستخدم في `47baf5e` |
 | المستودع التاريخي | `مشروع التخرج\SERS` (`anas8273/SERS`) — لم يُلمس |
 
 ### سلسلة commits المرفوعة إلى GitHub ([PR #43](https://github.com/anas8273/sers-preview/pull/43))
