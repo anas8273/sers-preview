@@ -13,6 +13,7 @@ import {
   UploadCloud,
 } from "lucide-react";
 import AppSidebar from "@/components/AppSidebar";
+import InstantReportLab from "@/components/InstantReportLab";
 
 type ActionCard = {
   title: string;
@@ -96,6 +97,8 @@ export default function Home() {
               </div>
             </div>
           </section>
+
+          <InstantReportLab onStartRealWork={() => navigate("/work")} />
 
           <section className="mt-8">
             <div className="mb-4 flex items-end justify-between gap-4">

@@ -2,9 +2,11 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { protectedProcedure, router } from "./_core/trpc";
 import {
+  getSmartEvidenceMatrixForUser,
   linkAssetToStandardForUser,
   listStandardsForAssetForUser,
   listStandardVersions,
+  seedOfficialStandardsPacks,
   unlinkAssetFromStandardForUser,
 } from "./standards-db";
 
@@ -47,6 +49,18 @@ export const standardsRouter = router({
       if (!ok) throw forbidden("لا تملك صلاحية فك ارتباط هذا الشاهد");
       return { success: true as const };
     }),
+
+  seedOfficialPacks: protectedProcedure
+    .input(z.object({
+      packId: z.enum(["saudi-teacher-eval-7", "saudi-teacher-standards-11", "all"]).default("all"),
+    }).strict().optional())
+    .mutation(({ input }) => seedOfficialStandardsPacks(input?.packId ?? "all")),
+
+  coverageMatrix: protectedProcedure
+    .input(z.object({
+      packId: z.enum(["saudi-teacher-eval-7", "saudi-teacher-standards-11", "all"]).default("saudi-teacher-eval-7"),
+    }).strict().optional())
+    .query(({ ctx, input }) => getSmartEvidenceMatrixForUser(ctx.user.id, input?.packId ?? "saudi-teacher-eval-7")),
 });
 
 export type StandardsRouter = typeof standardsRouter;

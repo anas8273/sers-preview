@@ -1,8 +1,13 @@
-import { and, desc, eq, isNull } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull } from "drizzle-orm";
 import { assets, assetStandardLinks, memberships, organizations, standardVersions } from "../drizzle/domain-core";
 import { users } from "../drizzle/schema";
 import { getDb } from "./db";
-import { assertAssetAccess } from "./domain-db";
+import { assertAssetAccess, listAssetsForUser } from "./domain-db";
+import {
+  buildSmartEvidenceCoverage,
+  OFFICIAL_SAUDI_STANDARD_SEEDS,
+  type OfficialStandardPackId,
+} from "../shared/saudi-standards-packs";
 
 function canWriteOrganization(role: string) {
   return role === "owner" || role === "admin" || role === "member";
@@ -130,5 +135,86 @@ export async function unlinkAssetFromStandardForUser(
         eq(assetStandardLinks.standardVersionId, input.standardVersionId),
       ));
     return true;
+  });
+}
+
+export async function seedOfficialStandardsPacks(packFilter: OfficialStandardPackId | "all" = "all") {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const seeds = packFilter === "all"
+    ? OFFICIAL_SAUDI_STANDARD_SEEDS
+    : OFFICIAL_SAUDI_STANDARD_SEEDS.filter(seed => seed.packId === packFilter);
+
+  for (const seed of seeds) {
+    const metadata = {
+      packId: seed.packId,
+      packTitle: seed.packTitle,
+      domainLabel: seed.domainLabel,
+      ...(typeof seed.weightPercent === "number" ? { weightPercent: seed.weightPercent } : {}),
+    };
+    await db
+      .insert(standardVersions)
+      .values({
+        standardKey: seed.standardKey,
+        version: seed.version,
+        title: seed.title,
+        data: metadata,
+        isActive: true,
+      })
+      .onDuplicateKeyUpdate({
+        set: {
+          title: seed.title,
+          data: metadata,
+          isActive: true,
+        },
+      });
+  }
+
+  return { seededCount: seeds.length };
+}
+
+export async function getSmartEvidenceMatrixForUser(
+  userId: number,
+  packFilter: OfficialStandardPackId | "all" = "saudi-teacher-eval-7",
+) {
+  const db = await getDb();
+  if (!db) {
+    return buildSmartEvidenceCoverage({ standards: [], assets: [], links: [] });
+  }
+
+  const allStandards = await db
+    .select()
+    .from(standardVersions)
+    .where(eq(standardVersions.isActive, true))
+    .orderBy(standardVersions.standardKey);
+
+  const seedPackByKey = new Map(OFFICIAL_SAUDI_STANDARD_SEEDS.map(s => [s.standardKey, s.packId]));
+  const filteredStandards = packFilter === "all"
+    ? allStandards
+    : allStandards.filter(std => {
+      const dataPack = std.data && typeof std.data === "object" ? (std.data as Record<string, unknown>).packId : undefined;
+      const effectivePack = typeof dataPack === "string" ? dataPack : seedPackByKey.get(std.standardKey);
+      return effectivePack === packFilter;
+    });
+
+  const readableAssets = await listAssetsForUser(userId);
+  const assetIds = readableAssets.map(asset => asset.id);
+
+  const links = assetIds.length > 0
+    ? await db
+      .select({
+        assetId: assetStandardLinks.assetId,
+        standardVersionId: assetStandardLinks.standardVersionId,
+        note: assetStandardLinks.note,
+      })
+      .from(assetStandardLinks)
+      .where(inArray(assetStandardLinks.assetId, assetIds))
+    : [];
+
+  return buildSmartEvidenceCoverage({
+    standards: filteredStandards,
+    assets: readableAssets.map(a => ({ id: a.id, title: a.title, kind: a.kind })),
+    links,
   });
 }
