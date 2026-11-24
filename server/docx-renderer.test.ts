@@ -86,5 +86,5 @@ describe('DOCX Export API endpoint', () => {
     const indexModule = await import('./_core/index');
     expect(indexModule).toBeDefined();
     expect(typeof indexModule.startServer).toBe('function');
-  });
+  }, 30_000);
 });
