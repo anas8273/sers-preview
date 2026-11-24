@@ -22,6 +22,7 @@ import {
   type ReportFieldDefinition,
   type ReportFieldValue,
 } from "@shared/report-projection";
+import { evaluateReportPreflight } from "@shared/report-preflight";
 import ministryLogoUrl from "@shared/report-assets/ministry-logo.png";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
@@ -752,6 +753,16 @@ function ReportEditor({ workId }: { workId: number }) {
     [evidenceAssetIds, linkedAssets],
   );
   const fieldDefinitions = editorFields(draft);
+  const preflight = useMemo(
+    () => evaluateReportPreflight({
+      title: workQuery.data?.title ?? "",
+      fieldDefinitions,
+      fields,
+      linkedAssetCount: linkedAssets.length,
+      selectedEvidenceCount: selectedEvidence.length,
+    }),
+    [workQuery.data?.title, fieldDefinitions, fields, linkedAssets.length, selectedEvidence.length],
+  );
   const previewModel = useMemo(() => {
     try {
       return projectReportDocument({
@@ -1181,9 +1192,26 @@ function ReportEditor({ workId }: { workId: number }) {
                   </section>
 
                   <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
-                    <p className="text-xs font-bold text-teal-700">نسخة غير قابلة للتغيير</p>
-                    <h2 className="mt-1 text-lg font-bold text-slate-950">حفظ نسخة للمراجعة أو الإخراج</h2>
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <p className="text-xs font-bold text-teal-700">نسخة غير قابلة للتغيير</p>
+                        <h2 className="mt-1 text-lg font-bold text-slate-950">حفظ نسخة للمراجعة أو الإخراج</h2>
+                      </div>
+                      <span className={`rounded-full border px-2.5 py-1 text-[11px] font-bold ${preflight.status === "ready" ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-amber-200 bg-amber-50 text-amber-900"}`}>
+                        {preflight.status === "ready" ? "جاهز للتثبيت" : "تنبيهات فحص مسبق"}
+                      </span>
+                    </div>
                     <p className="mt-2 text-xs leading-6 text-slate-600">ينشئ النظام نسخة من المسودة المحفوظة في الخادم والشواهد المرتبطة، لا من الصفحة المعروضة في المتصفح.</p>
+                    <ul className="mt-3 space-y-1.5 rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs" aria-label="فحص جاهزية المستند قبل التثبيت">
+                      {preflight.checks.map(item => (
+                        <li key={item.id} className="flex items-start gap-2">
+                          {item.passed
+                            ? <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-700" />
+                            : <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-700" />}
+                          <span className={item.passed ? "text-slate-700" : "font-semibold text-amber-950"}>{item.message}</span>
+                        </li>
+                      ))}
+                    </ul>
                     <textarea value={versionReason} onChange={event => setVersionReason(event.target.value)} rows={2} maxLength={255} placeholder="سبب إنشاء النسخة، مثل: جاهزة للمراجعة" className="mt-4 w-full resize-none rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100" />
                     <button
                       type="button"

@@ -2,6 +2,7 @@ import { useRef, useState, type MouseEvent } from "react";
 import { Award, Building2, ChevronDown, ChevronUp, ExternalLink, FileText, Library, Link2, Loader2, Plus, RefreshCw, ShieldCheck, Trash2, UserRound, X } from "lucide-react";
 import AppSidebar from "@/components/AppSidebar";
 import AssetDeleteDialog from "@/components/AssetDeleteDialog";
+import SmartEvidenceMatrixPanel from "@/components/SmartEvidenceMatrixPanel";
 import { trpc } from "@/lib/trpc";
 import { safeExternalHttpUrl } from "@/lib/safe-url";
 import { Link, useLocation } from "wouter";
@@ -252,6 +253,10 @@ export default function EvidenceLibrary() {
           </header>
 
           <PrivateEvidenceUpload />
+
+          <SmartEvidenceMatrixPanel
+            assets={(assetsQuery.data ?? []).map(asset => ({ id: asset.id, title: asset.title, kind: asset.kind }))}
+          />
 
           {assetsQuery.isLoading && <div role="status" className="mt-8 flex items-center justify-center rounded-2xl border border-slate-200 bg-white py-16 text-sm text-slate-600"><Loader2 className="ml-2 h-4 w-4 animate-spin" />جاري تحميل مكتبتك...</div>}
 
