@@ -449,7 +449,7 @@ export const appRouter = router({
         // storage keys are never a public download grant.
         const files = await getFilesByPortfolio(portfolio.id, { publicProjection: true });
         const currentLink = await getShareLinkByToken(input.token);
-        if (!currentLink || !currentLink.isActive || new Date() >= currentLink.expiresAt || currentLink.id !== link.id || currentLink.portfolioId !== link.portfolioId || currentLink.hasPassword !== link.hasPassword || currentLink.passwordHash !== link.passwordHash) return { error: "الرابط لم يعد متاحًا", portfolio: null };
+        if (!currentLink || !currentLink.isActive || new Date() >= currentLink.expiresAt || currentLink.id !== link.id || currentLink.portfolioId !== link.portfolioId || currentLink.hasPassword !== link.hasPassword || currentLink.passwordHash !== link.passwordHash) return { error: LEGACY_SHARE_UNAVAILABLE_ERROR, portfolio: null };
 
         // إشعار المالك عند مشاهدة رابط المشاركة
         const newViewCount = (link.viewCount ?? 0) + 1;

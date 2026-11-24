@@ -82,7 +82,7 @@ describe("legacy share password, attempt and view controls", () => {
   it("rechecks revocation, expiry and password identity after content reads before disclosure", async () => {
     for (const changed of [undefined, grant({ isActive: false }), grant({ expiresAt: new Date(Date.now() - 1000) }), grant({ passwordHash: "changed", hasPassword: true }), grant({ portfolioId: 999 })]) {
       vi.mocked(db.getShareLinkByToken).mockResolvedValueOnce(grant() as never).mockResolvedValueOnce(changed as never);
-      expect(await caller().share.view({ token: "legacy-fixture" })).toMatchObject({ portfolio: null, error: "الرابط لم يعد متاحًا" });
+      expect(await caller().share.view({ token: "legacy-fixture" })).toMatchObject({ portfolio: null, error: "الرابط غير صالح أو منتهي الصلاحية" });
     }
     expect(db.getFilesByPortfolio).toHaveBeenCalledTimes(5);
     expect(notifyOwner).not.toHaveBeenCalled();

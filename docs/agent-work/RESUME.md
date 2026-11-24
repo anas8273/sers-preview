@@ -1,6 +1,6 @@
 # SERS — نقطة الاستئناف (RESUME)
 
-**آخر تحديث:** 2026-11-24 21:00 (UTC)  
+**آخر تحديث:** 2026-11-24 22:00 (UTC)  
 **المنسّق:** Antigravity (قائد الهندسة والتكامل) + وكلاء فرعيون حقيقيون بأدوار محددة.
 
 > هذا الملف هو مصدر الحقيقة الوحيد للاستئناف. اقرأه أولًا، ثم افحص `git status` و`git log` في نسخة العمل قبل أي تعديل.
@@ -13,7 +13,7 @@
 |---|---|
 | المستودع | `anas8273/sers-preview` (origin) |
 | المجلد الرئيسي | `C:\Users\ANAS\Desktop\مشروع التخرج\sers-preview` — **`origin/main` = `6a9954d443c3eb482d0291d0d3de9d4058470adc` (دمج PR #43 الموحد، 6/6 CI)** |
-| **فرع العمل الحالي** | `chore/sync-audit-2026-11-24` (متفرع من `origin/main` `6a9954d`) |
+| **فرع العمل الحالي** | `chore/sync-audit-2026-11-24` (متفرع من `origin/main` `6a9954d`؛ اكتملت عليه حزم M1 وM2 وM3 وM4 دون أي `git push` وببقاء `main` المحلي و`SERS_*` و`.env` دون مساس) |
 | حالة `.worktrees/` | أُزيلت مجلدات العمل المؤقتة `.worktrees/reconcile` و`.worktrees/pr40-ref` بعد حفظ `RESUME.md` في `85dd741` |
 | حالة `TODO.md` / `todo.md` | حُلّ تعارض حالة الأحرف على NTFS بحذف `todo.md` من فهرس Git واستعادة `TODO.md` في `9c04e99` |
 | تنظيف الجذر | أُرشف 44 ملف ملاحظات جذرية قديمة إلى `docs/archive/root-notes/` وأُزيل `package-lock.json` غير المستخدم في `47baf5e` |
@@ -51,8 +51,8 @@
 | **M1** مصالحة PR #40 فوق PR #41 + إصلاحات الواجهة | **مكتمل ومثبت بـ commit `f58555a`** | انظر §4 |
 | M2 التهيئة الفردية والملكية + المعالجة الأمنية والوظيفية | **مكتمل ضمن حدود M2 على `chore/sync-audit-2026-11-24`**: تعبئة هوية التقرير من بيانات الحساب/المدرسة (`WorkReportEditor`)، ربط السنة/الفصل بعد الإنشاء (`WorkDetail`)، عرض الهوية المؤسسية في `PublicOutput`، ربط المعايير في `EvidenceLibrary` وحالة المتجر في `Store`، تعقيم الروابط والصور (`safe-url.ts`)، إصلاح انهيار `SharedTemplate` (`require`), وتصلب `routers.ts`/`db.ts`/`http-security.ts` | `server/m2-security-remediation.test.ts` + اختبارات الوحدة والمتصفح |
 | M3 نواة Work Graph | **مكتمل ومختبر (الدفعتان A + B)**: R12 + R04 + R08 + R21 + J08 | `server/template-switch.test.ts`، `server/asset-usage.test.ts`، `server/m3-batch-b.test.ts`، `server/portfolio-version-guard.test.ts`، `tests/browser/report-editor.mts` (13/13) |
-| M4 المعايير/التقويم الذاتي/المتجر التجريبي/AI | **مكتمل ضمن حدود بدون ترحيل DB**: تجريد `reportIdentity` من AI (`R20`)، سجل المعايير المؤرخ (`R14`)، المتجر التجريبي المعزول (`R13` معطّل في الإنتاج). التقويم الذاتي الكامل مؤجل لترحيل `Migration 0024` بعد اعتماد `O009`. | `server/m4-contracts.test.ts` (5/5) |
-| M5 المراجعة المستقلة النهائية | **PASS (Role 9)** — 0 Blockers · 0 Majors · أُغلقت جميع الملاحظات الـ 3 (TOCTOU في `standards-db`، فحص `productId` في idempotency، وتصفية الشواهد في `rollbackTemplate`). | تقرير المراجع المستقل + 48/48 عقود + 22/22 متصفح |
+| M4 المعايير/التقويم الذاتي/المتجر التجريبي/AI + جولة المراجعة والتطوير 2026-11-24 | **مكتمل على `chore/sync-audit-2026-11-24`**: إغلاق ملاحظات `M2 Challenger` (`AdminDashboard` `safeImageSrc`، `EvidenceLibrary` `safeExternalHttpUrl`، حماية `sanitizeCriteriaDataForShareView` من `__proto__`، توحيد خطأ `share.view`) + **M3** بحث المنافسين العميق الموحد (`COMPETITOR_BENCHMARK_AND_MATRIX_2026-11-24.md`) + **M4 التحسينات غير المتعارضة**: الصياغة العربية المذكّرة/المؤنثة وتعبئة الهوية (`IMP-1`: `shared/arabic-grammar.ts`, `userStore.ts`, `AccountHub.tsx`, `WorkReportEditor.tsx`)، فحص جاهزية الشواهد قبل التقديم (`IMP-2`: `shared/evidence-readiness.ts`, `WorkDetail.tsx`)، وبطاقة QR A4 للطباعة (`IMP-3`: `PrintQrCardDialog.tsx`, `ReportShareActions.tsx`, `PublicOutput.tsx`). التقويم الذاتي الكامل مؤجل لترحيل `Migration 0024` بعد اعتماد `O009`. | `server/m2-security-remediation.test.ts`، `server/m4-improvements.test.ts`، `server/public-output-ui.test.ts`، `server/m4-contracts.test.ts` (5/5) |
+| M5 المراجعة المستقلة النهائية | **PASS (Role 9)** على PR #43 + التحقق المحلي الكامل على `chore/sync-audit-2026-11-24` بعد آخر تعديل | `pnpm check` + `pnpm build` + drizzle drift check + Vitest + `tests/browser/public-output.mts` |
 
 ---
 
@@ -92,7 +92,8 @@
 3. ~~إكمال M4 + المراجعة المستقلة M5 (Role 9)~~ ✅ مكتمل ومثبّت محليًا.
 4. ~~موافقة المستخدم على الرفع وفتح PR~~ ✅ تم الرفع وفتح **[PR #43](https://github.com/anas8273/sers-preview/pull/43)** واجتاز **6/6 CI** عند `5398e3d`.
 5. ~~دمج PR #43 وإغلاق الطلبات المتجاوزة~~ ✅ دُمج رسميًا في `origin/main` بالالتزام **`6a9954d443c3eb482d0291d0d3de9d4058470adc`** (تلقائيًا شمل التزامات `#41`، وأُغلق `#40` و`#42` مع الإبقاء على فروعها كمرجع تاريخي — **0 طلبات سحب متعارضة مفتوحة الآن**).
-6. **الخطوة التالية الدقيقة (خارج النطاق البرمجي الحالي)**: حسم قرارات المنتج المفتوحة (`O001, O002, O003, O008, O009`) وتجهيز بيئة الاستضافة الفعلية بـ HTTPS/OAuth واختبار القبول البشري (Word/طباعة/QR فعلي).
+6. **جولة المراجعة والتطوير الشاملة (M1–M4 على `chore/sync-audit-2026-11-24`)** ✅ مكتملة ومحفوظة محليًا: مزامنة الفرع، إصلاح `TODO.md`/`.worktrees`، التحقق الأمني والوظيفي ومعالجة ثغرات M2 + استدراكات `M2 Challenger`، بحث المنافسين العميق والمصفوفة الفعلية في `docs/agent-work/COMPETITOR_BENCHMARK_AND_MATRIX_2026-11-24.md`، وتطبيق تحسينات Tier 1 غير المتعارضة (`IMP-1`, `IMP-2`, `IMP-3`) مع اختباراتها.
+7. **الخطوة التالية الدقيقة (بانتظار قرار المستخدم)**: مراجعة واعتماد الدفع إلى `origin` عند الرغبة، وحسم قرارات المنتج المفتوحة (`O001`: مزود الدفع والضرائب، `O002`: تعدد المراجعين والتفويض، `O003`: ملكية أعمال الموظف عند الانتقال، `O008`: حدود التوقيع النظامي والمشاركة العامة الفردية، `O009`: نطاق أول دورة تقويم ذاتي رسمية)، وتجهيز بيئة الاستضافة الفعلية بـ HTTPS/OAuth واختبار القبول البشري (Word/طباعة/QR فعلي).
 
 ### أوامر الاستئناف
 ```powershell

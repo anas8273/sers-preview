@@ -1,16 +1,20 @@
 import { useEffect, useMemo, useState } from "react";
 import {
+  AlertTriangle,
   ArrowRight,
   Building2,
   CalendarDays,
+  CheckCircle2,
   FileText,
   FolderKanban,
+  Info,
   Link2,
   Loader2,
   PencilLine,
   Plus,
   RefreshCw,
   Send,
+  ShieldCheck,
   Trash2,
   UserRound,
 } from "lucide-react";
@@ -18,6 +22,7 @@ import { useLocation, useRoute } from "wouter";
 import AppSidebar from "@/components/AppSidebar";
 import PortfolioReferencePanel from "@/components/PortfolioReferencePanel";
 import { trpc } from "@/lib/trpc";
+import { evaluateWorkReadiness } from "@shared/evidence-readiness";
 
 const statusLabel = {
   draft: "مسودة",
@@ -48,6 +53,19 @@ export default function WorkDetail() {
   const versionsQuery = trpc.reviewSupport.versions.useQuery(
     { workItemId: workId },
     { enabled: validWorkId, retry: false },
+  );
+  const reportDraftQuery = trpc.domain.reportDraft.get.useQuery(
+    { workItemId: workId },
+    { enabled: validWorkId && workQuery.data?.type === "report", retry: false },
+  );
+  const portfolioDraftQuery = trpc.domain.portfolioDraft.get.useQuery(
+    { workItemId: workId },
+    { enabled: validWorkId && workQuery.data?.type === "portfolio", retry: false },
+  );
+  const firstAssetId = workQuery.data?.assets[0]?.id;
+  const firstAssetStandardsQuery = trpc.domain.standards.listForAsset.useQuery(
+    { assetId: firstAssetId ?? 0 },
+    { enabled: Boolean(firstAssetId), retry: false },
   );
   const organizationId = workQuery.data?.ownerType === "organization"
     ? workQuery.data.ownerOrganizationId ?? undefined
@@ -110,6 +128,45 @@ export default function WorkDetail() {
     () => scopeYears.find(year => year.id === editYearId),
     [scopeYears, editYearId],
   );
+  const readiness = useMemo(() => {
+    const work = workQuery.data;
+    if (!work) return undefined;
+    const hasReportFields = Object.values(reportDraftQuery.data?.draft.fields ?? {}).some(value =>
+      typeof value === "string"
+        ? value.trim().length > 0
+        : Array.isArray(value)
+          ? value.length > 0
+          : value !== undefined && value !== null,
+    );
+    const hasPortfolioContent = Boolean(
+      portfolioDraftQuery.data?.draft.introduction?.trim() ||
+        (portfolioDraftQuery.data?.draft.entries?.length ?? 0) > 0,
+    );
+    const hasSubstantiveContent =
+      versions.length > 0 ||
+      work.currentVersionNumber > 0 ||
+      (work.type === "report" ? hasReportFields : hasPortfolioContent);
+
+    return evaluateWorkReadiness({
+      workType: work.type === "portfolio" ? "portfolio" : "report",
+      linkedAssets: work.assets.map(asset => ({
+        id: asset.id,
+        kind: asset.kind === "file" || asset.kind === "link" || asset.kind === "text" ? asset.kind : "text",
+        title: asset.title,
+      })),
+      hasAcademicContext: Boolean(work.academicYearId || work.academicContext?.yearLabel),
+      hasSubstantiveContent,
+      versionCount: versions.length || work.currentVersionNumber,
+      linkedStandardsCount: firstAssetStandardsQuery.data?.length ?? 0,
+    });
+  }, [
+    workQuery.data,
+    versions.length,
+    reportDraftQuery.data?.draft.fields,
+    portfolioDraftQuery.data?.draft.introduction,
+    portfolioDraftQuery.data?.draft.entries,
+    firstAssetStandardsQuery.data?.length,
+  ]);
 
   useEffect(() => {
     if (!workQuery.data) return;
@@ -214,6 +271,68 @@ export default function WorkDetail() {
                 </section>
 
                 <div className="space-y-6">
+                  {readiness && (
+                    <section
+                      aria-label="فحص جاهزية الشواهد قبل التقديم"
+                      className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6"
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div>
+                          <p className="text-xs font-bold text-teal-700">فحص استرشادي غير مانع</p>
+                          <h2 className="mt-1 text-base font-bold text-slate-950">فحص جاهزية الشواهد قبل التقديم</h2>
+                        </div>
+                        <span
+                          className={`rounded-full border px-2.5 py-1 text-[11px] font-bold ${
+                            readiness.status === "ready"
+                              ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                              : readiness.status === "needs_attention"
+                                ? "border-amber-200 bg-amber-50 text-amber-900"
+                                : "border-slate-200 bg-slate-100 text-slate-700"
+                          }`}
+                        >
+                          {readiness.summaryLabel}
+                        </span>
+                      </div>
+
+                      <div className="mt-3 flex flex-wrap items-center gap-2">
+                        <span
+                          className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[11px] font-bold ${
+                            readiness.verifiedFileCount > 0
+                              ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                              : "border-amber-200 bg-amber-50 text-amber-900"
+                          }`}
+                        >
+                          <ShieldCheck className="h-3 w-3" />
+                          {readiness.proofBadge}
+                        </span>
+                        <span className="text-[11px] text-slate-600">
+                          ملفات موثّقة: {readiness.verifiedFileCount} · روابط/نصوص: {readiness.supportingAssetCount}
+                        </span>
+                      </div>
+
+                      <ul className="mt-4 space-y-2">
+                        {readiness.checks.map(check => (
+                          <li
+                            key={check.key}
+                            className="flex items-start gap-2 rounded-xl border border-slate-100 bg-slate-50 px-3 py-2.5 text-xs"
+                          >
+                            {check.status === "pass" ? (
+                              <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
+                            ) : check.status === "advisory" ? (
+                              <Info className="mt-0.5 h-4 w-4 shrink-0 text-slate-500" />
+                            ) : (
+                              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+                            )}
+                            <div>
+                              <p className="font-bold text-slate-900">{check.label}</p>
+                              <p className="mt-0.5 leading-5 text-slate-600">{check.detail}</p>
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    </section>
+                  )}
+
                   {workQuery.data.type === "report" ? (
                     <section className="rounded-2xl border border-teal-200 bg-teal-50 p-5 shadow-sm sm:p-6">
                       <p className="text-xs font-bold text-teal-800">مصدر الحقيقة</p>

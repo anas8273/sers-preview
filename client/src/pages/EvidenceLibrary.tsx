@@ -3,6 +3,7 @@ import { Award, Building2, ChevronDown, ChevronUp, ExternalLink, FileText, Libra
 import AppSidebar from "@/components/AppSidebar";
 import AssetDeleteDialog from "@/components/AssetDeleteDialog";
 import { trpc } from "@/lib/trpc";
+import { safeExternalHttpUrl } from "@/lib/safe-url";
 import { Link, useLocation } from "wouter";
 import PrivateEvidenceUpload from "@/components/PrivateEvidenceUpload";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
@@ -283,6 +284,7 @@ export default function EvidenceLibrary() {
                 const Icon = asset.kind === "link" ? Link2 : asset.kind === "text" ? FileText : Library;
                 const textPreview = asset.kind === "text" && asset.metadata && typeof asset.metadata === "object" && "text" in asset.metadata ? String((asset.metadata as { text?: unknown }).text ?? "") : "";
                 const isVerifiedFile = asset.kind === "file";
+                const safeExternalUrl = asset.kind === "link" && asset.externalUrl ? safeExternalHttpUrl(asset.externalUrl) : null;
                 return (
                   <article key={asset.id} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:border-teal-200 hover:shadow-md">
                     <div className="flex items-start gap-3">
@@ -299,7 +301,8 @@ export default function EvidenceLibrary() {
                         </span>
                       </div>
                     </div>
-                    {asset.kind === "link" && asset.externalUrl && <a href={asset.externalUrl} target="_blank" rel="noreferrer" className="mt-4 flex min-h-11 items-center gap-2 truncate rounded-xl bg-slate-50 px-3 py-2.5 text-xs font-semibold text-teal-800 hover:bg-teal-50"><ExternalLink className="h-3.5 w-3.5 shrink-0" /><span className="truncate" dir="ltr">{asset.externalUrl}</span></a>}
+                    {safeExternalUrl && <a href={safeExternalUrl} target="_blank" rel="noreferrer" className="mt-4 flex min-h-11 items-center gap-2 truncate rounded-xl bg-slate-50 px-3 py-2.5 text-xs font-semibold text-teal-800 hover:bg-teal-50"><ExternalLink className="h-3.5 w-3.5 shrink-0" /><span className="truncate" dir="ltr">{safeExternalUrl}</span></a>}
+                    {asset.kind === "link" && asset.externalUrl && !safeExternalUrl && <p role="alert" className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">رابط خارجي غير صالح للفتح</p>}
                     {textPreview && <p className="mt-4 line-clamp-3 rounded-xl bg-slate-50 px-3 py-2.5 text-xs leading-6 text-slate-700">{textPreview}</p>}
                     {asset.kind === "file" && <a href={`/api/evidence/assets/${asset.id}/download`} className="mt-4 inline-flex min-h-11 items-center gap-2 rounded-xl bg-teal-50 px-3 py-2.5 text-xs font-bold text-teal-900 hover:bg-teal-100"><FileText className="h-4 w-4" />تنزيل الملف</a>}
                     <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-3">

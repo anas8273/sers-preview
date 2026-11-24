@@ -177,17 +177,35 @@ export const legacyUserThemeDataSchema = z.object({
   templateLayout: legacyTemplateLayoutSchema.nullable().optional(),
 }).strict().refine(obj => serializedBytes(obj) <= 2_600_000, "حجم بيانات الثيم يتجاوز الحد المسموح");
 
+const DANGEROUS_OBJECT_KEYS = new Set(["__proto__", "constructor", "prototype"]);
+
+function clonePlainObjectSafe(source: Record<string, unknown>): Record<string, unknown> {
+  const copy: Record<string, unknown> = {};
+  for (const key of Object.keys(source)) {
+    if (DANGEROUS_OBJECT_KEYS.has(key)) continue;
+    Object.defineProperty(copy, key, {
+      value: source[key],
+      enumerable: true,
+      writable: true,
+      configurable: true,
+    });
+  }
+  return copy;
+}
+
 export function sanitizeCriteriaDataForShareView(criteriaData: unknown): Record<string, unknown> {
   if (!criteriaData || typeof criteriaData !== "object" || Array.isArray(criteriaData)) return {};
+  const rawMap = criteriaData as Record<string, unknown>;
   const output: Record<string, unknown> = {};
-  for (const [criterionId, rawEntry] of Object.entries(criteriaData as Record<string, unknown>)) {
+  for (const criterionId of Object.keys(rawMap)) {
+    if (DANGEROUS_OBJECT_KEYS.has(criterionId)) continue;
+    const rawEntry = rawMap[criterionId];
     if (!rawEntry || typeof rawEntry !== "object" || Array.isArray(rawEntry)) continue;
-    const entry = rawEntry as Record<string, unknown>;
+    const entry = clonePlainObjectSafe(rawEntry as Record<string, unknown>);
     const evidences = Array.isArray(entry.evidences)
       ? entry.evidences.map(rawEv => {
           if (!rawEv || typeof rawEv !== "object" || Array.isArray(rawEv)) return rawEv;
-          const ev = rawEv as Record<string, unknown>;
-          const next = { ...ev };
+          const next = clonePlainObjectSafe(rawEv as Record<string, unknown>);
           if (typeof next.link === "string" && next.link && !isSafeLegacyHttpUrl(next.link)) {
             next.link = "";
           }
@@ -200,7 +218,13 @@ export function sanitizeCriteriaDataForShareView(criteriaData: unknown): Record<
           return next;
         })
       : entry.evidences;
-    output[criterionId] = { ...entry, evidences };
+    entry.evidences = evidences;
+    Object.defineProperty(output, criterionId, {
+      value: entry,
+      enumerable: true,
+      writable: true,
+      configurable: true,
+    });
   }
   return output;
 }

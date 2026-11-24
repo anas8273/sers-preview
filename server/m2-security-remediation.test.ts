@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { safeExternalHttpUrl, safeImageSrc } from "../client/src/lib/safe-url";
+import { sanitizeCriteriaDataForShareView } from "./legacy-input-validation";
 import type { TrpcContext } from "./_core/context";
 
 vi.mock("./db", async importOriginal => {
@@ -311,6 +312,8 @@ describe("M2 client remediation & tsconfig checks", () => {
     expect(sharedPortfolio).toContain("safeImageSrc");
     expect(portfolioBuilder).toContain("safeExternalHttpUrl");
     expect(adminDashboard).toContain("safeExternalHttpUrl");
+    expect(adminDashboard).toContain("safeImageSrc(formData.coverImageUrl)");
+    expect(adminDashboard).toContain("safeImageSrc(formData.logoUrl)");
     expect(templateManager).toContain("safeImageSrc");
 
     expect(publicOutput).toContain("data?.report.institution");
@@ -322,11 +325,31 @@ describe("M2 client remediation & tsconfig checks", () => {
     expect(workDetail).toContain("trpc.domain.work.update.useMutation");
     expect(reportEditor).toContain("useUserStore");
     expect(reportEditor).toContain("تعبئة من بيانات الحساب/المدرسة");
+    expect(evidenceLibrary).toContain("safeExternalHttpUrl");
     expect(evidenceLibrary).toContain("trpc.domain.standards.list");
     expect(evidenceLibrary).toContain("trpc.domain.standards.linkAsset");
     expect(store).toContain("trpc.domain.commerce.status");
     expect(store).toContain("O001");
 
     expect(tsconfig.exclude).not.toContain("client/src/stores/**/*");
+  });
+
+  it("blocks __proto__, constructor, and prototype pollution in sanitizeCriteriaDataForShareView", () => {
+    const parsed = JSON.parse(
+      '{"__proto__":{"polluted":true},"constructor":{"prototype":{"polluted2":true}},"prototype":{"polluted3":true},"c1":{"score":5,"evidences":[{"id":"e1","type":"link","link":"javascript:alert(1)"}]}}',
+    ) as unknown;
+
+    const sanitized = sanitizeCriteriaDataForShareView(parsed) as Record<string, any>;
+
+    expect(Object.getPrototypeOf(sanitized)).toBe(Object.prototype);
+    expect(Object.prototype.hasOwnProperty.call(sanitized, "__proto__")).toBe(false);
+    expect(Object.prototype.hasOwnProperty.call(sanitized, "constructor")).toBe(false);
+    expect(Object.prototype.hasOwnProperty.call(sanitized, "prototype")).toBe(false);
+    expect(sanitized.polluted).toBeUndefined();
+    expect(sanitized.polluted2).toBeUndefined();
+    expect(sanitized.polluted3).toBeUndefined();
+    expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+    expect(sanitized.c1.score).toBe(5);
+    expect(sanitized.c1.evidences[0].link).toBe("");
   });
 });

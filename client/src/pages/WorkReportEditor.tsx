@@ -49,6 +49,7 @@ import LegacyReportImportDialog from "@/components/LegacyReportImportDialog";
 import TemplateSwitchDialog from "@/components/TemplateSwitchDialog";
 import { trpc } from "@/lib/trpc";
 import { useUserStore } from "@/stores/userStore";
+import { buildReportIdentityDefaults, normalizeEducatorGender, normalizeEducatorRoleKey } from "@shared/arabic-grammar";
 import "./work-report-fonts.css";
 
 const templateOptions = REPORT_TEMPLATE_OPTIONS;
@@ -401,20 +402,16 @@ function ReportEditor({ workId }: { workId: number }) {
   const handleAutoFillIdentity = () => {
     const { personalInfo, profile } = useUserStore.getState();
     const orgName = organizationsQuery.data?.find(org => org.id === organizationId)?.name?.trim();
-    const deptLines = personalInfo.department
-      .split(/\r?\n/)
-      .map(line => line.trim())
-      .filter(line => line && line !== "مدرسة..." && line !== "المملكة العربية السعودية" && line !== "وزارة التعليم" && !line.startsWith("الإدارة العامة للتعليم بمنطقة..."));
-    const schoolCandidate = (orgName || deptLines[deptLines.length - 1] || "").slice(0, REPORT_IDENTITY_TEXT_LIMIT);
-    const preparerCandidate = (profile.fullName.trim() || personalInfo.preparer.trim()).slice(0, REPORT_IDENTITY_TEXT_LIMIT);
-
-    const patch: Partial<Omit<ReportIdentity, "version">> = {};
-    if (!reportIdentity?.schoolName && schoolCandidate) {
-      patch.schoolName = schoolCandidate;
-    }
-    if (!reportIdentity?.reportPreparer && preparerCandidate) {
-      patch.reportPreparer = preparerCandidate;
-    }
+    const patch = buildReportIdentityDefaults({
+      organizationName: orgName,
+      department: personalInfo.department,
+      fullName: profile.fullName,
+      preparer: personalInfo.preparer,
+      principalName: personalInfo.principalName,
+      gender: normalizeEducatorGender(personalInfo.gender),
+      roleKey: personalInfo.roleKey ? normalizeEducatorRoleKey(personalInfo.roleKey) : undefined,
+      existing: reportIdentity,
+    });
     if (Object.keys(patch).length === 0) {
       setIdentityAutoFillNotice("لم تُعدل الحقول المملوءة يدويًا أو لا توجد بيانات حساب/مدرسة محفوظة للتعبئة.");
       return;

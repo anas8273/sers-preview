@@ -8,10 +8,12 @@ import {
   KeyRound,
   Loader2,
   LockKeyhole,
+  Printer,
   RefreshCw,
   ShieldCheck,
 } from "lucide-react";
 import { useRoute } from "wouter";
+import PrintQrCardDialog from "@/components/PrintQrCardDialog";
 import { trpc } from "@/lib/trpc";
 import { safeImageSrc } from "@/lib/safe-url";
 import { REPORT_MINISTRY_LOGO_ALT, REPORT_SCHOOL_LOGO_ALT } from "@shared/report-appearance";
@@ -29,6 +31,7 @@ function PublicOutputSession({ token }: { token: string }) {
   const [password, setPassword] = useState("");
   const [requiresPassword, setRequiresPassword] = useState(false);
   const [passwordError, setPasswordError] = useState<string | undefined>();
+  const [printCardOpen, setPrintCardOpen] = useState(false);
 
   const resolveMutation = trpc.publicOutput.resolve.useMutation({
     onSuccess: () => {
@@ -76,6 +79,9 @@ function PublicOutputSession({ token }: { token: string }) {
   const schoolLogoSrc = institution?.visible && institution.schoolLogo
     ? safeImageSrc(`data:image/png;base64,${institution.schoolLogo}`)
     : null;
+  const verificationUrl = typeof window !== "undefined"
+    ? `${window.location.origin}/output/${token}`
+    : `/output/${token}`;
 
   return (
     <main className="min-h-screen bg-[#F5F8FA] px-4 py-8 sm:px-6 sm:py-12" dir="rtl">
@@ -185,8 +191,18 @@ function PublicOutputSession({ token }: { token: string }) {
                     <span className="rounded-full bg-slate-100 px-3 py-1.5 font-bold">{data.type === "qr" ? "QR" : "رابط"}</span>
                   </div>
                 </div>
-                <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs leading-6 text-emerald-800">
-                  <div className="flex items-start gap-2"><CheckCircle2 className="mt-1 h-4 w-4 shrink-0" /><span>المحتوى المعروض مأخوذ من نسخة ثابتة معتمدة، وليس من مسودة متغيرة.</span></div>
+                <div className="flex flex-col items-start gap-2 sm:items-end">
+                  <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs leading-6 text-emerald-800">
+                    <div className="flex items-start gap-2"><CheckCircle2 className="mt-1 h-4 w-4 shrink-0" /><span>المحتوى المعروض مأخوذ من نسخة ثابتة معتمدة، وليس من مسودة متغيرة.</span></div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setPrintCardOpen(true)}
+                    className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-teal-200 bg-teal-50 px-4 py-2 text-xs font-bold text-teal-900 hover:bg-teal-100"
+                  >
+                    <Printer className="h-4 w-4" />
+                    بطاقة QR للطباعة
+                  </button>
                 </div>
               </div>
 
@@ -236,6 +252,20 @@ function PublicOutputSession({ token }: { token: string }) {
 
         <p className="mt-6 text-center text-[11px] leading-6 text-slate-500">لا يعرض هذا المسار الملفات الأصلية أو بيانات الملكية أو روابط التخزين الداخلية.</p>
       </div>
+
+      {data && (
+        <PrintQrCardDialog
+          open={printCardOpen}
+          onOpenChange={setPrintCardOpen}
+          title={data.report.title}
+          outputTypeLabel={data.report.templateLabel}
+          verificationUrl={verificationUrl}
+          schoolName={institution?.visible ? institution.schoolName || undefined : undefined}
+          versionNumber={data.versionNumber}
+          visibility={data.visibility === "protected" ? "protected" : "public"}
+          verifiedAtLabel={data.report.capturedAt ? new Date(data.report.capturedAt).toLocaleString("ar-SA") : undefined}
+        />
+      )}
     </main>
   );
 }
