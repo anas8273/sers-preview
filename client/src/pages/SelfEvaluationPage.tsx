@@ -1,0 +1,893 @@
+import { useEffect, useMemo, useState } from "react";
+import {
+  AlertTriangle,
+  Building2,
+  CheckCircle2,
+  ClipboardCheck,
+  ExternalLink,
+  FilePlus2,
+  Loader2,
+  Plus,
+  Save,
+  Sparkles,
+  Trash2,
+  UserRound,
+} from "lucide-react";
+import { useLocation } from "wouter";
+import AppSidebar from "@/components/AppSidebar";
+import { trpc } from "@/lib/trpc";
+import {
+  SELF_EVALUATION_DOMAINS,
+  SELF_EVALUATION_INDICATORS,
+  SELF_EVALUATION_LEVELS,
+  type ImprovementAction,
+  type ImprovementActionStatus,
+  type IndicatorAssessment,
+  type SelfEvaluationDomainKey,
+  type SelfEvaluationLevel,
+} from "@shared/self-evaluation";
+
+const actionStatusLabels: Record<ImprovementActionStatus, string> = {
+  planned: "مخطط",
+  in_progress: "قيد التنفيذ",
+  completed: "مكتمل",
+};
+
+const levelBadgeClasses: Record<SelfEvaluationLevel, string> = {
+  1: "border-red-300 bg-red-50 text-red-900",
+  2: "border-amber-300 bg-amber-50 text-amber-900",
+  3: "border-teal-300 bg-teal-50 text-teal-900",
+  4: "border-emerald-300 bg-emerald-50 text-emerald-900",
+};
+
+export default function SelfEvaluationPage() {
+  const [location, navigate] = useLocation();
+  const [selectedCycleId, setSelectedCycleId] = useState<number | undefined>();
+  const [activeDomain, setActiveDomain] = useState<SelfEvaluationDomainKey>("administration");
+  const [showCreateForm, setShowCreateForm] = useState(false);
+
+  // Create form state
+  const [newTitle, setNewTitle] = useState("دورة التقويم الذاتي المدرسي وخطة التحسين");
+  const [newOwnerType, setNewOwnerType] = useState<"organization" | "personal">("organization");
+  const [newOrgId, setNewOrgId] = useState<number | undefined>();
+  const [newYearId, setNewYearId] = useState<number | undefined>();
+  const [newTermId, setNewTermId] = useState<number | undefined>();
+
+  // Editable cycle state
+  const [revision, setRevision] = useState(1);
+  const [executiveSummary, setExecutiveSummary] = useState("");
+  const [assessments, setAssessments] = useState<Record<string, IndicatorAssessment>>({});
+  const [actions, setActions] = useState<ImprovementAction[]>([]);
+  const [dirty, setDirty] = useState(false);
+  const [saveNotice, setSaveNotice] = useState("");
+
+  const utils = trpc.useUtils();
+  const orgsQuery = trpc.domain.organization.listMine.useQuery(undefined, { retry: false });
+  const yearsQuery = trpc.account.academicYears.useQuery(undefined, { retry: false });
+  const assetsQuery = trpc.domain.asset.list.useQuery(undefined, { retry: false });
+  const cyclesQuery = trpc.domain.selfEvaluation.listCycles.useQuery(undefined, { retry: false });
+
+  useEffect(() => {
+    if (!orgsQuery.data) return;
+    if (orgsQuery.data.length === 0 && newOwnerType === "organization") {
+      setNewOwnerType("personal");
+    } else if (orgsQuery.data.length > 0 && !newOrgId) {
+      setNewOrgId(orgsQuery.data[0]!.id);
+    }
+  }, [orgsQuery.data, newOwnerType, newOrgId]);
+
+  useEffect(() => {
+    if (!selectedCycleId && cyclesQuery.data && cyclesQuery.data.length > 0) {
+      setSelectedCycleId(cyclesQuery.data[0]!.id);
+    }
+  }, [cyclesQuery.data, selectedCycleId]);
+
+  const cycleQuery = trpc.domain.selfEvaluation.getCycle.useQuery(
+    { workItemId: selectedCycleId ?? 0 },
+    { enabled: Boolean(selectedCycleId), retry: false },
+  );
+
+  useEffect(() => {
+    if (!cycleQuery.data) return;
+    setRevision(cycleQuery.data.draft.revision);
+    setExecutiveSummary(cycleQuery.data.draft.executiveSummary);
+    setAssessments(cycleQuery.data.draft.assessments);
+    setActions(cycleQuery.data.draft.improvementActions);
+    setDirty(false);
+    setSaveNotice("");
+  }, [cycleQuery.data?.work.id, cycleQuery.data?.draft.revision]);
+
+  const createCycleMutation = trpc.domain.selfEvaluation.createCycle.useMutation({
+    onSuccess: async created => {
+      await utils.domain.selfEvaluation.listCycles.invalidate();
+      if (created?.work.id) {
+        setSelectedCycleId(created.work.id);
+      }
+      setShowCreateForm(false);
+    },
+  });
+
+  const saveCycleMutation = trpc.domain.selfEvaluation.saveCycle.useMutation({
+    onSuccess: async result => {
+      setRevision(result.draft.revision);
+      setAssessments(result.draft.assessments);
+      setActions(result.draft.improvementActions);
+      setDirty(false);
+      setSaveNotice("تم حفظ تقييم المؤشرات وخطة التحسين بنجاح.");
+      await Promise.all([
+        utils.domain.selfEvaluation.listCycles.invalidate(),
+        selectedCycleId
+          ? utils.domain.selfEvaluation.getCycle.invalidate({ workItemId: selectedCycleId })
+          : Promise.resolve(),
+      ]);
+    },
+  });
+
+  const createActionReportMutation = trpc.domain.selfEvaluation.createActionReport.useMutation({
+    onSuccess: async result => {
+      setRevision(result.draft.revision);
+      setActions(result.draft.improvementActions);
+      await Promise.all([
+        utils.domain.selfEvaluation.listCycles.invalidate(),
+        utils.domain.work.list.invalidate(),
+        selectedCycleId
+          ? utils.domain.selfEvaluation.getCycle.invalidate({ workItemId: selectedCycleId })
+          : Promise.resolve(),
+      ]);
+      navigate(`/work/${result.reportWorkItemId}/report`);
+    },
+  });
+
+  const scopeYears = useMemo(
+    () =>
+      (yearsQuery.data ?? []).filter(year =>
+        newOwnerType === "personal"
+          ? year.ownerUserId !== null
+          : year.organizationId === newOrgId,
+      ),
+    [yearsQuery.data, newOwnerType, newOrgId],
+  );
+  const chosenYear = useMemo(
+    () => scopeYears.find(year => year.id === newYearId),
+    [scopeYears, newYearId],
+  );
+
+  const scopedAssets = useMemo(() => {
+    const cycleWork = cycleQuery.data?.work;
+    if (!cycleWork) return [];
+    return (assetsQuery.data ?? []).filter(asset =>
+      cycleWork.ownerType === "personal"
+        ? asset.ownerType === "personal"
+        : asset.ownerType === "organization" && asset.ownerOrganizationId === cycleWork.ownerOrganizationId,
+    );
+  }, [assetsQuery.data, cycleQuery.data?.work]);
+
+  const linkedWorkMap = useMemo(
+    () => new Map((cycleQuery.data?.linkedWorks ?? []).map(item => [item.id, item])),
+    [cycleQuery.data?.linkedWorks],
+  );
+
+  const domainIndicators = useMemo(
+    () => SELF_EVALUATION_INDICATORS.filter(ind => ind.domainKey === activeDomain),
+    [activeDomain],
+  );
+
+  const updateAssessment = (indicatorKey: string, patch: Partial<IndicatorAssessment>) => {
+    setDirty(true);
+    setSaveNotice("");
+    setAssessments(prev => {
+      const current = prev[indicatorKey] ?? {
+        indicatorKey,
+        level: null,
+        rationale: "",
+        evidenceAssetIds: [],
+      };
+      return {
+        ...prev,
+        [indicatorKey]: { ...current, ...patch },
+      };
+    });
+  };
+
+  const addImprovementAction = (indicatorKey: string) => {
+    const indicator = SELF_EVALUATION_INDICATORS.find(item => item.key === indicatorKey);
+    const id = `act-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    setDirty(true);
+    setSaveNotice("");
+    setActions(prev => [
+      ...prev,
+      {
+        id,
+        indicatorKey,
+        goal: indicator ? `رفع مستوى تحقق مؤشر (${indicator.code}: ${indicator.title})` : "هدف تحسين",
+        action: "",
+        ownerName: "",
+        dueDate: "",
+        status: "planned",
+        linkedWorkItemId: null,
+      },
+    ]);
+  };
+
+  const updateAction = (id: string, patch: Partial<ImprovementAction>) => {
+    setDirty(true);
+    setSaveNotice("");
+    setActions(prev => prev.map(item => (item.id === id ? { ...item, ...patch } : item)));
+  };
+
+  const removeAction = (id: string) => {
+    setDirty(true);
+    setSaveNotice("");
+    setActions(prev => prev.filter(item => item.id !== id));
+  };
+
+  const handleSave = () => {
+    if (!selectedCycleId) return;
+    setSaveNotice("");
+    saveCycleMutation.mutate({
+      workItemId: selectedCycleId,
+      expectedRevision: revision,
+      executiveSummary,
+      assessments,
+      improvementActions: actions,
+    });
+  };
+
+  return (
+    <div className="min-h-screen bg-[#F8FAFC] pb-24 lg:pb-10" dir="rtl">
+      <AppSidebar currentPath={location} />
+      <main className="lg:mr-72">
+        <div className="mx-auto max-w-6xl space-y-6 px-4 py-8 sm:px-6">
+          <header className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <p className="text-xs font-bold text-teal-700">الاعتماد المدرسي والتطوير المستمر (ETEC)</p>
+              <h1
+                className="mt-1 text-2xl font-black text-slate-950 sm:text-3xl"
+                style={{ fontFamily: "'Tajawal', sans-serif" }}
+              >
+                التقويم الذاتي وخطة التحسين المدرسي
+              </h1>
+              <p className="mt-2 max-w-3xl text-sm leading-7 text-slate-600">
+                قيّم المجالات الأربعة المعتمدة لهيئة تقويم التعليم والتدريب بمبررات واقعية وشواهد فعلية من مكتبتك، وحوّل فجوات الأداء مباشرة إلى إجراءات تحسين وتقارير تنفيذ مترابطة.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowCreateForm(value => !value)}
+              className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-teal-700 px-4 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-teal-800"
+            >
+              <Plus className="h-4 w-4" />
+              دورة تقويم جديدة
+            </button>
+          </header>
+
+          {(showCreateForm || (cyclesQuery.data && cyclesQuery.data.length === 0)) && (
+            <section className="rounded-2xl border border-teal-200 bg-white p-5 shadow-sm sm:p-6">
+              <h2 className="text-base font-bold text-slate-950">بدء دورة تقويم ذاتي وخطة تحسين</h2>
+              <p className="mt-1 text-xs leading-6 text-slate-600">
+                يمكنك إنشاء الدورة باسم المدرسة للتعاون المؤسسي، أو في مساحتك الشخصية للإعداد الفردي المسبق.
+              </p>
+              <form
+                className="mt-4 grid gap-4 sm:grid-cols-2"
+                onSubmit={event => {
+                  event.preventDefault();
+                  createCycleMutation.mutate({
+                    title: newTitle,
+                    ownerType: newOwnerType,
+                    organizationId: newOwnerType === "organization" ? newOrgId : undefined,
+                    academicYearId: newYearId,
+                    academicTermId: newYearId ? newTermId : undefined,
+                  });
+                }}
+              >
+                <label className="text-xs font-bold text-slate-700 sm:col-span-2">
+                  عنوان دورة التقويم الذاتي
+                  <input
+                    required
+                    minLength={3}
+                    maxLength={255}
+                    value={newTitle}
+                    onChange={e => setNewTitle(e.target.value)}
+                    className="mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-normal"
+                  />
+                </label>
+                <label className="text-xs font-bold text-slate-700">
+                  نطاق الملكية
+                  <select
+                    value={newOwnerType}
+                    onChange={e => {
+                      const next = e.target.value as "organization" | "personal";
+                      setNewOwnerType(next);
+                      setNewYearId(undefined);
+                      setNewTermId(undefined);
+                    }}
+                    className="mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-normal"
+                  >
+                    {(orgsQuery.data?.length ?? 0) > 0 && <option value="organization">مساحة المدرسة (مؤسسي)</option>}
+                    <option value="personal">مساحتي الشخصية (إعداد فردي)</option>
+                  </select>
+                </label>
+
+                {newOwnerType === "organization" && (
+                  <label className="text-xs font-bold text-slate-700">
+                    المدرسة
+                    <select
+                      required
+                      value={newOrgId ?? ""}
+                      onChange={e => {
+                        setNewOrgId(Number(e.target.value) || undefined);
+                        setNewYearId(undefined);
+                        setNewTermId(undefined);
+                      }}
+                      className="mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-normal"
+                    >
+                      <option value="">اختر المدرسة</option>
+                      {(orgsQuery.data ?? []).map(org => (
+                        <option key={org.id} value={org.id}>{org.name}</option>
+                      ))}
+                    </select>
+                  </label>
+                )}
+
+                <label className="text-xs font-bold text-slate-700">
+                  العام الدراسي (اختياري)
+                  <select
+                    value={newYearId ?? ""}
+                    onChange={e => {
+                      setNewYearId(Number(e.target.value) || undefined);
+                      setNewTermId(undefined);
+                    }}
+                    className="mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-normal"
+                  >
+                    <option value="">دون عام محدد</option>
+                    {scopeYears.map(year => (
+                      <option key={year.id} value={year.id}>{year.label}</option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="text-xs font-bold text-slate-700">
+                  الفصل الدراسي (اختياري)
+                  <select
+                    disabled={!chosenYear}
+                    value={newTermId ?? ""}
+                    onChange={e => setNewTermId(Number(e.target.value) || undefined)}
+                    className="mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-normal disabled:opacity-50"
+                  >
+                    <option value="">دون فصل محدد</option>
+                    {chosenYear?.terms.map(term => (
+                      <option key={term.id} value={term.id}>{term.label}</option>
+                    ))}
+                  </select>
+                </label>
+
+                <div className="flex items-center justify-end gap-3 sm:col-span-2">
+                  {showCreateForm && (cyclesQuery.data?.length ?? 0) > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setShowCreateForm(false)}
+                      className="min-h-11 rounded-xl border border-slate-200 px-4 py-2 text-xs font-bold text-slate-700"
+                    >
+                      إلغاء
+                    </button>
+                  )}
+                  <button
+                    type="submit"
+                    disabled={createCycleMutation.isPending || (newOwnerType === "organization" && !newOrgId)}
+                    className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-teal-700 px-5 py-2.5 text-sm font-bold text-white disabled:opacity-50"
+                  >
+                    {createCycleMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <ClipboardCheck className="h-4 w-4" />}
+                    إنشاء الدورة والبدء بالتقييم
+                  </button>
+                </div>
+                {createCycleMutation.error && (
+                  <p role="alert" className="text-xs text-red-700 sm:col-span-2">{createCycleMutation.error.message}</p>
+                )}
+              </form>
+            </section>
+          )}
+
+          {cyclesQuery.isLoading && (
+            <div className="flex items-center justify-center rounded-2xl border border-slate-200 bg-white py-14 text-sm text-slate-600">
+              <Loader2 className="ml-2 h-4 w-4 animate-spin" />
+              جاري تحميل دورات التقويم الذاتي...
+            </div>
+          )}
+
+          {cyclesQuery.data && cyclesQuery.data.length > 0 && (
+            <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <label className="flex min-w-64 flex-1 items-center gap-3 text-xs font-bold text-slate-700">
+                  الدورة النشطة:
+                  <select
+                    aria-label="اختيار دورة التقويم الذاتي"
+                    value={selectedCycleId ?? ""}
+                    onChange={e => setSelectedCycleId(Number(e.target.value) || undefined)}
+                    className="flex-1 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-bold text-slate-900"
+                  >
+                    {cyclesQuery.data.map(item => (
+                      <option key={item.id} value={item.id}>
+                        {item.title} — {item.ownerType === "organization" ? (item.organizationName || "مدرسة") : "شخصي"} ({item.summary.ratedIndicators}/{item.summary.totalIndicators} مؤشر)
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <button
+                  type="button"
+                  onClick={handleSave}
+                  disabled={!dirty || saveCycleMutation.isPending}
+                  className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-teal-700 px-5 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-teal-800 disabled:opacity-50"
+                >
+                  {saveCycleMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                  حفظ التقييم وخطة التحسين
+                </button>
+              </div>
+              {saveNotice && (
+                <p role="status" className="mt-3 rounded-xl bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-900">
+                  {saveNotice}
+                </p>
+              )}
+              {saveCycleMutation.error && (
+                <p role="alert" className="mt-3 rounded-xl bg-red-50 px-3 py-2 text-xs font-bold text-red-800">
+                  {saveCycleMutation.error.message}
+                </p>
+              )}
+            </section>
+          )}
+
+          {cycleQuery.data && (
+            <>
+              {/* Summary Metrics */}
+              <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4" aria-label="ملخص جاهزية الاعتماد المدرسي">
+                <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                  <p className="text-xs font-bold text-slate-600">الجاهزية الموزونة</p>
+                  <p className="mt-2 text-2xl font-black text-teal-800">
+                    {cycleQuery.data.summary.overallReadinessPercent}%
+                  </p>
+                  <p className="mt-1 text-xs text-slate-600">
+                    المتوسط العام:{" "}
+                    {cycleQuery.data.summary.overallAverageLevel !== null
+                      ? `${cycleQuery.data.summary.overallAverageLevel} من 4`
+                      : "لم يبدأ التقييم"}
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                  <p className="text-xs font-bold text-slate-600">اكتمال المؤشرات</p>
+                  <p className="mt-2 text-2xl font-black text-slate-900">
+                    {cycleQuery.data.summary.ratedIndicators} / {cycleQuery.data.summary.totalIndicators}
+                  </p>
+                  <p className="mt-1 text-xs text-slate-600">
+                    نسبة الإنجاز {cycleQuery.data.summary.completionPercent}%
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                  <p className="text-xs font-bold text-slate-600">فجوات الأولوية (التهيئة/الانطلاق)</p>
+                  <p className="mt-2 text-2xl font-black text-amber-800">
+                    {cycleQuery.data.summary.gapIndicatorKeys.length}
+                  </p>
+                  <p className="mt-1 text-xs text-slate-600">
+                    غير مغطاة بإجراء تحسين: {cycleQuery.data.summary.uncoveredGapIndicatorKeys.length}
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                  <p className="text-xs font-bold text-slate-600">إجراءات خطة التحسين</p>
+                  <p className="mt-2 text-2xl font-black text-emerald-800">
+                    {cycleQuery.data.summary.actionCounts.completed} / {cycleQuery.data.summary.actionCounts.total}
+                  </p>
+                  <p className="mt-1 text-xs text-slate-600">
+                    تقارير تنفيذ مرتبطة: {cycleQuery.data.summary.actionCounts.linkedWorks}
+                  </p>
+                </div>
+              </section>
+
+              {/* Uncovered Gap Alert */}
+              {cycleQuery.data.summary.uncoveredGapIndicatorKeys.length > 0 && (
+                <section className="flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-xs leading-6 text-amber-950">
+                  <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-700" />
+                  <div>
+                    <p className="font-bold">توصية الاعتماد المدرسي: توجد مؤشرات في مستوى «التهيئة» أو «الانطلاق» بلا إجراء تحسين مرتبط</p>
+                    <p className="mt-1">
+                      أضف إجراءً في خطة التحسين لكل مؤشر منخفض التقدير لضمان اتساق دورة التقويم الذاتي مع الخطة التشغيلية.
+                    </p>
+                  </div>
+                </section>
+              )}
+
+              {/* Domain Tabs */}
+              <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <p className="text-xs font-bold text-teal-700">المجالات الأربعة الرسمية (12 مؤشرًا قياسيًا)</p>
+                    <h2 className="mt-1 text-lg font-bold text-slate-950">تقييم المؤشرات وربط الشواهد</h2>
+                  </div>
+                  <div className="flex items-center gap-2 text-xs text-slate-600">
+                    {cycleQuery.data.work.ownerType === "organization" ? (
+                      <Building2 className="h-4 w-4 text-teal-700" />
+                    ) : (
+                      <UserRound className="h-4 w-4 text-teal-700" />
+                    )}
+                    <span>
+                      الشواهد المتاحة في هذه المساحة: <strong>{scopedAssets.length}</strong>
+                    </span>
+                  </div>
+                </div>
+
+                <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4" role="tablist" aria-label="مجالات التقويم الذاتي">
+                  {SELF_EVALUATION_DOMAINS.map(domain => {
+                    const domainStat = cycleQuery.data.summary.domains.find(d => d.domainKey === domain.key);
+                    const isActive = activeDomain === domain.key;
+                    return (
+                      <button
+                        key={domain.key}
+                        role="tab"
+                        aria-selected={isActive}
+                        type="button"
+                        onClick={() => setActiveDomain(domain.key)}
+                        className={`rounded-xl border p-3.5 text-right transition ${
+                          isActive
+                            ? "border-teal-600 bg-teal-50/80 text-teal-950 shadow-sm"
+                            : "border-slate-200 bg-slate-50/60 text-slate-700 hover:bg-slate-100/70"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-sm font-bold">{domain.title}</span>
+                          <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-bold text-slate-700">
+                            الوزن {domain.weightPercent}%
+                          </span>
+                        </div>
+                        <p className="mt-2 text-xs text-slate-600">
+                          مقيّم: {domainStat?.ratedCount ?? 0}/{domainStat?.totalCount ?? 3} · الجاهزية {domainStat?.readinessPercent ?? 0}%
+                        </p>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <div className="mt-6 space-y-5">
+                  {domainIndicators.map(indicator => {
+                    const current = assessments[indicator.key] ?? {
+                      indicatorKey: indicator.key,
+                      level: null,
+                      rationale: "",
+                      evidenceAssetIds: [],
+                    };
+                    const needsRationale = current.level !== null && current.rationale.trim().length < 5;
+                    const isGap = current.level === 1 || current.level === 2;
+                    return (
+                      <article
+                        key={indicator.key}
+                        className="rounded-2xl border border-slate-200 bg-slate-50/40 p-4 sm:p-5"
+                      >
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div className="max-w-3xl">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="rounded-lg bg-teal-700 px-2.5 py-0.5 text-xs font-bold text-white">
+                                مؤشر {indicator.code}
+                              </span>
+                              <h3 className="text-base font-bold text-slate-950">{indicator.title}</h3>
+                            </div>
+                            <p className="mt-1.5 text-xs leading-6 text-slate-600">{indicator.description}</p>
+                            <p className="mt-1 text-[11px] text-teal-800">
+                              <strong>أمثلة الشواهد الداعمة:</strong> {indicator.suggestedEvidenceHint}
+                            </p>
+                          </div>
+                          {current.level && (
+                            <span className={`rounded-full border px-3 py-1 text-xs font-bold ${levelBadgeClasses[current.level]}`}>
+                              {SELF_EVALUATION_LEVELS.find(l => l.level === current.level)?.label} ({current.level}/4)
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Maturity Level Buttons */}
+                        <div className="mt-4">
+                          <p className="text-xs font-bold text-slate-700">مستوى التحقق الفعلي:</p>
+                          <div className="mt-2 grid gap-2 sm:grid-cols-4">
+                            {SELF_EVALUATION_LEVELS.map(lvl => {
+                              const selected = current.level === lvl.level;
+                              return (
+                                <button
+                                  key={lvl.level}
+                                  type="button"
+                                  onClick={() =>
+                                    updateAssessment(indicator.key, {
+                                      level: selected ? null : lvl.level,
+                                    })
+                                  }
+                                  className={`min-h-11 rounded-xl border p-2.5 text-right text-xs transition ${
+                                    selected
+                                      ? `${levelBadgeClasses[lvl.level]} font-bold shadow-sm`
+                                      : "border-slate-200 bg-white text-slate-700 hover:border-slate-300"
+                                  }`}
+                                >
+                                  <div className="flex items-center justify-between">
+                                    <span className="font-bold">{lvl.label}</span>
+                                    <span>{lvl.level}/4</span>
+                                  </div>
+                                  <p className="mt-1 line-clamp-2 text-[11px] opacity-85">{lvl.description}</p>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                        {/* Mandatory Rationale */}
+                        <div className="mt-4">
+                          <label className="block text-xs font-bold text-slate-700">
+                            مبررات التقدير الواقعية (إلزامي عند اختيار مستوى تحقيق — لا يُقبل التقييم بلا تعليل)
+                            <textarea
+                              rows={2}
+                              value={current.rationale}
+                              onChange={e => updateAssessment(indicator.key, { rationale: e.target.value })}
+                              placeholder="اشرح الوقائع الفعلية ومؤشرات القياس التي استند إليها هذا التقدير..."
+                              className={`mt-1.5 w-full rounded-xl border bg-white px-3 py-2 text-sm font-normal ${
+                                needsRationale ? "border-red-400" : "border-slate-200"
+                              }`}
+                            />
+                          </label>
+                          {needsRationale && (
+                            <p className="mt-1 text-xs font-semibold text-red-700">
+                              أدخل مبررًا واضحًا (5 أحرف على الأقل) لحفظ تقييم هذا المؤشر.
+                            </p>
+                          )}
+                        </div>
+
+                        {/* Evidence Linking & Quick Improvement Action */}
+                        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-200/80 pt-3">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <select
+                              aria-label={`ربط شاهد بالمؤشر ${indicator.code}`}
+                              value=""
+                              onChange={e => {
+                                const assetId = Number(e.target.value);
+                                if (!assetId || current.evidenceAssetIds.includes(assetId)) return;
+                                updateAssessment(indicator.key, {
+                                  evidenceAssetIds: [...current.evidenceAssetIds, assetId],
+                                });
+                              }}
+                              className="min-h-10 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-700"
+                            >
+                              <option value="">+ إرفاق شاهد من المكتبة ({scopedAssets.length})</option>
+                              {scopedAssets
+                                .filter(asset => !current.evidenceAssetIds.includes(asset.id))
+                                .map(asset => (
+                                  <option key={asset.id} value={asset.id}>
+                                    {asset.title} ({asset.kind})
+                                  </option>
+                                ))}
+                            </select>
+                            {current.evidenceAssetIds.map(assetId => {
+                              const asset = scopedAssets.find(a => a.id === assetId);
+                              return (
+                                <span
+                                  key={assetId}
+                                  className="inline-flex items-center gap-1.5 rounded-full border border-teal-200 bg-teal-50 px-2.5 py-1 text-[11px] font-bold text-teal-900"
+                                >
+                                  <CheckCircle2 className="h-3 w-3 text-teal-700" />
+                                  {asset?.title ?? `شاهد #${assetId}`}
+                                  <button
+                                    type="button"
+                                    aria-label={`إزالة الشاهد ${asset?.title ?? assetId}`}
+                                    onClick={() =>
+                                      updateAssessment(indicator.key, {
+                                        evidenceAssetIds: current.evidenceAssetIds.filter(id => id !== assetId),
+                                      })
+                                    }
+                                    className="mr-1 text-teal-700 hover:text-red-700"
+                                  >
+                                    ×
+                                  </button>
+                                </span>
+                              );
+                            })}
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => addImprovementAction(indicator.key)}
+                            className={`inline-flex min-h-10 items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-bold ${
+                              isGap
+                                ? "border-amber-300 bg-amber-50 text-amber-950 hover:bg-amber-100"
+                                : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                            }`}
+                          >
+                            <Sparkles className="h-3.5 w-3.5" />
+                            + إضافة إجراء لخطة التحسين
+                          </button>
+                        </div>
+                      </article>
+                    );
+                  })}
+                </div>
+              </section>
+
+              {/* Executive Summary & Improvement Plan */}
+              <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-bold text-teal-700">من التشخيص إلى التنفيذ</p>
+                    <h2 className="mt-1 text-lg font-bold text-slate-950">خطة التحسين والخطة التشغيلية المرتبطة</h2>
+                    <p className="mt-1 text-xs text-slate-600">
+                      كل إجراء تحسين يرتبط بمؤشر محدد ويمكن تحويله بضغطة واحدة إلى تقرير تنفيذ رسمي داخل «أعمالي».
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => addImprovementAction(domainIndicators[0]?.key ?? "admin.planning")}
+                    className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-teal-200 bg-teal-50 px-4 py-2 text-xs font-bold text-teal-900 hover:bg-teal-100"
+                  >
+                    <Plus className="h-4 w-4" />
+                    إضافة مبادرة أو إجراء تحسين
+                  </button>
+                </div>
+
+                <label className="mt-4 block text-xs font-bold text-slate-700">
+                  الملخص التنفيذي وأولويات التحسين للعام
+                  <textarea
+                    rows={3}
+                    value={executiveSummary}
+                    onChange={e => {
+                      setDirty(true);
+                      setSaveNotice("");
+                      setExecutiveSummary(e.target.value);
+                    }}
+                    placeholder="لخّص أبرز نقاط القوة وأولويات التحسين المستخلصة من التقييم الذاتي..."
+                    className="mt-1.5 w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3 py-2.5 text-sm font-normal"
+                  />
+                </label>
+
+                {actions.length === 0 ? (
+                  <div className="mt-5 rounded-xl border border-dashed border-slate-200 px-4 py-10 text-center text-xs text-slate-600">
+                    لا توجد إجراءات تحسين مسجلة بعد. اضغط «+ إضافة إجراء لخطة التحسين» تحت أي مؤشر لإضافته.
+                  </div>
+                ) : (
+                  <div className="mt-5 space-y-4">
+                    {actions.map(item => {
+                      const linkedWork = item.linkedWorkItemId ? linkedWorkMap.get(item.linkedWorkItemId) : undefined;
+                      return (
+                        <div
+                          key={item.id}
+                          className="rounded-2xl border border-slate-200 bg-slate-50/50 p-4"
+                        >
+                          <div className="grid gap-3 sm:grid-cols-3">
+                            <label className="text-xs font-bold text-slate-700">
+                              المؤشر المرتبط
+                              <select
+                                value={item.indicatorKey}
+                                onChange={e => updateAction(item.id, { indicatorKey: e.target.value })}
+                                className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-normal"
+                              >
+                                {SELF_EVALUATION_INDICATORS.map(ind => (
+                                  <option key={ind.key} value={ind.key}>
+                                    {ind.code} — {ind.title}
+                                  </option>
+                                ))}
+                              </select>
+                            </label>
+                            <label className="text-xs font-bold text-slate-700">
+                              المسؤول عن التنفيذ
+                              <input
+                                value={item.ownerName}
+                                onChange={e => updateAction(item.id, { ownerName: e.target.value })}
+                                placeholder="مثال: وكيل الشؤون التعليمية / لجنة التميز"
+                                className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-normal"
+                              />
+                            </label>
+                            <div className="grid grid-cols-2 gap-2">
+                              <label className="text-xs font-bold text-slate-700">
+                                تاريخ الاستحقاق
+                                <input
+                                  type="date"
+                                  value={item.dueDate}
+                                  onChange={e => updateAction(item.id, { dueDate: e.target.value })}
+                                  className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-2.5 py-2 text-xs font-normal"
+                                />
+                              </label>
+                              <label className="text-xs font-bold text-slate-700">
+                                الحالة
+                                <select
+                                  value={item.status}
+                                  onChange={e => updateAction(item.id, { status: e.target.value as ImprovementActionStatus })}
+                                  className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-2.5 py-2 text-xs font-normal"
+                                >
+                                  {(Object.keys(actionStatusLabels) as ImprovementActionStatus[]).map(st => (
+                                    <option key={st} value={st}>{actionStatusLabels[st]}</option>
+                                  ))}
+                                </select>
+                              </label>
+                            </div>
+                          </div>
+
+                          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                            <label className="text-xs font-bold text-slate-700">
+                              هدف التحسين (مطلوب)
+                              <input
+                                required
+                                value={item.goal}
+                                onChange={e => updateAction(item.id, { goal: e.target.value })}
+                                placeholder="الهدف القابل للقياس..."
+                                className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-normal"
+                              />
+                            </label>
+                            <label className="text-xs font-bold text-slate-700">
+                              الخطوات الإجرائية ومؤشر الإنجاز (مطلوب)
+                              <input
+                                required
+                                value={item.action}
+                                onChange={e => updateAction(item.id, { action: e.target.value })}
+                                placeholder="البرنامج أو المبادرة أو الإجراء التطبيقي..."
+                                className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-normal"
+                              />
+                            </label>
+                          </div>
+
+                          <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-slate-200/70 pt-3">
+                            {item.linkedWorkItemId ? (
+                              <button
+                                type="button"
+                                onClick={() => navigate(`/work/${item.linkedWorkItemId}/report`)}
+                                className="inline-flex min-h-10 items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-900 hover:bg-emerald-100"
+                              >
+                                <ExternalLink className="h-3.5 w-3.5" />
+                                فتح تقرير التنفيذ المرتبط: {linkedWork?.title ?? `#${item.linkedWorkItemId}`}
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                disabled={dirty || createActionReportMutation.isPending || !selectedCycleId}
+                                onClick={() =>
+                                  selectedCycleId &&
+                                  createActionReportMutation.mutate({
+                                    workItemId: selectedCycleId,
+                                    expectedRevision: revision,
+                                    actionId: item.id,
+                                  })
+                                }
+                                title={dirty ? "احفظ التقييم وخطة التحسين أولًا قبل إنشاء تقرير التنفيذ" : undefined}
+                                className="inline-flex min-h-10 items-center gap-1.5 rounded-xl border border-teal-200 bg-white px-3 py-1.5 text-xs font-bold text-teal-800 hover:bg-teal-50 disabled:opacity-50"
+                              >
+                                <FilePlus2 className="h-3.5 w-3.5" />
+                                {dirty ? "احفظ الخطة أولًا لإنشاء تقرير تنفيذ" : "إنشاء تقرير تنفيذ مرتبط في أعمالي"}
+                              </button>
+                            )}
+
+                            <button
+                              type="button"
+                              onClick={() => removeAction(item.id)}
+                              className="inline-flex min-h-10 items-center gap-1 rounded-xl px-3 py-1.5 text-xs font-bold text-red-700 hover:bg-red-50"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                              حذف الإجراء
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {createActionReportMutation.error && (
+                  <p role="alert" className="mt-3 text-xs font-bold text-red-700">
+                    {createActionReportMutation.error.message}
+                  </p>
+                )}
+
+                <div className="mt-5 flex justify-end border-t border-slate-100 pt-4">
+                  <button
+                    type="button"
+                    onClick={handleSave}
+                    disabled={!dirty || saveCycleMutation.isPending}
+                    className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-teal-700 px-6 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-teal-800 disabled:opacity-50"
+                  >
+                    {saveCycleMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                    حفظ التغييرات
+                  </button>
+                </div>
+              </section>
+            </>
+          )}
+        </div>
+      </main>
+    </div>
+  );
+}

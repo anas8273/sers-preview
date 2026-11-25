@@ -63,6 +63,12 @@ test('public output browser flow with HTTP fixtures', { timeout: 90_000 }, async
     browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox'] });
     const page = await browser.newPage();
     page.setDefaultTimeout(10_000);
+    await page.setRequestInterception(true);
+    page.on('request', req => {
+      const url = req.url();
+      if (url.startsWith(base) || url.startsWith('data:') || url.startsWith('blob:')) void req.continue();
+      else void req.abort();
+    });
     const visible = (text: string) => page.waitForFunction(value => document.body.innerText.includes(value), {}, text);
     const goto = (name: string) => page.goto(`${base}/output/${token(name)}`);
     const clickText = async (text: string) => {

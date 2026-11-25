@@ -282,36 +282,237 @@ export async function getReviewForUser(userId: number, reviewId: number) {
     .from(reviews)
     .innerJoin(workVersions, eq(reviews.workVersionId, workVersions.id))
     .innerJoin(workItems, eq(workVersions.workItemId, workItems.id))
-    .where(and(
-      eq(reviews.id, reviewId),
-      or(eq(reviews.requestedByUserId, userId), eq(reviews.reviewerUserId, userId)),
-    ))
+    .where(and(eq(reviews.id, reviewId), isNull(workItems.deletedAt)))
     .limit(1);
   if (!row) return undefined;
   const work = await assertWorkAccess(userId, row.work.id, "read");
   if (!work) return undefined;
+
+  let actorOrgRole: MembershipRow["role"] | null = null;
+  if (row.work.ownerType === "organization" && row.work.ownerOrganizationId) {
+    const member = await activeOrganizationMember(userId, row.work.ownerOrganizationId);
+    actorOrgRole = member?.role ?? null;
+  }
+  const isParticipant = row.review.requestedByUserId === userId || row.review.reviewerUserId === userId;
+  const isSchoolAdmin = actorOrgRole === "owner" || actorOrgRole === "admin";
+  if (!isParticipant && !isSchoolAdmin) return undefined;
+
+  const canReassign =
+    row.review.status === "pending" &&
+    row.work.ownerType === "organization" &&
+    Boolean(row.work.ownerOrganizationId) &&
+    (isSchoolAdmin || (row.review.requestedByUserId === userId && actorOrgRole !== null && canWriteOrganization(actorOrgRole)));
+
   const comments = await db.select().from(reviewComments).where(eq(reviewComments.reviewId, reviewId)).orderBy(reviewComments.createdAt);
-  return { ...row.review, versionNumber: row.version.versionNumber, workId: row.work.id, workTitle: row.work.title, comments, report: projectReportSnapshot(row.version.snapshot) };
+  return {
+    ...row.review,
+    versionNumber: row.version.versionNumber,
+    versionCreatedByUserId: row.version.createdByUserId,
+    workId: row.work.id,
+    workTitle: row.work.title,
+    ownerOrganizationId: row.work.ownerOrganizationId,
+    canReassign,
+    comments,
+    report: projectReportSnapshot(row.version.snapshot),
+  };
 }
 
 export async function listReviewsForUser(userId: number) {
   const db = await getDb();
   if (!db) return [];
+
+  const adminOrgs = await db
+    .select({ organizationId: memberships.organizationId })
+    .from(memberships)
+    .innerJoin(organizations, eq(organizations.id, memberships.organizationId))
+    .where(and(
+      eq(memberships.userId, userId),
+      eq(memberships.status, "active"),
+      eq(organizations.status, "active"),
+      inArray(memberships.role, ["owner", "admin"]),
+    ));
+  const adminOrgIds = adminOrgs.map(item => item.organizationId);
+
+  const scopeFilter = adminOrgIds.length > 0
+    ? or(
+      eq(reviews.requestedByUserId, userId),
+      eq(reviews.reviewerUserId, userId),
+      and(eq(workItems.ownerType, "organization"), inArray(workItems.ownerOrganizationId, adminOrgIds)),
+    )
+    : or(eq(reviews.requestedByUserId, userId), eq(reviews.reviewerUserId, userId));
+
   const candidates = await db
     .select({ review: reviews, version: workVersions, work: workItems })
     .from(reviews)
     .innerJoin(workVersions, eq(reviews.workVersionId, workVersions.id))
     .innerJoin(workItems, eq(workVersions.workItemId, workItems.id))
-    .where(or(eq(reviews.requestedByUserId, userId), eq(reviews.reviewerUserId, userId)))
+    .where(and(isNull(workItems.deletedAt), scopeFilter))
     .orderBy(desc(reviews.updatedAt));
 
   const visible = [];
   for (const row of candidates) {
     if (await assertWorkAccess(userId, row.work.id, "read")) {
-      visible.push({ ...row.review, versionNumber: row.version.versionNumber, workId: row.work.id, workTitle: row.work.title });
+      visible.push({
+        ...row.review,
+        versionNumber: row.version.versionNumber,
+        workId: row.work.id,
+        workTitle: row.work.title,
+        ownerOrganizationId: row.work.ownerOrganizationId,
+      });
     }
   }
   return visible;
+}
+
+export function evaluateReviewReassignEligibility(input: {
+  reviewStatus: string;
+  actorUserId: number;
+  actorOrgRole: string | null;
+  requestedByUserId: number;
+  versionCreatorUserId: number;
+  currentReviewerUserId: number;
+  targetReviewerUserId: number;
+  targetReviewerOrgRole: string | null;
+  targetReviewerStatus: string | null;
+}): { ok: true } | { ok: false; code: "forbidden" | "conflict" | "bad_request"; message: string } {
+  if (input.reviewStatus !== "pending") {
+    return { ok: false, code: "conflict", message: "لا يمكن إعادة تعيين المراجع إلا للمراجعات المعلقة بانتظار القرار" };
+  }
+  const isSchoolAdmin = input.actorOrgRole === "owner" || input.actorOrgRole === "admin";
+  const isRequesterWriter =
+    input.actorUserId === input.requestedByUserId &&
+    (input.actorOrgRole === "owner" || input.actorOrgRole === "admin" || input.actorOrgRole === "member");
+  if (!isSchoolAdmin && !isRequesterWriter) {
+    return { ok: false, code: "forbidden", message: "لا تملك صلاحية إعادة تعيين المراجع لهذه النسخة" };
+  }
+  if (input.targetReviewerUserId === input.currentReviewerUserId) {
+    return { ok: false, code: "bad_request", message: "المراجع المختار معيّن بالفعل لهذه المراجعة" };
+  }
+  if (
+    input.targetReviewerUserId === input.requestedByUserId ||
+    input.targetReviewerUserId === input.versionCreatorUserId
+  ) {
+    return { ok: false, code: "bad_request", message: "لا يجوز تعيين مُعدّ النسخة أو طالب المراجعة مراجعًا لنفس النسخة" };
+  }
+  if (
+    input.targetReviewerStatus !== "active" ||
+    !input.targetReviewerOrgRole ||
+    !canReviewOrganization(input.targetReviewerOrgRole as MembershipRow["role"])
+  ) {
+    return { ok: false, code: "bad_request", message: "المراجع الجديد يجب أن يكون عضوًا نشطًا بدور مراجع أو مدير أو مالك في المدرسة" };
+  }
+  return { ok: true };
+}
+
+export async function reassignReviewForUser(actorUserId: number, reviewId: number, newReviewerUserId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const updatedId = await db.transaction(async tx => {
+    const [row] = await tx
+      .select({ review: reviews, version: workVersions, work: workItems })
+      .from(reviews)
+      .innerJoin(workVersions, eq(reviews.workVersionId, workVersions.id))
+      .innerJoin(workItems, eq(workVersions.workItemId, workItems.id))
+      .where(and(eq(reviews.id, reviewId), isNull(workItems.deletedAt)))
+      .limit(1);
+    if (!row || row.work.ownerType !== "organization" || !row.work.ownerOrganizationId) return undefined;
+
+    const orgId = row.work.ownerOrganizationId;
+    if (!await lockActiveOrganization(tx, orgId)) return undefined;
+
+    const [actorMembership] = await tx
+      .select()
+      .from(memberships)
+      .where(and(
+        eq(memberships.organizationId, orgId),
+        eq(memberships.userId, actorUserId),
+        eq(memberships.status, "active"),
+      ))
+      .limit(1)
+      .for("update");
+    if (!actorMembership) return undefined;
+
+    const [lockedWork] = await tx
+      .select()
+      .from(workItems)
+      .where(and(eq(workItems.id, row.work.id), isNull(workItems.deletedAt)))
+      .limit(1)
+      .for("update");
+    if (!lockedWork || lockedWork.status === "archived") {
+      throw new ReviewConflictError("لا يمكن تعديل مراجعة لعمل مؤرشف");
+    }
+
+    const [lockedReview] = await tx
+      .select()
+      .from(reviews)
+      .where(eq(reviews.id, reviewId))
+      .limit(1)
+      .for("update");
+    if (!lockedReview) return undefined;
+
+    const [targetMembership] = await tx
+      .select()
+      .from(memberships)
+      .where(and(
+        eq(memberships.organizationId, orgId),
+        eq(memberships.userId, newReviewerUserId),
+      ))
+      .limit(1)
+      .for("update");
+
+    const check = evaluateReviewReassignEligibility({
+      reviewStatus: lockedReview.status,
+      actorUserId,
+      actorOrgRole: actorMembership.role,
+      requestedByUserId: lockedReview.requestedByUserId,
+      versionCreatorUserId: row.version.createdByUserId,
+      currentReviewerUserId: lockedReview.reviewerUserId,
+      targetReviewerUserId: newReviewerUserId,
+      targetReviewerOrgRole: targetMembership?.role ?? null,
+      targetReviewerStatus: targetMembership?.status ?? null,
+    });
+    if (!check.ok) {
+      if (check.code === "forbidden") return undefined;
+      if (check.code === "conflict") throw new ReviewConflictError(check.message);
+      throw new Error(`REASSIGN_INVALID:${check.message}`);
+    }
+
+    const [duplicateOnVersion] = await tx
+      .select({ id: reviews.id })
+      .from(reviews)
+      .where(and(
+        eq(reviews.workVersionId, lockedReview.workVersionId),
+        eq(reviews.reviewerUserId, newReviewerUserId),
+      ))
+      .limit(1)
+      .for("update");
+    if (duplicateOnVersion && duplicateOnVersion.id !== reviewId) {
+      throw new ReviewConflictError("سبق تسجيل مراجعة لهذا العضو على نفس النسخة؛ اختر مراجعًا آخر أو أنشئ نسخة محدثة");
+    }
+
+    const updatedReview = await tx
+      .update(reviews)
+      .set({ reviewerUserId: newReviewerUserId })
+      .where(and(eq(reviews.id, reviewId), eq(reviews.status, "pending")));
+    if (getAffectedRows(updatedReview) !== 1) {
+      throw new ReviewConflictError("تغيرت حالة المراجعة أثناء إعادة التعيين");
+    }
+
+    await tx.insert(notifications).values({
+      userId: newReviewerUserId,
+      type: "review_requested",
+      dedupeKey: `review:${reviewId}:reassigned:${newReviewerUserId}:${Date.now()}`,
+      title: "تم تفويضك لمراجعة نسخة عمل مدرسي",
+      body: `${lockedWork.title} — نسخة ${row.version.versionNumber}`,
+      targetType: "review",
+      targetId: String(reviewId),
+    });
+
+    return reviewId;
+  });
+
+  return updatedId ? getReviewForUser(actorUserId, updatedId) : undefined;
 }
 
 export async function addReviewCommentForUser(userId: number, reviewId: number, content: string, anchor?: Record<string, unknown>) {

@@ -1,5 +1,16 @@
-import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
-import { academicTerms, academicYears, memberships, organizations, type AcademicContext } from "../drizzle/domain-core";
+import { and, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm";
+import {
+  academicTerms,
+  academicYears,
+  assets,
+  assetStandardLinks,
+  contentBlocks,
+  memberships,
+  organizations,
+  standardVersions,
+  workItems,
+  type AcademicContext,
+} from "../drizzle/domain-core";
 import { users } from "../drizzle/schema";
 import { getDb } from "./db";
 
@@ -170,4 +181,258 @@ export async function captureAcademicContext(tx: Transaction, scopeKey: string, 
   const [term] = termId ? await tx.select().from(academicTerms).where(and(eq(academicTerms.id, termId), eq(academicTerms.academicYearId, yearId))).limit(1).for("update") : [];
   if (termId && !term) throw new AccountAccessError();
   return { yearId: year.id, yearLabel: year.label, yearStartsOn: year.startsOn, yearEndsOn: year.endsOn, termId: term?.id ?? null, termLabel: term?.label ?? null, termStartsOn: term?.startsOn ?? null, termEndsOn: term?.endsOn ?? null };
+}
+
+export type AccountDataExportBundle = {
+  schemaVersion: 1;
+  exportedAt: string;
+  scopePolicy: "personal_owned_only";
+  user: {
+    id: number;
+    name: string | null;
+    email: string | null;
+    createdAt: string | null;
+  };
+  schoolMemberships: Array<{
+    organizationId: number;
+    organizationName: string;
+    role: SchoolRole;
+    status: string;
+  }>;
+  personalAcademicYears: Array<{
+    id: number;
+    label: string;
+    startsOn: string;
+    endsOn: string;
+    terms: Array<{ label: string; ordinal: number; startsOn: string; endsOn: string }>;
+  }>;
+  personalWorks: Array<{
+    id: number;
+    type: string;
+    title: string;
+    status: string;
+    currentVersionNumber: number;
+    academicContext: AcademicContext | null;
+    createdAt: string | null;
+    updatedAt: string | null;
+    blocks: Array<{ blockType: string; sortOrder: number; data: Record<string, unknown> }>;
+  }>;
+  personalAssets: Array<{
+    id: number;
+    kind: string;
+    title: string;
+    mimeType: string | null;
+    fileSize: number | null;
+    externalUrl: string | null;
+    textNote: string | null;
+    linkedStandards: Array<{ standardKey: string; version: string; title: string; note: string | null }>;
+    createdAt: string | null;
+  }>;
+};
+
+/**
+ * Pure serializer for R18 / P0-021 personal data export.
+ * Explicitly allowlists safe fields so auth secrets (`openId`), private object
+ * `storageKey`s, and school-owned data can never leak into exported JSON.
+ */
+export function buildSanitizedAccountExportBundle(raw: {
+  exportedAt?: string;
+  user: { id: number; name: string | null; email: string | null; createdAt?: Date | string | null; openId?: unknown };
+  schools: Array<{ id: number; name: string; role: SchoolRole; status: string }>;
+  years: Array<{
+    id: number;
+    label: string;
+    startsOn: string;
+    endsOn: string;
+    terms: Array<{ label: string; ordinal: number; startsOn: string; endsOn: string }>;
+  }>;
+  works: Array<{
+    id: number;
+    type: string;
+    title: string;
+    status: string;
+    currentVersionNumber: number;
+    academicContext: AcademicContext | null;
+    createdAt?: Date | string | null;
+    updatedAt?: Date | string | null;
+    blocks: Array<{ blockType: string; sortOrder: number; data: Record<string, unknown> }>;
+  }>;
+  assets: Array<{
+    id: number;
+    kind: string;
+    title: string;
+    mimeType: string | null;
+    fileSize: number | null;
+    externalUrl: string | null;
+    metadata: Record<string, unknown> | null;
+    storageKey?: unknown;
+    createdAt?: Date | string | null;
+    linkedStandards: Array<{ standardKey: string; version: string; title: string; note: string | null }>;
+  }>;
+}): AccountDataExportBundle {
+  const toIso = (val: Date | string | null | undefined) =>
+    val instanceof Date ? val.toISOString() : typeof val === "string" ? val : null;
+
+  return {
+    schemaVersion: 1,
+    exportedAt: raw.exportedAt ?? new Date().toISOString(),
+    scopePolicy: "personal_owned_only",
+    user: {
+      id: raw.user.id,
+      name: raw.user.name ?? null,
+      email: raw.user.email ?? null,
+      createdAt: toIso(raw.user.createdAt),
+    },
+    schoolMemberships: raw.schools.map(s => ({
+      organizationId: s.id,
+      organizationName: s.name,
+      role: s.role,
+      status: s.status,
+    })),
+    personalAcademicYears: raw.years.map(y => ({
+      id: y.id,
+      label: y.label,
+      startsOn: y.startsOn,
+      endsOn: y.endsOn,
+      terms: y.terms.map(t => ({
+        label: t.label,
+        ordinal: t.ordinal,
+        startsOn: t.startsOn,
+        endsOn: t.endsOn,
+      })),
+    })),
+    personalWorks: raw.works.map(w => ({
+      id: w.id,
+      type: w.type,
+      title: w.title,
+      status: w.status,
+      currentVersionNumber: w.currentVersionNumber,
+      academicContext: w.academicContext ?? null,
+      createdAt: toIso(w.createdAt),
+      updatedAt: toIso(w.updatedAt),
+      blocks: w.blocks.map(b => ({
+        blockType: b.blockType,
+        sortOrder: b.sortOrder,
+        data: b.data,
+      })),
+    })),
+    personalAssets: raw.assets.map(a => ({
+      id: a.id,
+      kind: a.kind,
+      title: a.title,
+      mimeType: a.mimeType ?? null,
+      fileSize: a.fileSize ?? null,
+      externalUrl: a.kind === "link" && typeof a.externalUrl === "string" && /^https?:\/\//i.test(a.externalUrl)
+        ? a.externalUrl
+        : null,
+      textNote: a.kind === "text" && typeof a.metadata?.text === "string" ? a.metadata.text : null,
+      linkedStandards: a.linkedStandards,
+      createdAt: toIso(a.createdAt),
+    })),
+  };
+}
+
+export async function exportAccountDataForUser(userId: number): Promise<AccountDataExportBundle> {
+  actor(userId);
+  const db = await database();
+  const [user] = await db
+    .select({ id: users.id, name: users.name, email: users.email, createdAt: users.createdAt })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
+  if (!user) throw new AccountAccessError();
+
+  const schools = await db
+    .select({
+      id: organizations.id,
+      name: organizations.name,
+      role: memberships.role,
+      status: memberships.status,
+    })
+    .from(memberships)
+    .innerJoin(organizations, eq(memberships.organizationId, organizations.id))
+    .where(and(eq(memberships.userId, userId), eq(organizations.status, "active")))
+    .orderBy(organizations.name);
+
+  const personalYears = await db
+    .select()
+    .from(academicYears)
+    .where(eq(academicYears.scopeKey, `personal:${userId}`))
+    .orderBy(desc(academicYears.startsOn));
+  const personalTerms = personalYears.length > 0
+    ? await db
+      .select()
+      .from(academicTerms)
+      .where(inArray(academicTerms.academicYearId, personalYears.map(y => y.id)))
+      .orderBy(asc(academicTerms.ordinal))
+    : [];
+
+  const personalWorksRows = await db
+    .select()
+    .from(workItems)
+    .where(and(
+      eq(workItems.ownerType, "personal"),
+      eq(workItems.ownerUserId, userId),
+      isNull(workItems.deletedAt),
+    ))
+    .orderBy(desc(workItems.updatedAt));
+
+  const workBlocks = personalWorksRows.length > 0
+    ? await db
+      .select()
+      .from(contentBlocks)
+      .where(inArray(contentBlocks.workItemId, personalWorksRows.map(w => w.id)))
+      .orderBy(asc(contentBlocks.sortOrder), asc(contentBlocks.id))
+    : [];
+
+  const personalAssetRows = await db
+    .select()
+    .from(assets)
+    .where(and(
+      eq(assets.ownerType, "personal"),
+      eq(assets.ownerUserId, userId),
+      isNull(assets.deletedAt),
+    ))
+    .orderBy(desc(assets.createdAt));
+
+  const standardLinks = personalAssetRows.length > 0
+    ? await db
+      .select({
+        assetId: assetStandardLinks.assetId,
+        note: assetStandardLinks.note,
+        standardKey: standardVersions.standardKey,
+        version: standardVersions.version,
+        title: standardVersions.title,
+      })
+      .from(assetStandardLinks)
+      .innerJoin(standardVersions, eq(assetStandardLinks.standardVersionId, standardVersions.id))
+      .where(inArray(assetStandardLinks.assetId, personalAssetRows.map(a => a.id)))
+    : [];
+
+  return buildSanitizedAccountExportBundle({
+    user,
+    schools,
+    years: personalYears.map(year => ({
+      id: year.id,
+      label: year.label,
+      startsOn: year.startsOn,
+      endsOn: year.endsOn,
+      terms: personalTerms.filter(t => t.academicYearId === year.id),
+    })),
+    works: personalWorksRows.map(work => ({
+      ...work,
+      blocks: workBlocks.filter(b => b.workItemId === work.id),
+    })),
+    assets: personalAssetRows.map(asset => ({
+      ...asset,
+      linkedStandards: standardLinks
+        .filter(link => link.assetId === asset.id)
+        .map(link => ({
+          standardKey: link.standardKey,
+          version: link.version,
+          title: link.title,
+          note: link.note,
+        })),
+    })),
+  });
 }

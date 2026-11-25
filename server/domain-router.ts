@@ -6,6 +6,7 @@ import { z } from "zod";
 import { protectedProcedure, router } from "./_core/trpc";
 import {
   AssetDeleteConflictError,
+  copyWorkToPersonalForUser,
   createAssetForUser,
   createWorkItemForUser,
   createWorkVersionForUser,
@@ -26,6 +27,7 @@ import { reportDraftRouter } from "./report-draft-router";
 import { portfolioDraftRouter } from "./portfolio-draft-router";
 import { standardsRouter } from "./standards-router";
 import { commerceRouter } from "./commerce-router";
+import { selfEvaluationRouter } from "./self-evaluation-router";
 import {
   addReviewCommentForUser,
   createOutputForUser,
@@ -36,6 +38,7 @@ import {
   listOutputsForWorkForUser,
   listReviewsForUser,
   OutputValidationError,
+  reassignReviewForUser,
   ReviewConflictError,
   revokeOutputForUser,
 } from "./review-output-db";
@@ -142,12 +145,21 @@ export const domainRouter = router({
         if (!removed) throw forbidden("لا تملك صلاحية حذف هذا العمل");
         return { success: true } as const;
       }),
+
+    copyToPersonal: protectedProcedure
+      .input(z.object({ id: z.number().int().positive() }))
+      .mutation(async ({ ctx, input }) => {
+        const copied = await copyWorkToPersonalForUser(ctx.user.id, input.id);
+        if (!copied) throw forbidden("لا تملك صلاحية نسخ هذا العمل إلى مساحتك الشخصية");
+        return copied;
+      }),
   }),
 
   reportDraft: reportDraftRouter,
   portfolioDraft: portfolioDraftRouter,
   standards: standardsRouter,
   commerce: commerceRouter,
+  selfEvaluation: selfEvaluationRouter,
 
   asset: router({
     list: protectedProcedure.query(({ ctx }) => listAssetsForUser(ctx.user.id)),
@@ -258,6 +270,21 @@ export const domainRouter = router({
           return decided;
         } catch (error) {
           if (error instanceof ReviewConflictError) throw conflict(error.message);
+          throw error;
+        }
+      }),
+    reassign: protectedProcedure
+      .input(z.object({ reviewId: z.number().int().positive(), reviewerUserId: z.number().int().positive() }))
+      .mutation(async ({ ctx, input }) => {
+        try {
+          const reassigned = await reassignReviewForUser(ctx.user.id, input.reviewId, input.reviewerUserId);
+          if (!reassigned) throw forbidden("لا تملك صلاحية إعادة تعيين المراجع لهذه النسخة");
+          return reassigned;
+        } catch (error) {
+          if (error instanceof ReviewConflictError) throw conflict(error.message);
+          if (error instanceof Error && error.message.startsWith("REASSIGN_INVALID:")) {
+            throw badRequest(error.message.slice("REASSIGN_INVALID:".length));
+          }
           throw error;
         }
       }),

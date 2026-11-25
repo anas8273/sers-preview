@@ -4,6 +4,7 @@ import {
   Bell,
   BriefcaseBusiness,
   CheckSquare,
+  ClipboardCheck,
   FileText,
   Library,
   Plus,
@@ -44,6 +45,13 @@ const quickActions: ActionCard[] = [
     path: "/reviews",
     icon: CheckSquare,
     accent: "bg-violet-50 text-violet-700",
+  },
+  {
+    title: "التقويم والتحسين",
+    description: "قيّم مجالات الاعتماد المدرسي الأربعة وحوّل الفجوات إلى خطة تحسين وتقارير.",
+    path: "/self-evaluation",
+    icon: ClipboardCheck,
+    accent: "bg-emerald-50 text-emerald-700",
   },
   {
     title: "القوالب والمتجر",

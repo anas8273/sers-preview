@@ -5,6 +5,8 @@ import {
   Building2,
   CalendarDays,
   CheckCircle2,
+  ClipboardCheck,
+  Copy,
   FileText,
   FolderKanban,
   Info,
@@ -103,6 +105,14 @@ export default function WorkDetail() {
         utils.domain.review.list.invalidate(),
       ]);
       setLocation("/reviews");
+    },
+  });
+  const copyToPersonal = trpc.domain.work.copyToPersonal.useMutation({
+    onSuccess: async copied => {
+      await utils.domain.work.list.invalidate();
+      if (copied?.id) {
+        setLocation(`/work/${copied.id}`);
+      }
     },
   });
 
@@ -225,13 +235,33 @@ export default function WorkDetail() {
                     </div>
                   </div>
                   <div className="flex flex-col gap-3 sm:items-end">
+                    {workQuery.data.metadata?.module === "self_evaluation" && (
+                      <button type="button" onClick={() => setLocation("/self-evaluation")} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-teal-700 px-5 py-3 text-sm font-bold text-white shadow-sm hover:bg-teal-800">
+                        <ClipboardCheck className="h-4 w-4" /> فتح في وحدة التقويم الذاتي
+                      </button>
+                    )}
                     {workQuery.data.type === "report" && (
                       <button type="button" onClick={() => setLocation(`/work/${workId}/report`)} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-teal-700 px-5 py-3 text-sm font-bold text-white shadow-sm hover:bg-teal-800">
                         <PencilLine className="h-4 w-4" /> فتح محرر التقرير
                       </button>
                     )}
+                    {workQuery.data.ownerType === "organization" && workQuery.data.metadata?.module !== "self_evaluation" && (
+                      <button
+                        type="button"
+                        disabled={copyToPersonal.isPending}
+                        onClick={() => copyToPersonal.mutate({ id: workId })}
+                        className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-teal-200 bg-white px-4 py-2.5 text-xs font-bold text-teal-900 shadow-sm hover:bg-teal-50 disabled:opacity-50"
+                      >
+                        {copyToPersonal.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Copy className="h-4 w-4" />}
+                        نسخ الهيكل لمساحتي الشخصية
+                      </button>
+                    )}
+                    {copyToPersonal.error && (
+                      <p role="alert" className="text-xs text-red-700">{copyToPersonal.error.message}</p>
+                    )}
                     <div className="max-w-md rounded-xl border border-teal-100 bg-teal-50 px-4 py-3 text-xs leading-6 text-teal-900">
                       الشواهد تبقى أصولًا مستقلة. إزالة الربط من هذا العمل لا تحذف الأصل من المكتبة.
+                      {workQuery.data.ownerType === "organization" && " عند الانتقال بين المدارس يمكنك نسخ هيكل المسودة لمساحتك الشخصية دون نقل شواهد المدرسة أو اعتماداتها."}
                     </div>
                   </div>
                 </div>
