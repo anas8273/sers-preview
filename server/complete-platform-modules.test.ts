@@ -7,6 +7,7 @@ import {
   normalizeSelfEvaluationDraft,
   SELF_EVALUATION_DOMAINS,
   SELF_EVALUATION_FRAMEWORK_ID,
+  SELF_EVALUATION_FRAMEWORK_META,
   SELF_EVALUATION_INDICATORS,
   SelfEvaluationValidationError,
 } from "../shared/self-evaluation";
@@ -16,11 +17,15 @@ import { evaluateReviewReassignEligibility } from "./review-output-db";
 import { buildSanitizedAccountExportBundle } from "./account-db";
 import { getCommerceProviderStatus, verifyWebhookHmacSha256 } from "./commerce-sandbox";
 
-describe("R09 / O009: ETEC School Self-Evaluation & Improvement Plan engine", () => {
-  it("defines the 4 official ETEC domains (100% total weight) and 12 standard indicators", () => {
+describe("R09 / O009 (OPEN): guided School Self-Evaluation & Improvement Plan engine", () => {
+  it("is explicitly labelled unofficial, claims no official weights, and defines 4 domains x 3 guided indicators", () => {
+    expect(SELF_EVALUATION_FRAMEWORK_META.status).toBe("guided_unofficial");
+    expect(SELF_EVALUATION_FRAMEWORK_META.pendingDecision).toBe("O009");
+    expect(SELF_EVALUATION_FRAMEWORK_ID).not.toMatch(/etec/i);
     expect(SELF_EVALUATION_DOMAINS).toHaveLength(4);
-    const weightSum = SELF_EVALUATION_DOMAINS.reduce((acc, d) => acc + d.weightPercent, 0);
-    expect(weightSum).toBe(100);
+    for (const domain of SELF_EVALUATION_DOMAINS) {
+      expect(domain).not.toHaveProperty("weightPercent");
+    }
     expect(SELF_EVALUATION_INDICATORS).toHaveLength(12);
     for (const domain of SELF_EVALUATION_DOMAINS) {
       expect(SELF_EVALUATION_INDICATORS.filter(i => i.domainKey === domain.key)).toHaveLength(3);
@@ -47,7 +52,7 @@ describe("R09 / O009: ETEC School Self-Evaluation & Improvement Plan engine", ()
     ).toThrow(SelfEvaluationValidationError);
   });
 
-  it("computes domain averages, weighted readiness %, and uncovered priority gaps (levels 1-2)", () => {
+  it("computes domain averages, unweighted readiness %, and uncovered priority gaps (levels 1-2)", () => {
     const draft = normalizeSelfEvaluationDraft(
       {
         revision: 2,

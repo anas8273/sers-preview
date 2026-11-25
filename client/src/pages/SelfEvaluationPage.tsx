@@ -18,6 +18,7 @@ import AppSidebar from "@/components/AppSidebar";
 import { trpc } from "@/lib/trpc";
 import {
   SELF_EVALUATION_DOMAINS,
+  SELF_EVALUATION_FRAMEWORK_META,
   SELF_EVALUATION_INDICATORS,
   SELF_EVALUATION_LEVELS,
   type ImprovementAction,
@@ -240,7 +241,7 @@ export default function SelfEvaluationPage() {
         <div className="mx-auto max-w-6xl space-y-6 px-4 py-8 sm:px-6">
           <header className="flex flex-wrap items-start justify-between gap-4">
             <div>
-              <p className="text-xs font-bold text-teal-700">الاعتماد المدرسي والتطوير المستمر (ETEC)</p>
+              <p className="text-xs font-bold text-teal-700">التقويم الذاتي والتحسين المستمر (نموذج استرشادي)</p>
               <h1
                 className="mt-1 text-2xl font-black text-slate-950 sm:text-3xl"
                 style={{ fontFamily: "'Tajawal', sans-serif" }}
@@ -248,7 +249,7 @@ export default function SelfEvaluationPage() {
                 التقويم الذاتي وخطة التحسين المدرسي
               </h1>
               <p className="mt-2 max-w-3xl text-sm leading-7 text-slate-600">
-                قيّم المجالات الأربعة المعتمدة لهيئة تقويم التعليم والتدريب بمبررات واقعية وشواهد فعلية من مكتبتك، وحوّل فجوات الأداء مباشرة إلى إجراءات تحسين وتقارير تنفيذ مترابطة.
+                قيّم ممارسات مدرستك ضمن أربعة مجالات بمبررات واقعية وشواهد فعلية من مكتبتك، وحوّل الفجوات إلى إجراءات تحسين وتقارير تنفيذ مترابطة.
               </p>
             </div>
             <button
@@ -260,6 +261,11 @@ export default function SelfEvaluationPage() {
               دورة تقويم جديدة
             </button>
           </header>
+
+          <p role="note" className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs leading-6 text-amber-950">
+            <strong>{SELF_EVALUATION_FRAMEWORK_META.titleAr} (الإصدار {SELF_EVALUATION_FRAMEWORK_META.version}):</strong>{" "}
+            {SELF_EVALUATION_FRAMEWORK_META.sourceNoteAr}
+          </p>
 
           {(showCreateForm || (cyclesQuery.data && cyclesQuery.data.length === 0)) && (
             <section className="rounded-2xl border border-teal-200 bg-white p-5 shadow-sm sm:p-6">
@@ -439,9 +445,9 @@ export default function SelfEvaluationPage() {
           {cycleQuery.data && (
             <>
               {/* Summary Metrics */}
-              <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4" aria-label="ملخص جاهزية الاعتماد المدرسي">
+              <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4" aria-label="ملخص التقويم الذاتي">
                 <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                  <p className="text-xs font-bold text-slate-600">الجاهزية الموزونة</p>
+                  <p className="text-xs font-bold text-slate-600">متوسط التقدير الذاتي (استرشادي)</p>
                   <p className="mt-2 text-2xl font-black text-teal-800">
                     {cycleQuery.data.summary.overallReadinessPercent}%
                   </p>
@@ -486,7 +492,7 @@ export default function SelfEvaluationPage() {
                 <section className="flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-xs leading-6 text-amber-950">
                   <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-700" />
                   <div>
-                    <p className="font-bold">توصية الاعتماد المدرسي: توجد مؤشرات في مستوى «التهيئة» أو «الانطلاق» بلا إجراء تحسين مرتبط</p>
+                    <p className="font-bold">تنبيه خطة التحسين: توجد مؤشرات في مستوى «التهيئة» أو «الانطلاق» بلا إجراء تحسين مرتبط</p>
                     <p className="mt-1">
                       أضف إجراءً في خطة التحسين لكل مؤشر منخفض التقدير لضمان اتساق دورة التقويم الذاتي مع الخطة التشغيلية.
                     </p>
@@ -498,7 +504,7 @@ export default function SelfEvaluationPage() {
               <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
-                    <p className="text-xs font-bold text-teal-700">المجالات الأربعة الرسمية (12 مؤشرًا قياسيًا)</p>
+                    <p className="text-xs font-bold text-teal-700">أربعة مجالات · 12 مؤشرًا استرشاديًا</p>
                     <h2 className="mt-1 text-lg font-bold text-slate-950">تقييم المؤشرات وربط الشواهد</h2>
                   </div>
                   <div className="flex items-center gap-2 text-xs text-slate-600">
@@ -533,7 +539,7 @@ export default function SelfEvaluationPage() {
                         <div className="flex items-center justify-between gap-2">
                           <span className="text-sm font-bold">{domain.title}</span>
                           <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-bold text-slate-700">
-                            الوزن {domain.weightPercent}%
+                            {domainStat?.totalCount ?? 3} مؤشرات
                           </span>
                         </div>
                         <p className="mt-2 text-xs text-slate-600">
@@ -708,7 +714,7 @@ export default function SelfEvaluationPage() {
                     <p className="text-xs font-bold text-teal-700">من التشخيص إلى التنفيذ</p>
                     <h2 className="mt-1 text-lg font-bold text-slate-950">خطة التحسين والخطة التشغيلية المرتبطة</h2>
                     <p className="mt-1 text-xs text-slate-600">
-                      كل إجراء تحسين يرتبط بمؤشر محدد ويمكن تحويله بضغطة واحدة إلى تقرير تنفيذ رسمي داخل «أعمالي».
+                      كل إجراء تحسين يرتبط بمؤشر محدد ويمكن تحويله بضغطة واحدة إلى تقرير تنفيذ داخل «أعمالي».
                     </p>
                   </div>
                   <button

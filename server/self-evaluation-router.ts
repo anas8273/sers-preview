@@ -5,6 +5,7 @@ import { AccountAccessError, AccountValidationError } from "./account-db";
 import {
   SELF_EVALUATION_DOMAINS,
   SELF_EVALUATION_FRAMEWORK_ID,
+  SELF_EVALUATION_FRAMEWORK_META,
   SELF_EVALUATION_INDICATORS,
   SELF_EVALUATION_LEVELS,
   SelfEvaluationValidationError,
@@ -53,6 +54,7 @@ function mapError(error: unknown): never {
 export const selfEvaluationRouter = router({
   framework: protectedProcedure.query(() => ({
     frameworkId: SELF_EVALUATION_FRAMEWORK_ID,
+    meta: SELF_EVALUATION_FRAMEWORK_META,
     domains: SELF_EVALUATION_DOMAINS,
     indicators: SELF_EVALUATION_INDICATORS,
     levels: SELF_EVALUATION_LEVELS,

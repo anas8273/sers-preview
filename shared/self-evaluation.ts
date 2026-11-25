@@ -76,25 +76,21 @@ export const SELF_EVALUATION_DOMAINS: readonly SelfEvaluationDomainDef[] = [
   {
     key: "administration",
     title: "الإدارة المدرسية",
-    weightPercent: 25,
     description: "التخطيط التشغيلي، قيادة العملية التعليمية، التطوير المهني، والشراكة الأسرية والمجتمعية.",
   },
   {
     key: "teaching_learning",
     title: "التعليم والتعلم",
-    weightPercent: 30,
     description: "بناء خبرات التعلم، التنويع التدريسي، التقويم من أجل التعلم، ودعم المتعثرين والموهوبين.",
   },
   {
     key: "learning_outcomes",
     title: "نواتج التعلم",
-    weightPercent: 30,
     description: "التحصيل الدراسي والاختبارات الوطنية، التطور الشخصي والصحي، وتمثّل القيم والهوية الوطنية.",
   },
   {
     key: "school_environment",
     title: "البيئة المدرسية",
-    weightPercent: 15,
     description: "جاهزية المبنى والمرافق، الأمن والسلامة المدرسية، والمناخ المدرسي الداعم والجاذب.",
   },
 ] as const;
@@ -239,7 +235,6 @@ export type SelfEvaluationDraftData = {
 export type DomainSummary = {
   domainKey: SelfEvaluationDomainKey;
   title: string;
-  weightPercent: number;
   ratedCount: number;
   totalCount: number;
   averageLevel: number | null;
@@ -413,8 +408,7 @@ export function computeSelfEvaluationSummary(draft: SelfEvaluationDraftData): Se
   const gapIndicatorKeys: string[] = [];
   const uncoveredGapIndicatorKeys: string[] = [];
 
-  let weightedScoreSum = 0;
-  let ratedWeightSum = 0;
+  let overallLevelSum = 0;
   let ratedIndicators = 0;
 
   const domains: DomainSummary[] = SELF_EVALUATION_DOMAINS.map(domain => {
@@ -430,6 +424,7 @@ export function computeSelfEvaluationSummary(draft: SelfEvaluationDraftData): Se
         domainRated += 1;
         ratedIndicators += 1;
         levelSum += level;
+        overallLevelSum += level;
         if (level <= 2) {
           gapCount += 1;
           gapIndicatorKeys.push(ind.key);
@@ -442,15 +437,10 @@ export function computeSelfEvaluationSummary(draft: SelfEvaluationDraftData): Se
 
     const averageLevel = domainRated > 0 ? Math.round((levelSum / domainRated) * 100) / 100 : null;
     const readinessPercent = averageLevel !== null ? Math.round((averageLevel / 4) * 100) : 0;
-    if (averageLevel !== null) {
-      weightedScoreSum += averageLevel * domain.weightPercent;
-      ratedWeightSum += domain.weightPercent;
-    }
 
     return {
       domainKey: domain.key,
       title: domain.title,
-      weightPercent: domain.weightPercent,
       ratedCount: domainRated,
       totalCount: domainIndicators.length,
       averageLevel,
@@ -461,8 +451,9 @@ export function computeSelfEvaluationSummary(draft: SelfEvaluationDraftData): Se
 
   const totalIndicators = SELF_EVALUATION_INDICATORS.length;
   const completionPercent = Math.round((ratedIndicators / totalIndicators) * 100);
-  const overallAverageLevel = ratedWeightSum > 0
-    ? Math.round((weightedScoreSum / ratedWeightSum) * 100) / 100
+  // Unweighted mean across rated indicators: no official weights are claimed (O009 OPEN).
+  const overallAverageLevel = ratedIndicators > 0
+    ? Math.round((overallLevelSum / ratedIndicators) * 100) / 100
     : null;
   const overallReadinessPercent = overallAverageLevel !== null
     ? Math.round((overallAverageLevel / 4) * 100)
