@@ -69,7 +69,14 @@ export default function CatalogPage() {
 
       <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6">
         <div className="mb-6 rounded-2xl border border-teal-100 bg-teal-50/70 p-4 text-sm leading-6 text-teal-900">
-          هذه الصفحة تعيد استخدام بيانات الخدمات الحالية فقط. لا تنشئ سجلاً خادمياً جديداً، ولا تفعّل شراءً أو تكاملاً غير منشور.
+          <p>هذه الصفحة تعيد استخدام بيانات الخدمات الحالية فقط. لا تنشئ سجلاً خادمياً جديداً، ولا تفعّل شراءً أو تكاملاً غير منشور.</p>
+          <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-teal-200/60 pt-3 text-xs">
+            <span className="font-bold text-teal-950">مسارات النواة السحابية النشطة:</span>
+            <button type="button" onClick={() => navigate("/work")} className="min-h-9 rounded-lg border border-teal-300 bg-white px-3 py-1.5 font-bold text-teal-900 hover:bg-teal-100">أعمالي (التقارير وملفات الإنجاز)</button>
+            <button type="button" onClick={() => navigate("/evidence")} className="min-h-9 rounded-lg border border-teal-300 bg-white px-3 py-1.5 font-bold text-teal-900 hover:bg-teal-100">الشواهد ومصفوفة المعايير</button>
+            <button type="button" onClick={() => navigate("/self-evaluation")} className="min-h-9 rounded-lg border border-teal-300 bg-white px-3 py-1.5 font-bold text-teal-900 hover:bg-teal-100">التقويم الذاتي وخطة التحسين</button>
+            <button type="button" onClick={() => navigate("/reviews")} className="min-h-9 rounded-lg border border-teal-300 bg-white px-3 py-1.5 font-bold text-teal-900 hover:bg-teal-100">المراجعات والاعتمادات</button>
+          </div>
         </div>
 
         <section className="mb-6 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm" aria-label="فلاتر الكتالوج">

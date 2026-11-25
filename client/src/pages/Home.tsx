@@ -48,7 +48,7 @@ const quickActions: ActionCard[] = [
   },
   {
     title: "التقويم والتحسين",
-    description: "قيّم مجالات الاعتماد المدرسي الأربعة وحوّل الفجوات إلى خطة تحسين وتقارير.",
+    description: "قيّم مجالات المدرسة الأربعة استرشاديًا وحوّل الفجوات إلى خطة تحسين وتقارير.",
     path: "/self-evaluation",
     icon: ClipboardCheck,
     accent: "bg-emerald-50 text-emerald-700",
