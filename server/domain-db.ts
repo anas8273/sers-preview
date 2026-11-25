@@ -11,8 +11,8 @@ import {
 import { getDb } from "./db";
 import { users } from "../drizzle/schema";
 import { captureAcademicContext } from "./account-db";
-import { normalizeReportDraft } from "../shared/report-projection";
-import { normalizePortfolioDraft } from "../shared/portfolio-projection";
+import { normalizeReportDraft, ReportDocumentValidationError } from "../shared/report-projection";
+import { normalizePortfolioDraft, PortfolioValidationError } from "../shared/portfolio-projection";
 
 export type WorkAccessMode = "read" | "write";
 export type NewWorkItem = typeof workItems.$inferInsert;
@@ -23,6 +23,17 @@ type AssetRow = typeof assets.$inferSelect;
 type MembershipRow = typeof memberships.$inferSelect;
 type Database = NonNullable<Awaited<ReturnType<typeof getDb>>>;
 type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
+
+export class WorkCopyValidationError extends Error {
+  constructor(message = "تعذر نسخ هذا العمل لأن مسودته بصيغة غير صالحة أو غير مدعومة") {
+    super(message);
+    this.name = "WorkCopyValidationError";
+  }
+}
+
+function isSelfEvaluationModuleWork(work: { metadata: Record<string, unknown> | null }) {
+  return work.metadata?.module === "self_evaluation";
+}
 
 export class WorkVersionConflictError extends Error {
   constructor() {
@@ -90,7 +101,13 @@ export async function assertWorkAccess(userId: number, workItemId: number, mode:
   if (!work.ownerOrganizationId) return undefined;
   const membership = await activeMembership(userId, work.ownerOrganizationId);
   if (!membership) return undefined;
-  if (mode === "write" && !canWriteOrganization(membership.role)) return undefined;
+  if (mode === "write") {
+    if (isSelfEvaluationModuleWork(work)) {
+      if (membership.role !== "owner" && membership.role !== "admin") return undefined;
+    } else if (!canWriteOrganization(membership.role)) {
+      return undefined;
+    }
+  }
   return work;
 }
 
@@ -133,7 +150,13 @@ export async function listWorkItemsForUser(userId: number, filter?: { academicYe
 }
 
 /** Lock scope before a work/asset so revocation and writes serialize. */
-async function lockWriteScope(tx: Transaction, userId: number, ownerType: "personal" | "organization", organizationId?: number | null) {
+async function lockWriteScope(
+  tx: Transaction,
+  userId: number,
+  ownerType: "personal" | "organization",
+  organizationId?: number | null,
+  options?: { requireOrgAdmin?: boolean },
+) {
   if (ownerType === "personal") {
     const [user] = await tx.select({ id: users.id }).from(users).where(eq(users.id, userId)).limit(1).for("update");
     return Boolean(user);
@@ -142,16 +165,22 @@ async function lockWriteScope(tx: Transaction, userId: number, ownerType: "perso
   const [organization] = await tx.select().from(organizations).where(eq(organizations.id, organizationId)).limit(1).for("update");
   if (!organization || organization.status !== "active") return false;
   const [member] = await tx.select().from(memberships).where(and(eq(memberships.userId, userId), eq(memberships.organizationId, organizationId), eq(memberships.status, "active"))).limit(1).for("update");
-  return Boolean(member && canWriteOrganization(member.role));
+  if (!member) return false;
+  if (options?.requireOrgAdmin) {
+    return member.role === "owner" || member.role === "admin";
+  }
+  return canWriteOrganization(member.role);
 }
 async function withWorkWrite<T>(userId: number, workItemId: number, operation: (tx: Transaction, work: WorkRow) => Promise<T>) {
   const db = await getDb(); if (!db) throw new Error("Database not available");
   const [hint] = await db.select().from(workItems).where(and(eq(workItems.id, workItemId), isNull(workItems.deletedAt))).limit(1);
   if (!hint || (hint.ownerType === "personal" && hint.ownerUserId !== userId)) return undefined;
+  const requireOrgAdmin = hint.ownerType === "organization" && isSelfEvaluationModuleWork(hint);
   return db.transaction(async tx => {
-    if (!await lockWriteScope(tx, userId, hint.ownerType, hint.ownerOrganizationId)) return undefined;
+    if (!await lockWriteScope(tx, userId, hint.ownerType, hint.ownerOrganizationId, { requireOrgAdmin })) return undefined;
     const [work] = await tx.select().from(workItems).where(and(eq(workItems.id, workItemId), isNull(workItems.deletedAt))).limit(1).for("update");
     if (!work || work.ownerType !== hint.ownerType || work.ownerUserId !== hint.ownerUserId || work.ownerOrganizationId !== hint.ownerOrganizationId) return undefined;
+    if (work.ownerType === "organization" && isSelfEvaluationModuleWork(work) && !requireOrgAdmin) return undefined;
     return operation(tx, work);
   });
 }
@@ -192,7 +221,9 @@ export async function getWorkItemForUser(userId: number, workItemId: number) {
   for (const linkedAsset of linkedAssets) {
     if (await assertAssetAccess(userId, linkedAsset.id, "read")) visibleAssets.push(linkedAsset);
   }
-  return { ...work, assets: visibleAssets };
+  // `viewerIsCreator` & `viewerCanWrite` let the UI match server-side authorization rules accurately.
+  const viewerCanWrite = Boolean(await assertWorkAccess(userId, workItemId, "write"));
+  return { ...work, assets: visibleAssets, viewerIsCreator: work.creatorUserId === userId, viewerCanWrite };
 }
 
 export async function updateWorkItemForUser(
@@ -255,7 +286,13 @@ export function sanitizeCopiedDraftForPersonalScope(
   if (!rawBlockData) return undefined;
   const nowIso = new Date().toISOString();
   if (type === "report") {
-    const normalized = normalizeReportDraft(rawBlockData);
+    let normalized: ReturnType<typeof normalizeReportDraft>;
+    try {
+      normalized = normalizeReportDraft(rawBlockData);
+    } catch (error) {
+      if (error instanceof ReportDocumentValidationError) throw new WorkCopyValidationError();
+      throw error;
+    }
     const sanitizedIdentity = normalized.reportIdentity?.reportPreparer
       ? {
           version: normalized.reportIdentity.version,
@@ -274,7 +311,13 @@ export function sanitizeCopiedDraftForPersonalScope(
       },
     };
   }
-  const normalizedPortfolio = normalizePortfolioDraft(rawBlockData);
+  let normalizedPortfolio: ReturnType<typeof normalizePortfolioDraft>;
+  try {
+    normalizedPortfolio = normalizePortfolioDraft(rawBlockData);
+  } catch (error) {
+    if (error instanceof PortfolioValidationError) throw new WorkCopyValidationError();
+    throw error;
+  }
   return {
     blockType: "portfolio_document",
     data: {
@@ -287,13 +330,22 @@ export function sanitizeCopiedDraftForPersonalScope(
 }
 
 /**
- * Copies a readable work item's structure/draft into an independent personal draft
- * owned by `userId` (`O003`), leaving school versions, approvals, outputs, and
+ * Copies the caller's OWN work structure/draft into an independent personal draft
+ * (`O003`, proposed policy), leaving school versions, approvals, outputs, and
  * organization-scoped evidence untouched in the original school workspace.
+ *
+ * Server-side rules (review finding M1/L8):
+ * - Only the work's author (`creatorUserId`) may copy it; school members cannot
+ *   harvest colleagues' work. For school works the author must still be an active
+ *   writer (owner/admin/member) of that active school; `reviewer` role is excluded.
+ * - Self-evaluation cycles are institutional and are never copied.
+ * - The locked row must still match the scope that was authorized.
+ * - Idempotent: a repeated request returns the existing live personal copy.
  */
 export async function copyWorkToPersonalForUser(userId: number, sourceWorkItemId: number) {
   const readable = await assertWorkAccess(userId, sourceWorkItemId, "read");
   if (!readable) return undefined;
+  if (readable.creatorUserId !== userId || isSelfEvaluationModuleWork(readable)) return undefined;
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
@@ -318,7 +370,7 @@ export async function copyWorkToPersonalForUser(userId: number, sourceWorkItemId
         ))
         .limit(1)
         .for("update");
-      if (!member) return undefined;
+      if (!member || !canWriteOrganization(member.role)) return undefined;
     }
 
     const [source] = await tx
@@ -327,7 +379,30 @@ export async function copyWorkToPersonalForUser(userId: number, sourceWorkItemId
       .where(and(eq(workItems.id, sourceWorkItemId), isNull(workItems.deletedAt)))
       .limit(1)
       .for("update");
-    if (!source) return undefined;
+    if (
+      !source ||
+      source.ownerType !== readable.ownerType ||
+      source.ownerUserId !== readable.ownerUserId ||
+      source.ownerOrganizationId !== readable.ownerOrganizationId ||
+      source.creatorUserId !== userId ||
+      isSelfEvaluationModuleWork(source)
+    ) {
+      return undefined;
+    }
+
+    // Idempotency: the personal scope (user row) is locked above, so concurrent
+    // double-submits serialize here and the second one reuses the first copy.
+    const existingCopies = await tx
+      .select({ id: workItems.id, metadata: workItems.metadata })
+      .from(workItems)
+      .where(and(
+        eq(workItems.ownerType, "personal"),
+        eq(workItems.ownerUserId, userId),
+        eq(workItems.type, source.type),
+        isNull(workItems.deletedAt),
+      ));
+    const existingCopy = existingCopies.find(row => row.metadata?.copiedFromWorkItemId === source.id);
+    if (existingCopy) return existingCopy.id;
 
     const targetBlockType = source.type === "report" ? "report_document" : "portfolio_document";
     const [sourceBlock] = await tx
@@ -352,6 +427,7 @@ export async function copyWorkToPersonalForUser(userId: number, sourceWorkItemId
       academicContext: null,
       metadata: {
         copiedAsPersonalDraft: true,
+        copiedFromWorkItemId: source.id,
         sourceOwnerType: source.ownerType,
       },
     });
@@ -375,6 +451,9 @@ export async function copyWorkToPersonalForUser(userId: number, sourceWorkItemId
 
 export async function createWorkVersionForUser(userId: number, workItemId: number, snapshot: Record<string, unknown>, reason?: string) {
   return withWorkWrite(userId, workItemId, async (tx, work) => {
+    // Self-evaluation cycles are not versioned/reviewed/shared through the generic
+    // work pipeline (review finding L9); they are managed only by their own module.
+    if (isSelfEvaluationModuleWork(work)) return undefined;
     if (work.status === "archived") throw new WorkVersionConflictError();
     const expectedVersion = work.currentVersionNumber;
     const nextVersion = expectedVersion + 1;
@@ -435,6 +514,7 @@ export async function createAssetForUser(userId: number, input: {
 
 export async function linkAssetToWorkForUser(userId: number, input: { workItemId: number; assetId: number; role?: string; caption?: string }) {
   return withWorkWrite(userId, input.workItemId, async (tx, work) => {
+    if (isSelfEvaluationModuleWork(work)) return undefined;
     const [asset] = await tx.select().from(assets).where(and(eq(assets.id, input.assetId), isNull(assets.deletedAt))).limit(1).for("update");
     if (!asset || !sameOwnershipScope(work, asset)) return undefined;
     const role = input.role ?? "evidence";
@@ -444,7 +524,8 @@ export async function linkAssetToWorkForUser(userId: number, input: { workItemId
 }
 
 export async function unlinkAssetFromWorkForUser(userId: number, input: { workItemId: number; assetId: number; role?: string }) {
-  return Boolean(await withWorkWrite(userId, input.workItemId, async tx => {
+  return Boolean(await withWorkWrite(userId, input.workItemId, async (tx, work) => {
+    if (isSelfEvaluationModuleWork(work)) return false;
     await tx.delete(workAssetLinks).where(and(eq(workAssetLinks.workItemId, input.workItemId), eq(workAssetLinks.assetId, input.assetId), eq(workAssetLinks.role, input.role ?? "evidence")));
     return true;
   }));

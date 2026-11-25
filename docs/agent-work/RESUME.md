@@ -1,9 +1,9 @@
 # SERS — نقطة الاستئناف (RESUME)
 
-**آخر تحديث:** 2026-11-25 15:30 (UTC)  
+**آخر تحديث:** 2026-11-25 19:00 (UTC)  
 **المنسّق:** Antigravity (قائد الهندسة والتكامل)
 
-> هذا الملف هو مصدر الحقيقة الوحيد للاستئناف. اقرأه أولًا، ثم افحص `git status` و`git log` في نسخة العمل قبل أي تعديل.
+> هذا الملف هو مصدر الحقيقة الوحيد للاستئناف. اقرأه أولًا، ثم افحص `git status` و`git log` و`git worktree list` قبل أي تعديل.
 
 ---
 
@@ -13,7 +13,7 @@
 |---|---|
 | المستودع | `anas8273/sers-preview` (`origin`) |
 | المجلد الرئيسي | `C:\Users\ANAS\Desktop\مشروع التخرج\sers-preview` |
-| طلبات السحب المدمجة في `origin/main` | **PR #43** (`6a9954d`: مصالحة PR40+PR41 + R12 + R04 + R08 + R21 + J08 + R13 + R14 + R20، 6/6 CI) · **PR #44** (`9985956`: تنظيف الجذر وحل `TODO.md` + `SEC-01..06` + `IMP-1..3`، 6/6 CI) · **PR #45** (`33b08ed`: مختبر التقرير الفوري + مصفوفة الشواهد الذكية 2D + محفزات التقويم الهجري + فحص الجاهزية المسبق `CONV-05`، 6/6 CI) · **PR #46** (`a9206a2`: التقويم الذاتي الاسترشادي وخطط التحسين + إعادة تعيين المراجع `O002` + نسخ المسودة للمساحة الشخصية `O003` + تصدير بيانات الحساب `R18` + عقد الدفع `O001`، 6/6 CI + `promote-tested-image` ✅) |
+| طلبات السحب المدمجة في `origin/main` | **PR #43** (`6a9954d`: مصالحة PR40+PR41 + R12 + R04 + R08 + R21 + J08 + R13 + R14 + R20، 6/6 CI) · **PR #44** (`9985956`: تنظيف الجذر وحل `TODO.md` + `SEC-01..06` + `IMP-1..3`، 6/6 CI) · **PR #45** (`33b08ed`: مختبر التقرير الفوري + مصفوفة الشواهد الذكية 2D + محفزات التقويم الهجري + فحص الجاهزية المسبق `CONV-05`، 6/6 CI) · **PR #46** (`a9206a2`: التقويم الذاتي الاسترشادي + إعادة تعيين المراجع `O002` + النسخ الشخصي `O003` + تصدير البيانات `R18` + عقد الدفع `O001`، 6/6 CI) · **PR #47** (`8d0b123`: حزمة متصفح Chromium `platform-modules.mts` لمقاس `360px` ومزامنة التوثيق) · **PR #48** (`fix/review-findings-2026-11-25`: إحكام صلاحيات المراجعة المستقلة `M1–M5` و`L6–L10` وربط `review-findings-integration.test.ts` و`platform-modules.mts` في CI) |
 | **الملفات غير المتتبعة المحمية** | `.env`، `SERS_Handoff_2026-11-23/`، `SERS_Source_2026-11-23/`، `SERS_Source_2026-11-23.zip` — لم تُلمس |
 
 ---
@@ -22,17 +22,17 @@
 
 1. **وحدة التقويم الذاتي المدرسي وخطة التحسين (`R09` / `O009` — دون أي انحراف DDL):**
    - `shared/self-evaluation.ts`: نموذج سيرس الاسترشادي للتقويم الذاتي (`sers-guided-self-review-v1`) بالمجالات الأربعة المعلنة (`الإدارة المدرسية`، `التعليم والتعلم`، `نواتج التعلم`، `البيئة المدرسية`)، 12 مؤشرًا استرشاديًا بمتوسط غير موزون (دون ادعاء أوزان الأداة الرسمية الكاملة)، 4 مستويات تحقق (`التهيئة` ← `التميز`)، إلزامية المبررات الواقعية عند التقييم، واكتشاف الفجوات غير المغطاة بإجراءات تحسين.
-   - `server/self-evaluation-db.ts` و`server/self-evaluation-router.ts`: حفظ معاملاتي مقفل (`.for("update")` + CAS `expectedRevision`) فوق `work_items` و`content_blocks` (`self_evaluation_cycle`)، التحقق من ملكية الشواهد (`sameScope`)، وميزة إنشاء تقرير تنفيذ بضغطة واحدة من أي إجراء في خطة التحسين (`createActionReport`).
-   - `client/src/pages/SelfEvaluationPage.tsx`: واجهة عربية متكاملة على المسار `/self-evaluation` مربوطة بالشريط الجانبي والصفحة الرئيسية والكتالوج.
+   - `server/self-evaluation-db.ts` و`server/self-evaluation-router.ts`: حفظ معاملاتي مقفل (`.for("update")` + CAS `expectedRevision`) فوق `work_items` و`content_blocks` (`self_evaluation_cycle`)، وقصر تعديل/حذف الدورات المدرسية على `owner`/`admin` مع سجلات تدقيق `self_evaluation.saved` و`self_evaluation.action_report_created`، والتحقق من ملكية الشواهد (`sameScope`)، وميزة إنشاء تقرير تنفيذ بضغطة واحدة (`createActionReport`).
+   - `client/src/pages/SelfEvaluationPage.tsx`: واجهة عربية متكاملة على المسار `/self-evaluation` تدعم وضع العرض فقط (`!canEdit`) والافتراض التلقائي للمساحة الشخصية للأعضاء غير الإداريين.
 2. **إعادة تعيين وتفويض المراجع (`O002`) ونسخ هيكل العمل للمساحة الشخصية عند الانتقال (`O003`) وحوكمة الاعتماد الداخلي (`O008`):**
-   - `domain.review.reassign` (`server/review-output-db.ts` + `ReviewsHub.tsx`): يتيح لمالك/مدير المدرسة أو مرسل النسخة تحويل المراجعة المعلقة إلى مراجع مؤهل آخر مع منع المراجعة الذاتية (`BR01`) وإرسال إشعار فوري.
-   - `domain.work.copyToPersonal` (`server/domain-db.ts` + `WorkDetail.tsx`): ينسخ هيكل المسودة النصية لعمل مدرسي إلى مساحة المعلم الشخصية مع تجريد شعار المدرسة واسمها وشواهدها المؤسسية تلقائيًا.
+   - `domain.review.reassign` (`server/review-output-db.ts` + `ReviewsHub.tsx`): يتيح لمالك/مدير المدرسة أو مرسل النسخة تحويل المراجعة المعلقة إلى مراجع مؤهل آخر مع منع المراجعة الذاتية (`BR01`)، وسجل تدقيق `review.reassigned`، وإشعار المراجع الجديد والسابق بمفاتيح حتمية.
+   - `domain.work.copyToPersonal` (`server/domain-db.ts` + `WorkDetail.tsx`): يقتصر على مُعدّ العمل الأصلي النشط (`creatorUserId === userId`) دون ازدواج (`copiedFromWorkItemId`)، وينسخ هيكل المسودة إلى مساحته الشخصية مع تجريد شعار المدرسة واسمها وشواهدها المؤسسية.
    - توضيح حوكمة `O008` في `ReportShareActions.tsx` بأن الاعتماد داخل المنصة اعتماد مؤسسي داخلي مرتبط بنسخة ثابتة.
 3. **تصدير بيانات الحساب الشخصية (`R18`) وعقد مزود الدفع القياسي (`O001`):**
-   - `account.exportMyData` (`server/account-db.ts` + `AccountHub.tsx`): يصدر حزمة JSON كاملة للأعمال والسنوات والشواهد الشخصية مع حجب `openId` ومسارات `storageKey` الداخلية.
-   - `PaymentProviderAdapter` + `verifyWebhookHmacSha256` في `server/commerce-sandbox.ts` جاهز للربط المستقبلي بعملة `SAR` وضريبة 15% مع إبقاء الدفع الحي مغلقًا (`livePaymentsAllowed: false`).
-4. **التحقق الشامل بالوحدات والمتصفح الحقيقي (Chromium E2E):**
-   - 1,000+ اختبار وحدة وثوابت معمارية ناجح محليًا وفي CI، بالإضافة إلى 3 حزم اختبارات متصفح فعلية على Chromium (`public-output.mts`، `report-editor.mts`، و`platform-modules.mts`) تغطي مقاسات `360px` و`1440px` بوضع RTL دون أي أخطاء وقت تشغيل أو تجاوز أفقي.
+   - `account.exportMyData` (`server/account-db.ts` + `AccountHub.tsx`): يصدر حزمة JSON كاملة للأعمال والنسخ والسنوات والشواهد والمشتريات والاستحقاقات والإشعارات الشخصية مع حجب `openId` و`storageKey`، وبحجز ذري مقفل يسجل `account.data_exported` بحد 5 تصديرات كل 10 دقائق.
+   - `PaymentProviderAdapter` + `verifyWebhookHmacSha256` (`Buffer` خام + نافذة منع إعادة التشغيل) في `server/commerce-sandbox.ts` بعملة `SAR` وضريبة 15% مع إبقاء الدفع الحي مغلقًا (`livePaymentsAllowed: false`).
+4. **التحقق الشامل بالوحدات وتكامل MySQL والمتصفح الحقيقي (Chromium E2E):**
+   - 1,000+ اختبار وحدة وثوابت معمارية، وحزمة تكامل خادمية `server/review-findings-integration.test.ts` مربوطة في `integration.yml`، و3 حزم متصفح فعلية على Chromium (`public-output.mts`، `report-editor.mts`، و`platform-modules.mts`) مربوطة في `ci.yml` لمقاسات `360px` و`1440px` بوضع RTL.
 
 ---
 

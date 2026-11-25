@@ -20,6 +20,7 @@ import {
   softDeleteWorkItemForUser,
   unlinkAssetFromWorkForUser,
   updateWorkItemForUser,
+  WorkCopyValidationError,
   WorkVersionConflictError,
 } from "./domain-db";
 import { AccountAccessError, AccountValidationError } from "./account-db";
@@ -149,7 +150,13 @@ export const domainRouter = router({
     copyToPersonal: protectedProcedure
       .input(z.object({ id: z.number().int().positive() }))
       .mutation(async ({ ctx, input }) => {
-        const copied = await copyWorkToPersonalForUser(ctx.user.id, input.id);
+        let copied: Awaited<ReturnType<typeof copyWorkToPersonalForUser>>;
+        try {
+          copied = await copyWorkToPersonalForUser(ctx.user.id, input.id);
+        } catch (error) {
+          if (error instanceof WorkCopyValidationError) throw badRequest(error.message);
+          throw error;
+        }
         if (!copied) throw forbidden("لا تملك صلاحية نسخ هذا العمل إلى مساحتك الشخصية");
         return copied;
       }),

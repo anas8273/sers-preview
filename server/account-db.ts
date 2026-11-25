@@ -1,17 +1,21 @@
-import { and, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, isNull, sql } from "drizzle-orm";
 import {
   academicTerms,
   academicYears,
   assets,
   assetStandardLinks,
   contentBlocks,
+  entitlements,
   memberships,
+  notifications,
   organizations,
+  purchases,
   standardVersions,
   workItems,
+  workVersions,
   type AcademicContext,
 } from "../drizzle/domain-core";
-import { users } from "../drizzle/schema";
+import { auditLogs, users } from "../drizzle/schema";
 import { getDb } from "./db";
 
 type Database = NonNullable<Awaited<ReturnType<typeof getDb>>>;
@@ -216,6 +220,7 @@ export type AccountDataExportBundle = {
     createdAt: string | null;
     updatedAt: string | null;
     blocks: Array<{ blockType: string; sortOrder: number; data: Record<string, unknown> }>;
+    versions: Array<{ versionNumber: number; reason: string | null; createdAt: string | null }>;
   }>;
   personalAssets: Array<{
     id: number;
@@ -226,6 +231,29 @@ export type AccountDataExportBundle = {
     externalUrl: string | null;
     textNote: string | null;
     linkedStandards: Array<{ standardKey: string; version: string; title: string; note: string | null }>;
+    createdAt: string | null;
+  }>;
+  personalPurchases: Array<{
+    id: number;
+    productId: number;
+    state: string;
+    amountMinor: number;
+    currency: string;
+    createdAt: string | null;
+  }>;
+  personalEntitlements: Array<{
+    id: number;
+    productId: number;
+    status: string;
+    grantedAt: string | null;
+    expiresAt: string | null;
+  }>;
+  personalNotifications: Array<{
+    id: number;
+    type: string;
+    title: string;
+    body: string | null;
+    readAt: string | null;
     createdAt: string | null;
   }>;
 };
@@ -256,6 +284,7 @@ export function buildSanitizedAccountExportBundle(raw: {
     createdAt?: Date | string | null;
     updatedAt?: Date | string | null;
     blocks: Array<{ blockType: string; sortOrder: number; data: Record<string, unknown> }>;
+    versions?: Array<{ versionNumber: number; reason: string | null; createdAt?: Date | string | null }>;
   }>;
   assets: Array<{
     id: number;
@@ -268,6 +297,29 @@ export function buildSanitizedAccountExportBundle(raw: {
     storageKey?: unknown;
     createdAt?: Date | string | null;
     linkedStandards: Array<{ standardKey: string; version: string; title: string; note: string | null }>;
+  }>;
+  purchases?: Array<{
+    id: number;
+    productId: number;
+    state: string;
+    amountMinor: number;
+    currency: string;
+    createdAt?: Date | string | null;
+  }>;
+  entitlements?: Array<{
+    id: number;
+    productId: number;
+    status: string;
+    grantedAt?: Date | string | null;
+    expiresAt?: Date | string | null;
+  }>;
+  notifications?: Array<{
+    id: number;
+    type: string;
+    title: string;
+    body: string | null;
+    readAt?: Date | string | null;
+    createdAt?: Date | string | null;
   }>;
 }): AccountDataExportBundle {
   const toIso = (val: Date | string | null | undefined) =>
@@ -315,6 +367,11 @@ export function buildSanitizedAccountExportBundle(raw: {
         sortOrder: b.sortOrder,
         data: b.data,
       })),
+      versions: (w.versions ?? []).map(v => ({
+        versionNumber: v.versionNumber,
+        reason: v.reason ?? null,
+        createdAt: toIso(v.createdAt),
+      })),
     })),
     personalAssets: raw.assets.map(a => ({
       id: a.id,
@@ -329,8 +386,34 @@ export function buildSanitizedAccountExportBundle(raw: {
       linkedStandards: a.linkedStandards,
       createdAt: toIso(a.createdAt),
     })),
+    personalPurchases: (raw.purchases ?? []).map(p => ({
+      id: p.id,
+      productId: p.productId,
+      state: p.state,
+      amountMinor: p.amountMinor,
+      currency: p.currency,
+      createdAt: toIso(p.createdAt),
+    })),
+    personalEntitlements: (raw.entitlements ?? []).map(e => ({
+      id: e.id,
+      productId: e.productId,
+      status: e.status,
+      grantedAt: toIso(e.grantedAt),
+      expiresAt: toIso(e.expiresAt),
+    })),
+    personalNotifications: (raw.notifications ?? []).map(n => ({
+      id: n.id,
+      type: n.type,
+      title: n.title,
+      body: n.body ?? null,
+      readAt: toIso(n.readAt),
+      createdAt: toIso(n.createdAt),
+    })),
   };
 }
+
+const EXPORT_WINDOW_MS = 10 * 60 * 1000;
+const EXPORT_MAX_PER_WINDOW = 5;
 
 export async function exportAccountDataForUser(userId: number): Promise<AccountDataExportBundle> {
   actor(userId);
@@ -341,6 +424,32 @@ export async function exportAccountDataForUser(userId: number): Promise<AccountD
     .where(eq(users.id, userId))
     .limit(1);
   if (!user) throw new AccountAccessError();
+
+  // Atomic per-user cooldown + reservation against concurrent export bursts (review finding L6).
+  await db.transaction(async tx => {
+    const [lockedUser] = await tx.select({ id: users.id }).from(users).where(eq(users.id, userId)).limit(1).for("update");
+    if (!lockedUser) throw new AccountAccessError();
+    const windowStart = new Date(Date.now() - EXPORT_WINDOW_MS);
+    const recentExports = await tx
+      .select({ id: auditLogs.id })
+      .from(auditLogs)
+      .where(and(
+        eq(auditLogs.actorUserId, userId),
+        eq(auditLogs.action, "account.data_exported"),
+        gte(auditLogs.createdAt, windowStart),
+      ))
+      .limit(EXPORT_MAX_PER_WINDOW);
+    if (recentExports.length >= EXPORT_MAX_PER_WINDOW) {
+      throw new AccountConflictError("تم تجاوز الحد المسموح لتصدير البيانات مؤقتًا؛ حاول مرة أخرى بعد دقائق");
+    }
+    await tx.insert(auditLogs).values({
+      actorUserId: userId,
+      action: "account.data_exported",
+      resourceType: "user",
+      resourceId: String(userId),
+      metadata: { scopePolicy: "personal_owned_only" },
+    });
+  });
 
   const schools = await db
     .select({
@@ -379,10 +488,23 @@ export async function exportAccountDataForUser(userId: number): Promise<AccountD
 
   const workBlocks = personalWorksRows.length > 0
     ? await db
-      .select()
-      .from(contentBlocks)
-      .where(inArray(contentBlocks.workItemId, personalWorksRows.map(w => w.id)))
-      .orderBy(asc(contentBlocks.sortOrder), asc(contentBlocks.id))
+        .select()
+        .from(contentBlocks)
+        .where(inArray(contentBlocks.workItemId, personalWorksRows.map(w => w.id)))
+        .orderBy(asc(contentBlocks.sortOrder), asc(contentBlocks.id))
+    : [];
+
+  const personalWorkVersions = personalWorksRows.length > 0
+    ? await db
+        .select({
+          workItemId: workVersions.workItemId,
+          versionNumber: workVersions.versionNumber,
+          reason: workVersions.reason,
+          createdAt: workVersions.createdAt,
+        })
+        .from(workVersions)
+        .where(inArray(workVersions.workItemId, personalWorksRows.map(w => w.id)))
+        .orderBy(asc(workVersions.versionNumber))
     : [];
 
   const personalAssetRows = await db
@@ -409,7 +531,46 @@ export async function exportAccountDataForUser(userId: number): Promise<AccountD
       .where(inArray(assetStandardLinks.assetId, personalAssetRows.map(a => a.id)))
     : [];
 
-  return buildSanitizedAccountExportBundle({
+  const personalPurchaseRows = await db
+    .select({
+      id: purchases.id,
+      productId: purchases.productId,
+      state: purchases.state,
+      amountMinor: purchases.amountMinor,
+      currency: purchases.currency,
+      createdAt: purchases.createdAt,
+    })
+    .from(purchases)
+    .where(eq(purchases.userId, userId))
+    .orderBy(desc(purchases.createdAt));
+
+  const personalEntitlementRows = await db
+    .select({
+      id: entitlements.id,
+      productId: entitlements.productId,
+      status: entitlements.status,
+      grantedAt: entitlements.grantedAt,
+      expiresAt: entitlements.expiresAt,
+    })
+    .from(entitlements)
+    .where(and(eq(entitlements.userId, userId), isNull(entitlements.organizationId)))
+    .orderBy(desc(entitlements.grantedAt));
+
+  const personalNotificationRows = await db
+    .select({
+      id: notifications.id,
+      type: notifications.type,
+      title: notifications.title,
+      body: notifications.body,
+      readAt: notifications.readAt,
+      createdAt: notifications.createdAt,
+    })
+    .from(notifications)
+    .where(eq(notifications.userId, userId))
+    .orderBy(desc(notifications.createdAt))
+    .limit(500);
+
+  const bundle = buildSanitizedAccountExportBundle({
     user,
     schools,
     years: personalYears.map(year => ({
@@ -422,6 +583,7 @@ export async function exportAccountDataForUser(userId: number): Promise<AccountD
     works: personalWorksRows.map(work => ({
       ...work,
       blocks: workBlocks.filter(b => b.workItemId === work.id),
+      versions: personalWorkVersions.filter(v => v.workItemId === work.id),
     })),
     assets: personalAssetRows.map(asset => ({
       ...asset,
@@ -434,5 +596,10 @@ export async function exportAccountDataForUser(userId: number): Promise<AccountD
           note: link.note,
         })),
     })),
+    purchases: personalPurchaseRows,
+    entitlements: personalEntitlementRows,
+    notifications: personalNotificationRows,
   });
+
+  return bundle;
 }

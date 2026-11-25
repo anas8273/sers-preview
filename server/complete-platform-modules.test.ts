@@ -12,7 +12,7 @@ import {
   SelfEvaluationValidationError,
 } from "../shared/self-evaluation";
 import { normalizeReportDraft } from "../shared/report-projection";
-import { sanitizeCopiedDraftForPersonalScope } from "./domain-db";
+import { sanitizeCopiedDraftForPersonalScope, WorkCopyValidationError } from "./domain-db";
 import { evaluateReviewReassignEligibility } from "./review-output-db";
 import { buildSanitizedAccountExportBundle } from "./account-db";
 import { getCommerceProviderStatus, verifyWebhookHmacSha256 } from "./commerce-sandbox";
@@ -258,6 +258,16 @@ describe("O003: Educator Work Copy-to-Personal tenant isolation", () => {
     expect(sanitized?.data.revision).toBe(1);
     expect(sanitized?.data.introduction).toBe("مقدمة ملف الإنجاز المهني");
     expect(sanitized?.data.entries).toEqual([]);
+
+    // Oversized/invalid portfolio draft maps cleanly to WorkCopyValidationError (L8)
+    expect(() =>
+      sanitizeCopiedDraftForPersonalScope("portfolio", {
+        schemaVersion: 1,
+        revision: 1,
+        introduction: "أ".repeat(6000),
+        entries: [],
+      }),
+    ).toThrow(WorkCopyValidationError);
   });
 });
 
@@ -327,6 +337,15 @@ describe("R18 & O001: Personal Account Data Export redaction & Payment Provider 
     expect(verifyWebhookHmacSha256(payload, secret, `sha256=${validSig}`)).toBe(true);
     expect(verifyWebhookHmacSha256(payload, secret, "0".repeat(64))).toBe(false);
     expect(verifyWebhookHmacSha256(payload, "wrong_secret", validSig)).toBe(false);
+    // Rejects non-Buffer payloads so re-serialized JSON strings cannot bypass raw-body checks
+    expect(verifyWebhookHmacSha256(payload.toString("utf8") as unknown as Buffer, secret, validSig)).toBe(false);
+    // Enforces replay-window tolerance when timestampSeconds is required
+    const ts = 1_764_000_000;
+    const tsSig = createHmac("sha256", secret)
+      .update(Buffer.concat([Buffer.from(`${ts}.`, "utf8"), payload]))
+      .digest("hex");
+    expect(verifyWebhookHmacSha256(payload, secret, tsSig, { timestampSeconds: ts, nowMs: (ts + 60) * 1000 })).toBe(true);
+    expect(verifyWebhookHmacSha256(payload, secret, tsSig, { timestampSeconds: ts, nowMs: (ts + 601) * 1000 })).toBe(false);
 
     expect(getCommerceProviderStatus({ NODE_ENV: "production", SERS_COMMERCE_SANDBOX: "1" })).toEqual({
       mode: "disabled",

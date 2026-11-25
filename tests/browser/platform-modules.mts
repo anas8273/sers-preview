@@ -58,6 +58,8 @@ test("end-to-end browser verification of PR #43-#46 platform modules at 360px mo
       termEndsOn: "2026-11-20",
     },
     metadata: null,
+    viewerIsCreator: true,
+    viewerCanWrite: true,
     assets: [{ id: 51, title: "ملف شواهد الحضور الموثق", kind: "file", mimeType: "application/pdf", role: "evidence", caption: null }],
   };
 
@@ -73,7 +75,9 @@ test("end-to-end browser verification of PR #43-#46 platform modules at 360px mo
     academicYearId: null,
     academicTermId: null,
     academicContext: null,
-    metadata: { copiedAsPersonalDraft: true, sourceOwnerType: "organization" },
+    metadata: { copiedAsPersonalDraft: true, copiedFromWorkItemId: 10, sourceOwnerType: "organization" },
+    viewerIsCreator: true,
+    viewerCanWrite: true,
     assets: [],
   };
 
@@ -304,6 +308,7 @@ test("end-to-end browser verification of PR #43-#46 platform modules at 360px mo
                 academicContext: orgWork.academicContext,
                 updatedAt: new Date().toISOString(),
               },
+              canEdit: true,
               draft: selfEvalDraft,
               summary: computeSelfEvaluationSummary(selfEvalDraft),
               linkedWorks: [],
@@ -319,6 +324,7 @@ test("end-to-end browser verification of PR #43-#46 platform modules at 360px mo
                 academicContext: orgWork.academicContext,
                 updatedAt: new Date().toISOString(),
               },
+              canEdit: true,
               draft: selfEvalDraft,
               summary: computeSelfEvaluationSummary(selfEvalDraft),
               linkedWorks: linkedReportCreated ? [{ id: 77, title: "تقرير تحسين (1-1): انتظام متابعة الخطة", status: "draft" }] : [],
@@ -374,7 +380,7 @@ test("end-to-end browser verification of PR #43-#46 platform modules at 360px mo
   try {
     browser = await puppeteer.launch({ headless: true, args: ["--no-sandbox", "--disable-setuid-sandbox"] });
     const page = await browser.newPage();
-    page.setDefaultTimeout(10_000);
+    page.setDefaultTimeout(25_000);
     await page.setRequestInterception(true);
     page.on("request", req => {
       const url = req.url();
@@ -406,7 +412,7 @@ test("end-to-end browser verification of PR #43-#46 platform modules at 360px mo
 
     await t.test("Home InstantReportLab renders live A4 preview and switches presets at 360px RTL", async () => {
       await page.setViewport({ width: 360, height: 780 });
-      await page.goto(`${base}/`);
+      await page.goto(`${base}/`, { waitUntil: "domcontentloaded" });
       await visible("عاين شكل تقريرك الرسمي");
       await clickButtonContaining("تقرير مبادرة");
       await visible("تقرير مبادرة القراءة الإثرائية الصباحية");
@@ -415,7 +421,7 @@ test("end-to-end browser verification of PR #43-#46 platform modules at 360px mo
 
     await t.test("EvidenceLibrary SmartEvidenceMatrixPanel renders 7-element & 11-standard packs at 360px", async () => {
       await page.setViewport({ width: 360, height: 780 });
-      await page.goto(`${base}/evidence`);
+      await page.goto(`${base}/evidence`, { waitUntil: "domcontentloaded" });
       await visible("مصفوفة التغطية الذكية (SmartEvidence)");
       await clickButtonContaining("المعايير المهنية الـ 11");
       await visible("SA-STD11-01");

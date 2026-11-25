@@ -491,6 +491,7 @@ export async function reassignReviewForUser(actorUserId: number, reviewId: numbe
       throw new ReviewConflictError("سبق تسجيل مراجعة لهذا العضو على نفس النسخة؛ اختر مراجعًا آخر أو أنشئ نسخة محدثة");
     }
 
+    const previousReviewerUserId = lockedReview.reviewerUserId;
     const updatedReview = await tx
       .update(reviews)
       .set({ reviewerUserId: newReviewerUserId })
@@ -499,15 +500,42 @@ export async function reassignReviewForUser(actorUserId: number, reviewId: numbe
       throw new ReviewConflictError("تغيرت حالة المراجعة أثناء إعادة التعيين");
     }
 
+    // Audit trail for who changed the approver of an institutional version (review finding M2).
+    await tx.insert(auditLogs).values({
+      actorUserId,
+      action: "review.reassigned",
+      resourceType: "review",
+      resourceId: String(reviewId),
+      metadata: {
+        organizationId: orgId,
+        workItemId: lockedWork.id,
+        workVersionId: lockedReview.workVersionId,
+        versionNumber: row.version.versionNumber,
+        fromReviewerUserId: previousReviewerUserId,
+        toReviewerUserId: newReviewerUserId,
+      },
+    });
+
+    // Stable dedupe keys; a repeated A→B→A→B cycle re-surfaces the same row instead of failing.
     await tx.insert(notifications).values({
       userId: newReviewerUserId,
       type: "review_requested",
-      dedupeKey: `review:${reviewId}:reassigned:${newReviewerUserId}:${Date.now()}`,
+      dedupeKey: `review:${reviewId}:reassigned-to:${newReviewerUserId}:from:${previousReviewerUserId}`,
       title: "تم تفويضك لمراجعة نسخة عمل مدرسي",
       body: `${lockedWork.title} — نسخة ${row.version.versionNumber}`,
       targetType: "review",
       targetId: String(reviewId),
-    });
+    }).onDuplicateKeyUpdate({ set: { readAt: null, createdAt: new Date() } });
+
+    await tx.insert(notifications).values({
+      userId: previousReviewerUserId,
+      type: "review_reassigned_away",
+      dedupeKey: `review:${reviewId}:reassigned-away:${previousReviewerUserId}:to:${newReviewerUserId}`,
+      title: "أُسندت مراجعة كانت لديك إلى مراجع آخر",
+      body: `${lockedWork.title} — نسخة ${row.version.versionNumber}`,
+      targetType: "work",
+      targetId: String(lockedWork.id),
+    }).onDuplicateKeyUpdate({ set: { readAt: null, createdAt: new Date() } });
 
     return reviewId;
   });

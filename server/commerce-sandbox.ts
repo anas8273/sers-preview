@@ -41,16 +41,30 @@ export interface PaymentProviderAdapter {
 
 /**
  * Constant-time HMAC-SHA256 webhook signature verifier for payment provider callbacks (`F15`).
+ * Accepts ONLY a raw `Buffer` (never a parsed/re-serialized JSON string) and supports
+ * optional replay-window timestamp validation (`timestampSeconds` signed as `${ts}.${rawBody}`).
  */
 export function verifyWebhookHmacSha256(
-  rawBody: Buffer | string,
+  rawBody: Buffer,
   webhookSecret: string,
   providedHexSignature: string,
+  options?: { timestampSeconds?: number; nowMs?: number; toleranceSeconds?: number },
 ): boolean {
-  if (!webhookSecret || !providedHexSignature) return false;
+  if (!Buffer.isBuffer(rawBody) || !webhookSecret || !providedHexSignature) return false;
   const normalizedSig = providedHexSignature.trim().replace(/^sha256=/i, "");
   if (!/^[0-9a-f]{64}$/i.test(normalizedSig)) return false;
-  const expected = createHmac("sha256", webhookSecret).update(rawBody).digest("hex");
+
+  let signedPayload: Buffer = rawBody;
+  if (options?.timestampSeconds !== undefined) {
+    const ts = options.timestampSeconds;
+    if (!Number.isSafeInteger(ts) || ts <= 0) return false;
+    const nowSeconds = Math.floor((options.nowMs ?? Date.now()) / 1000);
+    const tolerance = options.toleranceSeconds ?? 300;
+    if (Math.abs(nowSeconds - ts) > tolerance) return false;
+    signedPayload = Buffer.concat([Buffer.from(`${ts}.`, "utf8"), rawBody]);
+  }
+
+  const expected = createHmac("sha256", webhookSecret).update(signedPayload).digest("hex");
   const expectedBuf = Buffer.from(expected, "hex");
   const providedBuf = Buffer.from(normalizedSig, "hex");
   if (expectedBuf.length !== providedBuf.length) return false;

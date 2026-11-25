@@ -68,14 +68,19 @@ export default function SelfEvaluationPage() {
   const assetsQuery = trpc.domain.asset.list.useQuery(undefined, { retry: false });
   const cyclesQuery = trpc.domain.selfEvaluation.listCycles.useQuery(undefined, { retry: false });
 
+  const creatableOrgs = useMemo(
+    () => (orgsQuery.data ?? []).filter(org => org.role === "owner" || org.role === "admin"),
+    [orgsQuery.data],
+  );
+
   useEffect(() => {
     if (!orgsQuery.data) return;
-    if (orgsQuery.data.length === 0 && newOwnerType === "organization") {
+    if (creatableOrgs.length === 0 && newOwnerType === "organization") {
       setNewOwnerType("personal");
-    } else if (orgsQuery.data.length > 0 && !newOrgId) {
-      setNewOrgId(orgsQuery.data[0]!.id);
+    } else if (creatableOrgs.length > 0 && !newOrgId) {
+      setNewOrgId(creatableOrgs[0]!.id);
     }
-  }, [orgsQuery.data, newOwnerType, newOrgId]);
+  }, [orgsQuery.data, creatableOrgs, newOwnerType, newOrgId]);
 
   useEffect(() => {
     if (!selectedCycleId && cyclesQuery.data && cyclesQuery.data.length > 0) {
@@ -87,6 +92,7 @@ export default function SelfEvaluationPage() {
     { workItemId: selectedCycleId ?? 0 },
     { enabled: Boolean(selectedCycleId), retry: false },
   );
+  const canEdit = cycleQuery.data?.canEdit ?? false;
 
   useEffect(() => {
     if (!cycleQuery.data) return;
@@ -267,6 +273,12 @@ export default function SelfEvaluationPage() {
             {SELF_EVALUATION_FRAMEWORK_META.sourceNoteAr}
           </p>
 
+          {cycleQuery.data && !canEdit && (
+            <p role="status" className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs leading-6 text-slate-700">
+              عرض فقط: تعديل دورة التقويم الذاتي للمدرسة متاح لمالك المدرسة أو مديرها. يمكنك الاطلاع على التقديرات وخطة التحسين.
+            </p>
+          )}
+
           {(showCreateForm || (cyclesQuery.data && cyclesQuery.data.length === 0)) && (
             <section className="rounded-2xl border border-teal-200 bg-white p-5 shadow-sm sm:p-6">
               <h2 className="text-base font-bold text-slate-950">بدء دورة تقويم ذاتي وخطة تحسين</h2>
@@ -309,7 +321,7 @@ export default function SelfEvaluationPage() {
                     }}
                     className="mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-normal"
                   >
-                    {(orgsQuery.data?.length ?? 0) > 0 && <option value="organization">مساحة المدرسة (مؤسسي)</option>}
+                    {creatableOrgs.length > 0 && <option value="organization">مساحة المدرسة (مؤسسي)</option>}
                     <option value="personal">مساحتي الشخصية (إعداد فردي)</option>
                   </select>
                 </label>
@@ -328,7 +340,7 @@ export default function SelfEvaluationPage() {
                       className="mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-normal"
                     >
                       <option value="">اختر المدرسة</option>
-                      {(orgsQuery.data ?? []).map(org => (
+                      {creatableOrgs.map(org => (
                         <option key={org.id} value={org.id}>{org.name}</option>
                       ))}
                     </select>
@@ -422,7 +434,7 @@ export default function SelfEvaluationPage() {
                 <button
                   type="button"
                   onClick={handleSave}
-                  disabled={!dirty || saveCycleMutation.isPending}
+                  disabled={!canEdit || !dirty || saveCycleMutation.isPending}
                   className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-teal-700 px-5 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-teal-800 disabled:opacity-50"
                 >
                   {saveCycleMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
@@ -595,12 +607,13 @@ export default function SelfEvaluationPage() {
                                 <button
                                   key={lvl.level}
                                   type="button"
+                                  disabled={!canEdit}
                                   onClick={() =>
                                     updateAssessment(indicator.key, {
                                       level: selected ? null : lvl.level,
                                     })
                                   }
-                                  className={`min-h-11 rounded-xl border p-2.5 text-right text-xs transition ${
+                                  className={`min-h-11 rounded-xl border p-2.5 text-right text-xs transition disabled:cursor-not-allowed disabled:opacity-60 ${
                                     selected
                                       ? `${levelBadgeClasses[lvl.level]} font-bold shadow-sm`
                                       : "border-slate-200 bg-white text-slate-700 hover:border-slate-300"
@@ -623,10 +636,11 @@ export default function SelfEvaluationPage() {
                             مبررات التقدير الواقعية (إلزامي عند اختيار مستوى تحقيق — لا يُقبل التقييم بلا تعليل)
                             <textarea
                               rows={2}
+                              disabled={!canEdit}
                               value={current.rationale}
                               onChange={e => updateAssessment(indicator.key, { rationale: e.target.value })}
                               placeholder="اشرح الوقائع الفعلية ومؤشرات القياس التي استند إليها هذا التقدير..."
-                              className={`mt-1.5 w-full rounded-xl border bg-white px-3 py-2 text-sm font-normal ${
+                              className={`mt-1.5 w-full rounded-xl border bg-white px-3 py-2 text-sm font-normal disabled:bg-slate-50 disabled:text-slate-600 ${
                                 needsRationale ? "border-red-400" : "border-slate-200"
                               }`}
                             />
@@ -643,6 +657,7 @@ export default function SelfEvaluationPage() {
                           <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">
                             <select
                               aria-label={`ربط شاهد بالمؤشر ${indicator.code}`}
+                              disabled={!canEdit}
                               value=""
                               onChange={e => {
                                 const assetId = Number(e.target.value);
@@ -651,7 +666,7 @@ export default function SelfEvaluationPage() {
                                   evidenceAssetIds: [...current.evidenceAssetIds, assetId],
                                 });
                               }}
-                              className="min-h-10 w-full max-w-full truncate rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-700 sm:w-auto"
+                              className="min-h-10 w-full max-w-full truncate rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-700 disabled:opacity-50 sm:w-auto"
                             >
                               <option value="">+ إرفاق شاهد من المكتبة ({scopedAssets.length})</option>
                               {scopedAssets
@@ -671,18 +686,20 @@ export default function SelfEvaluationPage() {
                                 >
                                   <CheckCircle2 className="h-3 w-3 text-teal-700" />
                                   {asset?.title ?? `شاهد #${assetId}`}
-                                  <button
-                                    type="button"
-                                    aria-label={`إزالة الشاهد ${asset?.title ?? assetId}`}
-                                    onClick={() =>
-                                      updateAssessment(indicator.key, {
-                                        evidenceAssetIds: current.evidenceAssetIds.filter(id => id !== assetId),
-                                      })
-                                    }
-                                    className="mr-1 text-teal-700 hover:text-red-700"
-                                  >
-                                    ×
-                                  </button>
+                                  {canEdit && (
+                                    <button
+                                      type="button"
+                                      aria-label={`إزالة الشاهد ${asset?.title ?? assetId}`}
+                                      onClick={() =>
+                                        updateAssessment(indicator.key, {
+                                          evidenceAssetIds: current.evidenceAssetIds.filter(id => id !== assetId),
+                                        })
+                                      }
+                                      className="mr-1 text-teal-700 hover:text-red-700"
+                                    >
+                                      ×
+                                    </button>
+                                  )}
                                 </span>
                               );
                             })}
@@ -690,8 +707,9 @@ export default function SelfEvaluationPage() {
 
                           <button
                             type="button"
+                            disabled={!canEdit}
                             onClick={() => addImprovementAction(indicator.key)}
-                            className={`inline-flex min-h-10 items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-bold ${
+                            className={`inline-flex min-h-10 items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-bold disabled:opacity-50 ${
                               isGap
                                 ? "border-amber-300 bg-amber-50 text-amber-950 hover:bg-amber-100"
                                 : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
@@ -719,8 +737,9 @@ export default function SelfEvaluationPage() {
                   </div>
                   <button
                     type="button"
+                    disabled={!canEdit}
                     onClick={() => addImprovementAction(domainIndicators[0]?.key ?? "admin.planning")}
-                    className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-teal-200 bg-teal-50 px-4 py-2 text-xs font-bold text-teal-900 hover:bg-teal-100"
+                    className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-teal-200 bg-teal-50 px-4 py-2 text-xs font-bold text-teal-900 hover:bg-teal-100 disabled:opacity-50"
                   >
                     <Plus className="h-4 w-4" />
                     إضافة مبادرة أو إجراء تحسين
@@ -731,6 +750,7 @@ export default function SelfEvaluationPage() {
                   الملخص التنفيذي وأولويات التحسين للعام
                   <textarea
                     rows={3}
+                    disabled={!canEdit}
                     value={executiveSummary}
                     onChange={e => {
                       setDirty(true);
@@ -738,7 +758,7 @@ export default function SelfEvaluationPage() {
                       setExecutiveSummary(e.target.value);
                     }}
                     placeholder="لخّص أبرز نقاط القوة وأولويات التحسين المستخلصة من التقييم الذاتي..."
-                    className="mt-1.5 w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3 py-2.5 text-sm font-normal"
+                    className="mt-1.5 w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3 py-2.5 text-sm font-normal disabled:opacity-60"
                   />
                 </label>
 
@@ -759,9 +779,10 @@ export default function SelfEvaluationPage() {
                             <label className="min-w-0 text-xs font-bold text-slate-700">
                               المؤشر المرتبط
                               <select
+                                disabled={!canEdit}
                                 value={item.indicatorKey}
                                 onChange={e => updateAction(item.id, { indicatorKey: e.target.value })}
-                                className="mt-1 w-full min-w-0 max-w-full truncate rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-normal"
+                                className="mt-1 w-full min-w-0 max-w-full truncate rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-normal disabled:opacity-60"
                               >
                                 {SELF_EVALUATION_INDICATORS.map(ind => (
                                   <option key={ind.key} value={ind.key}>
@@ -773,10 +794,11 @@ export default function SelfEvaluationPage() {
                             <label className="min-w-0 text-xs font-bold text-slate-700">
                               المسؤول عن التنفيذ
                               <input
+                                disabled={!canEdit}
                                 value={item.ownerName}
                                 onChange={e => updateAction(item.id, { ownerName: e.target.value })}
                                 placeholder="مثال: وكيل الشؤون التعليمية / لجنة التميز"
-                                className="mt-1 w-full min-w-0 max-w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-normal"
+                                className="mt-1 w-full min-w-0 max-w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-normal disabled:opacity-60"
                               />
                             </label>
                             <div className="grid min-w-0 grid-cols-2 gap-2">
@@ -784,17 +806,19 @@ export default function SelfEvaluationPage() {
                                 تاريخ الاستحقاق
                                 <input
                                   type="date"
+                                  disabled={!canEdit}
                                   value={item.dueDate}
                                   onChange={e => updateAction(item.id, { dueDate: e.target.value })}
-                                  className="mt-1 w-full min-w-0 max-w-full rounded-xl border border-slate-200 bg-white px-2 py-2 text-xs font-normal"
+                                  className="mt-1 w-full min-w-0 max-w-full rounded-xl border border-slate-200 bg-white px-2 py-2 text-xs font-normal disabled:opacity-60"
                                 />
                               </label>
                               <label className="min-w-0 text-xs font-bold text-slate-700">
                                 الحالة
                                 <select
+                                  disabled={!canEdit}
                                   value={item.status}
                                   onChange={e => updateAction(item.id, { status: e.target.value as ImprovementActionStatus })}
-                                  className="mt-1 w-full min-w-0 max-w-full truncate rounded-xl border border-slate-200 bg-white px-2 py-2 text-xs font-normal"
+                                  className="mt-1 w-full min-w-0 max-w-full truncate rounded-xl border border-slate-200 bg-white px-2 py-2 text-xs font-normal disabled:opacity-60"
                                 >
                                   {(Object.keys(actionStatusLabels) as ImprovementActionStatus[]).map(st => (
                                     <option key={st} value={st}>{actionStatusLabels[st]}</option>
@@ -809,20 +833,22 @@ export default function SelfEvaluationPage() {
                               هدف التحسين (مطلوب)
                               <input
                                 required
+                                disabled={!canEdit}
                                 value={item.goal}
                                 onChange={e => updateAction(item.id, { goal: e.target.value })}
                                 placeholder="الهدف القابل للقياس..."
-                                className="mt-1 w-full min-w-0 max-w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-normal"
+                                className="mt-1 w-full min-w-0 max-w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-normal disabled:opacity-60"
                               />
                             </label>
-                            <label className="text-xs font-bold text-slate-700">
+                            <label className="min-w-0 text-xs font-bold text-slate-700">
                               الخطوات الإجرائية ومؤشر الإنجاز (مطلوب)
                               <input
                                 required
+                                disabled={!canEdit}
                                 value={item.action}
                                 onChange={e => updateAction(item.id, { action: e.target.value })}
                                 placeholder="البرنامج أو المبادرة أو الإجراء التطبيقي..."
-                                className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-normal"
+                                className="mt-1 w-full min-w-0 max-w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-normal disabled:opacity-60"
                               />
                             </label>
                           </div>
@@ -840,7 +866,7 @@ export default function SelfEvaluationPage() {
                             ) : (
                               <button
                                 type="button"
-                                disabled={dirty || createActionReportMutation.isPending || !selectedCycleId}
+                                disabled={!canEdit || dirty || createActionReportMutation.isPending || !selectedCycleId}
                                 onClick={() =>
                                   selectedCycleId &&
                                   createActionReportMutation.mutate({
@@ -857,14 +883,16 @@ export default function SelfEvaluationPage() {
                               </button>
                             )}
 
-                            <button
-                              type="button"
-                              onClick={() => removeAction(item.id)}
-                              className="inline-flex min-h-10 items-center gap-1 rounded-xl px-3 py-1.5 text-xs font-bold text-red-700 hover:bg-red-50"
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                              حذف الإجراء
-                            </button>
+                            {canEdit && (
+                              <button
+                                type="button"
+                                onClick={() => removeAction(item.id)}
+                                className="inline-flex min-h-10 items-center gap-1 rounded-xl px-3 py-1.5 text-xs font-bold text-red-700 hover:bg-red-50"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                                حذف الإجراء
+                              </button>
+                            )}
                           </div>
                         </div>
                       );
@@ -882,7 +910,7 @@ export default function SelfEvaluationPage() {
                   <button
                     type="button"
                     onClick={handleSave}
-                    disabled={!dirty || saveCycleMutation.isPending}
+                    disabled={!canEdit || !dirty || saveCycleMutation.isPending}
                     className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-teal-700 px-6 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-teal-800 disabled:opacity-50"
                   >
                     {saveCycleMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
