@@ -3,43 +3,62 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
+  classifyAccreditationBand,
   computeSelfEvaluationSummary,
+  getApplicableIndicators,
+  LEGACY_V1_INDICATOR_KEY_MAP,
   normalizeSelfEvaluationDraft,
   SELF_EVALUATION_DOMAINS,
   SELF_EVALUATION_FRAMEWORK_ID,
   SELF_EVALUATION_FRAMEWORK_META,
   SELF_EVALUATION_INDICATORS,
+  SELF_EVALUATION_STANDARDS,
   SelfEvaluationValidationError,
 } from "../shared/self-evaluation";
+import { OFFICIAL_SAUDI_STANDARD_SEEDS } from "../shared/saudi-standards-packs";
 import { normalizeReportDraft } from "../shared/report-projection";
 import { sanitizeCopiedDraftForPersonalScope, WorkCopyValidationError } from "./domain-db";
 import { evaluateReviewReassignEligibility } from "./review-output-db";
 import { buildSanitizedAccountExportBundle } from "./account-db";
 import { getCommerceProviderStatus, verifyWebhookHmacSha256 } from "./commerce-sandbox";
 
-describe("R09 / O009 (OPEN): guided School Self-Evaluation & Improvement Plan engine", () => {
-  it("is explicitly labelled unofficial, claims no official weights, and defines 4 domains x 3 guided indicators", () => {
-    expect(SELF_EVALUATION_FRAMEWORK_META.status).toBe("guided_unofficial");
-    expect(SELF_EVALUATION_FRAMEWORK_META.pendingDecision).toBe("O009");
-    expect(SELF_EVALUATION_FRAMEWORK_ID).not.toMatch(/etec/i);
+describe("R09 / O009 (ACCEPTED): Official ETEC («تميز») School Self-Evaluation & Improvement Plan engine", () => {
+  it("defines the 4 official ETEC domains (25/35/25/15 = 100%), 10 standards, 48 gov indicators, and 51 private/international indicators", () => {
+    expect(SELF_EVALUATION_FRAMEWORK_ID).toBe("etec-school-accreditation-2026-v2");
+    expect(SELF_EVALUATION_FRAMEWORK_META.status).toBe("etec_aligned");
+    expect(SELF_EVALUATION_FRAMEWORK_META.sourceNoteAr).toContain("منصة «تميز»");
+
     expect(SELF_EVALUATION_DOMAINS).toHaveLength(4);
-    for (const domain of SELF_EVALUATION_DOMAINS) {
-      expect(domain).not.toHaveProperty("weightPercent");
-    }
-    expect(SELF_EVALUATION_INDICATORS).toHaveLength(12);
-    for (const domain of SELF_EVALUATION_DOMAINS) {
-      expect(SELF_EVALUATION_INDICATORS.filter(i => i.domainKey === domain.key)).toHaveLength(3);
-    }
+    const domainWeights = SELF_EVALUATION_DOMAINS.map(d => d.weightPercent);
+    expect(domainWeights).toEqual([25, 35, 25, 15]);
+    expect(domainWeights.reduce((acc, w) => acc + w, 0)).toBe(100);
+
+    expect(SELF_EVALUATION_STANDARDS).toHaveLength(10);
+    expect(SELF_EVALUATION_INDICATORS).toHaveLength(51);
+    expect(getApplicableIndicators("government")).toHaveLength(48);
+    expect(getApplicableIndicators("private_international")).toHaveLength(51);
+
+    // 3 private-only institutional governance/licensing indicators under 1-4
+    const privateOnly = SELF_EVALUATION_INDICATORS.filter(i => i.applicableTo === "private_only");
+    expect(privateOnly.map(i => i.code)).toEqual(["1-4-1-1", "1-4-1-2", "1-4-1-3"]);
+
+    // Official ETEC 10-standard pack also registered in SmartEvidence standards seeds
+    // without inventing unendorsed per-standard sub-weights (domain weights live on domainLabel)
+    const etecStandardsPack = OFFICIAL_SAUDI_STANDARD_SEEDS.filter(
+      s => s.packId === "etec-school-accreditation-10",
+    );
+    expect(etecStandardsPack).toHaveLength(10);
+    expect(etecStandardsPack.every(s => s.weightPercent === undefined)).toBe(true);
   });
 
-  it("rejects rated indicators lacking mandatory factual rationale in strict mode", () => {
+  it("rejects rated indicators lacking mandatory factual rationale in strict mode, while clearing incomplete private-only ratings when switched to government", () => {
     expect(() =>
       normalizeSelfEvaluationDraft(
         {
           revision: 1,
           assessments: {
-            "admin.planning": {
-              indicatorKey: "admin.planning",
+            "1-1-1-1": {
+              indicatorKey: "1-1-1-1",
               level: 3,
               rationale: "   ",
               evidenceAssetIds: [],
@@ -50,30 +69,61 @@ describe("R09 / O009 (OPEN): guided School Self-Evaluation & Improvement Plan en
         { strictValidation: true },
       ),
     ).toThrow(SelfEvaluationValidationError);
+
+    // Incomplete private-only indicator does not block saving after switching to government:
+    const switchedToGov = normalizeSelfEvaluationDraft(
+      {
+        revision: 2,
+        schoolCategory: "government",
+        assessments: {
+          "1-4-1-1": {
+            indicatorKey: "1-4-1-1",
+            level: 2,
+            rationale: "",
+            evidenceAssetIds: [],
+          },
+        },
+        improvementActions: [],
+      },
+      { strictValidation: true },
+    );
+    expect(switchedToGov.assessments["1-4-1-1"]?.level).toBeNull();
   });
 
-  it("computes domain averages, unweighted readiness %, and uncovered priority gaps (levels 1-2)", () => {
+  it("migrates legacy v1 guided keys losslessly and computes ETEC domain-weighted readiness & accreditation bands", () => {
+    expect(Object.keys(LEGACY_V1_INDICATOR_KEY_MAP)).toHaveLength(12);
+
     const draft = normalizeSelfEvaluationDraft(
       {
         revision: 2,
-        executiveSummary: "تركيز التحسين على نواتج التعلم والتخطيط التشغيلي.",
+        schoolCategory: "government",
+        executiveSummary: "تركيز التحسين على نواتج التعلم والتخطيط التشغيلي وفق مؤشرات تميز.",
+        committeeMembers: [
+          {
+            id: "mem-1",
+            userId: 12,
+            name: "أ. خالد العتيبي",
+            roleTitle: "رئيس فريق التقويم الذاتي",
+            assignedDomainKey: "all",
+          },
+        ],
         assessments: {
           "admin.planning": {
             indicatorKey: "admin.planning",
             level: 2,
-            rationale: "توجد خطة تشغيلية أولية لكن متابعة المؤشرات الشهرية غير مكتملة.",
+            rationale: "توجد خطة تشغيلية مكتملة العناصر وتجري متابعة مؤشراتها شهريًا.",
             evidenceAssetIds: [10, 10, 12],
           },
           "outcomes.achievement": {
             indicatorKey: "outcomes.achievement",
             level: 1,
-            rationale: "نتائج الاختبارات التشخيصية تظهر حاجة ماسة لخطة علاجية في المهارات الأساسية.",
+            rationale: "نتائج الاختبارات الوطنية (نافس) في القراءة تظهر حاجة لخطة علاجية مركزة.",
             evidenceAssetIds: [],
           },
           "teaching.planning": {
             indicatorKey: "teaching.planning",
             level: 4,
-            rationale: "تطبيق منتظم لاستراتيجيات التعلم النشط ومراعاة الفروق الفردية بشواهد موثقة.",
+            rationale: "تنويع منتظم لاستراتيجيات التدريس وفق خصائص المتعلمين بشواهد موثقة.",
             evidenceAssetIds: [15],
           },
         },
@@ -93,15 +143,39 @@ describe("R09 / O009 (OPEN): guided School Self-Evaluation & Improvement Plan en
       { strictValidation: true },
     );
 
+    expect(draft.schemaVersion).toBe(2);
     expect(draft.frameworkId).toBe(SELF_EVALUATION_FRAMEWORK_ID);
-    expect(draft.assessments["admin.planning"]?.evidenceAssetIds).toEqual([10, 12]);
+    expect(draft.committeeMembers).toHaveLength(1);
+    expect(draft.committeeMembers[0]?.name).toBe("أ. خالد العتيبي");
+    // Legacy v1 keys transparently remapped to official ETEC procedural codes:
+    expect(draft.assessments["1-1-1-1"]?.evidenceAssetIds).toEqual([10, 12]);
+    expect(draft.assessments["3-1-1-1"]?.level).toBe(1);
+    expect(draft.assessments["2-1-1-3"]?.level).toBe(4);
+    expect(draft.improvementActions[0]?.indicatorKey).toBe("1-1-1-1");
 
     const summary = computeSelfEvaluationSummary(draft);
+    expect(summary.schoolCategory).toBe("government");
     expect(summary.ratedIndicators).toBe(3);
-    expect(summary.totalIndicators).toBe(12);
-    expect(summary.gapIndicatorKeys).toEqual(["admin.planning", "outcomes.achievement"]);
-    // admin.planning is covered by act-1; outcomes.achievement has no action yet!
-    expect(summary.uncoveredGapIndicatorKeys).toEqual(["outcomes.achievement"]);
+    expect(summary.totalIndicators).toBe(48);
+    expect(summary.gapIndicatorKeys).toEqual(["1-1-1-1", "3-1-1-1"]);
+    // 1-1-1-1 is covered by act-1; 3-1-1-1 has no action yet!
+    expect(summary.uncoveredGapIndicatorKeys).toEqual(["3-1-1-1"]);
+
+    // Weighted calculation across the 3 rated domains:
+    // admin (weight 25): level 2 -> 50%
+    // teaching_learning (weight 35): level 4 -> 100%
+    // learning_outcomes (weight 25): level 1 -> 25%
+    // Weighted average across active rated weight (25+35+25=85):
+    // (50*25 + 100*35 + 25*25) / 85 = (1250 + 3500 + 625) / 85 = 5375 / 85 ≈ 63% -> الانطلاق
+    expect(summary.overallReadinessPercent).toBe(63);
+    expect(summary.accreditationBandLabel).toBe("الانطلاق");
+
+    expect(classifyAccreditationBand(null)).toBeNull();
+    expect(classifyAccreditationBand(49)).toBe("التهيئة");
+    expect(classifyAccreditationBand(50)).toBe("الانطلاق");
+    expect(classifyAccreditationBand(75)).toBe("التقدم");
+    expect(classifyAccreditationBand(90)).toBe("التميز");
+
     expect(summary.actionCounts).toEqual({
       total: 1,
       planned: 0,
@@ -144,7 +218,6 @@ describe("O002: Pending Review Reassignment & Delegation policy", () => {
   });
 
   it("blocks self-review reassignment (BR01), non-pending reviews, suspended targets, and unauthorized members", () => {
-    // Prevent assigning version creator / requester as reviewer even when admin reassigns
     const selfReviewAttempt = evaluateReviewReassignEligibility({
       reviewStatus: "pending",
       actorUserId: 99,
@@ -159,7 +232,6 @@ describe("O002: Pending Review Reassignment & Delegation policy", () => {
     expect(selfReviewAttempt.ok).toBe(false);
     if (!selfReviewAttempt.ok) expect(selfReviewAttempt.code).toBe("bad_request");
 
-    // Non-pending review cannot be reassigned
     const decidedAttempt = evaluateReviewReassignEligibility({
       reviewStatus: "approved",
       actorUserId: 99,
@@ -173,7 +245,6 @@ describe("O002: Pending Review Reassignment & Delegation policy", () => {
     });
     expect(decidedAttempt).toMatchObject({ ok: false, code: "conflict" });
 
-    // Unrelated ordinary member cannot reassign someone else's review
     const unrelatedMemberAttempt = evaluateReviewReassignEligibility({
       reviewStatus: "pending",
       actorUserId: 55,
@@ -187,7 +258,6 @@ describe("O002: Pending Review Reassignment & Delegation policy", () => {
     });
     expect(unrelatedMemberAttempt).toMatchObject({ ok: false, code: "forbidden" });
 
-    // Suspended or non-reviewer target rejected
     const suspendedTargetAttempt = evaluateReviewReassignEligibility({
       reviewStatus: "pending",
       actorUserId: 99,
@@ -240,7 +310,6 @@ describe("O003: Educator Work Copy-to-Personal tenant isolation", () => {
       version: "1",
       reportPreparer: "أ. سارة القحطاني",
     });
-    // Must re-normalize cleanly as a v2 report draft on subsequent edits!
     const roundTrip = normalizeReportDraft(sanitized?.data);
     expect(roundTrip.schemaVersion).toBe(2);
     expect(roundTrip.reportIdentity?.schoolName).toBeUndefined();
@@ -259,7 +328,6 @@ describe("O003: Educator Work Copy-to-Personal tenant isolation", () => {
     expect(sanitized?.data.introduction).toBe("مقدمة ملف الإنجاز المهني");
     expect(sanitized?.data.entries).toEqual([]);
 
-    // Oversized/invalid portfolio draft maps cleanly to WorkCopyValidationError (L8)
     expect(() =>
       sanitizeCopiedDraftForPersonalScope("portfolio", {
         schemaVersion: 1,
@@ -272,7 +340,7 @@ describe("O003: Educator Work Copy-to-Personal tenant isolation", () => {
 });
 
 describe("R18 & O001: Personal Account Data Export redaction & Payment Provider safety", () => {
-  it("exports personal-owned data while redacting openId, private storageKey, and unsafe URLs", () => {
+  it("exports personal-owned data while redacting openId, private storageKey, schoolLogoPng, and unsafe URLs", () => {
     const bundle = buildSanitizedAccountExportBundle({
       exportedAt: "2026-11-25T00:00:00.000Z",
       user: {
@@ -300,7 +368,17 @@ describe("R18 & O001: Personal Account Data Export redaction & Payment Provider 
           status: "draft",
           currentVersionNumber: 1,
           academicContext: null,
-          blocks: [{ blockType: "report_document", sortOrder: 0, data: { schemaVersion: 2 } }],
+          linkedAssetIds: [100],
+          blocks: [
+            {
+              blockType: "report_document",
+              sortOrder: 0,
+              data: {
+                schemaVersion: 2,
+                reportIdentity: { schoolName: "مدرستي", schoolLogoPng: "BASE64_LOGO_SECRET" },
+              },
+            },
+          ],
         },
       ],
       assets: [
@@ -323,8 +401,10 @@ describe("R18 & O001: Personal Account Data Export redaction & Payment Provider 
     expect(serialized).not.toContain("private/uploads/7/secret-path.pdf");
     expect(serialized).not.toContain("javascript:alert");
     expect(serialized).not.toContain("internalSecret");
+    expect(serialized).not.toContain("BASE64_LOGO_SECRET");
     expect(bundle.scopePolicy).toBe("personal_owned_only");
     expect(bundle.personalWorks).toHaveLength(1);
+    expect(bundle.personalWorks[0]?.linkedAssetIds).toEqual([100]);
     expect(bundle.personalAssets[0]?.linkedStandards[0]?.standardKey).toBe("teacher-1");
   });
 
@@ -337,9 +417,8 @@ describe("R18 & O001: Personal Account Data Export redaction & Payment Provider 
     expect(verifyWebhookHmacSha256(payload, secret, `sha256=${validSig}`)).toBe(true);
     expect(verifyWebhookHmacSha256(payload, secret, "0".repeat(64))).toBe(false);
     expect(verifyWebhookHmacSha256(payload, "wrong_secret", validSig)).toBe(false);
-    // Rejects non-Buffer payloads so re-serialized JSON strings cannot bypass raw-body checks
     expect(verifyWebhookHmacSha256(payload.toString("utf8") as unknown as Buffer, secret, validSig)).toBe(false);
-    // Enforces replay-window tolerance when timestampSeconds is required
+
     const ts = 1_764_000_000;
     const tsSig = createHmac("sha256", secret)
       .update(Buffer.concat([Buffer.from(`${ts}.`, "utf8"), payload]))

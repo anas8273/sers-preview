@@ -101,6 +101,7 @@ export default function AccountHub() {
   const activeGender = normalizeEducatorGender(personalInfo.gender);
   const activeRoleKey = normalizeEducatorRoleKey(personalInfo.roleKey);
   const [profileSavedNotice, setProfileSavedNotice] = useState(false);
+  const [exportSavedNotice, setExportSavedNotice] = useState(false);
   const refresh = async () => { await Promise.all([utils.account.overview.invalidate(), utils.domain.organization.listMine.invalidate(), utils.account.academicYears.invalidate()]); };
   const createSchool = trpc.account.createSchool.useMutation({ onSuccess: async () => { setSchoolName(""); await refresh(); } });
   const accept = trpc.account.acceptInvitation.useMutation({ onSuccess: refresh });
@@ -116,7 +117,9 @@ export default function AccountHub() {
       document.body.appendChild(anchor);
       anchor.click();
       document.body.removeChild(anchor);
-      URL.revokeObjectURL(url);
+      // Defer revocation so Safari/Firefox finish streaming the Blob download cleanly
+      window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+      setExportSavedNotice(true);
     },
   });
   const manageable = overview.data?.schools.filter(s => s.status === "active" && ["owner", "admin"].includes(s.role)) ?? [];
@@ -169,13 +172,19 @@ export default function AccountHub() {
             <button
               type="button"
               disabled={exportMyData.isPending}
-              onClick={() => exportMyData.mutate()}
+              onClick={() => {
+                setExportSavedNotice(false);
+                exportMyData.mutate();
+              }}
               className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-teal-200 bg-teal-50 px-4 py-2 text-xs font-bold text-teal-900 hover:bg-teal-100 disabled:opacity-50"
             >
               {exportMyData.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
               تصدير نسخة كاملة من بياناتي الشخصية (JSON)
             </button>
           </div>
+          {exportSavedNotice && !exportMyData.error && (
+            <p role="status" className="mt-2 text-xs font-semibold text-teal-800">تم تجهيز وتنزيل حزمة بياناتك الشخصية (JSON) بنجاح.</p>
+          )}
           {exportMyData.error && <p role="alert" className="mt-2 text-xs text-red-700">{exportMyData.error.message}</p>}
         </section>
       )}

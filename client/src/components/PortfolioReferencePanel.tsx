@@ -7,6 +7,7 @@ type PortfolioReferencePanelProps = {
   workId: number;
   ownerType: string;
   ownerOrganizationId: number | null;
+  canWrite?: boolean;
 };
 
 const readinessStyle = {
@@ -19,6 +20,7 @@ export default function PortfolioReferencePanel({
   workId,
   ownerType,
   ownerOrganizationId,
+  canWrite = true,
 }: PortfolioReferencePanelProps) {
   const utils = trpc.useUtils();
   const draftQuery = trpc.domain.portfolioDraft.get.useQuery({ workItemId: workId }, { retry: false });
@@ -35,6 +37,13 @@ export default function PortfolioReferencePanel({
   const [newSectionTitle, setNewSectionTitle] = useState("الأعمال والتقارير");
   const [versionReason, setVersionReason] = useState("");
   const [statusMessage, setStatusMessage] = useState<string | undefined>();
+
+  useEffect(() => {
+    setDirty(false);
+    setStatusMessage(undefined);
+    setNewRefId(undefined);
+    setVersionReason("");
+  }, [workId]);
 
   useEffect(() => {
     if (draftQuery.data && !dirty) {
@@ -176,55 +185,58 @@ export default function PortfolioReferencePanel({
         <textarea
           rows={3}
           maxLength={5000}
+          disabled={!canWrite}
           value={introduction}
           onChange={event => { setIntroduction(event.target.value); setDirty(true); }}
           placeholder="ملخص تعريفي لملف الإنجاز والفترة المستهدفة..."
-          className="mt-2 w-full resize-y rounded-xl border border-slate-200 px-3 py-2.5 text-sm font-normal outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
+          className="mt-2 w-full resize-y rounded-xl border border-slate-200 px-3 py-2.5 text-sm font-normal outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100 disabled:opacity-60"
         />
       </label>
 
-      <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50/70 p-3.5">
-        <p className="text-xs font-bold text-slate-800">إضافة مرجع (عمل أو شاهد من نفس المساحة)</p>
-        <div className="mt-2.5 grid gap-2 sm:grid-cols-3">
-          <select
-            aria-label="نوع المرجع"
-            value={newKind}
-            onChange={event => { setNewKind(event.target.value as "work" | "asset"); setNewRefId(undefined); }}
-            className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs"
+      {canWrite && (
+        <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50/70 p-3.5">
+          <p className="text-xs font-bold text-slate-800">إضافة مرجع (عمل أو شاهد من نفس المساحة)</p>
+          <div className="mt-2.5 grid gap-2 sm:grid-cols-3">
+            <select
+              aria-label="نوع المرجع"
+              value={newKind}
+              onChange={event => { setNewKind(event.target.value as "work" | "asset"); setNewRefId(undefined); }}
+              className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs"
+            >
+              <option value="work">تقرير محفوظ</option>
+              <option value="asset">شاهد من المكتبة</option>
+            </select>
+            <select
+              aria-label="اختيار المرجع"
+              value={newRefId ?? ""}
+              onChange={event => setNewRefId(Number(event.target.value) || undefined)}
+              className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs"
+            >
+              <option value="">{newKind === "work" ? "اختر تقريرًا" : "اختر شاهدًا"}</option>
+              {newKind === "work"
+                ? sameScopeWorks.map(work => <option key={work.id} value={work.id}>{work.title}</option>)
+                : sameScopeAssets.map(asset => <option key={asset.id} value={asset.id}>{asset.title}</option>)}
+            </select>
+            <input
+              type="text"
+              aria-label="عنوان القسم"
+              value={newSectionTitle}
+              maxLength={128}
+              onChange={event => setNewSectionTitle(event.target.value)}
+              placeholder="عنوان القسم"
+              className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs"
+            />
+          </div>
+          <button
+            type="button"
+            onClick={addEntry}
+            disabled={!newRefId || !newSectionTitle.trim()}
+            className="mt-2.5 inline-flex min-h-11 items-center gap-1.5 rounded-xl border border-teal-300 bg-white px-3.5 py-2 text-xs font-bold text-teal-800 hover:bg-teal-50 disabled:opacity-50"
           >
-            <option value="work">تقرير محفوظ</option>
-            <option value="asset">شاهد من المكتبة</option>
-          </select>
-          <select
-            aria-label="اختيار المرجع"
-            value={newRefId ?? ""}
-            onChange={event => setNewRefId(Number(event.target.value) || undefined)}
-            className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs"
-          >
-            <option value="">{newKind === "work" ? "اختر تقريرًا" : "اختر شاهدًا"}</option>
-            {newKind === "work"
-              ? sameScopeWorks.map(work => <option key={work.id} value={work.id}>{work.title}</option>)
-              : sameScopeAssets.map(asset => <option key={asset.id} value={asset.id}>{asset.title}</option>)}
-          </select>
-          <input
-            type="text"
-            aria-label="عنوان القسم"
-            value={newSectionTitle}
-            maxLength={128}
-            onChange={event => setNewSectionTitle(event.target.value)}
-            placeholder="عنوان القسم"
-            className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs"
-          />
+            <Plus className="h-4 w-4" /> إضافة إلى ملف الإنجاز
+          </button>
         </div>
-        <button
-          type="button"
-          onClick={addEntry}
-          disabled={!newRefId || !newSectionTitle.trim()}
-          className="mt-2.5 inline-flex min-h-11 items-center gap-1.5 rounded-xl border border-teal-300 bg-white px-3.5 py-2 text-xs font-bold text-teal-800 hover:bg-teal-50 disabled:opacity-50"
-        >
-          <Plus className="h-4 w-4" /> إضافة إلى ملف الإنجاز
-        </button>
-      </div>
+      )}
 
       {entries.length > 0 && (
         <ul className="mt-4 space-y-2">
@@ -238,50 +250,56 @@ export default function PortfolioReferencePanel({
                   {entry.sectionTitle} · {entry.kind === "work" ? "تقرير مرجعي" : "شاهد مرجعي"}
                 </span>
               </div>
-              <button
-                type="button"
-                onClick={() => removeEntry(entry.id)}
-                aria-label={`إزالة ${titleByRef.get(`${entry.kind}:${entry.refId}`) ?? entry.refId}`}
-                className="inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-lg text-slate-600 hover:bg-red-50 hover:text-red-700"
-              >
-                <Trash2 className="h-4 w-4" />
-              </button>
+              {canWrite && (
+                <button
+                  type="button"
+                  onClick={() => removeEntry(entry.id)}
+                  aria-label={`إزالة ${titleByRef.get(`${entry.kind}:${entry.refId}`) ?? entry.refId}`}
+                  className="inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-lg text-slate-600 hover:bg-red-50 hover:text-red-700"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              )}
             </li>
           ))}
         </ul>
       )}
 
-      <div className="mt-4 flex flex-wrap gap-2">
-        <button
-          type="button"
-          onClick={handleSave}
-          disabled={!dirty || saveMutation.isPending}
-          className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-xs font-bold text-white hover:bg-slate-800 disabled:opacity-50"
-        >
-          {saveMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-          حفظ المسودة المرجعية
-        </button>
-      </div>
+      {canWrite && (
+        <>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={!dirty || saveMutation.isPending}
+              className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-xs font-bold text-white hover:bg-slate-800 disabled:opacity-50"
+            >
+              {saveMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+              حفظ المسودة المرجعية
+            </button>
+          </div>
 
-      <div className="mt-4 border-t border-slate-100 pt-4">
-        <input
-          type="text"
-          value={versionReason}
-          onChange={event => setVersionReason(event.target.value)}
-          maxLength={255}
-          placeholder="سبب تثبيت النسخة (اختياري)"
-          className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs"
-        />
-        <button
-          type="button"
-          onClick={() => void handleCreateVersion().catch(() => undefined)}
-          disabled={entries.length === 0 || saveMutation.isPending || createVersionMutation.isPending}
-          className="mt-2.5 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-teal-700 px-4 py-2.5 text-sm font-bold text-white hover:bg-teal-800 disabled:opacity-50"
-        >
-          {createVersionMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileCheck2 className="h-4 w-4" />}
-          تثبيت نسخة ملف الإنجاز
-        </button>
-      </div>
+          <div className="mt-4 border-t border-slate-100 pt-4">
+            <input
+              type="text"
+              value={versionReason}
+              onChange={event => setVersionReason(event.target.value)}
+              maxLength={255}
+              placeholder="سبب تثبيت النسخة (اختياري)"
+              className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs"
+            />
+            <button
+              type="button"
+              onClick={() => void handleCreateVersion().catch(() => undefined)}
+              disabled={entries.length === 0 || saveMutation.isPending || createVersionMutation.isPending}
+              className="mt-2.5 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-teal-700 px-4 py-2.5 text-sm font-bold text-white hover:bg-teal-800 disabled:opacity-50"
+            >
+              {createVersionMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileCheck2 className="h-4 w-4" />}
+              تثبيت نسخة ملف الإنجاز
+            </button>
+          </div>
+        </>
+      )}
 
       {statusMessage && <p role="status" className="mt-3 rounded-xl bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-800">{statusMessage}</p>}
       {(saveMutation.error || createVersionMutation.error) && (

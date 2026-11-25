@@ -50,6 +50,7 @@ export default function WorkDetail() {
     { id: workId },
     { enabled: validWorkId, retry: false },
   );
+  const isSelfEvaluationWork = workQuery.data?.metadata?.module === "self_evaluation";
   const yearsQuery = trpc.account.academicYears.useQuery(undefined, { retry: false });
   const assetsQuery = trpc.domain.asset.list.useQuery(undefined, { retry: false });
   const versionsQuery = trpc.reviewSupport.versions.useQuery(
@@ -62,7 +63,10 @@ export default function WorkDetail() {
   );
   const portfolioDraftQuery = trpc.domain.portfolioDraft.get.useQuery(
     { workItemId: workId },
-    { enabled: validWorkId && workQuery.data?.type === "portfolio", retry: false },
+    {
+      enabled: validWorkId && workQuery.data?.type === "portfolio" && !isSelfEvaluationWork,
+      retry: false,
+    },
   );
   const firstAssetId = workQuery.data?.assets[0]?.id;
   const firstAssetStandardsQuery = trpc.domain.standards.listForAsset.useQuery(
@@ -116,14 +120,35 @@ export default function WorkDetail() {
     },
   });
 
+  useEffect(() => {
+    setSelectedAssetId(undefined);
+    setSelectedVersionId(undefined);
+    setSelectedReviewerId(undefined);
+    setYearSavedNotice(false);
+    linkAsset.reset();
+    unlinkAsset.reset();
+    updateWork.reset();
+    requestReview.reset();
+    copyToPersonal.reset();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workId]);
+
   const linkedIds = useMemo(
     () => new Set((workQuery.data?.assets ?? []).map(asset => asset.id)),
     [workQuery.data?.assets],
   );
-  const availableAssets = useMemo(
-    () => (assetsQuery.data ?? []).filter(asset => !linkedIds.has(asset.id)),
-    [assetsQuery.data, linkedIds],
-  );
+  const availableAssets = useMemo(() => {
+    const work = workQuery.data;
+    if (!work) return [];
+    return (assetsQuery.data ?? []).filter(asset => {
+      if (linkedIds.has(asset.id)) return false;
+      return work.ownerType === "personal"
+        ? asset.ownerType === "personal"
+        : asset.ownerType === "organization" &&
+            asset.ownerOrganizationId === work.ownerOrganizationId;
+    });
+  }, [assetsQuery.data, linkedIds, workQuery.data]);
+
   const versions = versionsQuery.data ?? [];
   const reviewers = reviewersQuery.data ?? [];
   const scopeYears = useMemo(
@@ -140,7 +165,7 @@ export default function WorkDetail() {
   );
   const readiness = useMemo(() => {
     const work = workQuery.data;
-    if (!work) return undefined;
+    if (!work || work.metadata?.module === "self_evaluation") return undefined;
     const hasReportFields = Object.values(reportDraftQuery.data?.draft.fields ?? {}).some(value =>
       typeof value === "string"
         ? value.trim().length > 0
@@ -189,7 +214,7 @@ export default function WorkDetail() {
   }
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] pb-20 lg:pb-0" dir="rtl">
+    <div className="min-h-screen bg-[#F8FAFC] pb-24 lg:pb-10" dir="rtl">
       <AppSidebar currentPath={location} />
       <main className="lg:mr-72">
         <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 sm:py-10">
@@ -235,8 +260,8 @@ export default function WorkDetail() {
                     </div>
                   </div>
                   <div className="flex flex-col gap-3 sm:items-end">
-                    {workQuery.data.metadata?.module === "self_evaluation" && (
-                      <button type="button" onClick={() => setLocation("/self-evaluation")} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-teal-700 px-5 py-3 text-sm font-bold text-white shadow-sm hover:bg-teal-800">
+                    {isSelfEvaluationWork && (
+                      <button type="button" onClick={() => setLocation(`/self-evaluation?cycleId=${workId}`)} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-teal-700 px-5 py-3 text-sm font-bold text-white shadow-sm hover:bg-teal-800">
                         <ClipboardCheck className="h-4 w-4" /> فتح في وحدة التقويم الذاتي
                       </button>
                     )}
@@ -245,17 +270,20 @@ export default function WorkDetail() {
                         <PencilLine className="h-4 w-4" /> فتح محرر التقرير
                       </button>
                     )}
-                    {workQuery.data.ownerType === "organization" && workQuery.data.viewerIsCreator && workQuery.data.metadata?.module !== "self_evaluation" && (
-                      <button
-                        type="button"
-                        disabled={copyToPersonal.isPending}
-                        onClick={() => copyToPersonal.mutate({ id: workId })}
-                        className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-teal-200 bg-white px-4 py-2.5 text-xs font-bold text-teal-900 shadow-sm hover:bg-teal-50 disabled:opacity-50"
-                      >
-                        {copyToPersonal.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Copy className="h-4 w-4" />}
-                        نسخ الهيكل لمساحتي الشخصية
-                      </button>
-                    )}
+                    {workQuery.data.ownerType === "organization" &&
+                      workQuery.data.viewerIsCreator &&
+                      workQuery.data.viewerCanWrite &&
+                      !isSelfEvaluationWork && (
+                        <button
+                          type="button"
+                          disabled={copyToPersonal.isPending}
+                          onClick={() => copyToPersonal.mutate({ id: workId })}
+                          className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-teal-200 bg-white px-4 py-2.5 text-xs font-bold text-teal-900 shadow-sm hover:bg-teal-50 disabled:opacity-50"
+                        >
+                          {copyToPersonal.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Copy className="h-4 w-4" />}
+                          نسخ الهيكل لمساحتي الشخصية
+                        </button>
+                      )}
                     {copyToPersonal.error && (
                       <p role="alert" className="text-xs text-red-700">{copyToPersonal.error.message}</p>
                     )}
@@ -274,22 +302,34 @@ export default function WorkDetail() {
                     <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-bold text-slate-700">{workQuery.data.assets.length} شاهد</span>
                   </div>
 
-                  {workQuery.data.metadata?.module === "self_evaluation" ? (
+                  {isSelfEvaluationWork ? (
                     <p className="mt-4 rounded-xl border border-teal-100 bg-teal-50/70 px-4 py-3 text-xs leading-6 text-teal-950">
                       ترتبط الشواهد في دورات التقويم الذاتي مباشرةً بكل مؤشر داخل صفحة التقويم الذاتي لضمان وضوح المبررات الواقعية لكل تقدير.
                     </p>
                   ) : (
                     <>
                       <div className="mt-4 flex flex-col gap-2 sm:flex-row">
-                        <select aria-label="اختر شاهدًا من المكتبة" value={selectedAssetId ?? ""} onChange={event => setSelectedAssetId(Number(event.target.value) || undefined)} className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm">
+                        <select
+                          aria-label="اختر شاهدًا من المكتبة"
+                          disabled={!workQuery.data.viewerCanWrite}
+                          value={selectedAssetId ?? ""}
+                          onChange={event => setSelectedAssetId(Number(event.target.value) || undefined)}
+                          className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm disabled:opacity-50"
+                        >
                           <option value="">اختر شاهدًا من المكتبة</option>
                           {availableAssets.map(asset => <option key={asset.id} value={asset.id}>{asset.title} — {asset.kind}</option>)}
                         </select>
-                        <button type="button" onClick={() => selectedAssetId && linkAsset.mutate({ workItemId: workId, assetId: selectedAssetId, role: "evidence" })} disabled={!selectedAssetId || linkAsset.isPending} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-teal-700 px-4 py-2.5 text-sm font-bold text-white hover:bg-teal-800 disabled:opacity-50">
+                        <button
+                          type="button"
+                          onClick={() => selectedAssetId && linkAsset.mutate({ workItemId: workId, assetId: selectedAssetId, role: "evidence" })}
+                          disabled={!workQuery.data.viewerCanWrite || !selectedAssetId || linkAsset.isPending}
+                          className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-teal-700 px-4 py-2.5 text-sm font-bold text-white hover:bg-teal-800 disabled:opacity-50"
+                        >
                           {linkAsset.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />} ربط الشاهد
                         </button>
                       </div>
                       {linkAsset.error && <p role="alert" className="mt-2 text-xs text-red-700">{linkAsset.error.message}</p>}
+                      {unlinkAsset.error && <p role="alert" className="mt-2 text-xs text-red-700">{unlinkAsset.error.message}</p>}
                     </>
                   )}
 
@@ -301,7 +341,9 @@ export default function WorkDetail() {
                         <div key={`${asset.id}-${asset.role}`} className="flex items-center gap-3 rounded-xl border border-slate-200 p-3">
                           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-50 text-slate-600"><Link2 className="h-4 w-4" /></div>
                           <div className="min-w-0 flex-1"><p className="truncate text-sm font-bold text-slate-900">{asset.title}</p><p className="mt-0.5 text-xs text-slate-600">{asset.kind} · {asset.role}</p></div>
-                          <button type="button" onClick={() => unlinkAsset.mutate({ workItemId: workId, assetId: asset.id, role: asset.role })} disabled={unlinkAsset.isPending} className="inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-lg text-slate-600 hover:bg-red-50 hover:text-red-700 disabled:opacity-50" aria-label={`إزالة ربط ${asset.title}`}><Trash2 className="h-4 w-4" /></button>
+                          {workQuery.data.viewerCanWrite && (
+                            <button type="button" onClick={() => unlinkAsset.mutate({ workItemId: workId, assetId: asset.id, role: asset.role })} disabled={unlinkAsset.isPending} className="inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-lg text-slate-600 hover:bg-red-50 hover:text-red-700 disabled:opacity-50" aria-label={`إزالة ربط ${asset.title}`}><Trash2 className="h-4 w-4" /></button>
+                          )}
                         </div>
                       ))}
                     </div>
@@ -380,21 +422,23 @@ export default function WorkDetail() {
                         <PencilLine className="h-4 w-4" /> تحرير التقرير وإنشاء نسخة
                       </button>
                     </section>
-                  ) : workQuery.data.metadata?.module === "self_evaluation" ? (
+                  ) : isSelfEvaluationWork ? (
                     <section className="rounded-2xl border border-teal-200 bg-teal-50 p-5 shadow-sm sm:p-6">
                       <p className="text-xs font-bold text-teal-800">وحدة مستقلة</p>
                       <h2 className="mt-1 text-lg font-bold text-slate-950">تُدار هذه الدورة من صفحة التقويم الذاتي</h2>
-                      <p className="mt-2 text-xs leading-6 text-slate-700">انتقل إلى صفحة التقويم الذاتي وخطة التحسين لاستعراض المؤشرات والمبررات الواقعية وإجراءات التحسين المرتبطة.</p>
-                      <button type="button" onClick={() => setLocation("/self-evaluation")} className="mt-4 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-teal-700 px-4 py-2.5 text-sm font-bold text-white hover:bg-teal-800">
+                      <p className="mt-2 text-xs leading-6 text-slate-700">انتقل إلى صفحة التقويم الذاتي وخطة التحسين لاستعراض المؤشرات الرسمية والمبررات الواقعية وإجراءات التحسين المرتبطة.</p>
+                      <button type="button" onClick={() => setLocation(`/self-evaluation?cycleId=${workId}`)} className="mt-4 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-teal-700 px-4 py-2.5 text-sm font-bold text-white hover:bg-teal-800">
                         <ClipboardCheck className="h-4 w-4" /> فتح في وحدة التقويم الذاتي
                       </button>
                     </section>
                   ) : (
                     <>
                       <PortfolioReferencePanel
+                        key={workId}
                         workId={workId}
                         ownerType={workQuery.data.ownerType}
                         ownerOrganizationId={workQuery.data.ownerOrganizationId ?? null}
+                        canWrite={workQuery.data.viewerCanWrite && workQuery.data.status !== "archived"}
                       />
                       <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
                         <p className="text-xs font-bold text-teal-700">ملف الإنجاز المحلي</p>
@@ -408,31 +452,33 @@ export default function WorkDetail() {
                     </>
                   )}
 
-                  {workQuery.data.ownerType === "organization" && !(workQuery.data.type === "portfolio" && versions.length === 0) && (
-                    <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
-                      <p className="text-xs font-bold text-teal-700">مراجعة مدرسية</p>
-                      <h2 className="mt-1 text-lg font-bold text-slate-950">إرسال نسخة للمراجعة</h2>
-                      <p className="mt-2 text-xs leading-6 text-slate-600">اختر نسخة محفوظة ومراجعًا مؤهلًا من نفس المدرسة. لن تتغير النسخة إذا عدّلت العمل بعد الإرسال.</p>
+                  {workQuery.data.ownerType === "organization" &&
+                    workQuery.data.viewerCanWrite &&
+                    !(workQuery.data.type === "portfolio" && versions.length === 0) && (
+                      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+                        <p className="text-xs font-bold text-teal-700">مراجعة مدرسية</p>
+                        <h2 className="mt-1 text-lg font-bold text-slate-950">إرسال نسخة للمراجعة</h2>
+                        <p className="mt-2 text-xs leading-6 text-slate-600">اختر نسخة محفوظة ومراجعًا مؤهلًا من نفس المدرسة. لن تتغير النسخة إذا عدّلت العمل بعد الإرسال.</p>
 
-                      <label className="mt-4 block text-xs font-bold text-slate-700">النسخة</label>
-                      <select value={selectedVersionId ?? ""} onChange={event => setSelectedVersionId(Number(event.target.value) || undefined)} className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm">
-                        <option value="">اختر نسخة ثابتة</option>
-                        {versions.map(version => <option key={version.id} value={version.id}>نسخة {version.versionNumber}{version.reason ? ` — ${version.reason}` : ""}</option>)}
-                      </select>
+                        <label className="mt-4 block text-xs font-bold text-slate-700">النسخة</label>
+                        <select value={selectedVersionId ?? ""} onChange={event => setSelectedVersionId(Number(event.target.value) || undefined)} className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm">
+                          <option value="">اختر نسخة ثابتة</option>
+                          {versions.map(version => <option key={version.id} value={version.id}>نسخة {version.versionNumber}{version.reason ? ` — ${version.reason}` : ""}</option>)}
+                        </select>
 
-                      <label className="mt-4 block text-xs font-bold text-slate-700">المراجع</label>
-                      <select value={selectedReviewerId ?? ""} onChange={event => setSelectedReviewerId(Number(event.target.value) || undefined)} className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm">
-                        <option value="">اختر المراجع</option>
-                        {reviewers.map(reviewer => <option key={reviewer.userId} value={reviewer.userId}>{reviewer.name || `مستخدم ${reviewer.userId}`} — {reviewer.role}</option>)}
-                      </select>
+                        <label className="mt-4 block text-xs font-bold text-slate-700">المراجع</label>
+                        <select value={selectedReviewerId ?? ""} onChange={event => setSelectedReviewerId(Number(event.target.value) || undefined)} className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm">
+                          <option value="">اختر المراجع</option>
+                          {reviewers.map(reviewer => <option key={reviewer.userId} value={reviewer.userId}>{reviewer.name || `مستخدم ${reviewer.userId}`} — {reviewer.role}</option>)}
+                        </select>
 
-                      {reviewersQuery.data && reviewers.length === 0 && <p className="mt-3 text-xs leading-6 text-amber-800">لا يوجد مراجع مؤهل حاليًا في هذه المدرسة. يلزم عضو بدور reviewer أو admin أو owner.</p>}
-                      <button type="button" onClick={() => selectedVersionId && selectedReviewerId && requestReview.mutate({ workVersionId: selectedVersionId, reviewerUserId: selectedReviewerId })} disabled={!selectedVersionId || !selectedReviewerId || requestReview.isPending} className="mt-4 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-teal-700 px-4 py-2.5 text-sm font-bold text-white hover:bg-teal-800 disabled:opacity-50">
-                        {requestReview.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />} إرسال للمراجعة
-                      </button>
-                      {requestReview.error && <p role="alert" className="mt-3 text-xs text-red-700">{requestReview.error.message}</p>}
-                    </section>
-                  )}
+                        {reviewersQuery.data && reviewers.length === 0 && <p className="mt-3 text-xs leading-6 text-amber-800">لا يوجد مراجع مؤهل حاليًا في هذه المدرسة. يلزم عضو بدور reviewer أو admin أو owner.</p>}
+                        <button type="button" onClick={() => selectedVersionId && selectedReviewerId && requestReview.mutate({ workVersionId: selectedVersionId, reviewerUserId: selectedReviewerId })} disabled={!selectedVersionId || !selectedReviewerId || requestReview.isPending} className="mt-4 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-teal-700 px-4 py-2.5 text-sm font-bold text-white hover:bg-teal-800 disabled:opacity-50">
+                          {requestReview.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />} إرسال للمراجعة
+                        </button>
+                        {requestReview.error && <p role="alert" className="mt-3 text-xs text-red-700">{requestReview.error.message}</p>}
+                      </section>
+                    )}
 
                   <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
                     <div className="flex items-center gap-2">

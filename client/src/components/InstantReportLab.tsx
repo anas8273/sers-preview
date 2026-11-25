@@ -32,7 +32,11 @@ const demoPresets: Record<DemoTemplateKey, {
   },
 };
 
-export default function InstantReportLab({ onStartRealWork }: { onStartRealWork: () => void }) {
+export default function InstantReportLab({
+  onStartRealWork,
+}: {
+  onStartRealWork: (draft?: { title: string }) => void;
+}) {
   const [templateId, setTemplateId] = useState<DemoTemplateKey>("program-report");
   const [title, setTitle] = useState(demoPresets["program-report"].title);
   const [schoolName, setSchoolName] = useState("مدرسة النموذج التعليمية");
@@ -182,7 +186,7 @@ export default function InstantReportLab({ onStartRealWork }: { onStartRealWork:
             </span>
             <button
               type="button"
-              onClick={onStartRealWork}
+              onClick={() => onStartRealWork({ title: title.trim() })}
               className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-teal-700 px-4 py-2.5 text-xs font-bold text-white shadow-sm hover:bg-teal-800"
             >
               ابدأ تقريرك الحقيقي وحفظ الشواهد

@@ -52,15 +52,22 @@ export const standardsRouter = router({
 
   seedOfficialPacks: protectedProcedure
     .input(z.object({
-      packId: z.enum(["saudi-teacher-eval-7", "saudi-teacher-standards-11", "all"]).default("all"),
+      packId: z.enum(["saudi-teacher-eval-7", "saudi-teacher-standards-11", "etec-school-accreditation-10", "all"]).default("all"),
     }).strict().optional())
     .mutation(({ input }) => seedOfficialStandardsPacks(input?.packId ?? "all")),
 
   coverageMatrix: protectedProcedure
     .input(z.object({
-      packId: z.enum(["saudi-teacher-eval-7", "saudi-teacher-standards-11", "all"]).default("saudi-teacher-eval-7"),
+      packId: z.enum(["saudi-teacher-eval-7", "saudi-teacher-standards-11", "etec-school-accreditation-10", "all"]).default("saudi-teacher-eval-7"),
+      organizationId: z.number().int().positive().optional(),
     }).strict().optional())
-    .query(({ ctx, input }) => getSmartEvidenceMatrixForUser(ctx.user.id, input?.packId ?? "saudi-teacher-eval-7")),
+    .query(({ ctx, input }) =>
+      getSmartEvidenceMatrixForUser(
+        ctx.user.id,
+        input?.packId ?? "saudi-teacher-eval-7",
+        input?.organizationId ? { scope: "organization", organizationId: input.organizationId } : undefined,
+      ),
+    ),
 });
 
 export type StandardsRouter = typeof standardsRouter;

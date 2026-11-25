@@ -77,12 +77,18 @@ function AssetStandardsPanel({
     onSuccess: async () => {
       setSelectedStandardId(undefined);
       setNote("");
-      await utils.domain.standards.listForAsset.invalidate({ assetId });
+      await Promise.all([
+        utils.domain.standards.listForAsset.invalidate({ assetId }),
+        utils.domain.standards.coverageMatrix.invalidate(),
+      ]);
     },
   });
   const unlinkMutation = trpc.domain.standards.unlinkAsset.useMutation({
     onSuccess: async () => {
-      await utils.domain.standards.listForAsset.invalidate({ assetId });
+      await Promise.all([
+        utils.domain.standards.listForAsset.invalidate({ assetId }),
+        utils.domain.standards.coverageMatrix.invalidate(),
+      ]);
     },
   });
 
@@ -136,7 +142,7 @@ function AssetStandardsPanel({
 
       {standards.length === 0 ? (
         <p className="rounded-lg border border-dashed border-slate-300 bg-white px-3 py-2 text-[11px] leading-5 text-slate-600">
-          لا توجد معايير رسمية مفعّلة في السجل بعد (بانتظار اعتماد الإطار الرسمي O009).
+          لم تُفعّل حزم المعايير الرسمية بعد؛ اضغط «تفعيل حزمة المعايير الرسمية» في مصفوفة التغطية أعلى الصفحة لتفعيلها فورًا.
         </p>
       ) : available.length === 0 ? (
         <p className="text-[11px] text-slate-600">تم ربط الشاهد بجميع المعايير النشطة المتاحة.</p>
@@ -255,7 +261,13 @@ export default function EvidenceLibrary() {
           <PrivateEvidenceUpload />
 
           <SmartEvidenceMatrixPanel
-            assets={(assetsQuery.data ?? []).map(asset => ({ id: asset.id, title: asset.title, kind: asset.kind }))}
+            assets={(assetsQuery.data ?? []).map(asset => ({
+              id: asset.id,
+              title: asset.title,
+              kind: asset.kind,
+              ownerType: asset.ownerType,
+              ownerOrganizationId: asset.ownerOrganizationId,
+            }))}
           />
 
           {assetsQuery.isLoading && <div role="status" className="mt-8 flex items-center justify-center rounded-2xl border border-slate-200 bg-white py-16 text-sm text-slate-600"><Loader2 className="ml-2 h-4 w-4 animate-spin" />جاري تحميل مكتبتك...</div>}

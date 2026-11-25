@@ -12,6 +12,7 @@ import {
   SELF_EVALUATION_FRAMEWORK_META,
   SELF_EVALUATION_INDICATORS,
   SELF_EVALUATION_LEVELS,
+  SELF_EVALUATION_STANDARDS,
 } from "../../shared/self-evaluation";
 import { OFFICIAL_SAUDI_STANDARD_SEEDS } from "../../shared/saudi-standards-packs";
 import { REPORT_SCHEMA_VERSION, REPORT_TEMPLATE_DEFINITIONS } from "../../shared/report-projection";
@@ -83,6 +84,7 @@ test("end-to-end browser verification of PR #43-#46 platform modules at 360px mo
 
   const eval7Items = OFFICIAL_SAUDI_STANDARD_SEEDS.filter(s => s.packId === "saudi-teacher-eval-7");
   const license11Items = OFFICIAL_SAUDI_STANDARD_SEEDS.filter(s => s.packId === "saudi-teacher-standards-11");
+  const etec10Items = OFFICIAL_SAUDI_STANDARD_SEEDS.filter(s => s.packId === "etec-school-accreditation-10");
 
   app.all("/api/trpc/:paths", async (req, res) => {
     const paths = req.params.paths.split(",");
@@ -170,29 +172,49 @@ test("end-to-end browser verification of PR #43-#46 platform modules at 360px mo
           case "domain.standards.listForAsset":
             return ok([{ linkId: 1, standardVersionId: 101, standardKey: eval7Items[0]!.standardKey, version: "2026.1", title: eval7Items[0]!.title, note: null }]);
           case "domain.standards.coverageMatrix": {
-            const isLicense = input?.packId === "saudi-teacher-standards-11";
-            const items = isLicense ? license11Items : eval7Items;
+            const packId =
+              input?.packId === "saudi-teacher-standards-11"
+                ? "saudi-teacher-standards-11"
+                : input?.packId === "etec-school-accreditation-10"
+                  ? "etec-school-accreditation-10"
+                  : "saudi-teacher-eval-7";
+            const items =
+              packId === "saudi-teacher-standards-11"
+                ? license11Items
+                : packId === "etec-school-accreditation-10"
+                  ? etec10Items
+                  : eval7Items;
+            const baseId =
+              packId === "saudi-teacher-standards-11"
+                ? 201
+                : packId === "etec-school-accreditation-10"
+                  ? 301
+                  : 101;
             const rows = items.map((item, idx) => {
-              const svId = (isLicense ? 201 : 101) + idx;
+              const svId = baseId + idx;
               const covered = linkedStandards.has(svId);
               return {
                 standardVersionId: svId,
                 standardKey: item.standardKey,
+                version: item.version,
                 title: item.title,
+                packId: item.packId,
                 domainLabel: item.domainLabel,
                 weightPercent: item.weightPercent ?? null,
-                status: covered ? ("verified" as const) : ("uncovered" as const),
-                linkedAssets: covered ? [{ assetId: 51, title: "ملف شواهد الحضور الموثق", kind: "file" }] : [],
+                status: covered ? ("verified" as const) : ("missing" as const),
+                linkedAssets: covered
+                  ? [{ assetId: 51, title: "ملف شواهد الحضور الموثق", kind: "file", isVerifiedFile: true, note: null }]
+                  : [],
               };
             });
-            const coveredCount = rows.filter(r => r.status !== "uncovered").length;
+            const coveredCount = rows.filter(r => r.status !== "missing").length;
             return ok({
-              packId: isLicense ? "saudi-teacher-standards-11" : "saudi-teacher-eval-7",
+              packId,
               totalStandards: rows.length,
               coveredStandards: coveredCount,
               verifiedStandards: coveredCount,
               coveragePercent: Math.round((coveredCount / rows.length) * 100),
-              weightedScorePercent: isLicense ? null : (coveredCount > 0 ? 10 : 0),
+              weightedScorePercent: packId === "saudi-teacher-standards-11" ? null : (coveredCount > 0 ? 10 : 0),
               rows,
             });
           }
@@ -279,6 +301,7 @@ test("end-to-end browser verification of PR #43-#46 platform modules at 360px mo
               frameworkId: SELF_EVALUATION_FRAMEWORK_ID,
               meta: SELF_EVALUATION_FRAMEWORK_META,
               domains: SELF_EVALUATION_DOMAINS,
+              standards: SELF_EVALUATION_STANDARDS,
               indicators: SELF_EVALUATION_INDICATORS,
               levels: SELF_EVALUATION_LEVELS,
             });
@@ -309,6 +332,11 @@ test("end-to-end browser verification of PR #43-#46 platform modules at 360px mo
                 updatedAt: new Date().toISOString(),
               },
               canEdit: true,
+              canManageCommittee: true,
+              schoolMembers: [
+                { userId: 1, name: "أ. سارة العتيبي", role: "owner" },
+                { userId: 2, name: "أ. نورة الشهري", role: "reviewer" },
+              ],
               draft: selfEvalDraft,
               summary: computeSelfEvaluationSummary(selfEvalDraft),
               linkedWorks: [],
@@ -325,6 +353,11 @@ test("end-to-end browser verification of PR #43-#46 platform modules at 360px mo
                 updatedAt: new Date().toISOString(),
               },
               canEdit: true,
+              canManageCommittee: true,
+              schoolMembers: [
+                { userId: 1, name: "أ. سارة العتيبي", role: "owner" },
+                { userId: 2, name: "أ. نورة الشهري", role: "reviewer" },
+              ],
               draft: selfEvalDraft,
               summary: computeSelfEvaluationSummary(selfEvalDraft),
               linkedWorks: linkedReportCreated ? [{ id: 77, title: "تقرير تحسين (1-1): انتظام متابعة الخطة", status: "draft" }] : [],
@@ -333,7 +366,9 @@ test("end-to-end browser verification of PR #43-#46 platform modules at 360px mo
             selfEvalDraft = normalizeSelfEvaluationDraft(
               {
                 revision: selfEvalDraft.revision + 1,
+                schoolCategory: input.schoolCategory ?? selfEvalDraft.schoolCategory,
                 executiveSummary: input.executiveSummary,
+                committeeMembers: input.committeeMembers ?? selfEvalDraft.committeeMembers,
                 assessments: input.assessments,
                 improvementActions: input.improvementActions,
                 updatedAt: new Date().toISOString(),
@@ -419,23 +454,31 @@ test("end-to-end browser verification of PR #43-#46 platform modules at 360px mo
       await assertNoHorizontalOverflow("Home 360px");
     });
 
-    await t.test("EvidenceLibrary SmartEvidenceMatrixPanel renders 7-element & 11-standard packs at 360px", async () => {
+    await t.test("EvidenceLibrary SmartEvidenceMatrixPanel renders 7-element, 11-standard, & ETEC 10-standard packs at 360px", async () => {
       await page.setViewport({ width: 360, height: 780 });
       await page.goto(`${base}/evidence`, { waitUntil: "domcontentloaded" });
       await visible("مصفوفة التغطية الذكية (SmartEvidence)");
       await clickButtonContaining("المعايير المهنية الـ 11");
       await visible("SA-STD11-01");
+      await clickButtonContaining("معايير الاعتماد المدرسي الـ 10 (ETEC)");
+      await visible("ETEC-SCH-1-1");
       await assertNoHorizontalOverflow("Evidence 360px");
     });
 
-    await t.test("SelfEvaluationPage enforces rationale, saves cycle & improvement action, and links report", async () => {
+    await t.test("SelfEvaluationPage renders official ETEC indicators, enforces rationale, saves cycle & action, and links report", async () => {
       await page.setViewport({ width: 360, height: 780 });
       await page.goto(`${base}/self-evaluation`);
-      await visible("نموذج سيرس الاسترشادي للتقويم الذاتي");
+      await visible(SELF_EVALUATION_FRAMEWORK_META.titleAr);
       await assertNoHorizontalOverflow("SelfEvaluation empty 360px");
 
       await clickButtonContaining("إنشاء الدورة والبدء بالتقييم");
-      await visible("مؤشر 1-1");
+      await visible("مؤشر 1-1-1-1");
+      await visible("المعيار 1-1: التخطيط");
+
+      // Form the Self-Evaluation & Excellence Committee (R09 / NEXT-19)
+      await clickButtonContaining("+ إضافة عضو للجنة");
+      await page.waitForSelector('select[aria-label="ربط بعضو المدرسة"] option[value="2"]');
+      await page.select('select[aria-label="ربط بعضو المدرسة"]', "2");
 
       // Rate indicator 1-1 as level 2 (الانطلاق) and verify mandatory rationale warning
       await clickButtonContaining("الانطلاق");

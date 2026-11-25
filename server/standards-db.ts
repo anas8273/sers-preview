@@ -1,8 +1,8 @@
-import { and, desc, eq, inArray, isNull } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { assets, assetStandardLinks, memberships, organizations, standardVersions } from "../drizzle/domain-core";
 import { users } from "../drizzle/schema";
 import { getDb } from "./db";
-import { assertAssetAccess, listAssetsForUser } from "./domain-db";
+import { assertAssetAccess, listAssetsForUser, listOrganizationsForUser } from "./domain-db";
 import {
   buildSmartEvidenceCoverage,
   OFFICIAL_SAUDI_STANDARD_SEEDS,
@@ -166,7 +166,8 @@ export async function seedOfficialStandardsPacks(packFilter: OfficialStandardPac
         set: {
           title: seed.title,
           data: metadata,
-          isActive: true,
+          // Preserve existing `isActive` flag if an admin intentionally toggled a standard
+          isActive: sql`isActive`,
         },
       });
   }
@@ -177,6 +178,7 @@ export async function seedOfficialStandardsPacks(packFilter: OfficialStandardPac
 export async function getSmartEvidenceMatrixForUser(
   userId: number,
   packFilter: OfficialStandardPackId | "all" = "saudi-teacher-eval-7",
+  options?: { scope?: "personal" | "organization"; organizationId?: number },
 ) {
   const db = await getDb();
   if (!db) {
@@ -199,7 +201,29 @@ export async function getSmartEvidenceMatrixForUser(
     });
 
   const readableAssets = await listAssetsForUser(userId);
-  const assetIds = readableAssets.map(asset => asset.id);
+  const userOrgs = packFilter === "etec-school-accreditation-10" || options?.scope === "organization"
+    ? await listOrganizationsForUser(userId)
+    : [];
+  // Teacher packs scope to personal assets so colleagues' school uploads never inflate personal coverage.
+  // ETEC school accreditation pack scopes to a single active school when the user belongs to any school
+  // (preventing cross-school mixing and preventing personal assets from inflating school accreditation).
+  const targetOrgId =
+    options?.organizationId ??
+    (packFilter === "etec-school-accreditation-10" && userOrgs.length > 0 ? userOrgs[0]!.id : undefined);
+  const effectiveScope =
+    options?.scope ??
+    (packFilter === "etec-school-accreditation-10" && targetOrgId !== undefined
+      ? "organization"
+      : "personal");
+
+  const scopedAssets = readableAssets.filter(asset => {
+    if (effectiveScope === "personal") return asset.ownerType === "personal";
+    if (targetOrgId !== undefined) {
+      return asset.ownerType === "organization" && asset.ownerOrganizationId === targetOrgId;
+    }
+    return asset.ownerType === "organization";
+  });
+  const assetIds = scopedAssets.map(asset => asset.id);
 
   const links = assetIds.length > 0
     ? await db
@@ -214,7 +238,7 @@ export async function getSmartEvidenceMatrixForUser(
 
   return buildSmartEvidenceCoverage({
     standards: filteredStandards,
-    assets: readableAssets.map(a => ({ id: a.id, title: a.title, kind: a.kind })),
+    assets: scopedAssets.map(a => ({ id: a.id, title: a.title, kind: a.kind })),
     links,
   });
 }

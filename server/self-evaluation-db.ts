@@ -19,7 +19,9 @@ import {
   SelfEvaluationValidationError,
   type ImprovementAction,
   type IndicatorAssessment,
+  type SelfEvaluationCommitteeMember,
   type SelfEvaluationDraftData,
+  type SelfEvaluationSchoolCategory,
   type SelfEvaluationSummary,
 } from "../shared/self-evaluation";
 
@@ -40,10 +42,12 @@ export class SelfEvaluationConflictError extends Error {
 }
 
 /**
- * School-owned self-evaluation cycles are institutional documents: only school
- * owner/admin may create or change them (least privilege, review finding M5).
- * Members and reviewers can read. Committee/assignment-based editing is pending
- * an owner decision (see 03_DECISION_REGISTER, O009).
+ * School-owned self-evaluation cycles are institutional documents:
+ * - Creating/deleting cycles, changing `schoolCategory`, and managing the official
+ *   Self-Evaluation & Excellence Committee (`committeeMembers`) require school `owner`/`admin`.
+ * - Active school members explicitly delegated onto `committeeMembers` (`userId`) by
+ *   `owner`/`admin` can contribute indicator ratings, factual rationales, evidence links,
+ *   and improvement actions (`R09` / `NEXT-19` / `O009`), while unassigned plain members have read-only access.
  */
 function canManageSchoolSelfEvaluation(role: string) {
   return role === "owner" || role === "admin";
@@ -113,15 +117,47 @@ async function assertCycleReadAccess(userId: number, workItemId: number) {
   return member?.membership ? { ...work, viewerRole: member.membership.role } : undefined;
 }
 
-async function assertCycleWriteInTransaction(tx: any, userId: number, workItemId: number) {
+async function assertCycleWriteInTransaction(
+  tx: any,
+  userId: number,
+  workItemId: number,
+): Promise<{ work: typeof workItems.$inferSelect; canManageCommittee: boolean } | undefined> {
   const [hint] = await tx
     .select()
     .from(workItems)
     .where(and(eq(workItems.id, workItemId), isNull(workItems.deletedAt)))
     .limit(1);
   if (!hint || !isSelfEvaluationWork(hint)) return undefined;
-  if (hint.ownerType === "personal" && hint.ownerUserId !== userId) return undefined;
-  if (!await lockWriteScope(tx, userId, hint.ownerType, hint.ownerOrganizationId)) return undefined;
+
+  let canManageCommittee = false;
+  if (hint.ownerType === "personal") {
+    if (hint.ownerUserId !== userId) return undefined;
+    const [user] = await tx.select({ id: users.id }).from(users).where(eq(users.id, userId)).limit(1).for("update");
+    if (!user) return undefined;
+    canManageCommittee = true;
+  } else {
+    if (!hint.ownerOrganizationId) return undefined;
+    const [org] = await tx
+      .select()
+      .from(organizations)
+      .where(eq(organizations.id, hint.ownerOrganizationId))
+      .limit(1)
+      .for("update");
+    if (!org || org.status !== "active") return undefined;
+    const [member] = await tx
+      .select()
+      .from(memberships)
+      .where(and(
+        eq(memberships.userId, userId),
+        eq(memberships.organizationId, hint.ownerOrganizationId),
+        eq(memberships.status, "active"),
+      ))
+      .limit(1)
+      .for("update");
+    if (!member) return undefined;
+    canManageCommittee = canManageSchoolSelfEvaluation(member.role);
+  }
+
   const [work] = await tx
     .select()
     .from(workItems)
@@ -137,29 +173,36 @@ async function assertCycleWriteInTransaction(tx: any, userId: number, workItemId
   ) {
     return undefined;
   }
-  return work;
+  return { work, canManageCommittee };
 }
 
-async function assertReferencesSameScope(
+/**
+ * Verifies every referenced asset and linked action report belongs to the exact
+ * same ownership scope. If a previously-linked same-scope asset or report was
+ * later soft-deleted (`deletedAt !== null`), prunes the stale ID cleanly instead
+ * of wedging future saves of the cycle (audit findings 1.2 & 1.3).
+ */
+async function sanitizeAndAssertReferencesSameScope(
   tx: any,
   cycleWork: { id: number; ownerType: string; ownerUserId: number | null; ownerOrganizationId: number | null },
   draft: SelfEvaluationDraftData,
-) {
+): Promise<SelfEvaluationDraftData> {
   const allAssetIds = new Set<number>();
   for (const assessment of Object.values(draft.assessments)) {
     for (const assetId of assessment.evidenceAssetIds) allAssetIds.add(assetId);
   }
+  const activeSameScopeAssets = new Set<number>();
   if (allAssetIds.size > 0) {
     const ids = Array.from(allAssetIds);
-    const rows = await tx
-      .select()
-      .from(assets)
-      .where(and(inArray(assets.id, ids), isNull(assets.deletedAt)));
+    const rows = await tx.select().from(assets).where(inArray(assets.id, ids));
     const map = new Map<number, any>(rows.map((r: any) => [r.id, r]));
     for (const id of ids) {
       const target = map.get(id);
       if (!target || !sameScope(cycleWork, target)) {
         throw new SelfEvaluationValidationError("أحد الشواهد المختارة غير متاح أو لا يتبع نفس مساحة الملكية");
+      }
+      if (!target.deletedAt) {
+        activeSameScopeAssets.add(id);
       }
     }
   }
@@ -171,19 +214,68 @@ async function assertReferencesSameScope(
         .filter((id): id is number => typeof id === "number" && id > 0),
     ),
   );
+  const activeSameScopeWorks = new Set<number>();
   if (allWorkIds.length > 0) {
-    const rows = await tx
-      .select()
-      .from(workItems)
-      .where(and(inArray(workItems.id, allWorkIds), isNull(workItems.deletedAt)));
+    const rows = await tx.select().from(workItems).where(inArray(workItems.id, allWorkIds));
     const map = new Map<number, any>(rows.map((r: any) => [r.id, r]));
     for (const id of allWorkIds) {
       const target = map.get(id);
       if (!target || target.id === cycleWork.id || !sameScope(cycleWork, target)) {
         throw new SelfEvaluationValidationError("أحد أعمال التنفيذ المرتبطة غير متاح أو لا يتبع نفس مساحة الملكية");
       }
+      if (!target.deletedAt) {
+        activeSameScopeWorks.add(id);
+      }
     }
   }
+
+  const prunedAssessments: Record<string, IndicatorAssessment> = {};
+  for (const [key, item] of Object.entries(draft.assessments)) {
+    prunedAssessments[key] = {
+      ...item,
+      evidenceAssetIds: item.evidenceAssetIds.filter(id => activeSameScopeAssets.has(id)),
+    };
+  }
+  const prunedActions = draft.improvementActions.map(item => ({
+    ...item,
+    linkedWorkItemId:
+      item.linkedWorkItemId && activeSameScopeWorks.has(item.linkedWorkItemId) ? item.linkedWorkItemId : null,
+  }));
+
+  let sanitizedCommittee: SelfEvaluationCommitteeMember[] = draft.committeeMembers;
+  if (cycleWork.ownerType === "personal") {
+    sanitizedCommittee = draft.committeeMembers.map(m => ({ ...m, userId: null }));
+  } else if (cycleWork.ownerOrganizationId) {
+    const committeeUserIds = Array.from(
+      new Set(draft.committeeMembers.map(m => m.userId).filter((id): id is number => typeof id === "number" && id > 0)),
+    );
+    if (committeeUserIds.length > 0) {
+      const memberRows = await tx
+        .select({ userId: memberships.userId, status: memberships.status })
+        .from(memberships)
+        .where(and(
+          eq(memberships.organizationId, cycleWork.ownerOrganizationId),
+          inArray(memberships.userId, committeeUserIds),
+        ));
+      const statusByUser = new Map<number, string>(memberRows.map((r: any) => [r.userId, r.status]));
+      for (const uid of committeeUserIds) {
+        if (!statusByUser.has(uid)) {
+          throw new SelfEvaluationValidationError("أحد أعضاء لجنة التقويم المحددين لا ينتمي إلى هذه المدرسة");
+        }
+      }
+      sanitizedCommittee = draft.committeeMembers.map(m => ({
+        ...m,
+        userId: m.userId && statusByUser.get(m.userId) === "active" ? m.userId : null,
+      }));
+    }
+  }
+
+  return {
+    ...draft,
+    committeeMembers: sanitizedCommittee,
+    assessments: prunedAssessments,
+    improvementActions: prunedActions,
+  };
 }
 
 export async function createSelfEvaluationCycleForUser(
@@ -191,6 +283,7 @@ export async function createSelfEvaluationCycleForUser(
   input: {
     title: string;
     ownerType: "personal" | "organization";
+    schoolCategory?: SelfEvaluationSchoolCategory;
     organizationId?: number;
     academicYearId?: number;
     academicTermId?: number;
@@ -208,8 +301,9 @@ export async function createSelfEvaluationCycleForUser(
       : `organization:${input.organizationId}`;
     const academicContext = await captureAcademicContext(tx, scopeKey, input.academicYearId, input.academicTermId);
     const initialDraft = normalizeSelfEvaluationDraft({
-      schemaVersion: 1,
+      schemaVersion: 2,
       frameworkId: SELF_EVALUATION_FRAMEWORK_ID,
+      schoolCategory: input.schoolCategory ?? "government",
       revision: 1,
       executiveSummary: "",
       assessments: {},
@@ -318,12 +412,31 @@ export async function getSelfEvaluationCycleForUser(userId: number, workItemId: 
     .orderBy(asc(contentBlocks.id))
     .limit(1);
 
-  const draft = normalizeSelfEvaluationDraft(block?.data);
-  const summary = computeSelfEvaluationSummary(draft);
+  const rawDraft = normalizeSelfEvaluationDraft(block?.data);
+
+  const referencedAssetIds = Array.from(
+    new Set(
+      Object.values(rawDraft.assessments).flatMap(item => item.evidenceAssetIds),
+    ),
+  );
+  const liveAssetRows = referencedAssetIds.length > 0
+    ? await db
+      .select({
+        id: assets.id,
+        ownerType: assets.ownerType,
+        ownerUserId: assets.ownerUserId,
+        ownerOrganizationId: assets.ownerOrganizationId,
+      })
+      .from(assets)
+      .where(and(inArray(assets.id, referencedAssetIds), isNull(assets.deletedAt)))
+    : [];
+  const liveAssetIds = new Set(
+    liveAssetRows.filter(target => sameScope(work, target)).map(target => target.id),
+  );
 
   const linkedWorkIds = Array.from(
     new Set(
-      draft.improvementActions
+      rawDraft.improvementActions
         .map(a => a.linkedWorkItemId)
         .filter((id): id is number => typeof id === "number" && id > 0),
     ),
@@ -337,6 +450,50 @@ export async function getSelfEvaluationCycleForUser(userId: number, workItemId: 
   const linkedWorks = linkedWorkRows
     .filter(target => sameScope(work, target))
     .map(target => ({ id: target.id, title: target.title, status: target.status }));
+  const liveLinkedIds = new Set(linkedWorks.map(item => item.id));
+
+  const sanitizedAssessments: Record<string, (typeof rawDraft.assessments)[string]> = {};
+  for (const [k, item] of Object.entries(rawDraft.assessments)) {
+    sanitizedAssessments[k] = {
+      ...item,
+      evidenceAssetIds: item.evidenceAssetIds.filter(id => liveAssetIds.has(id)),
+    };
+  }
+
+  const draft: SelfEvaluationDraftData = {
+    ...rawDraft,
+    assessments: sanitizedAssessments,
+    improvementActions: rawDraft.improvementActions.map(action => ({
+      ...action,
+      linkedWorkItemId: action.linkedWorkItemId && liveLinkedIds.has(action.linkedWorkItemId) ? action.linkedWorkItemId : null,
+    })),
+  };
+  const summary = computeSelfEvaluationSummary(draft);
+  const canManageCommittee =
+    work.ownerType === "personal" || canManageSchoolSelfEvaluation(work.viewerRole);
+  const isDelegatedCommitteeMember =
+    work.ownerType === "organization" &&
+    draft.committeeMembers.some(member => member.userId === userId);
+  const canEdit = canManageCommittee || isDelegatedCommitteeMember;
+
+  const schoolMembers =
+    canManageCommittee && work.ownerType === "organization" && work.ownerOrganizationId
+      ? await db
+          .select({
+            userId: memberships.userId,
+            name: users.name,
+            role: memberships.role,
+          })
+          .from(memberships)
+          .innerJoin(users, eq(users.id, memberships.userId))
+          .where(
+            and(
+              eq(memberships.organizationId, work.ownerOrganizationId),
+              eq(memberships.status, "active"),
+            ),
+          )
+          .orderBy(asc(users.name))
+      : [];
 
   return {
     work: {
@@ -348,7 +505,9 @@ export async function getSelfEvaluationCycleForUser(userId: number, workItemId: 
       academicContext: work.academicContext,
       updatedAt: work.updatedAt,
     },
-    canEdit: work.ownerType === "personal" || canManageSchoolSelfEvaluation(work.viewerRole),
+    canEdit,
+    canManageCommittee,
+    schoolMembers,
     draft,
     summary,
     linkedWorks,
@@ -360,7 +519,9 @@ export async function saveSelfEvaluationCycleForUser(
   input: {
     workItemId: number;
     expectedRevision: number;
+    schoolCategory?: SelfEvaluationSchoolCategory;
     executiveSummary: string;
+    committeeMembers?: SelfEvaluationCommitteeMember[];
     assessments: Record<string, IndicatorAssessment>;
     improvementActions: ImprovementAction[];
   },
@@ -369,8 +530,9 @@ export async function saveSelfEvaluationCycleForUser(
   if (!db) throw new Error("Database not available");
 
   return db.transaction(async tx => {
-    const work = await assertCycleWriteInTransaction(tx, userId, input.workItemId);
-    if (!work) throw new SelfEvaluationAccessError();
+    const access = await assertCycleWriteInTransaction(tx, userId, input.workItemId);
+    if (!access) throw new SelfEvaluationAccessError();
+    const { work, canManageCommittee } = access;
     if (work.status === "archived") throw new SelfEvaluationConflictError("لا يمكن تعديل دورة تقويم مؤرشفة");
 
     const [block] = await tx
@@ -382,16 +544,31 @@ export async function saveSelfEvaluationCycleForUser(
       .for("update");
 
     const current = normalizeSelfEvaluationDraft(block?.data);
+    const isDelegatedCommitteeMember =
+      work.ownerType === "organization" &&
+      current.committeeMembers.some(member => member.userId === userId);
+    if (!canManageCommittee && !isDelegatedCommitteeMember) {
+      throw new SelfEvaluationAccessError();
+    }
     if (current.revision !== input.expectedRevision) {
       throw new SelfEvaluationConflictError();
     }
+    if (!canManageCommittee && input.schoolCategory && input.schoolCategory !== current.schoolCategory) {
+      throw new SelfEvaluationAccessError("تغيير تصنيف المدرسة متاح لمالك المدرسة أو مديرها فقط");
+    }
 
-    const normalized = normalizeSelfEvaluationDraft(
+    const effectiveCommittee = canManageCommittee
+      ? (input.committeeMembers ?? current.committeeMembers)
+      : current.committeeMembers;
+
+    const validated = normalizeSelfEvaluationDraft(
       {
-        schemaVersion: 1,
+        schemaVersion: 2,
         frameworkId: SELF_EVALUATION_FRAMEWORK_ID,
+        schoolCategory: canManageCommittee ? (input.schoolCategory ?? current.schoolCategory) : current.schoolCategory,
         revision: current.revision + 1,
         executiveSummary: input.executiveSummary,
+        committeeMembers: effectiveCommittee,
         assessments: input.assessments,
         improvementActions: input.improvementActions,
         updatedAt: new Date().toISOString(),
@@ -399,7 +576,7 @@ export async function saveSelfEvaluationCycleForUser(
       { strictValidation: true },
     );
 
-    await assertReferencesSameScope(tx, work, normalized);
+    const normalized = await sanitizeAndAssertReferencesSameScope(tx, work, validated);
 
     if (block) {
       await tx
@@ -442,8 +619,9 @@ export async function createReportFromImprovementActionForUser(
   if (!db) throw new Error("Database not available");
 
   return db.transaction(async tx => {
-    const work = await assertCycleWriteInTransaction(tx, userId, input.workItemId);
-    if (!work) throw new SelfEvaluationAccessError();
+    const access = await assertCycleWriteInTransaction(tx, userId, input.workItemId);
+    if (!access) throw new SelfEvaluationAccessError();
+    const { work, canManageCommittee } = access;
     if (work.status === "archived") throw new SelfEvaluationConflictError("لا يمكن تعديل دورة تقويم مؤرشفة");
 
     const [block] = await tx
@@ -455,6 +633,12 @@ export async function createReportFromImprovementActionForUser(
       .for("update");
 
     const current = normalizeSelfEvaluationDraft(block?.data);
+    const isDelegatedCommitteeMember =
+      work.ownerType === "organization" &&
+      current.committeeMembers.some(member => member.userId === userId);
+    if (!canManageCommittee && !isDelegatedCommitteeMember) {
+      throw new SelfEvaluationAccessError();
+    }
     if (current.revision !== input.expectedRevision) {
       throw new SelfEvaluationConflictError();
     }
@@ -465,11 +649,18 @@ export async function createReportFromImprovementActionForUser(
     }
     const targetAction = current.improvementActions[actionIndex]!;
     if (targetAction.linkedWorkItemId) {
-      return {
-        reportWorkItemId: targetAction.linkedWorkItemId,
-        draft: current,
-        summary: computeSelfEvaluationSummary(current),
-      };
+      const [existingReport] = await tx
+        .select()
+        .from(workItems)
+        .where(and(eq(workItems.id, targetAction.linkedWorkItemId), isNull(workItems.deletedAt)))
+        .limit(1);
+      if (existingReport && sameScope(work, existingReport)) {
+        return {
+          reportWorkItemId: existingReport.id,
+          draft: current,
+          summary: computeSelfEvaluationSummary(current),
+        };
+      }
     }
 
     const indicator = SELF_EVALUATION_INDICATORS.find(item => item.key === targetAction.indicatorKey);
@@ -503,7 +694,7 @@ export async function createReportFromImprovementActionForUser(
       fields: {
         subject: targetAction.goal,
         executionDate: targetAction.dueDate || "",
-        field: indicator ? indicator.title : "",
+        field: indicator ? `${indicator.code} (${indicator.standardTitle}): ${indicator.title}` : "",
         executor: targetAction.ownerName || "",
         objectives: targetAction.goal,
         implementation: targetAction.action,

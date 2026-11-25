@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gte, inArray, isNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, isNull, ne, notLike, sql } from "drizzle-orm";
 import {
   academicTerms,
   academicYears,
@@ -11,6 +11,7 @@ import {
   organizations,
   purchases,
   standardVersions,
+  workAssetLinks,
   workItems,
   workVersions,
   type AcademicContext,
@@ -221,6 +222,7 @@ export type AccountDataExportBundle = {
     updatedAt: string | null;
     blocks: Array<{ blockType: string; sortOrder: number; data: Record<string, unknown> }>;
     versions: Array<{ versionNumber: number; reason: string | null; createdAt: string | null }>;
+    linkedAssetIds?: number[];
   }>;
   personalAssets: Array<{
     id: number;
@@ -285,6 +287,7 @@ export function buildSanitizedAccountExportBundle(raw: {
     updatedAt?: Date | string | null;
     blocks: Array<{ blockType: string; sortOrder: number; data: Record<string, unknown> }>;
     versions?: Array<{ versionNumber: number; reason: string | null; createdAt?: Date | string | null }>;
+    linkedAssetIds?: number[];
   }>;
   assets: Array<{
     id: number;
@@ -362,16 +365,26 @@ export function buildSanitizedAccountExportBundle(raw: {
       academicContext: w.academicContext ?? null,
       createdAt: toIso(w.createdAt),
       updatedAt: toIso(w.updatedAt),
-      blocks: w.blocks.map(b => ({
-        blockType: b.blockType,
-        sortOrder: b.sortOrder,
-        data: b.data,
-      })),
+      blocks: w.blocks
+        .filter(b => b.blockType !== "report_template_history")
+        .map(b => {
+          const dataCopy = b.data && typeof b.data === "object" ? { ...b.data } : {};
+          if (dataCopy.reportIdentity && typeof dataCopy.reportIdentity === "object") {
+            const { schoolLogoPng: _droppedLogo, ...restIdentity } = dataCopy.reportIdentity as Record<string, unknown>;
+            dataCopy.reportIdentity = restIdentity;
+          }
+          return {
+            blockType: b.blockType,
+            sortOrder: b.sortOrder,
+            data: dataCopy,
+          };
+        }),
       versions: (w.versions ?? []).map(v => ({
         versionNumber: v.versionNumber,
         reason: v.reason ?? null,
         createdAt: toIso(v.createdAt),
       })),
+      ...(w.linkedAssetIds ? { linkedAssetIds: w.linkedAssetIds } : {}),
     })),
     personalAssets: raw.assets.map(a => ({
       id: a.id,
@@ -425,31 +438,20 @@ export async function exportAccountDataForUser(userId: number): Promise<AccountD
     .limit(1);
   if (!user) throw new AccountAccessError();
 
-  // Atomic per-user cooldown + reservation against concurrent export bursts (review finding L6).
-  await db.transaction(async tx => {
-    const [lockedUser] = await tx.select({ id: users.id }).from(users).where(eq(users.id, userId)).limit(1).for("update");
-    if (!lockedUser) throw new AccountAccessError();
-    const windowStart = new Date(Date.now() - EXPORT_WINDOW_MS);
-    const recentExports = await tx
-      .select({ id: auditLogs.id })
-      .from(auditLogs)
-      .where(and(
-        eq(auditLogs.actorUserId, userId),
-        eq(auditLogs.action, "account.data_exported"),
-        gte(auditLogs.createdAt, windowStart),
-      ))
-      .limit(EXPORT_MAX_PER_WINDOW);
-    if (recentExports.length >= EXPORT_MAX_PER_WINDOW) {
-      throw new AccountConflictError("تم تجاوز الحد المسموح لتصدير البيانات مؤقتًا؛ حاول مرة أخرى بعد دقائق");
-    }
-    await tx.insert(auditLogs).values({
-      actorUserId: userId,
-      action: "account.data_exported",
-      resourceType: "user",
-      resourceId: String(userId),
-      metadata: { scopePolicy: "personal_owned_only" },
-    });
-  });
+  // Fast pre-check before running data queries; final atomic reservation happens right before returning.
+  const preWindowStart = new Date(Date.now() - EXPORT_WINDOW_MS);
+  const preCheck = await db
+    .select({ id: auditLogs.id })
+    .from(auditLogs)
+    .where(and(
+      eq(auditLogs.actorUserId, userId),
+      eq(auditLogs.action, "account.data_exported"),
+      gte(auditLogs.createdAt, preWindowStart),
+    ))
+    .limit(EXPORT_MAX_PER_WINDOW);
+  if (preCheck.length >= EXPORT_MAX_PER_WINDOW) {
+    throw new AccountConflictError("تم تجاوز الحد المسموح لتصدير البيانات مؤقتًا؛ حاول مرة أخرى بعد دقائق");
+  }
 
   const schools = await db
     .select({
@@ -460,7 +462,11 @@ export async function exportAccountDataForUser(userId: number): Promise<AccountD
     })
     .from(memberships)
     .innerJoin(organizations, eq(memberships.organizationId, organizations.id))
-    .where(and(eq(memberships.userId, userId), eq(organizations.status, "active")))
+    .where(and(
+      eq(memberships.userId, userId),
+      inArray(memberships.status, ["active", "invited"]),
+      eq(organizations.status, "active"),
+    ))
     .orderBy(organizations.name);
 
   const personalYears = await db
@@ -490,8 +496,18 @@ export async function exportAccountDataForUser(userId: number): Promise<AccountD
     ? await db
         .select()
         .from(contentBlocks)
-        .where(inArray(contentBlocks.workItemId, personalWorksRows.map(w => w.id)))
+        .where(and(
+          inArray(contentBlocks.workItemId, personalWorksRows.map(w => w.id)),
+          ne(contentBlocks.blockType, "report_template_history"),
+        ))
         .orderBy(asc(contentBlocks.sortOrder), asc(contentBlocks.id))
+    : [];
+
+  const personalWorkAssetLinkRows = personalWorksRows.length > 0
+    ? await db
+        .select({ workItemId: workAssetLinks.workItemId, assetId: workAssetLinks.assetId })
+        .from(workAssetLinks)
+        .where(inArray(workAssetLinks.workItemId, personalWorksRows.map(w => w.id)))
     : [];
 
   const personalWorkVersions = personalWorksRows.length > 0
@@ -556,6 +572,7 @@ export async function exportAccountDataForUser(userId: number): Promise<AccountD
     .where(and(eq(entitlements.userId, userId), isNull(entitlements.organizationId)))
     .orderBy(desc(entitlements.grantedAt));
 
+  // Exclude organization-scoped `review_*` notifications so school work titles never leak into personal export
   const personalNotificationRows = await db
     .select({
       id: notifications.id,
@@ -566,7 +583,7 @@ export async function exportAccountDataForUser(userId: number): Promise<AccountD
       createdAt: notifications.createdAt,
     })
     .from(notifications)
-    .where(eq(notifications.userId, userId))
+    .where(and(eq(notifications.userId, userId), notLike(notifications.type, "review_%")))
     .orderBy(desc(notifications.createdAt))
     .limit(500);
 
@@ -584,6 +601,7 @@ export async function exportAccountDataForUser(userId: number): Promise<AccountD
       ...work,
       blocks: workBlocks.filter(b => b.workItemId === work.id),
       versions: personalWorkVersions.filter(v => v.workItemId === work.id),
+      linkedAssetIds: personalWorkAssetLinkRows.filter(l => l.workItemId === work.id).map(l => l.assetId),
     })),
     assets: personalAssetRows.map(asset => ({
       ...asset,
@@ -599,6 +617,36 @@ export async function exportAccountDataForUser(userId: number): Promise<AccountD
     purchases: personalPurchaseRows,
     entitlements: personalEntitlementRows,
     notifications: personalNotificationRows,
+  });
+
+  // Commit atomic quota reservation + audit log AFTER data queries succeed.
+  await db.transaction(async tx => {
+    const [lockedUser] = await tx.select({ id: users.id }).from(users).where(eq(users.id, userId)).limit(1).for("update");
+    if (!lockedUser) throw new AccountAccessError();
+    const windowStart = new Date(Date.now() - EXPORT_WINDOW_MS);
+    const recentExports = await tx
+      .select({ id: auditLogs.id })
+      .from(auditLogs)
+      .where(and(
+        eq(auditLogs.actorUserId, userId),
+        eq(auditLogs.action, "account.data_exported"),
+        gte(auditLogs.createdAt, windowStart),
+      ))
+      .limit(EXPORT_MAX_PER_WINDOW);
+    if (recentExports.length >= EXPORT_MAX_PER_WINDOW) {
+      throw new AccountConflictError("تم تجاوز الحد المسموح لتصدير البيانات مؤقتًا؛ حاول مرة أخرى بعد دقائق");
+    }
+    await tx.insert(auditLogs).values({
+      actorUserId: userId,
+      action: "account.data_exported",
+      resourceType: "user",
+      resourceId: String(userId),
+      metadata: {
+        scopePolicy: "personal_owned_only",
+        personalWorksCount: bundle.personalWorks.length,
+        personalAssetsCount: bundle.personalAssets.length,
+      },
+    });
   });
 
   return bundle;

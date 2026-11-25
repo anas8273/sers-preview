@@ -135,7 +135,7 @@ export default function Store() {
   const totalPaid = allItems.filter(({ service }) => service.price > 0).length;
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC]" dir="rtl">
+    <div className="min-h-screen bg-[#F8FAFC] pb-24 lg:pb-10" dir="rtl">
       {/* Header */}
       <div className="w-full bg-gradient-to-l from-pink-700 via-pink-600 to-pink-500">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8">

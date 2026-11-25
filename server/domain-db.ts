@@ -267,8 +267,24 @@ export async function updateWorkItemForUser(
 }
 
 export async function softDeleteWorkItemForUser(userId: number, workItemId: number) {
-  return Boolean(await withWorkWrite(userId, workItemId, async tx => {
-    await tx.update(workItems).set({ deletedAt: new Date() }).where(eq(workItems.id, workItemId)); return true;
+  return Boolean(await withWorkWrite(userId, workItemId, async (tx, work) => {
+    // Approved/archived works cannot be soft-deleted casually, and plain school members
+    // can only delete their own unapproved drafts (school owner/admin may manage org drafts).
+    if (work.status === "approved" || work.status === "archived") return false;
+    if (work.ownerType === "organization" && work.creatorUserId !== userId && work.ownerOrganizationId) {
+      const [member] = await tx
+        .select({ role: memberships.role })
+        .from(memberships)
+        .where(and(
+          eq(memberships.userId, userId),
+          eq(memberships.organizationId, work.ownerOrganizationId),
+          eq(memberships.status, "active"),
+        ))
+        .limit(1);
+      if (!member || (member.role !== "owner" && member.role !== "admin")) return false;
+    }
+    await tx.update(workItems).set({ deletedAt: new Date() }).where(eq(workItems.id, workItemId));
+    return true;
   }));
 }
 
@@ -313,7 +329,13 @@ export function sanitizeCopiedDraftForPersonalScope(
   }
   let normalizedPortfolio: ReturnType<typeof normalizePortfolioDraft>;
   try {
-    normalizedPortfolio = normalizePortfolioDraft(rawBlockData);
+    // Sanitize only `introduction` since organization-scoped `entries` are intentionally cleared (`entries: []`).
+    normalizedPortfolio = normalizePortfolioDraft({
+      schemaVersion: 1,
+      revision: 1,
+      introduction: rawBlockData.introduction,
+      entries: [],
+    });
   } catch (error) {
     if (error instanceof PortfolioValidationError) throw new WorkCopyValidationError();
     throw error;
@@ -345,7 +367,13 @@ export function sanitizeCopiedDraftForPersonalScope(
 export async function copyWorkToPersonalForUser(userId: number, sourceWorkItemId: number) {
   const readable = await assertWorkAccess(userId, sourceWorkItemId, "read");
   if (!readable) return undefined;
-  if (readable.creatorUserId !== userId || isSelfEvaluationModuleWork(readable)) return undefined;
+  if (
+    readable.ownerType !== "organization" ||
+    readable.creatorUserId !== userId ||
+    isSelfEvaluationModuleWork(readable)
+  ) {
+    return undefined;
+  }
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
@@ -611,9 +639,51 @@ export async function getAssetUsageForUser(userId: number, assetId: number): Pro
     }
   }
 
+  // Also include active Self-Evaluation cycles referencing `assetId` inside `self_evaluation_cycle` blocks
+  const selfEvalRows = await db
+    .select({
+      workItemId: workItems.id,
+      workTitle: workItems.title,
+      workType: workItems.type,
+      workStatus: workItems.status,
+      blockData: contentBlocks.data,
+    })
+    .from(contentBlocks)
+    .innerJoin(workItems, eq(contentBlocks.workItemId, workItems.id))
+    .where(and(
+      eq(contentBlocks.blockType, "self_evaluation_cycle"),
+      isNull(workItems.deletedAt),
+      readableWorkScope,
+    ));
+
+  const selfEvalLinks: AssetUsageSummary["activeLinks"] = [];
+  for (const row of selfEvalRows) {
+    const assessments =
+      row.blockData && typeof row.blockData === "object" && typeof (row.blockData as Record<string, unknown>).assessments === "object"
+        ? ((row.blockData as Record<string, unknown>).assessments as Record<string, unknown>)
+        : {};
+    let referenced = false;
+    for (const item of Object.values(assessments)) {
+      const ids = item && typeof item === "object" ? (item as Record<string, unknown>).evidenceAssetIds : undefined;
+      if (Array.isArray(ids) && ids.includes(assetId)) {
+        referenced = true;
+        break;
+      }
+    }
+    if (referenced) {
+      selfEvalLinks.push({
+        workItemId: row.workItemId,
+        workTitle: row.workTitle,
+        workType: row.workType,
+        workStatus: row.workStatus,
+        role: "self_evaluation_evidence",
+      });
+    }
+  }
+
   return {
     assetId,
-    activeLinks: activeRows,
+    activeLinks: [...activeRows, ...selfEvalLinks],
     historicalVersionCount,
   };
 }
@@ -661,19 +731,82 @@ export async function deleteAssetForUser(
       .where(and(eq(workAssetLinks.assetId, asset.id), isNull(workItems.deletedAt)))
       .for("update");
 
-    if (activeLinks.length > 0 && !input.unlinkActive) {
+    const scopeWorkFilter =
+      asset.ownerType === "personal"
+        ? and(eq(workItems.ownerType, "personal"), eq(workItems.ownerUserId, userId))
+        : and(eq(workItems.ownerType, "organization"), eq(workItems.ownerOrganizationId, asset.ownerOrganizationId!));
+
+    const selfEvalCandidateRows = await tx
+      .select({
+        blockId: contentBlocks.id,
+        blockData: contentBlocks.data,
+        workItemId: workItems.id,
+        workStatus: workItems.status,
+      })
+      .from(contentBlocks)
+      .innerJoin(workItems, eq(contentBlocks.workItemId, workItems.id))
+      .where(and(
+        eq(contentBlocks.blockType, "self_evaluation_cycle"),
+        isNull(workItems.deletedAt),
+        scopeWorkFilter,
+      ))
+      .for("update");
+
+    const matchingSelfEvalBlocks = selfEvalCandidateRows.filter(row => {
+      const assessments =
+        row.blockData && typeof row.blockData === "object" && typeof (row.blockData as Record<string, unknown>).assessments === "object"
+          ? ((row.blockData as Record<string, unknown>).assessments as Record<string, unknown>)
+          : {};
+      return Object.values(assessments).some(item => {
+        const ids = item && typeof item === "object" ? (item as Record<string, unknown>).evidenceAssetIds : undefined;
+        return Array.isArray(ids) && ids.includes(asset.id);
+      });
+    });
+
+    if ((activeLinks.length > 0 || matchingSelfEvalBlocks.length > 0) && !input.unlinkActive) {
       throw new AssetDeleteConflictError("الشاهد مستخدم في أعمال أخرى. أكد فك الربط ثم الحذف.");
     }
 
     let unlinkedCount = 0;
-    if (activeLinks.length > 0 && input.unlinkActive) {
+    if ((activeLinks.length > 0 || matchingSelfEvalBlocks.length > 0) && input.unlinkActive) {
       const lockedLinks = activeLinks.filter(link => link.workStatus === "approved" || link.workStatus === "archived");
-      if (lockedLinks.length > 0) {
+      const lockedSelfEval = matchingSelfEvalBlocks.filter(row => row.workStatus === "approved" || row.workStatus === "archived");
+      if (lockedLinks.length > 0 || lockedSelfEval.length > 0) {
         throw new AssetDeleteConflictError("لا يمكن حذف الشاهد لأنه مرتبط بعمل معتمد أو مؤرشف");
       }
-      const unlockedIds = activeLinks.map(link => link.linkId);
-      await tx.delete(workAssetLinks).where(inArray(workAssetLinks.id, unlockedIds));
-      unlinkedCount = unlockedIds.length;
+      if (activeLinks.length > 0) {
+        const unlockedIds = activeLinks.map(link => link.linkId);
+        await tx.delete(workAssetLinks).where(inArray(workAssetLinks.id, unlockedIds));
+        unlinkedCount += unlockedIds.length;
+      }
+      for (const row of matchingSelfEvalBlocks) {
+        const rawBlock = (row.blockData ?? {}) as Record<string, unknown>;
+        const rawAssessments = (rawBlock.assessments ?? {}) as Record<string, Record<string, unknown>>;
+        const nextAssessments: Record<string, Record<string, unknown>> = {};
+        for (const [k, val] of Object.entries(rawAssessments)) {
+          if (val && typeof val === "object" && Array.isArray(val.evidenceAssetIds)) {
+            nextAssessments[k] = {
+              ...val,
+              evidenceAssetIds: val.evidenceAssetIds.filter((id: unknown) => id !== asset.id),
+            };
+          } else {
+            nextAssessments[k] = val;
+          }
+        }
+        const currentRev = typeof rawBlock.revision === "number" && Number.isInteger(rawBlock.revision) ? rawBlock.revision : 1;
+        await tx
+          .update(contentBlocks)
+          .set({
+            data: {
+              ...rawBlock,
+              revision: currentRev + 1,
+              assessments: nextAssessments,
+              updatedAt: new Date().toISOString(),
+            },
+          })
+          .where(eq(contentBlocks.id, row.blockId));
+        unlinkedCount += 1;
+      }
     }
 
     await tx.update(assets).set({ deletedAt: new Date() }).where(eq(assets.id, asset.id));

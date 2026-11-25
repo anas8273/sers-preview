@@ -223,6 +223,9 @@ export async function createReviewForUser(requestedByUserId: number, workVersion
       throw new ReviewConflictError("Only the current work version can be submitted for review");
     }
 
+    if (row.version.createdByUserId === reviewerUserId) {
+      throw new Error("Reviewer must be another user");
+    }
     const [reviewerMembership] = await tx
       .select()
       .from(memberships)
@@ -242,6 +245,16 @@ export async function createReviewForUser(requestedByUserId: number, workVersion
       .where(and(eq(reviews.workVersionId, workVersionId), eq(reviews.status, "pending")))
       .limit(1).for("update");
     if (pendingReview) throw new ReviewConflictError("A pending review already exists for this version");
+
+    const [existingForReviewer] = await tx
+      .select({ id: reviews.id })
+      .from(reviews)
+      .where(and(eq(reviews.workVersionId, workVersionId), eq(reviews.reviewerUserId, reviewerUserId)))
+      .limit(1)
+      .for("update");
+    if (existingForReviewer) {
+      throw new ReviewConflictError("سبق تسجيل مراجعة لهذا العضو على نفس النسخة؛ أنشئ نسخة محدثة أو اختر مراجعًا آخر");
+    }
 
     const inserted = await tx.insert(reviews).values({
       workVersionId,
@@ -303,9 +316,32 @@ export async function getReviewForUser(userId: number, reviewId: number) {
     Boolean(row.work.ownerOrganizationId) &&
     (isSchoolAdmin || (row.review.requestedByUserId === userId && actorOrgRole !== null && canWriteOrganization(actorOrgRole)));
 
+  const participantRows = await db
+    .select({ id: users.id, name: users.name })
+    .from(users)
+    .where(inArray(users.id, [row.review.requestedByUserId, row.review.reviewerUserId]));
+  const nameById = new Map(participantRows.map(u => [u.id, u.name]));
+
+  const rawSnapshot = row.version.snapshot as Record<string, unknown> | null;
+  const portfolioSnapshot =
+    rawSnapshot && rawSnapshot.kind === "portfolio" && typeof rawSnapshot.portfolioDraft === "object"
+      ? {
+          introduction: String((rawSnapshot.portfolioDraft as Record<string, unknown>)?.introduction ?? ""),
+          entries: Array.isArray(rawSnapshot.resolvedReferences)
+            ? (rawSnapshot.resolvedReferences as Array<Record<string, unknown>>).map(ref => ({
+                sectionTitle: String(ref.sectionTitle ?? ""),
+                title: String(ref.title ?? ""),
+                kind: String(ref.kind ?? ""),
+              }))
+            : [],
+        }
+      : undefined;
+
   const comments = await db.select().from(reviewComments).where(eq(reviewComments.reviewId, reviewId)).orderBy(reviewComments.createdAt);
   return {
     ...row.review,
+    requestedByName: nameById.get(row.review.requestedByUserId) ?? null,
+    reviewerName: nameById.get(row.review.reviewerUserId) ?? null,
     versionNumber: row.version.versionNumber,
     versionCreatedByUserId: row.version.createdByUserId,
     workId: row.work.id,
@@ -314,6 +350,7 @@ export async function getReviewForUser(userId: number, reviewId: number) {
     canReassign,
     comments,
     report: projectReportSnapshot(row.version.snapshot),
+    portfolio: portfolioSnapshot,
   };
 }
 
@@ -349,11 +386,21 @@ export async function listReviewsForUser(userId: number) {
     .where(and(isNull(workItems.deletedAt), scopeFilter))
     .orderBy(desc(reviews.updatedAt));
 
+  const userIdsToResolve = Array.from(
+    new Set(candidates.flatMap(row => [row.review.requestedByUserId, row.review.reviewerUserId])),
+  );
+  const userRows = userIdsToResolve.length > 0
+    ? await db.select({ id: users.id, name: users.name }).from(users).where(inArray(users.id, userIdsToResolve))
+    : [];
+  const nameMap = new Map(userRows.map(u => [u.id, u.name]));
+
   const visible = [];
   for (const row of candidates) {
     if (await assertWorkAccess(userId, row.work.id, "read")) {
       visible.push({
         ...row.review,
+        requestedByName: nameMap.get(row.review.requestedByUserId) ?? null,
+        reviewerName: nameMap.get(row.review.reviewerUserId) ?? null,
         versionNumber: row.version.versionNumber,
         workId: row.work.id,
         workTitle: row.work.title,
@@ -527,15 +574,17 @@ export async function reassignReviewForUser(actorUserId: number, reviewId: numbe
       targetId: String(reviewId),
     }).onDuplicateKeyUpdate({ set: { readAt: null, createdAt: new Date() } });
 
-    await tx.insert(notifications).values({
-      userId: previousReviewerUserId,
-      type: "review_reassigned_away",
-      dedupeKey: `review:${reviewId}:reassigned-away:${previousReviewerUserId}:to:${newReviewerUserId}`,
-      title: "أُسندت مراجعة كانت لديك إلى مراجع آخر",
-      body: `${lockedWork.title} — نسخة ${row.version.versionNumber}`,
-      targetType: "work",
-      targetId: String(lockedWork.id),
-    }).onDuplicateKeyUpdate({ set: { readAt: null, createdAt: new Date() } });
+    if (previousReviewerUserId !== actorUserId) {
+      await tx.insert(notifications).values({
+        userId: previousReviewerUserId,
+        type: "review_reassigned_away",
+        dedupeKey: `review:${reviewId}:reassigned-away:${previousReviewerUserId}:to:${newReviewerUserId}`,
+        title: "أُسندت مراجعة كانت لديك إلى مراجع آخر",
+        body: `${lockedWork.title} — نسخة ${row.version.versionNumber}`,
+        targetType: "work",
+        targetId: String(lockedWork.id),
+      }).onDuplicateKeyUpdate({ set: { readAt: null, createdAt: new Date() } });
+    }
 
     return reviewId;
   });

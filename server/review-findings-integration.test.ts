@@ -391,7 +391,8 @@ suite("PR #46 review findings — server & router MySQL integration", () => {
     const saved = await domainCaller(adminUser).selfEvaluation.saveCycle({
       workItemId: cycleId,
       expectedRevision: 1,
-      executiveSummary: "تشخيص أولي استرشادي",
+      schoolCategory: "private_international",
+      executiveSummary: "تشخيص مؤسسي وفق مؤشرات هيئة تقويم التعليم (تميز)",
       assessments: {
         "admin.planning": {
           indicatorKey: "admin.planning",
@@ -399,17 +400,27 @@ suite("PR #46 review findings — server & router MySQL integration", () => {
           rationale: "توجد خطة تشغيلية لكن متابعة المؤشرات تحتاج انتظامًا.",
           evidenceAssetIds: [],
         },
+        "1-4-1-1": {
+          indicatorKey: "1-4-1-1",
+          level: 3,
+          rationale: "التزام المدرسة بمتطلبات التراخيص والحوكمة المعتمدة من الوزارة.",
+          evidenceAssetIds: [],
+        },
       },
       improvementActions: [],
     });
     expect(saved.draft.revision).toBe(2);
+    expect(saved.draft.schoolCategory).toBe("private_international");
+    expect(saved.summary.totalIndicators).toBe(51);
+    expect(saved.draft.assessments["1-1-1-1"]?.level).toBe(2);
+    expect(saved.draft.assessments["1-4-1-1"]?.level).toBe(3);
     const saveAudit = await db
       .select()
       .from(auditLogs)
       .where(and(eq(auditLogs.action, "self_evaluation.saved"), eq(auditLogs.resourceId, String(cycleId))));
     expect(saveAudit).toHaveLength(1);
 
-    // Generic pipelines reject self-evaluation cycles (L9 + M1)
+    // Same-org asset linked to self-evaluation reports usage in domain.asset.usage (Used-in)
     const schoolAssetSameOrg = await createAssetForUser(adminUser.id, {
       title: "شاهد نفس المدرسة",
       kind: "text",
@@ -417,6 +428,28 @@ suite("PR #46 review findings — server & router MySQL integration", () => {
       organizationId: orgId,
       metadata: { text: "شاهد" },
     });
+    await domainCaller(adminUser).selfEvaluation.saveCycle({
+      workItemId: cycleId,
+      expectedRevision: 2,
+      executiveSummary: "ربط شاهد فعلي بالمؤشر 1-1-1-1",
+      assessments: {
+        "1-1-1-1": {
+          indicatorKey: "1-1-1-1",
+          level: 3,
+          rationale: "توثيق الخطة التشغيلية بشاهد رسمي معتمد.",
+          evidenceAssetIds: [schoolAssetSameOrg!.id],
+        },
+      },
+      improvementActions: [],
+    });
+    const usage = await domainCaller(adminUser).asset.usage({ id: schoolAssetSameOrg!.id });
+    expect(
+      usage?.activeLinks.some(
+        link => link.workItemId === cycleId && link.role === "self_evaluation_evidence",
+      ),
+    ).toBe(true);
+
+    // Generic pipelines reject self-evaluation cycles (L9 + M1)
     await expect(
       domainCaller(adminUser).asset.linkToWork({ workItemId: cycleId, assetId: schoolAssetSameOrg!.id }),
     ).rejects.toMatchObject({ code: "FORBIDDEN" });
@@ -448,6 +481,63 @@ suite("PR #46 review findings — server & router MySQL integration", () => {
       ownerType: "personal",
     });
     expect(personalCycle?.canEdit).toBe(true);
+
+    // NEXT-19 / O009: Admin delegates peerMemberUser onto committeeMembers -> peerMemberUser can rate indicators,
+    // but CANNOT change schoolCategory or escalate committeeMembers!
+    const currentCycle = await domainCaller(adminUser).selfEvaluation.getCycle({ workItemId: cycleId });
+    await domainCaller(adminUser).selfEvaluation.saveCycle({
+      workItemId: cycleId,
+      expectedRevision: currentCycle.draft.revision,
+      executiveSummary: currentCycle.draft.executiveSummary,
+      committeeMembers: [
+        {
+          id: "comm-peer",
+          userId: peerMemberUser.id,
+          name: peerMemberUser.name || "معلم زميل",
+          roleTitle: "عضو فريق التقويم — التعليم والتعلم",
+          assignedDomainKey: "teaching_learning",
+        },
+      ],
+      assessments: currentCycle.draft.assessments,
+      improvementActions: currentCycle.draft.improvementActions,
+    });
+
+    const delegatedView = await domainCaller(peerMemberUser).selfEvaluation.getCycle({ workItemId: cycleId });
+    expect(delegatedView.canEdit).toBe(true);
+    expect(delegatedView.canManageCommittee).toBe(false);
+
+    // Delegated committee member CANNOT change schoolCategory
+    await expect(
+      domainCaller(peerMemberUser).selfEvaluation.saveCycle({
+        workItemId: cycleId,
+        expectedRevision: delegatedView.draft.revision,
+        schoolCategory: "government",
+        executiveSummary: delegatedView.draft.executiveSummary,
+        assessments: delegatedView.draft.assessments,
+        improvementActions: delegatedView.draft.improvementActions,
+      }),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+
+    // Delegated committee member CAN contribute an indicator rating, while any attempt to tamper with committeeMembers is ignored
+    const memberSaved = await domainCaller(peerMemberUser).selfEvaluation.saveCycle({
+      workItemId: cycleId,
+      expectedRevision: delegatedView.draft.revision,
+      executiveSummary: delegatedView.draft.executiveSummary,
+      committeeMembers: [],
+      assessments: {
+        ...delegatedView.draft.assessments,
+        "2-1-1-1": {
+          indicatorKey: "2-1-1-1",
+          level: 3,
+          rationale: "توفير فرص تعلم متكافئة لجميع المتعلمين بشواهد صفية موثقة.",
+          evidenceAssetIds: [],
+        },
+      },
+      improvementActions: delegatedView.draft.improvementActions,
+    });
+    expect(memberSaved.draft.assessments["2-1-1-1"]?.level).toBe(3);
+    expect(memberSaved.draft.committeeMembers).toHaveLength(1);
+    expect(memberSaved.draft.committeeMembers[0]?.userId).toBe(peerMemberUser.id);
   });
 
   it("L6/R18: account.exportMyData isolates personal data from other users/schools, strips secrets, logs audit, and rate-limits after 5 exports", async () => {

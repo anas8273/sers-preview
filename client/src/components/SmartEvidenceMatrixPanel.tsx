@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Award, CheckCircle2, CircleDashed, Loader2, Plus, ShieldCheck, Sparkles } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Award, Building2, CheckCircle2, CircleDashed, Loader2, Plus, ShieldCheck, Sparkles } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import type { OfficialStandardPackId } from "@shared/saudi-standards-packs";
 
@@ -7,14 +7,33 @@ type AssetOption = {
   id: number;
   title: string;
   kind: string;
+  ownerType?: "personal" | "organization";
+  ownerOrganizationId?: number | null;
 };
 
 export default function SmartEvidenceMatrixPanel({ assets }: { assets: AssetOption[] }) {
   const [packId, setPackId] = useState<OfficialStandardPackId>("saudi-teacher-eval-7");
+  const [selectedOrgId, setSelectedOrgId] = useState<number | undefined>();
   const [selectedAssetByStandard, setSelectedAssetByStandard] = useState<Record<number, number | undefined>>({});
 
   const utils = trpc.useUtils();
-  const matrixQuery = trpc.domain.standards.coverageMatrix.useQuery({ packId }, { retry: false });
+  const orgsQuery = trpc.domain.organization.listMine.useQuery(undefined, { retry: false });
+
+  useEffect(() => {
+    if (!selectedOrgId && orgsQuery.data && orgsQuery.data.length > 0) {
+      setSelectedOrgId(orgsQuery.data[0]!.id);
+    }
+  }, [orgsQuery.data, selectedOrgId]);
+
+  const activeSchoolId =
+    packId === "etec-school-accreditation-10" && (orgsQuery.data?.length ?? 0) > 0
+      ? (selectedOrgId ?? orgsQuery.data?.[0]?.id)
+      : undefined;
+
+  const matrixQuery = trpc.domain.standards.coverageMatrix.useQuery(
+    activeSchoolId ? { packId, organizationId: activeSchoolId } : { packId },
+    { retry: false },
+  );
 
   const seedMutation = trpc.domain.standards.seedOfficialPacks.useMutation({
     onSuccess: async () => {
@@ -45,7 +64,7 @@ export default function SmartEvidenceMatrixPanel({ assets }: { assets: AssetOpti
           <p className="inline-flex items-center gap-1.5 text-xs font-bold text-teal-700">
             <Award className="h-4 w-4" /> مصفوفة التغطية الذكية (SmartEvidence)
           </p>
-          <h2 className="mt-1 text-lg font-bold text-slate-950">تغطية عناصر التقييم والمعايير المهنية</h2>
+          <h2 className="mt-1 text-lg font-bold text-slate-950">تغطية عناصر التقييم والمعايير المهنية والمدرسية</h2>
           <p className="mt-1 text-xs leading-6 text-slate-600">
             تابع أي عنصر تقييم مكتمل بشاهد أصلي وأي عنصر ينقصه توثيق، واربط شواهدك مباشرة دون تكرار رفع الملفات.
           </p>
@@ -68,8 +87,41 @@ export default function SmartEvidenceMatrixPanel({ assets }: { assets: AssetOpti
           >
             المعايير المهنية الـ 11
           </button>
+          <button
+            type="button"
+            aria-pressed={packId === "etec-school-accreditation-10"}
+            onClick={() => setPackId("etec-school-accreditation-10")}
+            className={`min-h-10 rounded-lg px-3 py-1.5 text-xs font-bold transition ${packId === "etec-school-accreditation-10" ? "bg-teal-700 text-white shadow-sm" : "text-slate-700 hover:bg-white"}`}
+          >
+            معايير الاعتماد المدرسي الـ 10 (ETEC)
+          </button>
         </div>
       </div>
+
+      {packId === "etec-school-accreditation-10" && orgsQuery.data && orgsQuery.data.length > 0 && (
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-teal-100 bg-teal-50/60 px-3.5 py-2.5 text-xs text-teal-950">
+          <span className="inline-flex items-center gap-1.5 font-bold">
+            <Building2 className="h-4 w-4 text-teal-700" />
+            نطاق شواهد الاعتماد المدرسي:
+          </span>
+          {orgsQuery.data.length > 1 ? (
+            <select
+              aria-label="اختيار مدرسة الاعتماد المدرسي"
+              value={activeSchoolId ?? ""}
+              onChange={e => setSelectedOrgId(Number(e.target.value) || undefined)}
+              className="min-w-0 max-w-full truncate rounded-lg border border-teal-200 bg-white px-2.5 py-1 text-xs font-bold text-slate-900"
+            >
+              {orgsQuery.data.map(org => (
+                <option key={org.id} value={org.id}>
+                  {org.name}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <span className="font-bold">{orgsQuery.data[0]!.name}</span>
+          )}
+        </div>
+      )}
 
       {matrixQuery.isLoading && (
         <div role="status" className="mt-5 flex items-center justify-center rounded-xl border border-slate-200 bg-slate-50 py-8 text-xs text-slate-600">
@@ -77,11 +129,17 @@ export default function SmartEvidenceMatrixPanel({ assets }: { assets: AssetOpti
         </div>
       )}
 
-      {!matrixQuery.isLoading && rows.length === 0 && (
+      {matrixQuery.error && (
+        <p role="alert" className="mt-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-xs font-semibold text-red-800">
+          {matrixQuery.error.message}
+        </p>
+      )}
+
+      {!matrixQuery.isLoading && !matrixQuery.error && rows.length === 0 && (
         <div className="mt-5 flex flex-col items-center justify-between gap-3 rounded-xl border border-dashed border-teal-200 bg-teal-50/50 p-5 text-center sm:flex-row sm:text-right">
           <div>
             <p className="text-sm font-bold text-slate-900">حزمة المعايير الرسمية غير مفعّلة بعد في السجل</p>
-            <p className="mt-1 text-xs text-slate-600">فعّل حزمتي عناصر تقييم الأداء الـ 7 والمعايير المهنية الـ 11 بنقرة واحدة لبدء ربط شواهدك بها.</p>
+            <p className="mt-1 text-xs text-slate-600">فعّل حزم عناصر تقييم الأداء الـ 7 والمعايير المهنية الـ 11 ومعايير الاعتماد المدرسي الـ 10 بنقرة واحدة لبدء ربط شواهدك بها.</p>
           </div>
           <button
             type="button"
@@ -93,6 +151,12 @@ export default function SmartEvidenceMatrixPanel({ assets }: { assets: AssetOpti
             تفعيل حزمة المعايير الرسمية
           </button>
         </div>
+      )}
+      {seedMutation.error && (
+        <p role="alert" className="mt-3 rounded-xl bg-red-50 px-3 py-2 text-xs text-red-700">{seedMutation.error.message}</p>
+      )}
+      {linkMutation.error && (
+        <p role="alert" className="mt-3 rounded-xl bg-red-50 px-3 py-2 text-xs text-red-700">{linkMutation.error.message}</p>
       )}
 
       {!matrixQuery.isLoading && rows.length > 0 && data && (
@@ -117,7 +181,14 @@ export default function SmartEvidenceMatrixPanel({ assets }: { assets: AssetOpti
           <div className="mt-4 divide-y divide-slate-100 rounded-xl border border-slate-200">
             {rows.map(row => {
               const linkedIds = new Set(row.linkedAssets.map(item => item.assetId));
-              const availableAssets = assets.filter(asset => !linkedIds.has(asset.id));
+              const availableAssets = assets.filter(asset => {
+                if (linkedIds.has(asset.id)) return false;
+                if (!asset.ownerType) return true;
+                if (activeSchoolId !== undefined) {
+                  return asset.ownerType === "organization" && asset.ownerOrganizationId === activeSchoolId;
+                }
+                return asset.ownerType === "personal";
+              });
               const chosenAssetId = selectedAssetByStandard[row.standardVersionId];
 
               return (

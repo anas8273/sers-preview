@@ -1,5 +1,5 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, gt, isNull, or } from "drizzle-orm";
 import { entitlements, products, purchases } from "../drizzle/domain-core";
 import { getDb } from "./db";
 
@@ -106,6 +106,7 @@ export async function listActiveProducts() {
 export async function listUserEntitlements(userId: number) {
   const db = await getDb();
   if (!db) return [];
+  const now = new Date();
   return db
     .select({
       id: entitlements.id,
@@ -119,7 +120,11 @@ export async function listUserEntitlements(userId: number) {
     })
     .from(entitlements)
     .innerJoin(products, eq(entitlements.productId, products.id))
-    .where(and(eq(entitlements.userId, userId), eq(entitlements.status, "active")))
+    .where(and(
+      eq(entitlements.userId, userId),
+      eq(entitlements.status, "active"),
+      or(isNull(entitlements.expiresAt), gt(entitlements.expiresAt, now)),
+    ))
     .orderBy(desc(entitlements.grantedAt));
 }
 
@@ -163,6 +168,28 @@ export async function executeSandboxPurchaseForUser(
       .limit(1)
       .for("update");
     if (!product) return undefined;
+
+    // Prevent duplicate 'paid' purchase rows if the user already holds an active non-expired entitlement.
+    const now = new Date();
+    const [activeEntitlement] = await tx
+      .select()
+      .from(entitlements)
+      .where(and(
+        eq(entitlements.userId, userId),
+        eq(entitlements.productId, product.id),
+        eq(entitlements.status, "active"),
+        or(isNull(entitlements.expiresAt), gt(entitlements.expiresAt, now)),
+      ))
+      .limit(1)
+      .for("update");
+    if (activeEntitlement) {
+      return {
+        purchaseId: activeEntitlement.purchaseId ?? 0,
+        productId: product.id,
+        state: "paid" as const,
+        deduplicated: true as const,
+      };
+    }
 
     const [inserted] = await tx.insert(purchases).values({
       userId,
