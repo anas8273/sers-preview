@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Building2, CalendarDays, Loader2, LogOut, Plus, UserRound } from "lucide-react";
+import { Building2, CalendarDays, Download, Loader2, LogOut, Plus, UserRound } from "lucide-react";
 import { useLocation } from "wouter";
 import AppSidebar from "@/components/AppSidebar";
 import { trpc } from "@/lib/trpc";
@@ -105,6 +105,20 @@ export default function AccountHub() {
   const createSchool = trpc.account.createSchool.useMutation({ onSuccess: async () => { setSchoolName(""); await refresh(); } });
   const accept = trpc.account.acceptInvitation.useMutation({ onSuccess: refresh });
   const createYear = trpc.account.createAcademicYear.useMutation({ onSuccess: async () => { setYearLabel(""); await utils.account.academicYears.invalidate(); } });
+  const exportMyData = trpc.account.exportMyData.useMutation({
+    onSuccess: bundle => {
+      const json = JSON.stringify(bundle, null, 2);
+      const blob = new Blob([json], { type: "application/json;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `sers-account-export-${bundle.user.id}-${bundle.exportedAt.slice(0, 10)}.json`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      document.body.removeChild(anchor);
+      URL.revokeObjectURL(url);
+    },
+  });
   const manageable = overview.data?.schools.filter(s => s.status === "active" && ["owner", "admin"].includes(s.role)) ?? [];
   const importLegacyProfile = async () => {
     if (!window.confirm("لا يمكن إثبات مالك النسخة المحلية القديمة تلقائيًا. هل تؤكد أنها تخص هذا الحساب وتريد نسخها إلى الخزنة المشفرة؟ لن تُحذف النسخة الأصلية إلا بعد نجاح الحفظ المشفر.")) return;
@@ -141,7 +155,30 @@ export default function AccountHub() {
       {legacyImportStatus !== "none" && legacyImportStatus !== "imported" && <section className="rounded-2xl border border-amber-200 bg-amber-50 p-5" aria-live="polite"><h2 className="font-bold text-amber-950">نسخة محلية قديمة متاحة</h2><p className="mt-2 text-sm leading-7 text-amber-900">لا ننسب هذه النسخة تلقائيًا لأي حساب ولا نعرض محتواها قبل موافقتك. إذا كانت تخص هذا الحساب، يمكنك نسخها إلى الخزنة المشفرة المرتبطة بجلسة الدخول. تبقى النسخة الأصلية حتى ينجح الحفظ.</p>{legacyImportStatus === "available" && <button type="button" className={`${button} mt-3 bg-amber-800`} onClick={() => void importLegacyProfile()}>مراجعة واستيراد النسخة بموافقتي</button>}{legacyImportStatus === "importing" && <p role="status" className="mt-3 text-sm">جارٍ حفظ نسخة مشفرة durable…</p>}{legacyImportStatus === "preserved" && <p role="status" className="mt-3 text-sm">حُفظت النسخة المشفرة، وتعذر حذف الأصل؛ بقي الأصل دون حذف صامت.</p>}{legacyImportStatus === "error" && <p role="alert" className="mt-3 text-sm text-red-800">{legacyImportError || "تعذر الاستيراد؛ بقيت النسخة القديمة دون تغيير."}</p>}</section>}
       {overview.isLoading && <Loader2 aria-label="جارٍ التحميل" className="animate-spin" />}
       {overview.error && <p role="alert" className="rounded-xl bg-amber-50 p-4 text-amber-900">تعذر تحميل الحساب. سجل الدخول ثم أعد المحاولة.</p>}
-      {overview.data && <section className="rounded-2xl border border-slate-200 bg-white p-5"><div className="flex items-center gap-3"><UserRound className="h-7 w-7 text-teal-700" /><div><h2 className="font-bold">{overview.data.user.name || "حسابي"}</h2><p className="mt-1 text-sm text-slate-600">معرّف حسابك: <strong>{overview.data.user.id}</strong></p>{overview.data.user.email && <p className="mt-1 text-xs text-slate-500" dir="ltr">{overview.data.user.email}</p>}</div></div></section>}
+      {overview.data && (
+        <section className="rounded-2xl border border-slate-200 bg-white p-5">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <UserRound className="h-7 w-7 text-teal-700" />
+              <div>
+                <h2 className="font-bold">{overview.data.user.name || "حسابي"}</h2>
+                <p className="mt-1 text-sm text-slate-600">معرّف حسابك: <strong>{overview.data.user.id}</strong></p>
+                {overview.data.user.email && <p className="mt-1 text-xs text-slate-500" dir="ltr">{overview.data.user.email}</p>}
+              </div>
+            </div>
+            <button
+              type="button"
+              disabled={exportMyData.isPending}
+              onClick={() => exportMyData.mutate()}
+              className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-teal-200 bg-teal-50 px-4 py-2 text-xs font-bold text-teal-900 hover:bg-teal-100 disabled:opacity-50"
+            >
+              {exportMyData.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+              تصدير نسخة كاملة من بياناتي الشخصية (JSON)
+            </button>
+          </div>
+          {exportMyData.error && <p role="alert" className="mt-2 text-xs text-red-700">{exportMyData.error.message}</p>}
+        </section>
+      )}
       <section className="rounded-2xl border border-slate-200 bg-white p-5" aria-label="تفضيلات الصياغة والتعبئة الافتراضية">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>

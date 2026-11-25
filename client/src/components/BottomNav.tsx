@@ -1,12 +1,13 @@
 import { useLocation } from "wouter";
 import { useEffect, useRef, useState } from "react";
-import { Home, BriefcaseBusiness, Library, CheckSquare, ShoppingBag, Bell, UserRound, MoreHorizontal, X, Wrench } from "lucide-react";
+import { Home, BriefcaseBusiness, Library, CheckSquare, ClipboardCheck, ShoppingBag, Bell, UserRound, MoreHorizontal, X, Wrench } from "lucide-react";
 import { PRODUCT_NAV_ITEMS, isProductRouteActive } from "@/config/productNavigation";
 
 const iconMap = {
   home: Home,
   work: BriefcaseBusiness,
   evidence: Library,
+  evaluation: ClipboardCheck,
   reviews: CheckSquare,
   store: ShoppingBag,
   notifications: Bell,

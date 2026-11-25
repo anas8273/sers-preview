@@ -1,6 +1,7 @@
-import { and, desc, eq, inArray, isNull, or } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, or } from "drizzle-orm";
 import {
   assets,
+  contentBlocks,
   memberships,
   organizations,
   workAssetLinks,
@@ -10,6 +11,8 @@ import {
 import { getDb } from "./db";
 import { users } from "../drizzle/schema";
 import { captureAcademicContext } from "./account-db";
+import { normalizeReportDraft } from "../shared/report-projection";
+import { normalizePortfolioDraft } from "../shared/portfolio-projection";
 
 export type WorkAccessMode = "read" | "write";
 export type NewWorkItem = typeof workItems.$inferInsert;
@@ -236,6 +239,138 @@ export async function softDeleteWorkItemForUser(userId: number, workItemId: numb
   return Boolean(await withWorkWrite(userId, workItemId, async tx => {
     await tx.update(workItems).set({ deletedAt: new Date() }).where(eq(workItems.id, workItemId)); return true;
   }));
+}
+
+/**
+ * Pure sanitizer enforcing O003 & D015 when copying an organizational work's
+ * editable draft structure into an educator's personal workspace:
+ * - Preserves text fields, template choice, and educator preparer name.
+ * - Strips organization-owned `evidenceAssetIds`, `schoolLogoPng`, `schoolName`,
+ *   `schoolPrincipal`, and cross-scope portfolio entries.
+ */
+export function sanitizeCopiedDraftForPersonalScope(
+  type: "report" | "portfolio",
+  rawBlockData: Record<string, unknown> | undefined,
+): { blockType: "report_document" | "portfolio_document"; data: Record<string, unknown> } | undefined {
+  if (!rawBlockData) return undefined;
+  const nowIso = new Date().toISOString();
+  if (type === "report") {
+    const normalized = normalizeReportDraft(rawBlockData);
+    const sanitizedIdentity = normalized.reportIdentity?.reportPreparer
+      ? {
+          version: normalized.reportIdentity.version,
+          reportPreparer: normalized.reportIdentity.reportPreparer,
+        }
+      : undefined;
+    const { reportIdentity: _droppedIdentity, migratedFromSchemaVersion: _droppedMig, ...restNormalized } = normalized;
+    return {
+      blockType: "report_document",
+      data: {
+        ...restNormalized,
+        revision: 1,
+        evidenceAssetIds: [],
+        ...(sanitizedIdentity ? { reportIdentity: sanitizedIdentity } : {}),
+        updatedAt: nowIso,
+      },
+    };
+  }
+  const normalizedPortfolio = normalizePortfolioDraft(rawBlockData);
+  return {
+    blockType: "portfolio_document",
+    data: {
+      ...normalizedPortfolio,
+      revision: 1,
+      entries: [],
+      updatedAt: nowIso,
+    },
+  };
+}
+
+/**
+ * Copies a readable work item's structure/draft into an independent personal draft
+ * owned by `userId` (`O003`), leaving school versions, approvals, outputs, and
+ * organization-scoped evidence untouched in the original school workspace.
+ */
+export async function copyWorkToPersonalForUser(userId: number, sourceWorkItemId: number) {
+  const readable = await assertWorkAccess(userId, sourceWorkItemId, "read");
+  if (!readable) return undefined;
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const newWorkId = await db.transaction(async tx => {
+    if (!await lockWriteScope(tx, userId, "personal", null)) return undefined;
+    if (readable.ownerType === "organization") {
+      if (!readable.ownerOrganizationId) return undefined;
+      const [org] = await tx
+        .select()
+        .from(organizations)
+        .where(eq(organizations.id, readable.ownerOrganizationId))
+        .limit(1)
+        .for("update");
+      if (!org || org.status !== "active") return undefined;
+      const [member] = await tx
+        .select()
+        .from(memberships)
+        .where(and(
+          eq(memberships.userId, userId),
+          eq(memberships.organizationId, readable.ownerOrganizationId),
+          eq(memberships.status, "active"),
+        ))
+        .limit(1)
+        .for("update");
+      if (!member) return undefined;
+    }
+
+    const [source] = await tx
+      .select()
+      .from(workItems)
+      .where(and(eq(workItems.id, sourceWorkItemId), isNull(workItems.deletedAt)))
+      .limit(1)
+      .for("update");
+    if (!source) return undefined;
+
+    const targetBlockType = source.type === "report" ? "report_document" : "portfolio_document";
+    const [sourceBlock] = await tx
+      .select()
+      .from(contentBlocks)
+      .where(and(eq(contentBlocks.workItemId, source.id), eq(contentBlocks.blockType, targetBlockType)))
+      .orderBy(asc(contentBlocks.id))
+      .limit(1);
+
+    const personalTitle = `${source.title} (نسخة شخصية)`.slice(0, 255);
+    const [inserted] = await tx.insert(workItems).values({
+      creatorUserId: userId,
+      ownerType: "personal",
+      ownerUserId: userId,
+      ownerOrganizationId: null,
+      type: source.type,
+      title: personalTitle,
+      status: "draft",
+      currentVersionNumber: 0,
+      academicYearId: null,
+      academicTermId: null,
+      academicContext: null,
+      metadata: {
+        copiedAsPersonalDraft: true,
+        sourceOwnerType: source.ownerType,
+      },
+    });
+    const createdId = Number(inserted.insertId);
+
+    const sanitizedBlock = sanitizeCopiedDraftForPersonalScope(source.type, sourceBlock?.data);
+    if (sanitizedBlock) {
+      await tx.insert(contentBlocks).values({
+        workItemId: createdId,
+        blockType: sanitizedBlock.blockType,
+        sortOrder: 0,
+        data: sanitizedBlock.data,
+      });
+    }
+
+    return createdId;
+  });
+
+  return newWorkId ? getWorkItemForUser(userId, newWorkId) : undefined;
 }
 
 export async function createWorkVersionForUser(userId: number, workItemId: number, snapshot: Record<string, unknown>, reason?: string) {

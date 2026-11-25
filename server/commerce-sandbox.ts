@@ -1,6 +1,75 @@
+import { createHmac, timingSafeEqual } from "node:crypto";
 import { and, desc, eq } from "drizzle-orm";
 import { entitlements, products, purchases } from "../drizzle/domain-core";
 import { getDb } from "./db";
+
+export type SupportedPaymentCurrency = "SAR";
+
+export type PaymentCheckoutSessionInput = {
+  purchaseId: number;
+  userId: number;
+  productId: number;
+  amountMinor: number;
+  currency: SupportedPaymentCurrency;
+  vatRatePercent: number;
+  idempotencyKey: string;
+  returnUrl: string;
+};
+
+export type VerifiedPaymentWebhookEvent = {
+  eventId: string;
+  idempotencyKey: string;
+  providerPaymentRef: string;
+  state: "paid" | "failed" | "refunded";
+  amountMinor: number;
+  currency: SupportedPaymentCurrency;
+};
+
+/**
+ * Pluggable payment gateway contract (`O001` — e.g. Moyasar / HyperPay / Tap SAR).
+ * Live payment adapters remain disabled by default (`SERS_ENABLE_LIVE_PAYMENTS !== "1"`)
+ * until merchant credentials, VAT registration, and commercial sign-off are provided.
+ */
+export interface PaymentProviderAdapter {
+  readonly providerId: string;
+  readonly isLive: boolean;
+  createCheckoutSession(
+    input: PaymentCheckoutSessionInput,
+  ): Promise<{ checkoutUrl: string; providerPaymentRef: string }>;
+  verifyWebhookEvent(rawBody: Buffer, signatureHeader: string): VerifiedPaymentWebhookEvent;
+}
+
+/**
+ * Constant-time HMAC-SHA256 webhook signature verifier for payment provider callbacks (`F15`).
+ */
+export function verifyWebhookHmacSha256(
+  rawBody: Buffer | string,
+  webhookSecret: string,
+  providedHexSignature: string,
+): boolean {
+  if (!webhookSecret || !providedHexSignature) return false;
+  const normalizedSig = providedHexSignature.trim().replace(/^sha256=/i, "");
+  if (!/^[0-9a-f]{64}$/i.test(normalizedSig)) return false;
+  const expected = createHmac("sha256", webhookSecret).update(rawBody).digest("hex");
+  const expectedBuf = Buffer.from(expected, "hex");
+  const providedBuf = Buffer.from(normalizedSig, "hex");
+  if (expectedBuf.length !== providedBuf.length) return false;
+  return timingSafeEqual(expectedBuf, providedBuf);
+}
+
+export function getCommerceProviderStatus(env: NodeJS.ProcessEnv = process.env): {
+  mode: "disabled" | "sandbox";
+  currency: SupportedPaymentCurrency;
+  vatRatePercent: number;
+  livePaymentsAllowed: false;
+} {
+  return {
+    mode: isCommerceSandboxEnabled(env) ? "sandbox" : "disabled",
+    currency: "SAR",
+    vatRatePercent: 15,
+    livePaymentsAllowed: false,
+  };
+}
 
 /**
  * Commerce sandbox is strictly disabled in production and off by default.

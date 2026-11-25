@@ -38,6 +38,7 @@ const ExamBuilder = lazy(() => import("./pages/ExamBuilder"));
 const SharedOnlineExam = lazy(() => import("./pages/SharedOnlineExam"));
 const AuditLog = lazy(() => import("./pages/AuditLog"));
 const CatalogPage = lazy(() => import("./pages/CatalogPage"));
+const SelfEvaluationPage = lazy(() => import("./pages/SelfEvaluationPage"));
 
 function LoadingFallback() {
   return (
@@ -60,6 +61,7 @@ function Router() {
         <Route path={"/work/:id"} component={WorkDetail} />
         <Route path={"/work"}><WorkHub /></Route>
         <Route path={"/evidence"} component={EvidenceLibrary} />
+        <Route path={"/self-evaluation"} component={SelfEvaluationPage} />
         <Route path={"/reviews"} component={ReviewsHub} />
         <Route path={"/notifications"} component={NotificationsHub} />
         <Route path={"/account"} component={AccountHub} />

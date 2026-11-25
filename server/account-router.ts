@@ -1,7 +1,7 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { protectedProcedure, router } from "./_core/trpc";
-import { AccountAccessError, AccountConflictError, AccountValidationError, acceptSchoolInvitationForUser, createAcademicYearForUser, createSchoolForUser, getAccountOverviewForUser, inviteSchoolMemberForUser, listAcademicYearsForUser, listSchoolMembersForUser, setSchoolMemberForUser } from "./account-db";
+import { AccountAccessError, AccountConflictError, AccountValidationError, acceptSchoolInvitationForUser, createAcademicYearForUser, createSchoolForUser, exportAccountDataForUser, getAccountOverviewForUser, inviteSchoolMemberForUser, listAcademicYearsForUser, listSchoolMembersForUser, setSchoolMemberForUser } from "./account-db";
 const id = z.number().int().positive();
 const role = z.enum(["owner", "admin", "reviewer", "member"]);
 const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
@@ -22,4 +22,5 @@ export const accountRouter = router({
   setMember: protectedProcedure.input(z.object({ organizationId: id, membershipId: id, role, status: z.enum(["active", "suspended", "left"]) })).mutation(({ ctx, input }) => run(() => setSchoolMemberForUser(ctx.user.id, input))),
   academicYears: protectedProcedure.query(({ ctx }) => run(() => listAcademicYearsForUser(ctx.user.id))),
   createAcademicYear: protectedProcedure.input(z.object({ ownerType: z.enum(["personal", "organization"]), organizationId: id.optional(), label: z.string().trim().min(2).max(100), startsOn: date, endsOn: date, terms: z.array(z.object({ label: z.string().trim().min(2).max(100), startsOn: date, endsOn: date })).min(1).max(3) })).mutation(({ ctx, input }) => run(() => createAcademicYearForUser(ctx.user.id, input))),
+  exportMyData: protectedProcedure.mutation(({ ctx }) => run(() => exportAccountDataForUser(ctx.user.id))),
 });
