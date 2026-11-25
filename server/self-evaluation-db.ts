@@ -19,6 +19,7 @@ import {
   SelfEvaluationValidationError,
   type ImprovementAction,
   type IndicatorAssessment,
+  type SelfEvaluationCommitteeMember,
   type SelfEvaluationDraftData,
   type SelfEvaluationSchoolCategory,
   type SelfEvaluationSummary,
@@ -41,10 +42,12 @@ export class SelfEvaluationConflictError extends Error {
 }
 
 /**
- * School-owned self-evaluation cycles are institutional documents: only school
- * owner/admin may create or change them (least privilege, review finding M5).
- * Members and reviewers can read. Committee/assignment-based editing is pending
- * an owner decision (see 03_DECISION_REGISTER, O009).
+ * School-owned self-evaluation cycles are institutional documents:
+ * - Creating/deleting cycles, changing `schoolCategory`, and managing the official
+ *   Self-Evaluation & Excellence Committee (`committeeMembers`) require school `owner`/`admin`.
+ * - Active school members explicitly delegated onto `committeeMembers` (`userId`) by
+ *   `owner`/`admin` can contribute indicator ratings, factual rationales, evidence links,
+ *   and improvement actions (`R09` / `NEXT-19` / `O009`), while unassigned plain members have read-only access.
  */
 function canManageSchoolSelfEvaluation(role: string) {
   return role === "owner" || role === "admin";
@@ -114,15 +117,47 @@ async function assertCycleReadAccess(userId: number, workItemId: number) {
   return member?.membership ? { ...work, viewerRole: member.membership.role } : undefined;
 }
 
-async function assertCycleWriteInTransaction(tx: any, userId: number, workItemId: number) {
+async function assertCycleWriteInTransaction(
+  tx: any,
+  userId: number,
+  workItemId: number,
+): Promise<{ work: typeof workItems.$inferSelect; canManageCommittee: boolean } | undefined> {
   const [hint] = await tx
     .select()
     .from(workItems)
     .where(and(eq(workItems.id, workItemId), isNull(workItems.deletedAt)))
     .limit(1);
   if (!hint || !isSelfEvaluationWork(hint)) return undefined;
-  if (hint.ownerType === "personal" && hint.ownerUserId !== userId) return undefined;
-  if (!await lockWriteScope(tx, userId, hint.ownerType, hint.ownerOrganizationId)) return undefined;
+
+  let canManageCommittee = false;
+  if (hint.ownerType === "personal") {
+    if (hint.ownerUserId !== userId) return undefined;
+    const [user] = await tx.select({ id: users.id }).from(users).where(eq(users.id, userId)).limit(1).for("update");
+    if (!user) return undefined;
+    canManageCommittee = true;
+  } else {
+    if (!hint.ownerOrganizationId) return undefined;
+    const [org] = await tx
+      .select()
+      .from(organizations)
+      .where(eq(organizations.id, hint.ownerOrganizationId))
+      .limit(1)
+      .for("update");
+    if (!org || org.status !== "active") return undefined;
+    const [member] = await tx
+      .select()
+      .from(memberships)
+      .where(and(
+        eq(memberships.userId, userId),
+        eq(memberships.organizationId, hint.ownerOrganizationId),
+        eq(memberships.status, "active"),
+      ))
+      .limit(1)
+      .for("update");
+    if (!member) return undefined;
+    canManageCommittee = canManageSchoolSelfEvaluation(member.role);
+  }
+
   const [work] = await tx
     .select()
     .from(workItems)
@@ -138,7 +173,7 @@ async function assertCycleWriteInTransaction(tx: any, userId: number, workItemId
   ) {
     return undefined;
   }
-  return work;
+  return { work, canManageCommittee };
 }
 
 /**
@@ -207,8 +242,37 @@ async function sanitizeAndAssertReferencesSameScope(
       item.linkedWorkItemId && activeSameScopeWorks.has(item.linkedWorkItemId) ? item.linkedWorkItemId : null,
   }));
 
+  let sanitizedCommittee: SelfEvaluationCommitteeMember[] = draft.committeeMembers;
+  if (cycleWork.ownerType === "personal") {
+    sanitizedCommittee = draft.committeeMembers.map(m => ({ ...m, userId: null }));
+  } else if (cycleWork.ownerOrganizationId) {
+    const committeeUserIds = Array.from(
+      new Set(draft.committeeMembers.map(m => m.userId).filter((id): id is number => typeof id === "number" && id > 0)),
+    );
+    if (committeeUserIds.length > 0) {
+      const memberRows = await tx
+        .select({ userId: memberships.userId, status: memberships.status })
+        .from(memberships)
+        .where(and(
+          eq(memberships.organizationId, cycleWork.ownerOrganizationId),
+          inArray(memberships.userId, committeeUserIds),
+        ));
+      const statusByUser = new Map<number, string>(memberRows.map((r: any) => [r.userId, r.status]));
+      for (const uid of committeeUserIds) {
+        if (!statusByUser.has(uid)) {
+          throw new SelfEvaluationValidationError("أحد أعضاء لجنة التقويم المحددين لا ينتمي إلى هذه المدرسة");
+        }
+      }
+      sanitizedCommittee = draft.committeeMembers.map(m => ({
+        ...m,
+        userId: m.userId && statusByUser.get(m.userId) === "active" ? m.userId : null,
+      }));
+    }
+  }
+
   return {
     ...draft,
+    committeeMembers: sanitizedCommittee,
     assessments: prunedAssessments,
     improvementActions: prunedActions,
   };
@@ -405,6 +469,31 @@ export async function getSelfEvaluationCycleForUser(userId: number, workItemId: 
     })),
   };
   const summary = computeSelfEvaluationSummary(draft);
+  const canManageCommittee =
+    work.ownerType === "personal" || canManageSchoolSelfEvaluation(work.viewerRole);
+  const isDelegatedCommitteeMember =
+    work.ownerType === "organization" &&
+    draft.committeeMembers.some(member => member.userId === userId);
+  const canEdit = canManageCommittee || isDelegatedCommitteeMember;
+
+  const schoolMembers =
+    canManageCommittee && work.ownerType === "organization" && work.ownerOrganizationId
+      ? await db
+          .select({
+            userId: memberships.userId,
+            name: users.name,
+            role: memberships.role,
+          })
+          .from(memberships)
+          .innerJoin(users, eq(users.id, memberships.userId))
+          .where(
+            and(
+              eq(memberships.organizationId, work.ownerOrganizationId),
+              eq(memberships.status, "active"),
+            ),
+          )
+          .orderBy(asc(users.name))
+      : [];
 
   return {
     work: {
@@ -416,7 +505,9 @@ export async function getSelfEvaluationCycleForUser(userId: number, workItemId: 
       academicContext: work.academicContext,
       updatedAt: work.updatedAt,
     },
-    canEdit: work.ownerType === "personal" || canManageSchoolSelfEvaluation(work.viewerRole),
+    canEdit,
+    canManageCommittee,
+    schoolMembers,
     draft,
     summary,
     linkedWorks,
@@ -430,6 +521,7 @@ export async function saveSelfEvaluationCycleForUser(
     expectedRevision: number;
     schoolCategory?: SelfEvaluationSchoolCategory;
     executiveSummary: string;
+    committeeMembers?: SelfEvaluationCommitteeMember[];
     assessments: Record<string, IndicatorAssessment>;
     improvementActions: ImprovementAction[];
   },
@@ -438,8 +530,9 @@ export async function saveSelfEvaluationCycleForUser(
   if (!db) throw new Error("Database not available");
 
   return db.transaction(async tx => {
-    const work = await assertCycleWriteInTransaction(tx, userId, input.workItemId);
-    if (!work) throw new SelfEvaluationAccessError();
+    const access = await assertCycleWriteInTransaction(tx, userId, input.workItemId);
+    if (!access) throw new SelfEvaluationAccessError();
+    const { work, canManageCommittee } = access;
     if (work.status === "archived") throw new SelfEvaluationConflictError("لا يمكن تعديل دورة تقويم مؤرشفة");
 
     const [block] = await tx
@@ -451,17 +544,31 @@ export async function saveSelfEvaluationCycleForUser(
       .for("update");
 
     const current = normalizeSelfEvaluationDraft(block?.data);
+    const isDelegatedCommitteeMember =
+      work.ownerType === "organization" &&
+      current.committeeMembers.some(member => member.userId === userId);
+    if (!canManageCommittee && !isDelegatedCommitteeMember) {
+      throw new SelfEvaluationAccessError();
+    }
     if (current.revision !== input.expectedRevision) {
       throw new SelfEvaluationConflictError();
     }
+    if (!canManageCommittee && input.schoolCategory && input.schoolCategory !== current.schoolCategory) {
+      throw new SelfEvaluationAccessError("تغيير تصنيف المدرسة متاح لمالك المدرسة أو مديرها فقط");
+    }
+
+    const effectiveCommittee = canManageCommittee
+      ? (input.committeeMembers ?? current.committeeMembers)
+      : current.committeeMembers;
 
     const validated = normalizeSelfEvaluationDraft(
       {
         schemaVersion: 2,
         frameworkId: SELF_EVALUATION_FRAMEWORK_ID,
-        schoolCategory: input.schoolCategory ?? current.schoolCategory,
+        schoolCategory: canManageCommittee ? (input.schoolCategory ?? current.schoolCategory) : current.schoolCategory,
         revision: current.revision + 1,
         executiveSummary: input.executiveSummary,
+        committeeMembers: effectiveCommittee,
         assessments: input.assessments,
         improvementActions: input.improvementActions,
         updatedAt: new Date().toISOString(),
@@ -512,8 +619,9 @@ export async function createReportFromImprovementActionForUser(
   if (!db) throw new Error("Database not available");
 
   return db.transaction(async tx => {
-    const work = await assertCycleWriteInTransaction(tx, userId, input.workItemId);
-    if (!work) throw new SelfEvaluationAccessError();
+    const access = await assertCycleWriteInTransaction(tx, userId, input.workItemId);
+    if (!access) throw new SelfEvaluationAccessError();
+    const { work, canManageCommittee } = access;
     if (work.status === "archived") throw new SelfEvaluationConflictError("لا يمكن تعديل دورة تقويم مؤرشفة");
 
     const [block] = await tx
@@ -525,6 +633,12 @@ export async function createReportFromImprovementActionForUser(
       .for("update");
 
     const current = normalizeSelfEvaluationDraft(block?.data);
+    const isDelegatedCommitteeMember =
+      work.ownerType === "organization" &&
+      current.committeeMembers.some(member => member.userId === userId);
+    if (!canManageCommittee && !isDelegatedCommitteeMember) {
+      throw new SelfEvaluationAccessError();
+    }
     if (current.revision !== input.expectedRevision) {
       throw new SelfEvaluationConflictError();
     }

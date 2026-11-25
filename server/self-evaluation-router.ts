@@ -28,6 +28,16 @@ const assessmentSchema = z.object({
   evidenceAssetIds: z.array(z.number().int().positive()).max(25),
 });
 
+const committeeMemberSchema = z.object({
+  id: z.string().trim().min(2).max(64),
+  userId: z.number().int().positive().nullable().default(null),
+  name: z.string().max(120).default(""),
+  roleTitle: z.string().max(120).default(""),
+  assignedDomainKey: z
+    .enum(["all", "administration", "teaching_learning", "learning_outcomes", "school_environment"])
+    .default("all"),
+});
+
 const actionSchema = z.object({
   id: z.string().trim().min(2).max(64),
   indicatorKey: z.string().trim().min(2).max(64),
@@ -112,6 +122,7 @@ export const selfEvaluationRouter = router({
         expectedRevision: z.number().int().positive(),
         schoolCategory: z.enum(["government", "private_international"]).optional(),
         executiveSummary: z.string().max(4000).default(""),
+        committeeMembers: z.array(committeeMemberSchema).max(25).optional(),
         assessments: z.record(z.string(), assessmentSchema),
         improvementActions: z.array(actionSchema).max(100),
       }),

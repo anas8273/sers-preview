@@ -18,6 +18,7 @@ import {
   Sparkles,
   Trash2,
   UserRound,
+  Users,
 } from "lucide-react";
 import { useLocation } from "wouter";
 import AppSidebar from "@/components/AppSidebar";
@@ -34,6 +35,7 @@ import {
   type ImprovementAction,
   type ImprovementActionStatus,
   type IndicatorAssessment,
+  type SelfEvaluationCommitteeMember,
   type SelfEvaluationDomainKey,
   type SelfEvaluationLevel,
   type SelfEvaluationSchoolCategory,
@@ -91,6 +93,7 @@ export default function SelfEvaluationPage() {
   const [schoolCategory, setSchoolCategory] =
     useState<SelfEvaluationSchoolCategory>("government");
   const [executiveSummary, setExecutiveSummary] = useState("");
+  const [committeeMembers, setCommitteeMembers] = useState<SelfEvaluationCommitteeMember[]>([]);
   const [assessments, setAssessments] = useState<Record<string, IndicatorAssessment>>({});
   const [actions, setActions] = useState<ImprovementAction[]>([]);
   const [dirty, setDirty] = useState(false);
@@ -138,6 +141,8 @@ export default function SelfEvaluationPage() {
     { enabled: Boolean(selectedCycleId), retry: false },
   );
   const canEdit = cycleQuery.data?.canEdit ?? false;
+  const canManageCommittee = cycleQuery.data?.canManageCommittee ?? false;
+  const schoolMembers = cycleQuery.data?.schoolMembers ?? [];
 
   useEffect(() => {
     setSaveNotice("");
@@ -148,6 +153,7 @@ export default function SelfEvaluationPage() {
     setRevision(cycleQuery.data.draft.revision);
     setSchoolCategory(cycleQuery.data.draft.schoolCategory ?? "government");
     setExecutiveSummary(cycleQuery.data.draft.executiveSummary);
+    setCommitteeMembers(cycleQuery.data.draft.committeeMembers ?? []);
     setAssessments(cycleQuery.data.draft.assessments);
     setActions(cycleQuery.data.draft.improvementActions);
     setDirty(false);
@@ -167,6 +173,7 @@ export default function SelfEvaluationPage() {
     onSuccess: async result => {
       setRevision(result.draft.revision);
       setSchoolCategory(result.draft.schoolCategory);
+      setCommitteeMembers(result.draft.committeeMembers ?? []);
       setAssessments(result.draft.assessments);
       setActions(result.draft.improvementActions);
       setDirty(false);
@@ -329,14 +336,48 @@ export default function SelfEvaluationPage() {
     setActions(prev => prev.filter(item => item.id !== id));
   };
 
+  const addCommitteeMember = () => {
+    const id = `mem-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    setDirty(true);
+    setSaveNotice("");
+    setCommitteeMembers(prev => [
+      ...prev,
+      {
+        id,
+        userId: null,
+        name: "",
+        roleTitle: prev.length === 0 ? "رئيس فريق التقويم الذاتي (مدير المدرسة)" : "عضو فريق التقويم الذاتي",
+        assignedDomainKey: "all",
+      },
+    ]);
+  };
+
+  const updateCommitteeMember = (
+    id: string,
+    patch: Partial<SelfEvaluationCommitteeMember>,
+  ) => {
+    setDirty(true);
+    setSaveNotice("");
+    setCommitteeMembers(prev =>
+      prev.map(item => (item.id === id ? { ...item, ...patch } : item)),
+    );
+  };
+
+  const removeCommitteeMember = (id: string) => {
+    setDirty(true);
+    setSaveNotice("");
+    setCommitteeMembers(prev => prev.filter(item => item.id !== id));
+  };
+
   const handleSave = () => {
     if (!selectedCycleId) return;
     setSaveNotice("");
     saveCycleMutation.mutate({
       workItemId: selectedCycleId,
       expectedRevision: revision,
-      schoolCategory,
+      schoolCategory: canManageCommittee ? schoolCategory : undefined,
       executiveSummary,
+      committeeMembers: canManageCommittee ? committeeMembers : undefined,
       assessments,
       improvementActions: actions,
     });
@@ -355,6 +396,7 @@ export default function SelfEvaluationPage() {
         schoolCategory,
         revision,
         executiveSummary,
+        committeeMembers,
         assessments,
         improvementActions: actions,
       },
@@ -638,7 +680,7 @@ export default function SelfEvaluationPage() {
                     <span>فئة المؤشرات المطبقة</span>
                     <select
                       aria-label="فئة المؤشرات المطبقة"
-                      disabled={!canEdit}
+                      disabled={!canManageCommittee}
                       value={schoolCategory}
                       onChange={e => {
                         setDirty(true);
@@ -811,6 +853,141 @@ export default function SelfEvaluationPage() {
                   </div>
                 </section>
               )}
+
+              {/* Self-Evaluation & Excellence Committee (R09 / NEXT-19) */}
+              <section
+                aria-label="فريق التقويم الذاتي والتميز المدرسي"
+                className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="inline-flex items-center gap-1.5 text-xs font-bold text-teal-700">
+                      <Users className="h-4 w-4" /> الحوكمة المؤسسية للدورة
+                    </p>
+                    <h2 className="mt-1 text-base font-bold text-slate-950 sm:text-lg">
+                      فريق / لجنة التقويم الذاتي والتميز المدرسي
+                    </h2>
+                    <p className="mt-1 text-xs leading-6 text-slate-600">
+                      توثيق أعضاء لجنة التقويم الذاتي وتوزيع المجالات عليهم؛ عند ربط عضو نشط من المدرسة بحسابه في اللجنة يُفوّض تلقائيًا بالمساهمة في تقييم المؤشرات وربط الشواهد.
+                    </p>
+                  </div>
+                  {canManageCommittee && (
+                    <button
+                      type="button"
+                      onClick={addCommitteeMember}
+                      className="inline-flex min-h-10 items-center gap-1.5 rounded-xl border border-teal-200 bg-teal-50 px-3.5 py-2 text-xs font-bold text-teal-900 hover:bg-teal-100 print:hidden"
+                    >
+                      <Plus className="h-4 w-4" />
+                      + إضافة عضو للجنة
+                    </button>
+                  )}
+                </div>
+
+                {committeeMembers.length === 0 ? (
+                  <p className="mt-3 rounded-xl border border-dashed border-slate-200 px-4 py-4 text-xs text-slate-600">
+                    لم يُسجّل أعضاء لجنة التقويم الذاتي بعد (اختياري — يُوصى بتشكيل اللجنة قبل بدء التقييم).
+                  </p>
+                ) : (
+                  <div className="mt-4 space-y-3">
+                    {committeeMembers.map(member => (
+                      <div
+                        key={member.id}
+                        className="grid gap-2.5 rounded-xl border border-slate-200 bg-slate-50/60 p-3.5 sm:grid-cols-4"
+                      >
+                        {canManageCommittee && schoolMembers.length > 0 && (
+                          <label className="min-w-0 text-xs font-bold text-slate-700">
+                            ربط بعضو المدرسة (تفويض)
+                            <select
+                              aria-label="ربط بعضو المدرسة"
+                              value={member.userId ?? ""}
+                              onChange={e => {
+                                const uid = Number(e.target.value) || null;
+                                const picked = uid
+                                  ? schoolMembers.find(sm => sm.userId === uid)
+                                  : undefined;
+                                updateCommitteeMember(member.id, {
+                                  userId: uid,
+                                  ...(picked?.name && !member.name.trim()
+                                    ? { name: picked.name }
+                                    : {}),
+                                });
+                              }}
+                              className="mt-1 w-full min-w-0 max-w-full truncate rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs font-normal"
+                            >
+                              <option value="">عضو خارجي / بدون ربط حساب</option>
+                              {schoolMembers.map(sm => (
+                                <option key={sm.userId} value={sm.userId}>
+                                  {sm.name || `عضو #${sm.userId}`} ({sm.role})
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                        )}
+
+                        <label className="min-w-0 text-xs font-bold text-slate-700">
+                          اسم العضو (مطلوب)
+                          <input
+                            required
+                            disabled={!canManageCommittee}
+                            value={member.name}
+                            onChange={e => updateCommitteeMember(member.id, { name: e.target.value })}
+                            placeholder="الاسم الثلاثي..."
+                            className="mt-1 w-full min-w-0 max-w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs font-normal disabled:opacity-70"
+                          />
+                        </label>
+
+                        <label className="min-w-0 text-xs font-bold text-slate-700">
+                          الصفة في اللجنة
+                          <input
+                            disabled={!canManageCommittee}
+                            value={member.roleTitle}
+                            onChange={e =>
+                              updateCommitteeMember(member.id, { roleTitle: e.target.value })
+                            }
+                            placeholder="رئيس اللجنة / منسق الجودة..."
+                            className="mt-1 w-full min-w-0 max-w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs font-normal disabled:opacity-70"
+                          />
+                        </label>
+
+                        <div className="flex min-w-0 items-end gap-2">
+                          <label className="min-w-0 flex-1 text-xs font-bold text-slate-700">
+                            المجال المسند
+                            <select
+                              disabled={!canManageCommittee}
+                              value={member.assignedDomainKey}
+                              onChange={e =>
+                                updateCommitteeMember(member.id, {
+                                  assignedDomainKey: e.target.value as
+                                    | SelfEvaluationDomainKey
+                                    | "all",
+                                })
+                              }
+                              className="mt-1 w-full min-w-0 max-w-full truncate rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs font-normal disabled:opacity-70"
+                            >
+                              <option value="all">جميع المجالات الأربعة</option>
+                              {SELF_EVALUATION_DOMAINS.map(d => (
+                                <option key={d.key} value={d.key}>
+                                  {d.title} ({d.weightPercent}%)
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                          {canManageCommittee && (
+                            <button
+                              type="button"
+                              aria-label={`حذف عضو اللجنة ${member.name || member.id}`}
+                              onClick={() => removeCommitteeMember(member.id)}
+                              className="inline-flex min-h-9 min-w-9 shrink-0 items-center justify-center rounded-lg text-red-700 hover:bg-red-50 print:hidden"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </section>
 
               {/* Domain Tabs & Standards / Indicators */}
               <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">

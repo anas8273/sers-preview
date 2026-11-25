@@ -481,6 +481,63 @@ suite("PR #46 review findings — server & router MySQL integration", () => {
       ownerType: "personal",
     });
     expect(personalCycle?.canEdit).toBe(true);
+
+    // NEXT-19 / O009: Admin delegates peerMemberUser onto committeeMembers -> peerMemberUser can rate indicators,
+    // but CANNOT change schoolCategory or escalate committeeMembers!
+    const currentCycle = await domainCaller(adminUser).selfEvaluation.getCycle({ workItemId: cycleId });
+    await domainCaller(adminUser).selfEvaluation.saveCycle({
+      workItemId: cycleId,
+      expectedRevision: currentCycle.draft.revision,
+      executiveSummary: currentCycle.draft.executiveSummary,
+      committeeMembers: [
+        {
+          id: "comm-peer",
+          userId: peerMemberUser.id,
+          name: peerMemberUser.name || "معلم زميل",
+          roleTitle: "عضو فريق التقويم — التعليم والتعلم",
+          assignedDomainKey: "teaching_learning",
+        },
+      ],
+      assessments: currentCycle.draft.assessments,
+      improvementActions: currentCycle.draft.improvementActions,
+    });
+
+    const delegatedView = await domainCaller(peerMemberUser).selfEvaluation.getCycle({ workItemId: cycleId });
+    expect(delegatedView.canEdit).toBe(true);
+    expect(delegatedView.canManageCommittee).toBe(false);
+
+    // Delegated committee member CANNOT change schoolCategory
+    await expect(
+      domainCaller(peerMemberUser).selfEvaluation.saveCycle({
+        workItemId: cycleId,
+        expectedRevision: delegatedView.draft.revision,
+        schoolCategory: "government",
+        executiveSummary: delegatedView.draft.executiveSummary,
+        assessments: delegatedView.draft.assessments,
+        improvementActions: delegatedView.draft.improvementActions,
+      }),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+
+    // Delegated committee member CAN contribute an indicator rating, while any attempt to tamper with committeeMembers is ignored
+    const memberSaved = await domainCaller(peerMemberUser).selfEvaluation.saveCycle({
+      workItemId: cycleId,
+      expectedRevision: delegatedView.draft.revision,
+      executiveSummary: delegatedView.draft.executiveSummary,
+      committeeMembers: [],
+      assessments: {
+        ...delegatedView.draft.assessments,
+        "2-1-1-1": {
+          indicatorKey: "2-1-1-1",
+          level: 3,
+          rationale: "توفير فرص تعلم متكافئة لجميع المتعلمين بشواهد صفية موثقة.",
+          evidenceAssetIds: [],
+        },
+      },
+      improvementActions: delegatedView.draft.improvementActions,
+    });
+    expect(memberSaved.draft.assessments["2-1-1-1"]?.level).toBe(3);
+    expect(memberSaved.draft.committeeMembers).toHaveLength(1);
+    expect(memberSaved.draft.committeeMembers[0]?.userId).toBe(peerMemberUser.id);
   });
 
   it("L6/R18: account.exportMyData isolates personal data from other users/schools, strips secrets, logs audit, and rate-limits after 5 exports", async () => {

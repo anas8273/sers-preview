@@ -804,6 +804,7 @@ export const LEGACY_V1_INDICATOR_KEY_MAP: Readonly<Record<string, string>> = {
 } as const;
 
 const VALID_INDICATOR_KEYS = new Set(SELF_EVALUATION_INDICATORS.map(item => item.key));
+const VALID_DOMAIN_KEYS = new Set<SelfEvaluationDomainKey>(SELF_EVALUATION_DOMAINS.map(item => item.key));
 const VALID_ACTION_STATUSES = new Set<ImprovementActionStatus>(["planned", "in_progress", "completed"]);
 
 export function resolveIndicatorKey(rawKey: string): string | null {
@@ -844,12 +845,21 @@ export type ImprovementAction = {
   linkedWorkItemId: number | null;
 };
 
+export type SelfEvaluationCommitteeMember = {
+  id: string;
+  userId: number | null;
+  name: string;
+  roleTitle: string;
+  assignedDomainKey: SelfEvaluationDomainKey | "all";
+};
+
 export type SelfEvaluationDraftData = {
   schemaVersion: 2;
   frameworkId: typeof SELF_EVALUATION_FRAMEWORK_ID;
   schoolCategory: SelfEvaluationSchoolCategory;
   revision: number;
   executiveSummary: string;
+  committeeMembers: SelfEvaluationCommitteeMember[];
   assessments: Record<string, IndicatorAssessment>;
   improvementActions: ImprovementAction[];
   updatedAt: string;
@@ -1055,12 +1065,53 @@ export function normalizeSelfEvaluationDraft(
     ? record.updatedAt
     : new Date().toISOString();
 
+  const rawCommittee = Array.isArray(record.committeeMembers) ? record.committeeMembers : [];
+  if (strict && rawCommittee.length > 25) {
+    throw new SelfEvaluationValidationError("الحد الأقصى لأعضاء لجنة التقويم الذاتي هو 25 عضوًا");
+  }
+  const committeeMembers: SelfEvaluationCommitteeMember[] = [];
+  const seenCommitteeIds = new Set<string>();
+  const seenCommitteeUsers = new Set<number>();
+  for (const candidate of rawCommittee.slice(0, 25)) {
+    if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) continue;
+    const item = candidate as Record<string, unknown>;
+    const rawId = typeof item.id === "string" && item.id.trim().length >= 2
+      ? item.id.trim().slice(0, 64)
+      : `mem-${committeeMembers.length + 1}`;
+    if (seenCommitteeIds.has(rawId)) continue;
+    const name = typeof item.name === "string" ? item.name.trim().slice(0, 120) : "";
+    if (strict && name.length < 2) {
+      throw new SelfEvaluationValidationError("أدخل اسم عضو لجنة التقويم الذاتي بوضوح (حرفان على الأقل)");
+    }
+    if (!strict && !name) continue;
+    const userId = isPositiveSafeInt(item.userId) ? item.userId : null;
+    if (userId !== null) {
+      if (seenCommitteeUsers.has(userId)) continue;
+      seenCommitteeUsers.add(userId);
+    }
+    seenCommitteeIds.add(rawId);
+    const roleTitleRaw = typeof item.roleTitle === "string" ? item.roleTitle.trim().slice(0, 120) : "";
+    const roleTitle = roleTitleRaw || "عضو فريق التقويم الذاتي";
+    const assignedDomainKey: SelfEvaluationDomainKey | "all" =
+      typeof item.assignedDomainKey === "string" && VALID_DOMAIN_KEYS.has(item.assignedDomainKey as SelfEvaluationDomainKey)
+        ? (item.assignedDomainKey as SelfEvaluationDomainKey)
+        : "all";
+    committeeMembers.push({
+      id: rawId,
+      userId,
+      name,
+      roleTitle,
+      assignedDomainKey,
+    });
+  }
+
   return {
     schemaVersion: 2,
     frameworkId: SELF_EVALUATION_FRAMEWORK_ID,
     schoolCategory,
     revision,
     executiveSummary,
+    committeeMembers,
     assessments,
     improvementActions,
     updatedAt,
@@ -1071,7 +1122,9 @@ export function normalizeSelfEvaluationDraft(
  * Computes domain-level and official ETEC domain-weighted (25% / 35% / 25% / 15%)
  * school self-evaluation readiness across applicable indicators.
  */
-export function computeSelfEvaluationSummary(draft: SelfEvaluationDraftData): SelfEvaluationSummary {
+export function computeSelfEvaluationSummary(
+  draft: Omit<SelfEvaluationDraftData, "committeeMembers"> & { committeeMembers?: SelfEvaluationCommitteeMember[] },
+): SelfEvaluationSummary {
   const applicableIndicators = getApplicableIndicators(draft.schoolCategory);
   const actionIndicatorSet = new Set(draft.improvementActions.map(item => item.indicatorKey));
   const gapIndicatorKeys: string[] = [];

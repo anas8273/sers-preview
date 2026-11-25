@@ -98,6 +98,15 @@ describe("R09 / O009 (ACCEPTED): Official ETEC («تميز») School Self-Evalua
         revision: 2,
         schoolCategory: "government",
         executiveSummary: "تركيز التحسين على نواتج التعلم والتخطيط التشغيلي وفق مؤشرات تميز.",
+        committeeMembers: [
+          {
+            id: "mem-1",
+            userId: 12,
+            name: "أ. خالد العتيبي",
+            roleTitle: "رئيس فريق التقويم الذاتي",
+            assignedDomainKey: "all",
+          },
+        ],
         assessments: {
           "admin.planning": {
             indicatorKey: "admin.planning",
@@ -136,6 +145,8 @@ describe("R09 / O009 (ACCEPTED): Official ETEC («تميز») School Self-Evalua
 
     expect(draft.schemaVersion).toBe(2);
     expect(draft.frameworkId).toBe(SELF_EVALUATION_FRAMEWORK_ID);
+    expect(draft.committeeMembers).toHaveLength(1);
+    expect(draft.committeeMembers[0]?.name).toBe("أ. خالد العتيبي");
     // Legacy v1 keys transparently remapped to official ETEC procedural codes:
     expect(draft.assessments["1-1-1-1"]?.evidenceAssetIds).toEqual([10, 12]);
     expect(draft.assessments["3-1-1-1"]?.level).toBe(1);

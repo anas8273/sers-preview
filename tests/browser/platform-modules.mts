@@ -332,6 +332,11 @@ test("end-to-end browser verification of PR #43-#46 platform modules at 360px mo
                 updatedAt: new Date().toISOString(),
               },
               canEdit: true,
+              canManageCommittee: true,
+              schoolMembers: [
+                { userId: 1, name: "أ. سارة العتيبي", role: "owner" },
+                { userId: 2, name: "أ. نورة الشهري", role: "reviewer" },
+              ],
               draft: selfEvalDraft,
               summary: computeSelfEvaluationSummary(selfEvalDraft),
               linkedWorks: [],
@@ -348,6 +353,11 @@ test("end-to-end browser verification of PR #43-#46 platform modules at 360px mo
                 updatedAt: new Date().toISOString(),
               },
               canEdit: true,
+              canManageCommittee: true,
+              schoolMembers: [
+                { userId: 1, name: "أ. سارة العتيبي", role: "owner" },
+                { userId: 2, name: "أ. نورة الشهري", role: "reviewer" },
+              ],
               draft: selfEvalDraft,
               summary: computeSelfEvaluationSummary(selfEvalDraft),
               linkedWorks: linkedReportCreated ? [{ id: 77, title: "تقرير تحسين (1-1): انتظام متابعة الخطة", status: "draft" }] : [],
@@ -358,6 +368,7 @@ test("end-to-end browser verification of PR #43-#46 platform modules at 360px mo
                 revision: selfEvalDraft.revision + 1,
                 schoolCategory: input.schoolCategory ?? selfEvalDraft.schoolCategory,
                 executiveSummary: input.executiveSummary,
+                committeeMembers: input.committeeMembers ?? selfEvalDraft.committeeMembers,
                 assessments: input.assessments,
                 improvementActions: input.improvementActions,
                 updatedAt: new Date().toISOString(),
@@ -463,6 +474,11 @@ test("end-to-end browser verification of PR #43-#46 platform modules at 360px mo
       await clickButtonContaining("إنشاء الدورة والبدء بالتقييم");
       await visible("مؤشر 1-1-1-1");
       await visible("المعيار 1-1: التخطيط");
+
+      // Form the Self-Evaluation & Excellence Committee (R09 / NEXT-19)
+      await clickButtonContaining("+ إضافة عضو للجنة");
+      await page.waitForSelector('select[aria-label="ربط بعضو المدرسة"] option[value="2"]');
+      await page.select('select[aria-label="ربط بعضو المدرسة"]', "2");
 
       // Rate indicator 1-1 as level 2 (الانطلاق) and verify mandatory rationale warning
       await clickButtonContaining("الانطلاق");
