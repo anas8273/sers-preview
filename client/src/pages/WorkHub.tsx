@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, type MouseEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import { ArrowLeft, Building2, CalendarDays, FileText, FolderKanban, Loader2, Plus, RefreshCw, UserRound, X } from "lucide-react";
 import AppSidebar from "@/components/AppSidebar";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
@@ -25,6 +25,24 @@ export default function WorkHub({ reportsOnly = false }: { reportsOnly?: boolean
   const [yearFilter, setYearFilter] = useState("");
   const [termFilter, setTermFilter] = useState<number | undefined>();
   const createTrigger = useRef<HTMLButtonElement | null>(null);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const prefillTitle = params.get("prefillTitle")?.trim();
+    if (prefillTitle) {
+      setTitle(prefillTitle.slice(0, 255));
+      setType("report");
+      setShowCreate(true);
+      params.delete("prefillTitle");
+      const nextSearch = params.toString();
+      window.history.replaceState(
+        null,
+        "",
+        `${window.location.pathname}${nextSearch ? `?${nextSearch}` : ""}`,
+      );
+    }
+  }, []);
 
   const openCreate = (event: MouseEvent<HTMLButtonElement>) => {
     createTrigger.current = event.currentTarget;
@@ -210,7 +228,13 @@ export default function WorkHub({ reportsOnly = false }: { reportsOnly?: boolean
                           <span className="text-[11px] font-semibold text-slate-600">نسخة {work.currentVersionNumber}</span>
                         </div>
                         <h2 className="mt-3 truncate text-sm font-bold text-slate-900">{work.title}</h2>
-                        <p className="mt-1 text-xs text-slate-600">{work.type === "report" ? "تقرير" : "ملف إنجاز"}</p>
+                        <p className="mt-1 text-xs text-slate-600">
+                          {work.type === "report"
+                            ? "تقرير"
+                            : work.metadata?.module === "self_evaluation"
+                              ? "دورة تقويم ذاتي (ETEC)"
+                              : "ملف إنجاز"}
+                        </p>
                         <p className="mt-2 text-xs text-teal-800">{work.academicContext ? `${work.academicContext.yearLabel} · ${work.academicContext.termLabel || "السنة كاملة"}` : "دون سنة دراسية محددة"}</p>
                       </div>
                     </div>
@@ -218,8 +242,25 @@ export default function WorkHub({ reportsOnly = false }: { reportsOnly?: boolean
                       {work.ownerType === "personal" ? <UserRound className="h-3.5 w-3.5" /> : <Building2 className="h-3.5 w-3.5" />}
                       {work.ownerType === "personal" ? "ملكية شخصية" : "ملكية مدرسية"}
                     </div>
-                    <button type="button" onClick={() => setLocation(reportsOnly ? `/work/${work.id}/report` : `/work/${work.id}`)} className="mt-4 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-slate-200 px-3 py-2.5 text-xs font-bold text-slate-700 hover:border-teal-300 hover:bg-teal-50 hover:text-teal-900">
-                      {reportsOnly ? "فتح التقرير" : "فتح العمل وإدارة الشواهد"} <ArrowLeft className="h-3.5 w-3.5" />
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setLocation(
+                          reportsOnly
+                            ? `/work/${work.id}/report`
+                            : work.metadata?.module === "self_evaluation"
+                              ? `/self-evaluation?cycleId=${work.id}`
+                              : `/work/${work.id}`,
+                        )
+                      }
+                      className="mt-4 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-slate-200 px-3 py-2.5 text-xs font-bold text-slate-700 hover:border-teal-300 hover:bg-teal-50 hover:text-teal-900"
+                    >
+                      {reportsOnly
+                        ? "فتح التقرير"
+                        : work.metadata?.module === "self_evaluation"
+                          ? "فتح دورة التقويم الذاتي"
+                          : "فتح العمل وإدارة الشواهد"}{" "}
+                      <ArrowLeft className="h-3.5 w-3.5" />
                     </button>
                   </article>
                 );

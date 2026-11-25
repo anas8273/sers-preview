@@ -20,6 +20,7 @@ import {
   type ImprovementAction,
   type IndicatorAssessment,
   type SelfEvaluationDraftData,
+  type SelfEvaluationSchoolCategory,
   type SelfEvaluationSummary,
 } from "../shared/self-evaluation";
 
@@ -140,26 +141,33 @@ async function assertCycleWriteInTransaction(tx: any, userId: number, workItemId
   return work;
 }
 
-async function assertReferencesSameScope(
+/**
+ * Verifies every referenced asset and linked action report belongs to the exact
+ * same ownership scope. If a previously-linked same-scope asset or report was
+ * later soft-deleted (`deletedAt !== null`), prunes the stale ID cleanly instead
+ * of wedging future saves of the cycle (audit findings 1.2 & 1.3).
+ */
+async function sanitizeAndAssertReferencesSameScope(
   tx: any,
   cycleWork: { id: number; ownerType: string; ownerUserId: number | null; ownerOrganizationId: number | null },
   draft: SelfEvaluationDraftData,
-) {
+): Promise<SelfEvaluationDraftData> {
   const allAssetIds = new Set<number>();
   for (const assessment of Object.values(draft.assessments)) {
     for (const assetId of assessment.evidenceAssetIds) allAssetIds.add(assetId);
   }
+  const activeSameScopeAssets = new Set<number>();
   if (allAssetIds.size > 0) {
     const ids = Array.from(allAssetIds);
-    const rows = await tx
-      .select()
-      .from(assets)
-      .where(and(inArray(assets.id, ids), isNull(assets.deletedAt)));
+    const rows = await tx.select().from(assets).where(inArray(assets.id, ids));
     const map = new Map<number, any>(rows.map((r: any) => [r.id, r]));
     for (const id of ids) {
       const target = map.get(id);
       if (!target || !sameScope(cycleWork, target)) {
         throw new SelfEvaluationValidationError("أحد الشواهد المختارة غير متاح أو لا يتبع نفس مساحة الملكية");
+      }
+      if (!target.deletedAt) {
+        activeSameScopeAssets.add(id);
       }
     }
   }
@@ -171,19 +179,39 @@ async function assertReferencesSameScope(
         .filter((id): id is number => typeof id === "number" && id > 0),
     ),
   );
+  const activeSameScopeWorks = new Set<number>();
   if (allWorkIds.length > 0) {
-    const rows = await tx
-      .select()
-      .from(workItems)
-      .where(and(inArray(workItems.id, allWorkIds), isNull(workItems.deletedAt)));
+    const rows = await tx.select().from(workItems).where(inArray(workItems.id, allWorkIds));
     const map = new Map<number, any>(rows.map((r: any) => [r.id, r]));
     for (const id of allWorkIds) {
       const target = map.get(id);
       if (!target || target.id === cycleWork.id || !sameScope(cycleWork, target)) {
         throw new SelfEvaluationValidationError("أحد أعمال التنفيذ المرتبطة غير متاح أو لا يتبع نفس مساحة الملكية");
       }
+      if (!target.deletedAt) {
+        activeSameScopeWorks.add(id);
+      }
     }
   }
+
+  const prunedAssessments: Record<string, IndicatorAssessment> = {};
+  for (const [key, item] of Object.entries(draft.assessments)) {
+    prunedAssessments[key] = {
+      ...item,
+      evidenceAssetIds: item.evidenceAssetIds.filter(id => activeSameScopeAssets.has(id)),
+    };
+  }
+  const prunedActions = draft.improvementActions.map(item => ({
+    ...item,
+    linkedWorkItemId:
+      item.linkedWorkItemId && activeSameScopeWorks.has(item.linkedWorkItemId) ? item.linkedWorkItemId : null,
+  }));
+
+  return {
+    ...draft,
+    assessments: prunedAssessments,
+    improvementActions: prunedActions,
+  };
 }
 
 export async function createSelfEvaluationCycleForUser(
@@ -191,6 +219,7 @@ export async function createSelfEvaluationCycleForUser(
   input: {
     title: string;
     ownerType: "personal" | "organization";
+    schoolCategory?: SelfEvaluationSchoolCategory;
     organizationId?: number;
     academicYearId?: number;
     academicTermId?: number;
@@ -208,8 +237,9 @@ export async function createSelfEvaluationCycleForUser(
       : `organization:${input.organizationId}`;
     const academicContext = await captureAcademicContext(tx, scopeKey, input.academicYearId, input.academicTermId);
     const initialDraft = normalizeSelfEvaluationDraft({
-      schemaVersion: 1,
+      schemaVersion: 2,
       frameworkId: SELF_EVALUATION_FRAMEWORK_ID,
+      schoolCategory: input.schoolCategory ?? "government",
       revision: 1,
       executiveSummary: "",
       assessments: {},
@@ -318,12 +348,31 @@ export async function getSelfEvaluationCycleForUser(userId: number, workItemId: 
     .orderBy(asc(contentBlocks.id))
     .limit(1);
 
-  const draft = normalizeSelfEvaluationDraft(block?.data);
-  const summary = computeSelfEvaluationSummary(draft);
+  const rawDraft = normalizeSelfEvaluationDraft(block?.data);
+
+  const referencedAssetIds = Array.from(
+    new Set(
+      Object.values(rawDraft.assessments).flatMap(item => item.evidenceAssetIds),
+    ),
+  );
+  const liveAssetRows = referencedAssetIds.length > 0
+    ? await db
+      .select({
+        id: assets.id,
+        ownerType: assets.ownerType,
+        ownerUserId: assets.ownerUserId,
+        ownerOrganizationId: assets.ownerOrganizationId,
+      })
+      .from(assets)
+      .where(and(inArray(assets.id, referencedAssetIds), isNull(assets.deletedAt)))
+    : [];
+  const liveAssetIds = new Set(
+    liveAssetRows.filter(target => sameScope(work, target)).map(target => target.id),
+  );
 
   const linkedWorkIds = Array.from(
     new Set(
-      draft.improvementActions
+      rawDraft.improvementActions
         .map(a => a.linkedWorkItemId)
         .filter((id): id is number => typeof id === "number" && id > 0),
     ),
@@ -337,6 +386,25 @@ export async function getSelfEvaluationCycleForUser(userId: number, workItemId: 
   const linkedWorks = linkedWorkRows
     .filter(target => sameScope(work, target))
     .map(target => ({ id: target.id, title: target.title, status: target.status }));
+  const liveLinkedIds = new Set(linkedWorks.map(item => item.id));
+
+  const sanitizedAssessments: Record<string, (typeof rawDraft.assessments)[string]> = {};
+  for (const [k, item] of Object.entries(rawDraft.assessments)) {
+    sanitizedAssessments[k] = {
+      ...item,
+      evidenceAssetIds: item.evidenceAssetIds.filter(id => liveAssetIds.has(id)),
+    };
+  }
+
+  const draft: SelfEvaluationDraftData = {
+    ...rawDraft,
+    assessments: sanitizedAssessments,
+    improvementActions: rawDraft.improvementActions.map(action => ({
+      ...action,
+      linkedWorkItemId: action.linkedWorkItemId && liveLinkedIds.has(action.linkedWorkItemId) ? action.linkedWorkItemId : null,
+    })),
+  };
+  const summary = computeSelfEvaluationSummary(draft);
 
   return {
     work: {
@@ -360,6 +428,7 @@ export async function saveSelfEvaluationCycleForUser(
   input: {
     workItemId: number;
     expectedRevision: number;
+    schoolCategory?: SelfEvaluationSchoolCategory;
     executiveSummary: string;
     assessments: Record<string, IndicatorAssessment>;
     improvementActions: ImprovementAction[];
@@ -386,10 +455,11 @@ export async function saveSelfEvaluationCycleForUser(
       throw new SelfEvaluationConflictError();
     }
 
-    const normalized = normalizeSelfEvaluationDraft(
+    const validated = normalizeSelfEvaluationDraft(
       {
-        schemaVersion: 1,
+        schemaVersion: 2,
         frameworkId: SELF_EVALUATION_FRAMEWORK_ID,
+        schoolCategory: input.schoolCategory ?? current.schoolCategory,
         revision: current.revision + 1,
         executiveSummary: input.executiveSummary,
         assessments: input.assessments,
@@ -399,7 +469,7 @@ export async function saveSelfEvaluationCycleForUser(
       { strictValidation: true },
     );
 
-    await assertReferencesSameScope(tx, work, normalized);
+    const normalized = await sanitizeAndAssertReferencesSameScope(tx, work, validated);
 
     if (block) {
       await tx
@@ -465,11 +535,18 @@ export async function createReportFromImprovementActionForUser(
     }
     const targetAction = current.improvementActions[actionIndex]!;
     if (targetAction.linkedWorkItemId) {
-      return {
-        reportWorkItemId: targetAction.linkedWorkItemId,
-        draft: current,
-        summary: computeSelfEvaluationSummary(current),
-      };
+      const [existingReport] = await tx
+        .select()
+        .from(workItems)
+        .where(and(eq(workItems.id, targetAction.linkedWorkItemId), isNull(workItems.deletedAt)))
+        .limit(1);
+      if (existingReport && sameScope(work, existingReport)) {
+        return {
+          reportWorkItemId: existingReport.id,
+          draft: current,
+          summary: computeSelfEvaluationSummary(current),
+        };
+      }
     }
 
     const indicator = SELF_EVALUATION_INDICATORS.find(item => item.key === targetAction.indicatorKey);
@@ -503,7 +580,7 @@ export async function createReportFromImprovementActionForUser(
       fields: {
         subject: targetAction.goal,
         executionDate: targetAction.dueDate || "",
-        field: indicator ? indicator.title : "",
+        field: indicator ? `${indicator.code} (${indicator.standardTitle}): ${indicator.title}` : "",
         executor: targetAction.ownerName || "",
         objectives: targetAction.goal,
         implementation: targetAction.action,

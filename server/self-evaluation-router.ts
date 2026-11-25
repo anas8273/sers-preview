@@ -8,6 +8,7 @@ import {
   SELF_EVALUATION_FRAMEWORK_META,
   SELF_EVALUATION_INDICATORS,
   SELF_EVALUATION_LEVELS,
+  SELF_EVALUATION_STANDARDS,
   SelfEvaluationValidationError,
 } from "../shared/self-evaluation";
 import {
@@ -30,8 +31,10 @@ const assessmentSchema = z.object({
 const actionSchema = z.object({
   id: z.string().trim().min(2).max(64),
   indicatorKey: z.string().trim().min(2).max(64),
-  goal: z.string().trim().min(1).max(300),
-  action: z.string().trim().min(1).max(600),
+  // Length >= 3 is enforced by `normalizeSelfEvaluationDraft(..., { strictValidation: true })`
+  // so users receive a clear Arabic validation message rather than raw Zod JSON.
+  goal: z.string().max(300).default(""),
+  action: z.string().max(600).default(""),
   ownerName: z.string().max(120).default(""),
   dueDate: z.string().max(16).default(""),
   status: z.enum(["planned", "in_progress", "completed"]).default("planned"),
@@ -56,6 +59,7 @@ export const selfEvaluationRouter = router({
     frameworkId: SELF_EVALUATION_FRAMEWORK_ID,
     meta: SELF_EVALUATION_FRAMEWORK_META,
     domains: SELF_EVALUATION_DOMAINS,
+    standards: SELF_EVALUATION_STANDARDS,
     indicators: SELF_EVALUATION_INDICATORS,
     levels: SELF_EVALUATION_LEVELS,
   })),
@@ -78,6 +82,7 @@ export const selfEvaluationRouter = router({
         .object({
           title: z.string().trim().min(3).max(255),
           ownerType: z.enum(["personal", "organization"]).default("organization"),
+          schoolCategory: z.enum(["government", "private_international"]).default("government"),
           organizationId: z.number().int().positive().optional(),
           academicYearId: z.number().int().positive().optional(),
           academicTermId: z.number().int().positive().optional(),
@@ -105,9 +110,10 @@ export const selfEvaluationRouter = router({
       z.object({
         workItemId: z.number().int().positive(),
         expectedRevision: z.number().int().positive(),
+        schoolCategory: z.enum(["government", "private_international"]).optional(),
         executiveSummary: z.string().max(4000).default(""),
         assessments: z.record(z.string(), assessmentSchema),
-        improvementActions: z.array(actionSchema).max(50),
+        improvementActions: z.array(actionSchema).max(100),
       }),
     )
     .mutation(async ({ ctx, input }) => {

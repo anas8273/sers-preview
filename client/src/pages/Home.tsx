@@ -48,7 +48,7 @@ const quickActions: ActionCard[] = [
   },
   {
     title: "التقويم والتحسين",
-    description: "قيّم مجالات المدرسة الأربعة استرشاديًا وحوّل الفجوات إلى خطة تحسين وتقارير.",
+    description: "قيّم مجالات ومعايير ومؤشرات الاعتماد المدرسي (ETEC — تميز) وحوّل الفجوات إلى خطة تحسين وتقارير.",
     path: "/self-evaluation",
     icon: ClipboardCheck,
     accent: "bg-emerald-50 text-emerald-700",
@@ -106,7 +106,15 @@ export default function Home() {
             </div>
           </section>
 
-          <InstantReportLab onStartRealWork={() => navigate("/work")} />
+          <InstantReportLab
+            onStartRealWork={draft =>
+              navigate(
+                draft?.title
+                  ? `/work?prefillTitle=${encodeURIComponent(draft.title)}`
+                  : "/work",
+              )
+            }
+          />
 
           <section className="mt-8">
             <div className="mb-4 flex items-end justify-between gap-4">

@@ -391,7 +391,8 @@ suite("PR #46 review findings — server & router MySQL integration", () => {
     const saved = await domainCaller(adminUser).selfEvaluation.saveCycle({
       workItemId: cycleId,
       expectedRevision: 1,
-      executiveSummary: "تشخيص أولي استرشادي",
+      schoolCategory: "private_international",
+      executiveSummary: "تشخيص مؤسسي وفق مؤشرات هيئة تقويم التعليم (تميز)",
       assessments: {
         "admin.planning": {
           indicatorKey: "admin.planning",
@@ -399,17 +400,27 @@ suite("PR #46 review findings — server & router MySQL integration", () => {
           rationale: "توجد خطة تشغيلية لكن متابعة المؤشرات تحتاج انتظامًا.",
           evidenceAssetIds: [],
         },
+        "1-4-1-1": {
+          indicatorKey: "1-4-1-1",
+          level: 3,
+          rationale: "التزام المدرسة بمتطلبات التراخيص والحوكمة المعتمدة من الوزارة.",
+          evidenceAssetIds: [],
+        },
       },
       improvementActions: [],
     });
     expect(saved.draft.revision).toBe(2);
+    expect(saved.draft.schoolCategory).toBe("private_international");
+    expect(saved.summary.totalIndicators).toBe(51);
+    expect(saved.draft.assessments["1-1-1-1"]?.level).toBe(2);
+    expect(saved.draft.assessments["1-4-1-1"]?.level).toBe(3);
     const saveAudit = await db
       .select()
       .from(auditLogs)
       .where(and(eq(auditLogs.action, "self_evaluation.saved"), eq(auditLogs.resourceId, String(cycleId))));
     expect(saveAudit).toHaveLength(1);
 
-    // Generic pipelines reject self-evaluation cycles (L9 + M1)
+    // Same-org asset linked to self-evaluation reports usage in domain.asset.usage (Used-in)
     const schoolAssetSameOrg = await createAssetForUser(adminUser.id, {
       title: "شاهد نفس المدرسة",
       kind: "text",
@@ -417,6 +428,28 @@ suite("PR #46 review findings — server & router MySQL integration", () => {
       organizationId: orgId,
       metadata: { text: "شاهد" },
     });
+    await domainCaller(adminUser).selfEvaluation.saveCycle({
+      workItemId: cycleId,
+      expectedRevision: 2,
+      executiveSummary: "ربط شاهد فعلي بالمؤشر 1-1-1-1",
+      assessments: {
+        "1-1-1-1": {
+          indicatorKey: "1-1-1-1",
+          level: 3,
+          rationale: "توثيق الخطة التشغيلية بشاهد رسمي معتمد.",
+          evidenceAssetIds: [schoolAssetSameOrg!.id],
+        },
+      },
+      improvementActions: [],
+    });
+    const usage = await domainCaller(adminUser).asset.usage({ id: schoolAssetSameOrg!.id });
+    expect(
+      usage?.activeLinks.some(
+        link => link.workItemId === cycleId && link.role === "self_evaluation_evidence",
+      ),
+    ).toBe(true);
+
+    // Generic pipelines reject self-evaluation cycles (L9 + M1)
     await expect(
       domainCaller(adminUser).asset.linkToWork({ workItemId: cycleId, assetId: schoolAssetSameOrg!.id }),
     ).rejects.toMatchObject({ code: "FORBIDDEN" });

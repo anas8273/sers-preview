@@ -1,4 +1,7 @@
-export type OfficialStandardPackId = "saudi-teacher-eval-7" | "saudi-teacher-standards-11";
+export type OfficialStandardPackId =
+  | "saudi-teacher-eval-7"
+  | "saudi-teacher-standards-11"
+  | "etec-school-accreditation-10";
 
 export type OfficialStandardSeed = {
   packId: OfficialStandardPackId;
@@ -164,6 +167,89 @@ export const OFFICIAL_SAUDI_STANDARD_SEEDS: readonly OfficialStandardSeed[] = [
     version: "2026.1",
     title: "المبادرات التربوية والقيادة المدرسية المساندة",
     domainLabel: "الممارسة المهنية",
+  },
+
+  // 3. معايير التقويم والاعتماد المدرسي — هيئة تقويم التعليم والتدريب (10 معايير ضمن 4 مجالات رسمية أوزانها 25/35/25/15%)
+  // ملاحظة: الأوزان الرسمية المعتمدة من الهيئة هي على مستوى المجالات الأربعة (موضحة في domainLabel) وليست أوزانًا فرعية منفصلة لكل معيار.
+  {
+    packId: "etec-school-accreditation-10",
+    packTitle: "معايير التقويم والاعتماد المدرسي (ETEC — 10 معايير)",
+    standardKey: "ETEC-SCH-1-1",
+    version: "2026.2",
+    title: "1-1 التخطيط (الخطة التشغيلية ومتابعة تنفيذها وتطويرها)",
+    domainLabel: "المجال الأول: الإدارة المدرسية (وزن المجال الرسمي 25%)",
+  },
+  {
+    packId: "etec-school-accreditation-10",
+    packTitle: "معايير التقويم والاعتماد المدرسي (ETEC — 10 معايير)",
+    standardKey: "ETEC-SCH-1-2",
+    version: "2026.2",
+    title: "1-2 قيادة العملية التعليمية (القيم والهوية والانضباط والسلوك والمواهب)",
+    domainLabel: "المجال الأول: الإدارة المدرسية (وزن المجال الرسمي 25%)",
+  },
+  {
+    packId: "etec-school-accreditation-10",
+    packTitle: "معايير التقويم والاعتماد المدرسي (ETEC — 10 معايير)",
+    standardKey: "ETEC-SCH-1-3",
+    version: "2026.2",
+    title: "1-3 المجتمع المدرسي (العلاقات الإيجابية ومشاركة الأسرة والشراكة المجتمعية)",
+    domainLabel: "المجال الأول: الإدارة المدرسية (وزن المجال الرسمي 25%)",
+  },
+  {
+    packId: "etec-school-accreditation-10",
+    packTitle: "معايير التقويم والاعتماد المدرسي (ETEC — 10 معايير)",
+    standardKey: "ETEC-SCH-1-4",
+    version: "2026.2",
+    title: "1-4 التطوير المؤسسي (الرخص المهنية والتطوير المهني والتقويم الذاتي وخطة التحسين)",
+    domainLabel: "المجال الأول: الإدارة المدرسية (وزن المجال الرسمي 25%)",
+  },
+  {
+    packId: "etec-school-accreditation-10",
+    packTitle: "معايير التقويم والاعتماد المدرسي (ETEC — 10 معايير)",
+    standardKey: "ETEC-SCH-2-1",
+    version: "2026.2",
+    title: "2-1 بناء خبرات التعلم (تكافؤ الفرص وتنويع الاستراتيجيات والتقنية والمهارات العليا)",
+    domainLabel: "المجال الثاني: التعليم والتعلم (وزن المجال الرسمي 35%)",
+  },
+  {
+    packId: "etec-school-accreditation-10",
+    packTitle: "معايير التقويم والاعتماد المدرسي (ETEC — 10 معايير)",
+    standardKey: "ETEC-SCH-2-2",
+    version: "2026.2",
+    title: "2-2 تقويم التعلم (تنوع أدوات التقويم وتحليل النتائج والتغذية الراجعة)",
+    domainLabel: "المجال الثاني: التعليم والتعلم (وزن المجال الرسمي 35%)",
+  },
+  {
+    packId: "etec-school-accreditation-10",
+    packTitle: "معايير التقويم والاعتماد المدرسي (ETEC — 10 معايير)",
+    standardKey: "ETEC-SCH-3-1",
+    version: "2026.2",
+    title: "3-1 التحصيل التعليمي (مستوى الأداء والتقدم في القراءة والرياضيات والعلوم — نافس)",
+    domainLabel: "المجال الثالث: نواتج التعلم (وزن المجال الرسمي 25%)",
+  },
+  {
+    packId: "etec-school-accreditation-10",
+    packTitle: "معايير التقويم والاعتماد المدرسي (ETEC — 10 معايير)",
+    standardKey: "ETEC-SCH-3-2",
+    version: "2026.2",
+    title: "3-2 التطور الشخصي والصحي والاجتماعي (القيم والممارسات الصحية والتطوع والتعلم الذاتي)",
+    domainLabel: "المجال الثالث: نواتج التعلم (وزن المجال الرسمي 25%)",
+  },
+  {
+    packId: "etec-school-accreditation-10",
+    packTitle: "معايير التقويم والاعتماد المدرسي (ETEC — 10 معايير)",
+    standardKey: "ETEC-SCH-4-1",
+    version: "2026.2",
+    title: "4-1 المبنى المدرسي (ملاءمة المبنى والفصول والمعامل ومصادر التعلم والوصول الشامل)",
+    domainLabel: "المجال الرابع: البيئة المدرسية (وزن المجال الرسمي 15%)",
+  },
+  {
+    packId: "etec-school-accreditation-10",
+    packTitle: "معايير التقويم والاعتماد المدرسي (ETEC — 10 معايير)",
+    standardKey: "ETEC-SCH-4-2",
+    version: "2026.2",
+    title: "4-2 الأمن والسلامة (متطلبات السلامة والصيانة الدورية ونظافة المرافق)",
+    domainLabel: "المجال الرابع: البيئة المدرسية (وزن المجال الرسمي 15%)",
   },
 ];
 
