@@ -95,13 +95,16 @@ export default function SelfEvaluationPage() {
   const canEdit = cycleQuery.data?.canEdit ?? false;
 
   useEffect(() => {
+    setSaveNotice("");
+  }, [selectedCycleId]);
+
+  useEffect(() => {
     if (!cycleQuery.data) return;
     setRevision(cycleQuery.data.draft.revision);
     setExecutiveSummary(cycleQuery.data.draft.executiveSummary);
     setAssessments(cycleQuery.data.draft.assessments);
     setActions(cycleQuery.data.draft.improvementActions);
     setDirty(false);
-    setSaveNotice("");
   }, [cycleQuery.data?.work.id, cycleQuery.data?.draft.revision]);
 
   const createCycleMutation = trpc.domain.selfEvaluation.createCycle.useMutation({

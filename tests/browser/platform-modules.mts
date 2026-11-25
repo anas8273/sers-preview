@@ -475,6 +475,7 @@ test("end-to-end browser verification of PR #43-#46 platform modules at 360px mo
       await clickButtonContaining("تقرير برنامج الانضباط المدرسي");
       await visible("إعادة تعيين / تفويض المراجع");
 
+      await page.waitForSelector('select[aria-label="اختر المراجع البديل"] option[value="3"]');
       await page.select('select[aria-label="اختر المراجع البديل"]', "3");
       await clickButtonContaining("تحويل المراجعة");
       await visible("تم تحويل المراجعة إلى المراجع الجديد وإشعاره بنجاح.");
