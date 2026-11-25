@@ -6,7 +6,7 @@ import {
   organizations,
   workItems,
 } from "../drizzle/domain-core";
-import { users } from "../drizzle/schema";
+import { auditLogs, users } from "../drizzle/schema";
 import { captureAcademicContext } from "./account-db";
 import { getDb } from "./db";
 import { REPORT_DOCUMENT_BLOCK } from "./work-report-draft-db";
@@ -39,8 +39,14 @@ export class SelfEvaluationConflictError extends Error {
   }
 }
 
-function canWriteOrganization(role: string) {
-  return role === "owner" || role === "admin" || role === "member";
+/**
+ * School-owned self-evaluation cycles are institutional documents: only school
+ * owner/admin may create or change them (least privilege, review finding M5).
+ * Members and reviewers can read. Committee/assignment-based editing is pending
+ * an owner decision (see 03_DECISION_REGISTER, O009).
+ */
+function canManageSchoolSelfEvaluation(role: string) {
+  return role === "owner" || role === "admin";
 }
 
 function isSelfEvaluationWork(work: { type: string; metadata: Record<string, unknown> | null }) {
@@ -79,7 +85,7 @@ async function lockWriteScope(
     ))
     .limit(1)
     .for("update");
-  return Boolean(member && canWriteOrganization(member.role));
+  return Boolean(member && canManageSchoolSelfEvaluation(member.role));
 }
 
 async function assertCycleReadAccess(userId: number, workItemId: number) {
@@ -91,7 +97,7 @@ async function assertCycleReadAccess(userId: number, workItemId: number) {
     .where(and(eq(workItems.id, workItemId), isNull(workItems.deletedAt)))
     .limit(1);
   if (!work || !isSelfEvaluationWork(work)) return undefined;
-  if (work.ownerType === "personal") return work.ownerUserId === userId ? work : undefined;
+  if (work.ownerType === "personal") return work.ownerUserId === userId ? { ...work, viewerRole: "owner" as string } : undefined;
   if (!work.ownerOrganizationId) return undefined;
   const [member] = await db
     .select({ membership: memberships })
@@ -104,7 +110,7 @@ async function assertCycleReadAccess(userId: number, workItemId: number) {
       eq(memberships.status, "active"),
     ))
     .limit(1);
-  return member?.membership ? work : undefined;
+  return member?.membership ? { ...work, viewerRole: member.membership.role } : undefined;
 }
 
 async function assertCycleWriteInTransaction(tx: any, userId: number, workItemId: number) {
@@ -342,6 +348,7 @@ export async function getSelfEvaluationCycleForUser(userId: number, workItemId: 
       academicContext: work.academicContext,
       updatedAt: work.updatedAt,
     },
+    canEdit: work.ownerType === "personal" || canManageSchoolSelfEvaluation(work.viewerRole),
     draft,
     summary,
     linkedWorks,
@@ -408,6 +415,13 @@ export async function saveSelfEvaluationCycleForUser(
       });
     }
     await tx.update(workItems).set({ updatedAt: new Date() }).where(eq(workItems.id, input.workItemId));
+    await tx.insert(auditLogs).values({
+      actorUserId: userId,
+      action: "self_evaluation.saved",
+      resourceType: "work_item",
+      resourceId: String(input.workItemId),
+      metadata: { revision: normalized.revision, ownerType: work.ownerType, organizationId: work.ownerOrganizationId ?? null },
+    });
 
     return {
       draft: normalized,
@@ -536,6 +550,19 @@ export async function createReportFromImprovementActionForUser(
       });
     }
     await tx.update(workItems).set({ updatedAt: new Date() }).where(eq(workItems.id, input.workItemId));
+    await tx.insert(auditLogs).values({
+      actorUserId: userId,
+      action: "self_evaluation.action_report_created",
+      resourceType: "work_item",
+      resourceId: String(input.workItemId),
+      metadata: {
+        revision: nextDraft.revision,
+        actionId: targetAction.id,
+        reportWorkItemId,
+        ownerType: work.ownerType,
+        organizationId: work.ownerOrganizationId ?? null,
+      },
+    });
 
     return {
       reportWorkItemId,

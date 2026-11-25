@@ -89,6 +89,8 @@ jobs:
         run: pnpm build
       - name: Public output browser integration (HTTP fixtures)
         run: pnpm exec tsx --test tests/browser/public-output.mts
+      - name: Platform modules browser integration at 360px RTL (HTTP fixtures)
+        run: pnpm exec tsx --test tests/browser/platform-modules.mts
       - name: Immutable Arabic PDF and Word pagination and digital QR acceptance
         run: node --import tsx scripts/verify-work-version-outputs.ts qa-artifacts/work-version-outputs
       - name: Preserve synthetic document verification artifacts

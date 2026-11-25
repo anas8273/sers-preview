@@ -163,6 +163,7 @@ export async function getPortfolioDraftForUser(userId: number, workItemId: numbe
   const work = await assertReadAccess(userId, workItemId);
   if (!work) return undefined;
   if (work.type !== "portfolio") throw new PortfolioAccessError("هذا المسار مخصص لملفات الإنجاز فقط");
+  if (work.metadata?.module === "self_evaluation") throw new PortfolioAccessError("دورة التقويم الذاتي تُدار من صفحة التقويم الذاتي فقط");
 
   const db = await getDb();
   if (!db) throw new Error("Database not available");
@@ -208,6 +209,7 @@ export async function savePortfolioDraftForUser(
     const work = await assertWriteAccessInTransaction(tx, userId, input.workItemId);
     if (!work) throw new PortfolioAccessError();
     if (work.type !== "portfolio") throw new PortfolioAccessError("هذا المسار مخصص لملفات الإنجاز فقط");
+    if (work.metadata?.module === "self_evaluation") throw new PortfolioAccessError("دورة التقويم الذاتي تُدار من صفحة التقويم الذاتي فقط");
     if (work.status === "archived") throw new PortfolioConflictError("لا يمكن تعديل عمل مؤرشف");
 
     const [block] = await tx
@@ -263,6 +265,7 @@ export async function createPortfolioDraftVersionForUser(
     const work = await assertWriteAccessInTransaction(tx, userId, input.workItemId);
     if (!work) throw new PortfolioAccessError();
     if (work.type !== "portfolio") throw new PortfolioAccessError("هذا المسار مخصص لملفات الإنجاز فقط");
+    if (work.metadata?.module === "self_evaluation") throw new PortfolioAccessError("دورة التقويم الذاتي تُدار من صفحة التقويم الذاتي فقط");
     if (work.status === "archived") throw new PortfolioConflictError("لا يمكن إنشاء نسخة لعمل مؤرشف");
 
     const [block] = await tx

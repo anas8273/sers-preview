@@ -245,7 +245,7 @@ export default function WorkDetail() {
                         <PencilLine className="h-4 w-4" /> فتح محرر التقرير
                       </button>
                     )}
-                    {workQuery.data.ownerType === "organization" && workQuery.data.metadata?.module !== "self_evaluation" && (
+                    {workQuery.data.ownerType === "organization" && workQuery.data.viewerIsCreator && workQuery.data.metadata?.module !== "self_evaluation" && (
                       <button
                         type="button"
                         disabled={copyToPersonal.isPending}
@@ -274,16 +274,24 @@ export default function WorkDetail() {
                     <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-bold text-slate-700">{workQuery.data.assets.length} شاهد</span>
                   </div>
 
-                  <div className="mt-4 flex flex-col gap-2 sm:flex-row">
-                    <select aria-label="اختر شاهدًا من المكتبة" value={selectedAssetId ?? ""} onChange={event => setSelectedAssetId(Number(event.target.value) || undefined)} className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm">
-                      <option value="">اختر شاهدًا من المكتبة</option>
-                      {availableAssets.map(asset => <option key={asset.id} value={asset.id}>{asset.title} — {asset.kind}</option>)}
-                    </select>
-                    <button type="button" onClick={() => selectedAssetId && linkAsset.mutate({ workItemId: workId, assetId: selectedAssetId, role: "evidence" })} disabled={!selectedAssetId || linkAsset.isPending} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-teal-700 px-4 py-2.5 text-sm font-bold text-white hover:bg-teal-800 disabled:opacity-50">
-                      {linkAsset.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />} ربط الشاهد
-                    </button>
-                  </div>
-                  {linkAsset.error && <p role="alert" className="mt-2 text-xs text-red-700">{linkAsset.error.message}</p>}
+                  {workQuery.data.metadata?.module === "self_evaluation" ? (
+                    <p className="mt-4 rounded-xl border border-teal-100 bg-teal-50/70 px-4 py-3 text-xs leading-6 text-teal-950">
+                      ترتبط الشواهد في دورات التقويم الذاتي مباشرةً بكل مؤشر داخل صفحة التقويم الذاتي لضمان وضوح المبررات الواقعية لكل تقدير.
+                    </p>
+                  ) : (
+                    <>
+                      <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+                        <select aria-label="اختر شاهدًا من المكتبة" value={selectedAssetId ?? ""} onChange={event => setSelectedAssetId(Number(event.target.value) || undefined)} className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm">
+                          <option value="">اختر شاهدًا من المكتبة</option>
+                          {availableAssets.map(asset => <option key={asset.id} value={asset.id}>{asset.title} — {asset.kind}</option>)}
+                        </select>
+                        <button type="button" onClick={() => selectedAssetId && linkAsset.mutate({ workItemId: workId, assetId: selectedAssetId, role: "evidence" })} disabled={!selectedAssetId || linkAsset.isPending} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-teal-700 px-4 py-2.5 text-sm font-bold text-white hover:bg-teal-800 disabled:opacity-50">
+                          {linkAsset.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />} ربط الشاهد
+                        </button>
+                      </div>
+                      {linkAsset.error && <p role="alert" className="mt-2 text-xs text-red-700">{linkAsset.error.message}</p>}
+                    </>
+                  )}
 
                   {workQuery.data.assets.length === 0 ? (
                     <div className="mt-5 rounded-xl border border-dashed border-slate-200 px-4 py-10 text-center text-sm text-slate-600">لا توجد شواهد مرتبطة. أضفها من المكتبة بدل إعادة الرفع.</div>
@@ -372,6 +380,15 @@ export default function WorkDetail() {
                         <PencilLine className="h-4 w-4" /> تحرير التقرير وإنشاء نسخة
                       </button>
                     </section>
+                  ) : workQuery.data.metadata?.module === "self_evaluation" ? (
+                    <section className="rounded-2xl border border-teal-200 bg-teal-50 p-5 shadow-sm sm:p-6">
+                      <p className="text-xs font-bold text-teal-800">وحدة مستقلة</p>
+                      <h2 className="mt-1 text-lg font-bold text-slate-950">تُدار هذه الدورة من صفحة التقويم الذاتي</h2>
+                      <p className="mt-2 text-xs leading-6 text-slate-700">انتقل إلى صفحة التقويم الذاتي وخطة التحسين لاستعراض المؤشرات والمبررات الواقعية وإجراءات التحسين المرتبطة.</p>
+                      <button type="button" onClick={() => setLocation("/self-evaluation")} className="mt-4 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-teal-700 px-4 py-2.5 text-sm font-bold text-white hover:bg-teal-800">
+                        <ClipboardCheck className="h-4 w-4" /> فتح في وحدة التقويم الذاتي
+                      </button>
+                    </section>
                   ) : (
                     <>
                       <PortfolioReferencePanel
@@ -436,7 +453,7 @@ export default function WorkDetail() {
                         <select
                           aria-label="ربط العمل بسنة دراسية"
                           value={editYearId ?? ""}
-                          disabled={workQuery.data.status === "archived" || updateWork.isPending}
+                          disabled={!workQuery.data.viewerCanWrite || workQuery.data.status === "archived" || updateWork.isPending}
                           onChange={event => {
                             setYearSavedNotice(false);
                             setEditYearId(Number(event.target.value) || undefined);
@@ -455,7 +472,7 @@ export default function WorkDetail() {
                         <select
                           aria-label="ربط العمل بفصل دراسي"
                           value={editTermId ?? ""}
-                          disabled={!chosenYear || workQuery.data.status === "archived" || updateWork.isPending}
+                          disabled={!workQuery.data.viewerCanWrite || !chosenYear || workQuery.data.status === "archived" || updateWork.isPending}
                           onChange={event => {
                             setYearSavedNotice(false);
                             setEditTermId(Number(event.target.value) || undefined);
@@ -470,7 +487,7 @@ export default function WorkDetail() {
                       </label>
                       <button
                         type="button"
-                        disabled={workQuery.data.status === "archived" || updateWork.isPending}
+                        disabled={!workQuery.data.viewerCanWrite || workQuery.data.status === "archived" || updateWork.isPending}
                         onClick={() => {
                           setYearSavedNotice(false);
                           updateWork.mutate({
