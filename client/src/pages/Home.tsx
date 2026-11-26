@@ -61,7 +61,7 @@ type ActionCard = {
 
 const coreWorkspaceActions: ActionCard[] = [
   {
-    title: "أعمالي والتقارير",
+    title: "التقارير",
     description: "أنشئ تقاريرك وملفات إنجازك السحابية مع نسخ ثابتة وتصدير PDF وWord.",
     path: "/reports",
     badge: "سحابي",
