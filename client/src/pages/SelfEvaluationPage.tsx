@@ -420,7 +420,7 @@ export default function SelfEvaluationPage() {
       <main className="lg:mr-72">
         <div className="mx-auto max-w-6xl space-y-6 px-4 py-8 sm:px-6">
           <header className="flex flex-wrap items-start justify-between gap-4">
-            <div className="min-w-0 flex-1">
+            <div className="mr-12 min-w-0 flex-1 lg:mr-0">
               <p className="text-xs font-bold text-teal-700">
                 التقويم الذاتي والاعتماد المدرسي (وفق إطار هيئة تقويم التعليم والتدريب — تميز)
               </p>
